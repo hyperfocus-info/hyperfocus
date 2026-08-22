@@ -1,9 +1,11 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import type { WorkspaceProjectState } from "../../../shared/protocol";
 import { getThreadCleanupCandidates, parseThreadCleanupDuration } from "../lib/thread-cleanup";
 import { Button } from "./primitives/button";
 import { Dialog } from "./primitives/dialog";
 import { Input } from "./primitives/input";
+import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 
 type ThreadCleanupDialogProps = {
   open: boolean;
@@ -68,7 +70,7 @@ export function ThreadCleanupDialog(props: ThreadCleanupDialogProps) {
       onClose={props.onClose}
       title="Clean up old threads"
       description="Archive inactive user threads older than the selected age."
-      contentClass="gap-3"
+      contentClass={stylex.attrs(styles.cleanupDialogContent).class}
       footer={
         <>
           <Button tooltip="Close thread cleanup without archiving" variant="secondary" onClick={props.onClose}>
@@ -80,8 +82,8 @@ export function ThreadCleanupDialog(props: ThreadCleanupDialogProps) {
         </>
       }
     >
-      <div data-test-thread-cleanup-dialog="" class="flex flex-col gap-3">
-        <label class="flex flex-col gap-1 text-[0.675rem] font-semibold text-(--foreground)">
+      <div data-test-thread-cleanup-dialog="" {...stylex.attrs(styles.cleanupStack)}>
+        <label {...stylex.attrs(styles.cleanupField)}>
           Older than
           <Input
             value={duration()}
@@ -90,12 +92,12 @@ export function ThreadCleanupDialog(props: ThreadCleanupDialogProps) {
           />
         </label>
         <Show when={durationError()}>
-          {(reason) => <div class="text-[0.65rem] text-(--danger)">{reason()}</div>}
+          {(reason) => <div {...stylex.attrs(styles.cleanupError)}>{reason()}</div>}
         </Show>
 
-        <div class="flex flex-col gap-2">
-          <div class="text-[0.675rem] font-semibold text-(--foreground)">Projects</div>
-          <label class="flex min-h-8 cursor-pointer items-center gap-2 rounded-lg px-2 text-[0.675rem] hover:bg-black/5">
+        <div {...stylex.attrs(styles.cleanupProjects)}>
+          <div {...stylex.attrs(styles.cleanupProjectTitle)}>Projects</div>
+          <label {...stylex.attrs(styles.cleanupProjectRow)}>
             <input
               type="checkbox"
               checked={allProjects()}
@@ -108,25 +110,25 @@ export function ThreadCleanupDialog(props: ThreadCleanupDialogProps) {
             />
             <span>All projects</span>
           </label>
-          <div class="grid max-h-44 gap-1 overflow-auto">
+          <div {...stylex.attrs(styles.cleanupProjectList)}>
             <For each={props.projects}>
               {(project) => (
-                <label class="flex min-h-8 cursor-pointer items-center gap-2 rounded-lg px-2 text-[0.675rem] hover:bg-black/5">
+                <label {...stylex.attrs(styles.cleanupProjectRow)}>
                   <input
                     type="checkbox"
                     checked={!allProjects() && selectedProjectIds().includes(project.id)}
                     disabled={allProjects()}
                     onChange={() => toggleProject(project.id)}
                   />
-                  <span class="min-w-0 flex-1 truncate">{project.name}</span>
+                  <span {...stylex.attrs(styles.truncate)}>{project.name}</span>
                 </label>
               )}
             </For>
           </div>
         </div>
 
-        <div class="rounded-xl border border-(--border) bg-white/55 px-3 py-2 text-[0.675rem] text-(--muted)">
-          <div class="font-semibold text-(--foreground)">{candidates().length} threads match</div>
+        <div {...stylex.attrs(styles.cleanupSummary)}>
+          <div {...stylex.attrs(styles.cleanupSummaryTitle)}>{candidates().length} threads match</div>
           <div>Active and final remaining threads are skipped</div>
         </div>
       </div>

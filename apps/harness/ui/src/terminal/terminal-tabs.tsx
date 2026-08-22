@@ -1,8 +1,9 @@
 import { For, Show, createMemo, createSignal } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { Bolt, ChevronDown, ChevronRight, Square, TerminalSquare, X } from "lucide-solid";
-import { cn } from "../lib/utils";
 import { ActionButton } from "../components/action-button";
 import { Input } from "../components/primitives/input";
+import { terminalStyles as styles, terminalUtilities as utilities } from "./terminal.styles";
 
 export type TerminalTabItem = {
   id: string;
@@ -53,47 +54,45 @@ export function TerminalTabs(props: {
   };
 
   return (
-    <nav class="flex min-h-0 flex-1 flex-col gap-3" aria-label="Terminal sessions">
+    <nav class={stylex.attrs(utilities.flex, utilities.minH0, utilities.flex1, utilities.flexCol, utilities.gap3).class} aria-label="Terminal sessions">
       <For each={groups()}>
         {(group) => (
-          <section class="grid gap-1">
+          <section class={stylex.attrs(utilities.grid, utilities.gap1).class}>
             <button
               type="button"
-              class="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-left transition hover:bg-(--terminal-hover)"
+              class={stylex.attrs(styles.hoverSurface, utilities.flex, utilities.cursorPointer, utilities.itemsCenter, utilities.gap2, utilities.roundedMd, utilities.px15, utilities.py1, utilities.textLeft, utilities.transition).class}
               aria-expanded={!collapsed()[group.id]}
               aria-label={`${collapsed()[group.id] ? "Expand" : "Collapse"} ${group.title} (${group.subtitle})`}
               onClick={() => toggleGroup(group.id)}
             >
-              <Show when={collapsed()[group.id]} fallback={<ChevronDown class="h-3.5 w-3.5 text-(--terminal-muted)" />}>
-                <ChevronRight class="h-3.5 w-3.5 text-(--terminal-muted)" />
+              <Show when={collapsed()[group.id]} fallback={<ChevronDown class={stylex.attrs(utilities.h35, utilities.w35, styles.muted).class} />}>
+                <ChevronRight class={stylex.attrs(utilities.h35, utilities.w35, styles.muted).class} />
               </Show>
-              <span class="min-w-0">
-                <span class="block truncate text-[0.78rem] font-semibold leading-4 text-(--terminal-foreground)">{group.title}</span>
-                <span class="block truncate text-[0.64rem] leading-3 text-(--terminal-muted)">{group.subtitle}</span>
+              <span class={stylex.attrs(utilities.minW0).class}>
+                <span class={stylex.attrs(utilities.block, utilities.truncate, utilities.text078, utilities.fontSemibold, utilities.leading4, styles.foreground).class}>{group.title}</span>
+                <span class={stylex.attrs(utilities.block, utilities.truncate, utilities.text064, utilities.leading3, styles.muted).class}>{group.subtitle}</span>
               </span>
             </button>
             <Show when={!collapsed()[group.id]}>
-              <div class="grid gap-1 pl-5">
+              <div class={stylex.attrs(utilities.grid, utilities.gap1, utilities.pl5).class}>
                 <Show
                   when={group.sessions.length > 0}
-                  fallback={<div class="rounded-md px-2 py-1.5 text-[0.68rem] text-(--terminal-muted)">No sessions</div>}
+                  fallback={<div class={stylex.attrs(utilities.roundedMd, utilities.px2, utilities.py15, utilities.text068, styles.muted).class}>No sessions</div>}
                 >
                   <For each={group.sessions}>
                     {(session) => (
                       <div
-                        class={cn(
-                          "group flex min-h-9 min-w-0 items-center gap-1 rounded-md border border-transparent text-[0.74rem] transition",
-                          props.activeSessionId === session.id
-                            ? "bg-(--terminal-selection) text-(--terminal-foreground)"
-                            : "text-(--terminal-muted) hover:bg-(--terminal-hover)"
-                        )}
+                        data-terminal-session-row=""
+                        class={props.activeSessionId === session.id
+                          ? stylex.attrs(styles.selectionSurface, utilities.flex, utilities.minH9, utilities.minW0, utilities.itemsCenter, utilities.gap1, utilities.roundedMd, utilities.border, utilities.text074, utilities.transition).class
+                          : stylex.attrs(styles.idleSession, utilities.flex, utilities.minH9, utilities.minW0, utilities.itemsCenter, utilities.gap1, utilities.roundedMd, utilities.border, utilities.text074, utilities.transition).class}
                       >
                         <Show
                           when={editingId() === session.id}
                           fallback={
                             <button
                               type="button"
-                              class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 bg-transparent px-2 py-1.5 text-left"
+                              class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flex1, utilities.cursorPointer, utilities.itemsCenter, utilities.gap2, utilities.bgTransparent, utilities.px2, utilities.py15, utilities.textLeft).class}
                               onClick={() => props.onSelect(session.id)}
                               onDblClick={() => {
                                 if (session.renamable === false) {
@@ -104,19 +103,19 @@ export function TerminalTabs(props: {
                               }}
                             >
                               <ActivityIcon category={session.category ?? "terminal"} status={session.status} />
-                              <span class="min-w-0 flex-1">
-                                <span class="block truncate font-medium text-(--terminal-foreground)">{session.name}</span>
-                                <span class="block truncate text-[0.58rem] uppercase leading-3 tracking-[0.08em] text-(--terminal-muted)">{session.status}</span>
+                              <span class={stylex.attrs(utilities.minW0, utilities.flex1).class}>
+                                <span class={stylex.attrs(utilities.block, utilities.truncate, utilities.fontMedium, styles.foreground).class}>{session.name}</span>
+                                <span class={stylex.attrs(utilities.block, utilities.truncate, utilities.text058, utilities.uppercase, utilities.leading3, utilities.tracking008, styles.muted).class}>{session.status}</span>
                               </span>
                               <TerminalStatusDot status={session.status} />
                             </button>
                           }
                         >
-                          <div class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
+                          <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flex1, utilities.itemsCenter, utilities.gap2, utilities.px2, utilities.py15).class}>
                             <ActivityIcon category={session.category ?? "terminal"} status={session.status} />
                             <Input
                               aria-label="Rename terminal"
-                              class="h-6 min-w-0 flex-1 rounded-md border-(--terminal-border) bg-(--terminal-shell) px-1 py-0 text-[0.72rem] text-(--terminal-foreground)"
+                              class={stylex.attrs(styles.input, utilities.h6, utilities.minW0, utilities.flex1, utilities.roundedMd, utilities.px1, utilities.py0, utilities.text072).class}
                               value={draft()}
                               onInput={(event) => setDraft(event.currentTarget.value)}
                               onBlur={() => commit(session)}
@@ -136,8 +135,8 @@ export function TerminalTabs(props: {
                           ariaLabel={`Close ${session.name}`}
                           variant="ghost"
                           size="icon"
-                          class="mr-1 h-6 w-6 shrink-0 rounded-md text-(--terminal-muted) opacity-0 hover:bg-(--terminal-hover) hover:text-(--terminal-foreground) group-hover:opacity-100"
-                          icon={<X class="h-3 w-3" />}
+                          class={stylex.attrs(styles.action, utilities.mr1, utilities.h6, utilities.w6, utilities.shrink0, utilities.roundedMd).class}
+                          icon={<X class={stylex.attrs(utilities.h3, utilities.w3).class} />}
                           onClick={(event) => {
                             event.stopPropagation();
                             props.onClose(session.id);
@@ -158,24 +157,31 @@ export function TerminalTabs(props: {
 
 function ActivityIcon(props: { category: "terminal" | "spawned"; status: string }) {
   const normalized = () => props.status.toLowerCase();
-  const iconClass = () => {
+  const iconTone = () => {
     if (normalized() === "failed" || normalized() === "cancelled") {
-      return "text-(--danger-strong)";
+      return "danger" as const;
     }
     if (props.category === "spawned" && (normalized() === "running" || normalized() === "starting" || normalized() === "queued")) {
-      return "text-(--warning-strong)";
+      return "warning" as const;
     }
     if (props.category === "terminal" && normalized() === "running") {
-      return "text-(--success-strong)";
+      return "success" as const;
     }
-    return "text-(--terminal-muted)";
+    return "muted" as const;
   };
+  const iconContainerClass = () => iconTone() === "danger"
+    ? stylex.attrs(utilities.inlineFlex, utilities.h4, utilities.w4, utilities.shrink0, utilities.itemsCenter, utilities.justifyCenter, styles.dangerText).class
+    : iconTone() === "warning"
+      ? stylex.attrs(utilities.inlineFlex, utilities.h4, utilities.w4, utilities.shrink0, utilities.itemsCenter, utilities.justifyCenter, styles.warningText).class
+      : iconTone() === "success"
+        ? stylex.attrs(utilities.inlineFlex, utilities.h4, utilities.w4, utilities.shrink0, utilities.itemsCenter, utilities.justifyCenter, styles.successText).class
+        : stylex.attrs(utilities.inlineFlex, utilities.h4, utilities.w4, utilities.shrink0, utilities.itemsCenter, utilities.justifyCenter, styles.muted).class;
 
   return (
-    <span class="inline-flex h-4 w-4 shrink-0 items-center justify-center">
-      <Show when={props.category === "spawned"} fallback={<TerminalSquare class={cn("h-3.5 w-3.5", iconClass())} />}>
-        <Show when={normalized() === "failed" || normalized() === "cancelled"} fallback={<Bolt class={cn("h-3.5 w-3.5", iconClass())} />}>
-          <Square class={cn("h-3.5 w-3.5 fill-current", iconClass())} />
+    <span class={iconContainerClass()}>
+      <Show when={props.category === "spawned"} fallback={<TerminalSquare class={stylex.attrs(utilities.h35, utilities.w35).class} />}>
+        <Show when={normalized() === "failed" || normalized() === "cancelled"} fallback={<Bolt class={stylex.attrs(utilities.h35, utilities.w35).class} />}>
+          <Square class={stylex.attrs(utilities.h35, utilities.w35, utilities.fillCurrent).class} />
         </Show>
       </Show>
     </span>
@@ -184,18 +190,29 @@ function ActivityIcon(props: { category: "terminal" | "spawned"; status: string 
 
 function TerminalStatusDot(props: { status: string }) {
   const normalized = () => props.status.toLowerCase();
-  const dotClass = () => {
+  const dotTone = () => {
     if (normalized() === "running" || normalized() === "succeeded") {
-      return "bg-(--success-strong)";
+      return "success" as const;
     }
     if (normalized() === "starting" || normalized() === "queued") {
-      return "bg-(--warning-strong)";
+      return "warning" as const;
     }
     if (normalized() === "failed" || normalized() === "cancelled") {
-      return "bg-(--danger-strong)";
+      return "danger" as const;
     }
-    return "bg-(--terminal-muted)";
+    return "muted" as const;
   };
 
-  return <span class={cn("h-2 w-2 shrink-0 rounded-full", dotClass())} aria-label={`Status ${props.status}`} />;
+  return (
+    <span
+      class={dotTone() === "success"
+        ? stylex.attrs(utilities.h2, utilities.w2, utilities.shrink0, utilities.roundedFull, styles.successDot).class
+        : dotTone() === "warning"
+          ? stylex.attrs(utilities.h2, utilities.w2, utilities.shrink0, utilities.roundedFull, styles.warningDot).class
+          : dotTone() === "danger"
+            ? stylex.attrs(utilities.h2, utilities.w2, utilities.shrink0, utilities.roundedFull, styles.dangerDot).class
+            : stylex.attrs(utilities.h2, utilities.w2, utilities.shrink0, utilities.roundedFull, styles.mutedDot).class}
+      aria-label={`Status ${props.status}`}
+    />
+  );
 }

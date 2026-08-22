@@ -1,4 +1,5 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { createRequestId, type AgentRunState, type BackgroundJob, type BackgroundJobRun, type ExecutionToolActivity } from "../../../shared/protocol";
 import { getActiveProject, harnessStore } from "../harness-store";
 import type { ChatFileTarget } from "../lib/chat-file-links";
@@ -30,6 +31,7 @@ import { MarkdownContent } from "./markdown-content";
 import { Tooltip } from "./primitives/tooltip";
 import { VirtualList } from "./primitives/virtual-list";
 import { TerminalHistoryDialog } from "../terminal/terminal-history-dialog";
+import { tracePanelStyles as styles, traceUtilityStyles as utilities } from "./trace-panel.styles";
 import {
   CheckCircle2,
   ChevronDown,
@@ -258,13 +260,13 @@ export function TracePanel() {
 
   return (
     <>
-    <aside data-test-trace-panel="" class="panel-shell flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-x-hidden rounded-2xl border-t-0 p-[0.8rem]">
+    <aside data-test-trace-panel="" class={stylex.attrs(styles.panelShell, utilities.flex, utilities.hFull, utilities.minH0, utilities.minW0, utilities.flexCol, utilities.gap4, utilities.overflowXHidden, utilities.rounded2xl, utilities.borderTop0, utilities.p08).class}>
       <div>
-        <div class="flex items-center gap-2 text-[0.585rem] font-semibold tracking-[0.2em] text-(--muted)">
+        <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.gap2, utilities.text0585, utilities.fontSemibold, utilities.tracking02, utilities.textMuted).class}>
           <span>Developer trace</span>
           <Tooltip content="Selected thread, assistant, or job traces stay here, separate from user-visible chat history.">
-            <span class="inline-flex">
-              <CircleHelp class="h-3.5 w-3.5 text-(--muted)" aria-label="Projects trace help" />
+            <span class={stylex.attrs(utilities.inlineFlex).class}>
+              <CircleHelp class={stylex.attrs(utilities.h35, utilities.w35, utilities.textMuted).class} aria-label="Projects trace help" />
             </span>
           </Tooltip>
         </div>
@@ -289,44 +291,48 @@ export function TracePanel() {
           <>
             <Show when={assistantSnapshot()}>
               {(snapshot) => (
-                <div class="flex min-h-0 flex-1 flex-col gap-4">
-                  <div class="rounded-3xl border border-(--border) bg-white/55 p-3">
-                    <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Assistant jobs</div>
+                <div class={stylex.attrs(utilities.flex, utilities.minH0, utilities.flex1, utilities.flexCol, utilities.gap4).class}>
+                  <div class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
+                    <div class={stylex.attrs(utilities.mb3, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking018, utilities.textMuted).class}>Assistant jobs</div>
                     <Show
                       when={snapshot().jobs.length > 0}
-                      fallback={<div class="rounded-2xl border border-dashed border-(--border) bg-white/45 p-3 text-[0.675rem] text-(--muted)">No assistant-owned jobs.</div>}
+                      fallback={<div class={stylex.attrs(utilities.rounded2xl, utilities.border, utilities.borderDashed, utilities.borderDefault, utilities.bgWhite45, utilities.p3, utilities.text0675, utilities.textMuted).class}>No assistant-owned jobs.</div>}
                     >
-                      <div class="space-y-2">
+                      <div class={stylex.attrs(utilities.spaceY2).class}>
                         <For each={snapshot().jobs.slice(0, 6)}>
                           {(job) => {
                             const statusView = () => getAssistantJobStatusView(job.id, snapshot().runs);
                             return (
                             <div
-                              class="cursor-pointer rounded-2xl border bg-white/70 p-3 text-[0.675rem]"
-                              classList={{
-                                "border-amber-300": statusView().state === "running",
-                                "border-emerald-300": statusView().state === "successful",
-                                "border-rose-300": statusView().state === "error",
-                                "border-(--border)": statusView().state === "idle"
-                              }}
+                              data-test-trace-assistant-job=""
+                              data-state={statusView().state}
+                              class={statusView().state === "running"
+                                ? stylex.attrs(styles.assistantJob, utilities.cursorPointer, utilities.rounded2xl, utilities.border, utilities.bgWhite70, utilities.p3, utilities.text0675, styles.assistantJobRunning).class
+                                : statusView().state === "successful"
+                                  ? stylex.attrs(styles.assistantJob, utilities.cursorPointer, utilities.rounded2xl, utilities.border, utilities.bgWhite70, utilities.p3, utilities.text0675, styles.assistantJobSuccessful).class
+                                  : statusView().state === "error"
+                                    ? stylex.attrs(styles.assistantJob, utilities.cursorPointer, utilities.rounded2xl, utilities.border, utilities.bgWhite70, utilities.p3, utilities.text0675, styles.assistantJobError).class
+                                    : stylex.attrs(styles.assistantJob, utilities.cursorPointer, utilities.rounded2xl, utilities.border, utilities.bgWhite70, utilities.p3, utilities.text0675, styles.assistantJobIdle).class}
                               role="button"
                               tabIndex={0}
                               onClick={() => openAssistantJob(job.id)}
                               onKeyDown={(event) => handleAssistantJobKeyDown(event, job.id)}
                             >
                               <div
-                                class="flex min-w-0 items-center gap-2 font-semibold"
-                                classList={{
-                                  "text-amber-700": statusView().state === "running",
-                                  "text-emerald-700": statusView().state === "successful",
-                                  "text-rose-700": statusView().state === "error",
-                                  "text-(--foreground)": statusView().state === "idle"
-                                }}
+                                data-test-trace-assistant-job-heading=""
+                                data-state={statusView().state}
+                                class={statusView().state === "running"
+                                  ? stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.gap2, utilities.fontSemibold, styles.assistantJobTextRunning).class
+                                  : statusView().state === "successful"
+                                    ? stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.gap2, utilities.fontSemibold, styles.assistantJobTextSuccessful).class
+                                    : statusView().state === "error"
+                                      ? stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.gap2, utilities.fontSemibold, styles.assistantJobTextError).class
+                                      : stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.gap2, utilities.fontSemibold, styles.assistantJobTextIdle).class}
                               >
                                 <AssistantJobStatusIcon state={statusView().state} />
-                                <span class="truncate">{job.name}</span>
+                                <span class={stylex.attrs(utilities.truncate).class}>{job.name}</span>
                               </div>
-                              <div class="mt-1 text-(--muted)">{getAssistantJobStatusText(job, statusView().state)}</div>
+                              <div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>{getAssistantJobStatusText(job, statusView().state)}</div>
                             </div>
                             );
                           }}
@@ -334,8 +340,8 @@ export function TracePanel() {
                       </div>
                     </Show>
                   </div>
-                  <section class="flex min-h-[8.5rem] flex-1 flex-col rounded-3xl border border-(--border) bg-white/55 p-3">
-                    <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Execution log</div>
+                  <section class={stylex.attrs(utilities.flex, utilities.minH85, utilities.flex1, utilities.flexCol, utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
+                    <div class={stylex.attrs(utilities.mb3, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking018, utilities.textMuted).class}>Execution log</div>
                     <ExecutionLog entries={executionLogEntries()} emptyMessage="No execution log yet." fileLinks={traceFileLinks()} />
                   </section>
                 </div>
@@ -343,17 +349,17 @@ export function TracePanel() {
             </Show>
             <Show when={jobSnapshot()}>
               {(snapshot) => (
-                <div class="flex min-h-0 flex-1 flex-col gap-4">
-                  <section class="flex min-h-[8.5rem] flex-1 flex-col rounded-3xl border border-(--border) bg-white/55 p-3">
-                    <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Execution log</div>
+                <div class={stylex.attrs(utilities.flex, utilities.minH0, utilities.flex1, utilities.flexCol, utilities.gap4).class}>
+                  <section class={stylex.attrs(utilities.flex, utilities.minH85, utilities.flex1, utilities.flexCol, utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
+                    <div class={stylex.attrs(utilities.mb3, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking018, utilities.textMuted).class}>Execution log</div>
                     <ExecutionLog entries={executionLogEntries()} emptyMessage="No execution log yet." fileLinks={traceFileLinks()} />
                   </section>
                 </div>
               )}
             </Show>
             <Show when={!assistantSnapshot() && !jobSnapshot()}>
-              <div class="flex">
-                <div class="w-full rounded-3xl border border-dashed border-(--border) bg-white/40 p-5 text-[0.675rem] leading-5 text-(--muted)">
+              <div class={stylex.attrs(utilities.flex).class}>
+                <div class={stylex.attrs(utilities.wFull, utilities.rounded3xl, utilities.border, utilities.borderDashed, utilities.borderDefault, utilities.bgWhite40, utilities.p5, utilities.text0675, utilities.leading5, utilities.textMuted).class}>
                   Open project root, assistant, or job to inspect execution.
                 </div>
               </div>
@@ -364,13 +370,13 @@ export function TracePanel() {
         {(project) => (
           <>
             <Show when={project().latestPlan}>
-              <div class="rounded-3xl border border-(--border) bg-white/55 p-3">
-                <div class="mb-3 flex items-center justify-between gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
+              <div class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
+                <div class={stylex.attrs(utilities.mb3, utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking02, utilities.textMuted).class}>
                   <span>Latest plan</span>
                   <Show when={hasPlanDetails()}>
                     <ActionButton
                       tooltip="Open the full execution plan"
-                      icon={<ClipboardList class="h-3.5 w-3.5" />}
+                      icon={<ClipboardList class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                       size="sm"
                       variant="secondary"
                       onClick={() => {
@@ -384,7 +390,7 @@ export function TracePanel() {
                     </ActionButton>
                   </Show>
                 </div>
-                <div class="grid grid-cols-2 gap-2 text-[0.675rem] text-(--muted)">
+                <div class={stylex.attrs(utilities.grid, utilities.gridCols2, utilities.gap2, utilities.text0675, utilities.textMuted).class}>
                   <div>Difficulty: {project().latestPlan?.difficultyScore}%</div>
                   <div>Route: {project().latestPlan?.executionPlan?.route ?? (project().latestPlan?.usesSubagents ? "subagents" : "main")}</div>
                   <div>Planner: {project().latestPlan?.planningModelId}</div>
@@ -396,20 +402,20 @@ export function TracePanel() {
             </Show>
 
             <Show when={runToShow()}>
-              <div data-test-trace-run-card="" class="w-full min-w-0 rounded-3xl border border-(--border) bg-white/55 p-3">
-                <div class="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3 text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
-                  <div class="flex min-w-0 flex-wrap items-center gap-2">
+              <div data-test-trace-run-card="" class={stylex.attrs(utilities.wFull, utilities.minW0, utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
+                <div class={stylex.attrs(utilities.mb3, utilities.flex, utilities.minW0, utilities.flexWrap, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking02, utilities.textMuted).class}>
+                  <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flexWrap, utilities.itemsCenter, utilities.gap2).class}>
                     <Show when={runToShow() && isRunWorking(runToShow()!.status)}>
-                      <LoaderCircle class="h-3.5 w-3.5 animate-spin" />
+                      <LoaderCircle class={stylex.attrs(utilities.h35, utilities.w35, utilities.animateSpin).class} />
                     </Show>
                     Run
                   </div>
-                  <div data-test-trace-run-actions="" class="flex w-full min-w-0 flex-wrap items-center justify-end gap-2">
+                  <div data-test-trace-run-actions="" class={stylex.attrs(utilities.flex, utilities.wFull, utilities.minW0, utilities.flexWrap, utilities.itemsCenter, utilities.justifyEnd, utilities.gap2).class}>
                     <ActionButton
                       tooltip="Refresh the active run"
                       disabledReason={executionPaused() ? executionPauseReason : refreshState().disabledReason}
                       disabled={executionPaused() || refreshState().disabled}
-                      icon={<RefreshCcw class="h-3.5 w-3.5" />}
+                      icon={<RefreshCcw class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                       size="sm"
                       variant="secondary"
                       onClick={handleRefreshRun}
@@ -421,7 +427,7 @@ export function TracePanel() {
                         tooltip="Retry last run"
                         disabledReason={executionPaused() ? executionPauseReason : "Project is streaming"}
                         disabled={executionPaused() || project().session.isStreaming}
-                        icon={<RefreshCcw class="h-3.5 w-3.5" />}
+                        icon={<RefreshCcw class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                         size="sm"
                         variant="secondary"
                         onClick={handleRetryRun}
@@ -432,7 +438,7 @@ export function TracePanel() {
                     <ActionButton
                       tooltip="Open terminal history for this run"
                       ariaLabel="Open run terminal history"
-                      icon={<Terminal class="h-3.5 w-3.5" />}
+                      icon={<Terminal class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                       size="sm"
                       variant="secondary"
                       onClick={handleOpenRunTerminalHistory}
@@ -441,18 +447,18 @@ export function TracePanel() {
                     </ActionButton>
                   </div>
                 </div>
-                <div class="min-w-0 space-y-2 text-[0.675rem] text-(--muted)">
+                <div class={stylex.attrs(utilities.minW0, utilities.spaceY2, utilities.text0675, utilities.textMuted).class}>
                   <div>Status: {runToShow()?.status}</div>
                   <div>Retryable: {runToShow()?.retryable ? "yes" : "no"}</div>
                   <div>Resumable: {runToShow()?.resumable ? "yes" : "no"}</div>
-                  <Tooltip content={runToShow()?.latestUserPrompt} triggerClass="block min-w-0">
-                    <div class="truncate">
+                  <Tooltip content={runToShow()?.latestUserPrompt} triggerClass={stylex.attrs(utilities.block, utilities.minW0).class}>
+                    <div class={stylex.attrs(utilities.truncate).class}>
                       <FileLinkedText text={() => `Prompt: ${runToShow()?.latestUserPrompt ?? ""}`} fileLinks={traceFileLinks()} />
                     </div>
                   </Tooltip>
                   <Show when={runToShow()?.failureMessage}>
                     {(failure) => (
-                      <div class="wrap-anywhere">
+                      <div class={stylex.attrs(utilities.wrapAnywhere).class}>
                         <FileLinkedText text={`Failure: ${failure()}`} fileLinks={traceFileLinks()} />
                       </div>
                     )}
@@ -460,43 +466,43 @@ export function TracePanel() {
                 </div>
 
                 <Show when={runToShow()?.subtasks.length}>
-                  <div class="mt-4 space-y-2">
-                    <div class="flex items-center justify-between gap-3">
-                      <div class="text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
+                  <div class={stylex.attrs(utilities.mt4, utilities.spaceY2).class}>
+                    <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3).class}>
+                      <div class={stylex.attrs(utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking02, utilities.textMuted).class}>
                         Subtasks
                       </div>
                     </div>
                     <VirtualList
-                      class="max-h-80 min-w-0 overflow-x-hidden pr-2"
-                      contentClass="w-full min-w-0"
-                      itemClass="min-w-0 pb-2"
+                      class={stylex.attrs(utilities.maxH80, utilities.minW0, utilities.overflowXHidden, utilities.pr2).class}
+                      contentClass={stylex.attrs(utilities.wFull, utilities.minW0).class}
+                      itemClass={stylex.attrs(utilities.minW0, utilities.pb2).class}
                       items={visibleSubtasks()}
                       getKey={(task) => task.id}
                       estimateSize={132}
                       pagination={{ kind: "forward", initialCount: TRACE_SUBTASK_LIMIT, batchSize: TRACE_SUBTASK_LIMIT }}
                     >
                       {(task) => (
-                          <div class="rounded-2xl border border-(--border) bg-white/70 p-3 text-[0.675rem]">
-                            <div class="flex min-w-0 items-center justify-between gap-3 text-(--foreground)">
-                              <span class="flex min-w-0 flex-1 items-center gap-2 font-semibold">
+                          <div class={stylex.attrs(utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite70, utilities.p3, utilities.text0675).class}>
+                            <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
+                              <span class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flex1, utilities.itemsCenter, utilities.gap2, utilities.fontSemibold).class}>
                                 <TaskStatusIcon status={task.status} />
-                                <Tooltip content={task.title} triggerClass="min-w-0 flex-1">
-                                  <FileLinkedText class="block truncate" text={task.title} fileLinks={traceFileLinks()} />
+                                <Tooltip content={task.title} triggerClass={stylex.attrs(utilities.minW0, utilities.flex1).class}>
+                                  <FileLinkedText class={stylex.attrs(utilities.block, utilities.truncate).class} text={task.title} fileLinks={traceFileLinks()} />
                                 </Tooltip>
                               </span>
-                              <span class="shrink-0 uppercase tracking-[0.14em] text-(--accent-strong)">{task.status}</span>
+                              <span class={stylex.attrs(utilities.shrink0, utilities.uppercase, utilities.tracking014, utilities.textAccentStrong).class}>{task.status}</span>
                             </div>
-                            <div class="mt-1 text-(--muted)">Attempts: {task.attemptCount}</div>
-                            <div class="mt-1 text-(--muted)">
+                            <div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>Attempts: {task.attemptCount}</div>
+                            <div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>
                               <FileLinkedText text={() => `Latest status: ${getLatestTaskStatusText(project(), task)}`} fileLinks={traceFileLinks()} />
                             </div>
                             <Show when={task.startedAt}>
-                              <div class="mt-1 text-(--muted)">Started: {formatShortTimestamp(task.startedAt)}</div>
+                              <div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>Started: {formatShortTimestamp(task.startedAt)}</div>
                             </Show>
                             <Show when={task.completedAt}>
-                              <div class="mt-1 text-(--muted)">Completed: {formatShortTimestamp(task.completedAt)}</div>
+                              <div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>Completed: {formatShortTimestamp(task.completedAt)}</div>
                             </Show>
-                            <div class="mt-2 flex flex-wrap gap-2">
+                            <div class={stylex.attrs(utilities.mt2, utilities.flex, utilities.flexWrap, utilities.gap2).class}>
                               <ActionButton
                                 tooltip="Refresh this active subagent"
                                 disabledReason={
@@ -505,7 +511,7 @@ export function TracePanel() {
                                     : getRunRefreshState(project(), project().activeRun, task.id).disabledReason
                                 }
                                 disabled={executionPaused() || getRunRefreshState(project(), project().activeRun, task.id).disabled}
-                                icon={<RefreshCcw class="h-3.5 w-3.5" />}
+                                icon={<RefreshCcw class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                                 size="sm"
                                 variant="secondary"
                                 onClick={() => handleRefreshSubagent(task.id)}
@@ -517,7 +523,7 @@ export function TracePanel() {
                                   tooltip="Retry this subagent"
                                   disabledReason={executionPaused() ? executionPauseReason : "Project is streaming"}
                                   disabled={executionPaused() || project().session.isStreaming}
-                                  icon={<RefreshCcw class="h-3.5 w-3.5" />}
+                                  icon={<RefreshCcw class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                                   size="sm"
                                   variant="secondary"
                                   onClick={() => handleRetrySubagent(task.id)}
@@ -527,7 +533,7 @@ export function TracePanel() {
                               </Show>
                             </div>
                             <Show when={task.errorMessage}>
-                              <MarkdownContent content={() => task.errorMessage ?? ""} class="mt-1" size="compact" tone="danger" fileLinks={traceFileLinks()} />
+                              <MarkdownContent content={() => task.errorMessage ?? ""} class={stylex.attrs(utilities.mt1).class} size="compact" tone="danger" fileLinks={traceFileLinks()} />
                             </Show>
                           </div>
                       )}
@@ -538,54 +544,54 @@ export function TracePanel() {
             </Show>
 
             <Show when={runToShow()?.toolActivities?.length}>
-              <div class="rounded-3xl border border-(--border) bg-white/55 p-3">
-                <div class="mb-3 flex items-center justify-between gap-3">
-                  <div class="flex items-center gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
-                    <Terminal class="h-3.5 w-3.5" />
+              <div class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
+                <div class={stylex.attrs(utilities.mb3, utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3).class}>
+                  <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.gap2, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking02, utilities.textMuted).class}>
+                    <Terminal class={stylex.attrs(utilities.h35, utilities.w35).class} />
                     Tool activity
                   </div>
                 </div>
                 <VirtualList
-                  class="max-h-96 min-w-0 overflow-x-hidden pr-2"
-                  contentClass="w-full min-w-0"
-                  itemClass="min-w-0 pb-2"
+                  class={stylex.attrs(utilities.maxH96, utilities.minW0, utilities.overflowXHidden, utilities.pr2).class}
+                  contentClass={stylex.attrs(utilities.wFull, utilities.minW0).class}
+                  itemClass={stylex.attrs(utilities.minW0, utilities.pb2).class}
                   items={visibleToolActivities()}
                   getKey={(activity) => activity.id}
                   estimateSize={150}
                   pagination={{ kind: "forward", initialCount: TRACE_TOOL_ACTIVITY_LIMIT, batchSize: TRACE_TOOL_ACTIVITY_LIMIT }}
                 >
                   {(activity) => (
-                      <article class="w-full min-w-0 rounded-2xl border border-(--border) bg-white/70 p-3 text-[0.675rem]">
-                        <div class="flex min-w-0 items-center justify-between gap-3 text-(--foreground)">
-                          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2 font-semibold">
+                      <article class={stylex.attrs(utilities.wFull, utilities.minW0, utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite70, utilities.p3, utilities.text0675).class}>
+                        <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
+                          <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flex1, utilities.flexWrap, utilities.itemsCenter, utilities.gap2, utilities.fontSemibold).class}>
                             <ToolActivityStatusIcon status={activity.status} />
-                            <span class="truncate">{formatToolActivityOwner(activity)}</span>
-                            <span class="shrink-0 text-(--muted)">|</span>
-                            <span class="min-w-0 wrap-anywhere">{activity.toolName}</span>
+                            <span class={stylex.attrs(utilities.truncate).class}>{formatToolActivityOwner(activity)}</span>
+                            <span class={stylex.attrs(utilities.shrink0, utilities.textMuted).class}>|</span>
+                            <span class={stylex.attrs(utilities.minW0, utilities.wrapAnywhere).class}>{activity.toolName}</span>
                           </div>
-                          <span class="shrink-0 uppercase tracking-[0.14em] text-(--accent-strong)">
+                          <span class={stylex.attrs(utilities.shrink0, utilities.uppercase, utilities.tracking014, utilities.textAccentStrong).class}>
                             {activity.exitCode === undefined ? activity.status : `${activity.status} ${activity.exitCode}`}
                           </span>
                         </div>
-                        <div class="mt-2 text-[0.64rem] leading-5 text-(--muted)">
+                        <div class={stylex.attrs(utilities.mt2, utilities.text064, utilities.leading5, utilities.textMuted).class}>
                           {formatToolInvocationDescription(activity)}
                         </div>
                         <Show when={formatToolActivitySnippet(activity, 260)}>
                           {(snippet) => (
-                            <div class="tool-call-snippet mt-2 font-mono">
+                            <div class={stylex.attrs(styles.toolSnippet, utilities.mt2, utilities.fontMono).class}>
                               <FileLinkedText text={snippet()} fileLinks={traceFileLinks()} />
                             </div>
                           )}
                         </Show>
                         <Show when={activity.outputPreview && activity.outputPreview !== activity.command ? activity.outputPreview : undefined}>
                           {(preview) => (
-                            <div class="tool-call-snippet mt-2">
+                            <div class={stylex.attrs(styles.toolSnippet, utilities.mt2).class}>
                               <FileLinkedText text={normalizeToolSnippet(preview(), 260)} fileLinks={traceFileLinks()} />
                             </div>
                           )}
                         </Show>
                         <Show when={expandedToolActivityId() === activity.id}>
-                          <div class="mt-2 space-y-2 rounded-xl border border-(--border) bg-white/80 p-2">
+                          <div class={stylex.attrs(utilities.mt2, utilities.spaceY2, utilities.roundedXl, utilities.border, utilities.borderDefault, utilities.bgWhite80, utilities.p2).class}>
                             <Show when={activity.argsSummary}>
                               {(summary) => <ToolSnippetBlock title="Args" value={summary()} fileLinks={traceFileLinks()} />}
                             </Show>
@@ -597,10 +603,10 @@ export function TracePanel() {
                             </Show>
                           </div>
                         </Show>
-                        <div class="mt-2 flex flex-wrap justify-end gap-2">
+                        <div class={stylex.attrs(utilities.mt2, utilities.flex, utilities.flexWrap, utilities.justifyEnd, utilities.gap2).class}>
                           <ActionButton
                             tooltip="Toggle tool details"
-                            icon={expandedToolActivityId() === activity.id ? <ChevronDown class="h-3.5 w-3.5" /> : <ChevronRight class="h-3.5 w-3.5" />}
+                            icon={expandedToolActivityId() === activity.id ? <ChevronDown class={stylex.attrs(utilities.h35, utilities.w35).class} /> : <ChevronRight class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                             size="sm"
                             variant="ghost"
                             onClick={() => setExpandedToolActivityId(expandedToolActivityId() === activity.id ? undefined : activity.id)}
@@ -626,52 +632,52 @@ export function TracePanel() {
             </Show>
 
             <Show when={runToShow()?.browserSessions?.length}>
-              <div class="rounded-3xl border border-(--border) bg-white/55 p-3">
-                <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
+              <div class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
+                <div class={stylex.attrs(utilities.mb3, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking02, utilities.textMuted).class}>
                   Browser sessions
                 </div>
                 <Show when={executionPaused() && deferredBrowserApprovalCount() > 0}>
-                  <div class="mb-3 rounded-xl border border-amber-300/70 bg-amber-50/80 p-3 text-[0.675rem] text-amber-900">
+                  <div class={stylex.attrs(utilities.mb3, utilities.roundedXl, utilities.border, utilities.borderAmber300_70, utilities.bgAmber50_80, utilities.p3, utilities.text0675, utilities.textAmber900).class}>
                     {deferredBrowserApprovalCount()} browser approvals queued until resume.
                   </div>
                 </Show>
                 <VirtualList
-                  class="max-h-96 min-w-0 overflow-x-hidden pr-2"
-                  contentClass="w-full min-w-0"
-                  itemClass="min-w-0 pb-3"
+                  class={stylex.attrs(utilities.maxH96, utilities.minW0, utilities.overflowXHidden, utilities.pr2).class}
+                  contentClass={stylex.attrs(utilities.wFull, utilities.minW0).class}
+                  itemClass={stylex.attrs(utilities.minW0, utilities.pb3).class}
                   items={visibleBrowserSessions()}
                   getKey={(session) => session.id}
                   estimateSize={240}
                   pagination={{ kind: "forward", initialCount: TRACE_BROWSER_SESSION_LIMIT, batchSize: TRACE_BROWSER_SESSION_LIMIT }}
                 >
                   {(session) => (
-                      <article class="rounded-2xl border border-(--border) bg-white/70 p-3 text-[0.675rem]">
-                        <div class="flex items-center justify-between gap-3 text-(--foreground)">
-                          <div class="font-semibold">
+                      <article class={stylex.attrs(utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite70, utilities.p3, utilities.text0675).class}>
+                        <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
+                          <div class={stylex.attrs(utilities.fontSemibold).class}>
                             {session.owner === "subagent" ? `Subagent ${session.subagentId}` : session.owner}
                           </div>
-                          <div class="uppercase tracking-[0.14em] text-(--accent-strong)">{session.status}</div>
+                          <div class={stylex.attrs(utilities.uppercase, utilities.tracking014, utilities.textAccentStrong).class}>{session.status}</div>
                         </div>
                         <Show when={session.pendingApproval}>
                           {(approval) => (
-                            <div class="mt-3 rounded-xl border border-amber-300/70 bg-amber-50/80 p-3">
-                              <div class="font-semibold text-amber-900">Approval needed</div>
-                              <div class="mt-1 text-amber-900/80">
+                            <div class={stylex.attrs(utilities.mt3, utilities.roundedXl, utilities.border, utilities.borderAmber300_70, utilities.bgAmber50_80, utilities.p3).class}>
+                              <div class={stylex.attrs(utilities.fontSemibold, utilities.textAmber900).class}>Approval needed</div>
+                              <div class={stylex.attrs(utilities.mt1, utilities.textAmber900_80).class}>
                                 <FileLinkedText text={approval().label} fileLinks={traceFileLinks()} />
                               </div>
                               <Show when={approval().inputSummary}>
                                 {(summary) => (
-                                  <div class="mt-1 whitespace-pre-wrap text-amber-900/70">
+                                  <div class={stylex.attrs(utilities.mt1, utilities.whitespacePreWrap, utilities.textAmber900_70).class}>
                                     <FileLinkedText text={summary()} fileLinks={traceFileLinks()} />
                                   </div>
                                 )}
                               </Show>
-                              <div class="mt-3 flex flex-wrap gap-2">
+                              <div class={stylex.attrs(utilities.mt3, utilities.flex, utilities.flexWrap, utilities.gap2).class}>
                                 <ActionButton
                                   tooltip="Approve this browser step"
                                   disabled={executionPaused()}
                                   disabledReason={executionPauseReason}
-                                  icon={<ShieldCheck class="h-3.5 w-3.5" />}
+                                  icon={<ShieldCheck class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                                   size="sm"
                                   variant="secondary"
                                   onClick={() => handleResolveBrowserApproval(session.id, approval().toolCallId, true)}
@@ -680,7 +686,7 @@ export function TracePanel() {
                                 </ActionButton>
                                 <ActionButton
                                   tooltip="Reject this browser step"
-                                  icon={<ShieldX class="h-3.5 w-3.5" />}
+                                  icon={<ShieldX class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                                   size="sm"
                                   variant="secondary"
                                   onClick={() => handleResolveBrowserApproval(session.id, approval().toolCallId, false)}
@@ -692,25 +698,25 @@ export function TracePanel() {
                           )}
                         </Show>
 
-                        <div class="mt-3 space-y-2">
+                        <div class={stylex.attrs(utilities.mt3, utilities.spaceY2).class}>
                           <For each={session.activities.slice(-TRACE_BROWSER_ACTIVITY_LIMIT)}>
                             {(activity) => (
                               <Show when={activity.approval?.status !== "deferred"}>
-                                <div class="rounded-xl border border-(--border) bg-white/80 p-3">
-                                  <div class="flex items-center justify-between gap-3 text-(--foreground)">
-                                    <span class="font-semibold">
+                                <div class={stylex.attrs(utilities.roundedXl, utilities.border, utilities.borderDefault, utilities.bgWhite80, utilities.p3).class}>
+                                  <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
+                                    <span class={stylex.attrs(utilities.fontSemibold).class}>
                                       <FileLinkedText text={activity.label} fileLinks={traceFileLinks()} />
                                     </span>
-                                    <span class="uppercase tracking-[0.14em] text-(--muted)">{activity.status}</span>
+                                    <span class={stylex.attrs(utilities.uppercase, utilities.tracking014, utilities.textMuted).class}>{activity.status}</span>
                                   </div>
-                                  <div class="mt-1 text-(--muted)">
+                                  <div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>
                                     {activity.toolName} | {activity.kind}
                                   </div>
                                   <Show when={activity.outputSummary}>
-                                    <MarkdownContent content={() => activity.outputSummary ?? ""} class="mt-2" size="compact" fileLinks={traceFileLinks()} />
+                                    <MarkdownContent content={() => activity.outputSummary ?? ""} class={stylex.attrs(utilities.mt2).class} size="compact" fileLinks={traceFileLinks()} />
                                   </Show>
                                   <Show when={activity.replay.length > 0}>
-                                    <div class="mt-2 space-y-1 text-(--muted)">
+                                    <div class={stylex.attrs(utilities.mt2, utilities.spaceY1, utilities.textMuted).class}>
                                       <For each={activity.replay.slice(-3)}>
                                         {(entry) => (
                                           <div>
@@ -721,7 +727,7 @@ export function TracePanel() {
                                     </div>
                                   </Show>
                                   <Show when={activity.verification.length > 0}>
-                                    <div class="mt-2 text-emerald-800/80">
+                                    <div class={stylex.attrs(utilities.mt2, utilities.textEmerald800_80).class}>
                                       {formatVerificationSummary(activity.verification)}
                                     </div>
                                   </Show>
@@ -736,27 +742,27 @@ export function TracePanel() {
               </div>
             </Show>
 
-            <section class="flex min-h-[8.5rem] max-h-72 flex-col rounded-3xl border border-(--border) bg-white/55 p-3">
-              <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Execution log</div>
+            <section class={stylex.attrs(utilities.flex, utilities.minH85, utilities.maxH72, utilities.flexCol, utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
+              <div class={stylex.attrs(utilities.mb3, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking018, utilities.textMuted).class}>Execution log</div>
               <ExecutionLog entries={executionLogEntries()} emptyMessage="No execution log yet." fileLinks={traceFileLinks()} />
             </section>
 
             <VirtualList
-              class="flex-1 min-h-0 min-w-0 overflow-x-hidden pr-2"
-              contentClass="w-full min-w-0"
-              itemClass="min-w-0 pb-3"
+              class={stylex.attrs(utilities.flex1, utilities.minH0, utilities.minW0, utilities.overflowXHidden, utilities.pr2).class}
+              contentClass={stylex.attrs(utilities.wFull, utilities.minW0).class}
+              itemClass={stylex.attrs(utilities.minW0, utilities.pb3).class}
               items={visibleTraceRows()}
               getKey={(trace, index) => `${trace.stage}-${index}`}
               estimateSize={140}
               pagination={{ kind: "reverse", initialCount: TRACE_EVENT_LIMIT, batchSize: TRACE_EVENT_LIMIT }}
-              empty={<div class="rounded-3xl border border-dashed border-(--border) bg-white/40 p-5 text-[0.675rem] text-(--muted)">No trace events yet.</div>}
+              empty={<div class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDashed, utilities.borderDefault, utilities.bgWhite40, utilities.p5, utilities.text0675, utilities.textMuted).class}>No trace events yet.</div>}
             >
               {(trace) => (
-                <article class="rounded-3xl border border-(--border) bg-white/55 p-3">
-                  <div class="mb-2 flex items-center justify-between gap-3 text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--accent-strong)">
-                    <div class="min-w-0">
-                      <div class="truncate">{trace.stage}</div>
-                      <div class="mt-1 text-[0.53rem] font-medium normal-case tracking-normal text-(--muted)">
+                <article class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
+                  <div class={stylex.attrs(utilities.mb2, utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking016, utilities.textAccentStrong).class}>
+                    <div class={stylex.attrs(utilities.minW0).class}>
+                      <div class={stylex.attrs(utilities.truncate).class}>{trace.stage}</div>
+                      <div class={stylex.attrs(utilities.mt1, utilities.text053, utilities.fontMedium, utilities.normalCase, utilities.trackingNormal, utilities.textMuted).class}>
                         {formatShortTimestamp(trace.createdAt)}
                       </div>
                     </div>
@@ -764,7 +770,7 @@ export function TracePanel() {
                   </div>
                   <MarkdownContent content={() => trace.message} size="compact" fileLinks={traceFileLinks()} />
                   <Show when={trace.detail}>
-                    <MarkdownContent content={() => trace.detail ?? ""} class="mt-2" size="compact" tone="muted" fileLinks={traceFileLinks()} />
+                    <MarkdownContent content={() => trace.detail ?? ""} class={stylex.attrs(utilities.mt2).class} size="compact" tone="muted" fileLinks={traceFileLinks()} />
                   </Show>
                 </article>
               )}
@@ -773,9 +779,9 @@ export function TracePanel() {
         )}
       </Show>
 
-      <div class="shrink-0 rounded-2xl border border-(--border) bg-white/75 px-3 py-2 text-[0.625rem] font-semibold text-(--foreground)">
-        Running agents: <span classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() }}>{runningCounts().current}</span> current /{" "}
-        <span classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() }}>{runningCounts().total}</span> total
+      <div data-test-trace-running-counts="" class={stylex.attrs(utilities.shrink0, utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite75, utilities.px3, utilities.py2, utilities.text0625, utilities.fontSemibold, utilities.textForeground).class}>
+        Running agents: <span class={rightAlignedNumbersEnabled() ? stylex.attrs(styles.numericFlagged).class : undefined}>{runningCounts().current}</span> current /{" "}
+        <span class={rightAlignedNumbersEnabled() ? stylex.attrs(styles.numericFlagged).class : undefined}>{runningCounts().total}</span> total
       </div>
     </aside>
     <TerminalHistoryDialog
@@ -805,28 +811,23 @@ function TraceContextSummary(props: {
   fileLinks?: FileLinkConfig;
 }) {
   return (
-    <section data-test-trace-context-summary="" class="trace-context-summary">
-      <div class="trace-context-summary-header">
-        <div class="min-w-0">
-          <div class="trace-context-eyebrow">{props.title.eyebrow}</div>
-          <div class="trace-context-title">{props.title.title}</div>
-          <div class="trace-context-source">
+    <section data-test-trace-context-summary="" class={stylex.attrs(styles.contextSummary).class}>
+      <div class={stylex.attrs(styles.contextSummaryHeader).class}>
+        <div class={stylex.attrs(utilities.minW0).class}>
+          <div class={stylex.attrs(styles.contextEyebrow).class}>{props.title.eyebrow}</div>
+          <div class={stylex.attrs(styles.contextTitle).class}>{props.title.title}</div>
+          <div class={stylex.attrs(styles.contextSource).class}>
             <FileLinkedText text={`Source: ${props.title.source}`} fileLinks={props.fileLinks} />
           </div>
         </div>
-        <div
-          class="trace-context-agent-pill"
-          classList={{
-            "trace-context-agent-pill-active": props.runningCounts.current > 0
-          }}
-        >
-          <span class="trace-context-pill-dot" />
-          <span classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() }}>{props.runningCounts.current}</span>
-          <span class="text-(--muted)" classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() }}>/ {props.runningCounts.total}</span>
+        <div class={props.runningCounts.current > 0 ? stylex.attrs(styles.agentPill, styles.agentPillActive).class : stylex.attrs(styles.agentPill).class}>
+          <span class={props.runningCounts.current > 0 ? stylex.attrs(styles.agentPillDot, styles.agentPillDotActive).class : stylex.attrs(styles.agentPillDot).class} />
+          <span class={rightAlignedNumbersEnabled() ? stylex.attrs(styles.numericFlagged).class : undefined}>{props.runningCounts.current}</span>
+          <span class={rightAlignedNumbersEnabled() ? stylex.attrs(utilities.textMuted, styles.numericFlagged).class : stylex.attrs(utilities.textMuted).class}>/ {props.runningCounts.total}</span>
         </div>
       </div>
 
-      <div class="trace-context-metrics">
+      <div class={stylex.attrs(styles.contextMetrics).class}>
         <Show when={props.assistant}>
           {(assistant) => (
             <>
@@ -864,15 +865,15 @@ function TraceContextSummary(props: {
 
       <Show when={!props.job && props.run}>
         {(run) => (
-          <div class="trace-context-runline">
-            <Tooltip content={run().latestUserPrompt} triggerClass="block min-w-0">
-              <div class="truncate">
+          <div class={stylex.attrs(styles.contextRunLine).class}>
+            <Tooltip content={run().latestUserPrompt} triggerClass={stylex.attrs(utilities.block, utilities.minW0).class}>
+              <div class={stylex.attrs(utilities.truncate).class}>
                 <FileLinkedText text={`Prompt: ${run().latestUserPrompt}`} fileLinks={props.fileLinks} />
               </div>
             </Tooltip>
             <Show when={run().failureMessage}>
               {(failure) => (
-                <div class="wrap-anywhere text-rose-800">
+                <div class={stylex.attrs(utilities.wrapAnywhere, utilities.textRose800).class}>
                   <FileLinkedText text={`Failure: ${failure()}`} fileLinks={props.fileLinks} />
                 </div>
               )}
@@ -886,17 +887,17 @@ function TraceContextSummary(props: {
 
 function TraceContextMetric(props: { label: string; value: string; tone: "neutral" | "success" | "warning" | "danger" | "info"; numeric?: boolean }) {
   return (
-    <div
-      class="trace-context-metric"
-      classList={{
-        "trace-context-metric-success": props.tone === "success",
-        "trace-context-metric-warning": props.tone === "warning",
-        "trace-context-metric-danger": props.tone === "danger",
-        "trace-context-metric-info": props.tone === "info"
-      }}
-    >
-      <div class="trace-context-metric-label">{props.label}</div>
-      <div class="trace-context-metric-value" classList={{ "dense-numeric-flagged": Boolean(props.numeric) && rightAlignedNumbersEnabled() }}>{props.value}</div>
+    <div class={props.tone === "success"
+      ? stylex.attrs(styles.contextMetric, styles.contextMetricSuccess).class
+      : props.tone === "warning"
+        ? stylex.attrs(styles.contextMetric, styles.contextMetricWarning).class
+        : props.tone === "danger"
+          ? stylex.attrs(styles.contextMetric, styles.contextMetricDanger).class
+          : props.tone === "info"
+            ? stylex.attrs(styles.contextMetric, styles.contextMetricInfo).class
+            : stylex.attrs(styles.contextMetric).class}>
+      <div class={stylex.attrs(styles.contextMetricLabel).class}>{props.label}</div>
+      <div class={Boolean(props.numeric) && rightAlignedNumbersEnabled() ? stylex.attrs(styles.contextMetricValue, styles.numericFlagged).class : stylex.attrs(styles.contextMetricValue).class}>{props.value}</div>
     </div>
   );
 }
@@ -905,37 +906,39 @@ function TraceJobRunSummary(props: { run?: BackgroundJobRun; fileLinks?: FileLin
   return (
     <Show
       when={props.run}
-      fallback={<div class="trace-context-runline trace-context-runline-empty">No run yet.</div>}
+      fallback={<div class={stylex.attrs(styles.contextRunLine, styles.contextRunEmpty).class}>No run yet.</div>}
     >
-      {(run) => (
-        <div
-          class="trace-context-run-summary"
-          classList={{
-            "trace-context-run-summary-danger": toneForStatus(run().status) === "danger",
-            "trace-context-run-summary-warning": toneForStatus(run().status) === "warning",
-            "trace-context-run-summary-success": toneForStatus(run().status) === "success"
-          }}
-        >
-          <div class="trace-context-run-status">
-            <span class="trace-context-run-dot" />
+      {(run) => {
+        const tone = toneForStatus(run().status);
+        return (
+        <div class={tone === "danger"
+          ? stylex.attrs(styles.contextRunLine, styles.contextRunSummary, styles.contextRunDanger).class
+          : tone === "warning"
+            ? stylex.attrs(styles.contextRunLine, styles.contextRunSummary, styles.contextRunWarning).class
+            : tone === "success"
+              ? stylex.attrs(styles.contextRunLine, styles.contextRunSummary, styles.contextRunSuccess).class
+              : stylex.attrs(styles.contextRunLine, styles.contextRunSummary).class}>
+          <div class={stylex.attrs(styles.contextRunStatus).class}>
+            <span class={stylex.attrs(styles.contextRunDot).class} />
             <span>{run().status}</span>
           </div>
-          <div class="trace-context-run-facts">
+          <div class={stylex.attrs(styles.contextRunFacts).class}>
             <span>Trigger: {run().triggerSource}</span>
             <span>Approval: {run().approvalStatus}</span>
           </div>
-          <div class="trace-context-run-copy">
+          <div class={stylex.attrs(styles.contextRunCopy).class}>
             <FileLinkedText text={`Summary: ${run().summary ?? "n/a"}`} fileLinks={props.fileLinks} />
           </div>
           <Show when={run().failureMessage}>
             {(failure) => (
-              <div class="trace-context-run-copy text-rose-900">
+              <div class={stylex.attrs(styles.contextRunCopy, utilities.textRose900).class}>
                 <FileLinkedText text={`Failure: ${failure()}`} fileLinks={props.fileLinks} />
               </div>
             )}
           </Show>
         </div>
-      )}
+        );
+      }}
     </Show>
   );
 }
@@ -1021,17 +1024,17 @@ export function TracePeekRail() {
   }
 
   return (
-    <aside data-test-trace-peek-rail="" class="trace-peek-rail panel-shell flex h-full min-h-0 flex-col gap-3 rounded-xl border-t-0 p-3">
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex min-w-0 items-center gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">
-          <Eye class="h-3.5 w-3.5" />
-          <span class="truncate">Trace peek</span>
+    <aside data-test-trace-peek-rail="" class={stylex.attrs(styles.peekRail, styles.panelShell, utilities.flex, utilities.hFull, utilities.minH0, utilities.flexCol, utilities.gap3, utilities.roundedXl, utilities.borderTop0, utilities.p3).class}>
+      <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2).class}>
+        <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.gap2, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking016, utilities.textMuted).class}>
+          <Eye class={stylex.attrs(utilities.h35, utilities.w35).class} />
+          <span class={stylex.attrs(utilities.truncate).class}>Trace peek</span>
         </div>
-        <div class="flex gap-1">
+        <div class={stylex.attrs(utilities.flex, utilities.gap1).class}>
           <ActionButton
             tooltip="Open full trace inspector"
             ariaLabel="Open full trace inspector"
-            icon={<PanelRightOpen class="h-3.5 w-3.5" />}
+            icon={<PanelRightOpen class={stylex.attrs(utilities.h35, utilities.w35).class} />}
             size="icon"
             variant="ghost"
             onClick={() => harnessStore.setTracePanelMode("open")}
@@ -1039,7 +1042,7 @@ export function TracePeekRail() {
           <ActionButton
             tooltip="Close trace panel"
             ariaLabel="Close trace panel"
-            icon={<X class="h-3.5 w-3.5" />}
+            icon={<X class={stylex.attrs(utilities.h35, utilities.w35).class} />}
             size="icon"
             variant="ghost"
             onClick={() => harnessStore.setTracePanelMode("closed")}
@@ -1047,15 +1050,15 @@ export function TracePeekRail() {
         </div>
       </div>
 
-      <div class="trace-summary-card">
-        <div class="trace-summary-eyebrow">{traceTitle().eyebrow}</div>
-        <div class="truncate text-[0.76rem] font-semibold text-(--foreground)">{traceTitle().title}</div>
-        <div class="mt-1 truncate text-[0.62rem] text-(--muted)">
+      <div class={stylex.attrs(styles.summaryCard).class}>
+        <div class={stylex.attrs(styles.summaryEyebrow).class}>{traceTitle().eyebrow}</div>
+        <div class={stylex.attrs(utilities.truncate, utilities.text076, utilities.fontSemibold, utilities.textForeground).class}>{traceTitle().title}</div>
+        <div class={stylex.attrs(utilities.mt1, utilities.truncate, utilities.text062, utilities.textMuted).class}>
           <FileLinkedText text={traceTitle().source} fileLinks={traceFileLinks()} />
         </div>
       </div>
 
-      <div class="grid gap-2">
+      <div class={stylex.attrs(utilities.grid, utilities.gap2).class}>
         <TracePeekMetric label="Agents" value={`${runningCounts().current}/${runningCounts().total}`} tone={runningCounts().current > 0 ? "info" : "neutral"} />
         <Show when={runStatus()}>
           {(status) => <TracePeekMetric label="Run" value={status()} tone={isAttentionStatus(status()) ? "warning" : "success"} />}
@@ -1067,12 +1070,12 @@ export function TracePeekRail() {
 
       <Show
         when={failureText()}
-        fallback={<div class="trace-summary-card text-[0.65rem] leading-5 text-(--muted)">No active failure surfaced for this context.</div>}
+        fallback={<div class={stylex.attrs(styles.summaryCard, utilities.text065, utilities.leading5, utilities.textMuted).class}>No active failure surfaced for this context.</div>}
       >
         {(failure) => (
-          <div class="trace-summary-card border-rose-300 bg-rose-50/85 text-[0.65rem] leading-5 text-rose-950">
-            <div class="mb-1 font-semibold">Failure digest</div>
-            <div class="line-clamp-6 wrap-anywhere">
+          <div class={stylex.attrs(styles.summaryCard, utilities.borderRose300, utilities.bgRose50_85, utilities.text065, utilities.leading5, utilities.textRose950).class}>
+            <div class={stylex.attrs(utilities.mb1, utilities.fontSemibold).class}>Failure digest</div>
+            <div class={stylex.attrs(styles.lineClamp6, utilities.wrapAnywhere).class}>
               <FileLinkedText text={failure()} fileLinks={traceFileLinks()} />
             </div>
           </div>
@@ -1084,16 +1087,15 @@ export function TracePeekRail() {
 
 function TracePeekMetric(props: { label: string; value: string; tone: "neutral" | "success" | "warning" | "info" }) {
   return (
-    <div
-      class="trace-peek-metric"
-      classList={{
-        "trace-peek-metric-success": props.tone === "success",
-        "trace-peek-metric-warning": props.tone === "warning",
-        "trace-peek-metric-info": props.tone === "info"
-      }}
-    >
-      <div class="text-[0.55rem] font-semibold uppercase tracking-[0.14em] opacity-75">{props.label}</div>
-      <div class="mt-1 truncate text-[0.72rem] font-semibold">{props.value}</div>
+    <div class={props.tone === "success"
+      ? stylex.attrs(styles.peekMetric, styles.peekMetricSuccess).class
+      : props.tone === "warning"
+        ? stylex.attrs(styles.peekMetric, styles.peekMetricWarning).class
+        : props.tone === "info"
+          ? stylex.attrs(styles.peekMetric, styles.peekMetricInfo).class
+          : stylex.attrs(styles.peekMetric).class}>
+      <div class={stylex.attrs(utilities.text055, utilities.fontSemibold, utilities.uppercase, utilities.tracking014, utilities.opacity75).class}>{props.label}</div>
+      <div class={stylex.attrs(utilities.mt1, utilities.truncate, utilities.text072, utilities.fontSemibold).class}>{props.value}</div>
     </div>
   );
 }
@@ -1104,14 +1106,9 @@ function isAttentionStatus(status: string) {
 
 function ToolSnippetBlock(props: { title: string; value: string; tone?: "danger"; fileLinks?: FileLinkConfig }) {
   return (
-    <div class="rounded-lg border border-(--border) bg-white/70 p-2">
-      <div class="mb-1 text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-(--muted)">{props.title}</div>
-      <div
-        class="tool-call-snippet"
-        classList={{
-          "text-rose-800": props.tone === "danger"
-        }}
-      >
+    <div class={stylex.attrs(utilities.roundedLg, utilities.border, utilities.borderDefault, utilities.bgWhite70, utilities.p2).class}>
+      <div class={stylex.attrs(utilities.mb1, utilities.text055, utilities.fontSemibold, utilities.uppercase, utilities.tracking014, utilities.textMuted).class}>{props.title}</div>
+      <div class={props.tone === "danger" ? stylex.attrs(styles.toolSnippet, utilities.textRose800).class : stylex.attrs(styles.toolSnippet).class}>
         <FileLinkedText text={normalizeToolSnippet(props.value, 360)} fileLinks={props.fileLinks} />
       </div>
     </div>
@@ -1128,14 +1125,7 @@ type AssistantJobStatusState = "running" | "successful" | "error" | "idle";
 
 function getAssistantJobStatusView(jobId: string, runs: { jobId: string; status: string; updatedAt: string }[]) {
   const run = runs.filter((entry) => entry.jobId === jobId).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-  const state = getAssistantJobStatusState(run?.status);
-  const classes: Record<AssistantJobStatusState, { borderClass: string; textClass: string }> = {
-    running: { borderClass: "border-amber-300", textClass: "text-amber-700" },
-    successful: { borderClass: "border-emerald-300", textClass: "text-emerald-700" },
-    error: { borderClass: "border-rose-300", textClass: "text-rose-700" },
-    idle: { borderClass: "border-(--border)", textClass: "text-(--foreground)" }
-  };
-  return { state, ...classes[state] };
+  return { state: getAssistantJobStatusState(run?.status) };
 }
 
 function getAssistantJobStatusState(status: string | undefined): AssistantJobStatusState {
@@ -1160,38 +1150,38 @@ function getAssistantJobStatusText(job: { kind: string; status: string; riskLeve
 function AssistantJobStatusIcon(props: { state: AssistantJobStatusState }) {
   switch (props.state) {
     case "running":
-      return <LoaderCircle class="h-3.5 w-3.5 shrink-0 animate-spin" aria-label="Assistant job running" />;
+      return <LoaderCircle class={stylex.attrs(utilities.h35, utilities.w35, utilities.shrink0, utilities.animateSpin).class} aria-label="Assistant job running" />;
     case "successful":
-      return <CheckCircle2 class="h-3.5 w-3.5 shrink-0" aria-label="Assistant job successful" />;
+      return <CheckCircle2 class={stylex.attrs(utilities.h35, utilities.w35, utilities.shrink0).class} aria-label="Assistant job successful" />;
     case "error":
-      return <CircleAlert class="h-3.5 w-3.5 shrink-0" aria-label="Assistant job error" />;
+      return <CircleAlert class={stylex.attrs(utilities.h35, utilities.w35, utilities.shrink0).class} aria-label="Assistant job error" />;
     default:
-      return <Circle class="h-3.5 w-3.5 shrink-0" aria-label="Assistant job idle" />;
+      return <Circle class={stylex.attrs(utilities.h35, utilities.w35, utilities.shrink0).class} aria-label="Assistant job idle" />;
   }
 }
 
 function TaskStatusIcon(props: { status: "pending" | "running" | "completed" | "failed" }) {
   switch (props.status) {
     case "running":
-      return <LoaderCircle class="h-3.5 w-3.5 animate-spin" aria-label="Subtask running" />;
+      return <LoaderCircle class={stylex.attrs(utilities.h35, utilities.w35, utilities.animateSpin).class} aria-label="Subtask running" />;
     case "completed":
-      return <CheckCircle2 class="h-3.5 w-3.5 text-emerald-600" aria-label="Subtask completed" />;
+      return <CheckCircle2 class={stylex.attrs(utilities.h35, utilities.w35, utilities.textEmerald600).class} aria-label="Subtask completed" />;
     case "failed":
-      return <CircleAlert class="h-3.5 w-3.5 text-rose-600" aria-label="Subtask failed" />;
+      return <CircleAlert class={stylex.attrs(utilities.h35, utilities.w35, utilities.textRose600).class} aria-label="Subtask failed" />;
     default:
-      return <Circle class="h-3.5 w-3.5 text-(--muted)" aria-label="Subtask pending" />;
+      return <Circle class={stylex.attrs(utilities.h35, utilities.w35, utilities.textMuted).class} aria-label="Subtask pending" />;
   }
 }
 
 function ToolActivityStatusIcon(props: { status: ExecutionToolActivity["status"] }) {
   switch (props.status) {
     case "running":
-      return <LoaderCircle class="h-3.5 w-3.5 animate-spin" aria-label="Tool running" />;
+      return <LoaderCircle class={stylex.attrs(utilities.h35, utilities.w35, utilities.animateSpin).class} aria-label="Tool running" />;
     case "completed":
-      return <CheckCircle2 class="h-3.5 w-3.5 text-emerald-600" aria-label="Tool completed" />;
+      return <CheckCircle2 class={stylex.attrs(utilities.h35, utilities.w35, utilities.textEmerald600).class} aria-label="Tool completed" />;
     case "failed":
     case "timed-out":
-      return <CircleAlert class="h-3.5 w-3.5 text-rose-600" aria-label="Tool failed" />;
+      return <CircleAlert class={stylex.attrs(utilities.h35, utilities.w35, utilities.textRose600).class} aria-label="Tool failed" />;
   }
 }
 

@@ -1,8 +1,10 @@
 import { For, Show } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { createRequestId, type TerminalPaneLayout, type TerminalSession } from "../../../shared/protocol";
 import { harnessStore } from "../harness-store";
 import { terminalStore } from "./terminal-store";
 import { TerminalPane } from "./terminal-pane";
+import { terminalStyles as styles, terminalUtilities as utilities } from "./terminal.styles";
 
 export function createDefaultTerminalLayout(sessionId?: string): TerminalPaneLayout {
   return {
@@ -122,23 +124,21 @@ export function TerminalSplitLayout(props: { sessions: TerminalSession[] }) {
   };
 
   return (
-    <Show when={activeSession()} fallback={<div class="flex h-full items-center justify-center text-xs text-(--terminal-muted)">No terminal session.</div>}>
+    <Show when={activeSession()} fallback={<div class={stylex.attrs(utilities.flex, utilities.hFull, utilities.itemsCenter, utilities.justifyCenter, utilities.textXs, styles.muted).class}>No terminal session.</div>}>
       {(session) => (
         <Show when={splitSessions().length > 1} fallback={renderLeaf(session())}>
-          <div class={layoutDirection() === "horizontal" ? "flex h-full min-h-0 flex-col" : "flex h-full min-w-0"}>
+          <div class={layoutDirection() === "horizontal" ? stylex.attrs(utilities.flex, utilities.hFull, utilities.minH0, utilities.flexCol).class : stylex.attrs(utilities.flex, utilities.hFull, utilities.minW0).class}>
             <For each={splitSessions()}>
               {(entry, index) => (
                 <>
-                  <div class="min-h-0 min-w-0" style={{ flex: `0 0 ${splitSize(index())}` }}>{renderLeaf(entry)}</div>
+                  <div class={stylex.attrs(utilities.minH0, utilities.minW0).class} style={{ flex: `0 0 ${splitSize(index())}` }}>{renderLeaf(entry)}</div>
                   <Show when={index() === 0}>
                     <button
                       type="button"
                       aria-label="Resize terminal split"
-                      class={
-                        layoutDirection() === "horizontal"
-                          ? "h-1 shrink-0 cursor-row-resize bg-(--terminal-border) hover:bg-(--accent)"
-                          : "w-1 shrink-0 cursor-col-resize bg-(--terminal-border) hover:bg-(--accent)"
-                      }
+                      class={layoutDirection() === "horizontal"
+                        ? stylex.attrs(styles.resizeHandle, utilities.h1, utilities.shrink0, utilities.cursorRowResize).class
+                        : stylex.attrs(styles.resizeHandle, utilities.w1, utilities.shrink0, utilities.cursorColResize).class}
                       onPointerDown={startSplitResize}
                     />
                   </Show>

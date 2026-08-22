@@ -2,7 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "bun:test";
-import { SolidPlugin } from "@dschz/bun-plugin-solid";
+import { stylexSolidPlugin } from "../../../../../../scripts/stylex-solid-plugin";
 
 const repoRoot = path.resolve(import.meta.dir, "../../../../../..");
 const smokeRoot = path.join(repoRoot, ".local", "virtual-list-first-paint");
@@ -30,11 +30,11 @@ async function buildFixture() {
     target: "browser",
     sourcemap: "none",
     plugins: [
-      SolidPlugin({
+      stylexSolidPlugin({
         generate: "dom",
         hydratable: false,
-        sourceMaps: false,
-        debug: false
+        useCSSLayers: { before: ["reset"], prefix: "hyperfocus" },
+        importSources: ["@stylexjs/stylex"]
       }),
     ]
   });

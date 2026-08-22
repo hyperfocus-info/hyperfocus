@@ -1,5 +1,6 @@
 import { For, createEffect, createSignal, onCleanup, type JSX } from "solid-js";
 import { Menu } from "lucide-solid";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
 import { ActionButton } from "../action-button";
 import { Button } from "./button";
@@ -63,29 +64,29 @@ export function ButtonGroup(props: ButtonGroupProps) {
   };
 
   return (
-    <div ref={rootElement} data-test-button-group="" class={cn("flex shrink-0 gap-0.5", props.class)}>
+    <div ref={rootElement} data-test-button-group="" class={cn(stylex.attrs(styles.root).class, props.class)}>
       {collapsed() ? (
         <Popover
           open={open()}
           onClose={() => setOpen(false)}
           align="end"
           side="bottom"
-          contentClass="w-44 rounded-[1rem] p-1.5"
+          contentClass={stylex.attrs(styles.popoverContent).class}
           content={
-            <div class="flex flex-col gap-1 text-[0.675rem]">
+            <div {...stylex.attrs(styles.menu)}>
               <For each={items()}>
                 {(item) => (
-                  <Tooltip content={item.disabled && item.disabledReason ? item.disabledReason : item.tooltip} triggerClass="block">
+                  <Tooltip content={item.disabled && item.disabledReason ? item.disabledReason : item.tooltip} triggerClass={stylex.attrs(styles.tooltipTrigger).class}>
                     <button
                       type="button"
-                      class="flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-left font-semibold text-(--foreground) transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-45"
+                      {...stylex.attrs(styles.menuItem)}
                       disabled={item.disabled}
                       aria-label={item.label}
                       aria-description={item.disabled && item.disabledReason ? item.disabledReason : undefined}
                       onClick={(event) => runItem(item, event)}
                     >
-                      <span class="flex h-4 w-4 items-center justify-center">{item.icon}</span>
-                      <span class="min-w-0 flex-1 truncate">{item.label}</span>
+                      <span {...stylex.attrs(styles.itemIcon)}>{item.icon}</span>
+                      <span {...stylex.attrs(styles.itemLabel)}>{item.label}</span>
                     </button>
                   </Tooltip>
                 )}
@@ -98,10 +99,10 @@ export function ButtonGroup(props: ButtonGroupProps) {
             aria-label={props.menuLabel}
             variant="ghost"
             size="icon"
-            class="h-6 w-6 rounded-lg"
+            class={stylex.attrs(styles.compactButton).class}
             onClick={() => setOpen((current) => !current)}
           >
-            <Menu class="h-3 w-3" />
+            <Menu {...stylex.attrs(styles.menuIcon)} />
           </Button>
         </Popover>
       ) : (
@@ -114,7 +115,7 @@ export function ButtonGroup(props: ButtonGroupProps) {
               icon={item.icon}
               variant="ghost"
               size="icon"
-              class={cn("h-6 w-6 rounded-lg", item.class)}
+              class={cn(stylex.attrs(styles.compactButton).class, item.class)}
               classList={item.classList}
               ariaLabel={item.label}
               onClick={item.onClick}
@@ -125,6 +126,35 @@ export function ButtonGroup(props: ButtonGroupProps) {
     </div>
   );
 }
+
+const styles = stylex.create({
+  root: { display: "flex", flexShrink: 0, gap: "0.125rem" },
+  popoverContent: { padding: "0.375rem", width: "11rem" },
+  menu: { display: "flex", flexDirection: "column", fontSize: "0.675rem", gap: "0.25rem" },
+  menuItem: {
+    alignItems: "center",
+    backgroundColor: { default: "transparent", ":hover": "rgb(0 0 0 / 0.05)" },
+    borderWidth: 0,
+    borderRadius: "0.5rem",
+    color: "var(--foreground)",
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    display: "flex",
+    fontWeight: 600,
+    gap: "0.5rem",
+    minHeight: "2rem",
+    paddingInline: "0.5rem",
+    textAlign: "left",
+    transitionProperty: "background-color, color",
+    opacity: { default: 1, ":disabled": 0.45 },
+    transitionDuration: "150ms",
+    width: "100%"
+  },
+  itemIcon: { alignItems: "center", display: "flex", height: "1rem", justifyContent: "center", width: "1rem" },
+  itemLabel: { flex: "1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  compactButton: { borderRadius: "0.5rem", height: "1.5rem", width: "1.5rem" },
+  menuIcon: { height: "0.75rem", width: "0.75rem" },
+  tooltipTrigger: { display: "block" }
+});
 
 function resolveCollapseWidth(width: number | string | undefined) {
   if (typeof width === "number") {

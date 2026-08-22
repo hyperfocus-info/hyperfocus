@@ -113,7 +113,7 @@ createUiTest("StreamedToolBlock", () => {
     ));
 
     const fileLink = screen.getByRole("button", { name: "harness/ui/src/app.tsx:12" });
-    expect(fileLink.className).toContain("markdown-file-link");
+    expect(fileLink.hasAttribute("data-test-chat-file-link")).toBe(true);
 
     fireEvent.click(fileLink);
     expect(opened).toEqual([]);

@@ -1,4 +1,6 @@
 import { createEffect, createSignal, onCleanup, Show, type JSX } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
+import { cn } from "../../lib/utils";
 import { PrimitivePortal } from "./primitive-portal";
 
 type TooltipProps = {
@@ -120,7 +122,7 @@ export function Tooltip(props: TooltipProps) {
       <span
         ref={tooltipRef}
         data-test-tooltip-content=""
-        class="app-zoom-portal-content pointer-events-none fixed z-[160] max-w-xs whitespace-pre-line rounded-lg border border-(--border) bg-(--foreground) px-3 py-1.5 text-center text-xs text-(--surface-foreground) shadow-xl"
+        {...stylex.attrs(styles.content)}
         style={{
           top: `${position().top}px`,
           left: `${position().left}px`
@@ -135,7 +137,7 @@ export function Tooltip(props: TooltipProps) {
     <span
       ref={triggerRef}
       data-test-tooltip=""
-      class={props.triggerClass ?? "inline-flex"}
+      class={cn(stylex.attrs(styles.trigger).class, props.triggerClass)}
       onMouseEnter={handleShow}
       onMouseLeave={handleHide}
       onFocusIn={handleShow}
@@ -148,3 +150,24 @@ export function Tooltip(props: TooltipProps) {
     </span>
   );
 }
+
+const styles = stylex.create({
+  trigger: { display: "inline-flex" },
+  content: {
+    backgroundColor: "var(--foreground)",
+    borderColor: "var(--border)",
+    borderRadius: "0.5rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+    color: "var(--surface-foreground)",
+    fontSize: "0.75rem",
+    maxWidth: "20rem",
+    padding: "0.375rem 0.75rem",
+    pointerEvents: "none",
+    position: "fixed",
+    textAlign: "center",
+    whiteSpace: "pre-line",
+    zIndex: 160
+  }
+});

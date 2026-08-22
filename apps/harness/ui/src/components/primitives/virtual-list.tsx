@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, splitProps, untrack, type JSX } from "solid-js";
 import { createVirtualizer, measureElement as measureVirtualElement } from "@tanstack/solid-virtual";
+import * as stylex from "@stylexjs/stylex";
 import { recordUiTelemetry } from "../../lib/ui-telemetry";
 import { cn } from "../../lib/utils";
 
@@ -606,7 +607,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
   function renderVirtualItemFallback(size: number) {
     return (
       <div
-        class="w-full animate-pulse rounded-lg bg-black/[0.035]"
+        {...stylex.attrs(styles.loadingRow)}
         style={{ height: `${Math.max(24, size)}px` }}
         aria-hidden="true"
       />
@@ -816,11 +817,11 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       ref={setViewport}
       data-test-scroll-area=""
       data-test-virtual-list={local.dataTest ?? ""}
-      class={cn("overflow-auto", local.class)}
+      class={cn(stylex.attrs(styles.viewport).class, local.class)}
       onScroll={handleScroll}
     >
       <Show when={items().length > 0} fallback={local.empty}>
-        <div class={cn("relative w-full", local.contentClass)} style={debugContentStyle(totalContentSize())}>
+        <div class={cn(stylex.attrs(styles.content).class, local.contentClass)} style={debugContentStyle(totalContentSize())}>
           <For each={virtualItems()}>
             {(virtualRow) => {
               const item = () => viewWindow().items[virtualRow.index];
@@ -833,7 +834,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
                   data-virtual-size={virtualRow.size}
                   data-virtual-key={getVirtualRowKey(virtualRow.index)}
                   data-test-virtual-list-item=""
-                  class={cn("absolute left-0 top-0 w-full", local.itemClass)}
+                  class={cn(stylex.attrs(styles.item).class, local.itemClass)}
                   style={debugRowStyle(virtualRow.start)}
                 >
                   <Show when={item()} keyed fallback={renderVirtualItemFallback(virtualRow.size)}>
@@ -1131,3 +1132,20 @@ function estimateVirtualListOffset<T>(items: readonly T[], estimateSize: number 
   }
   return offset;
 }
+
+const pulse = stylex.keyframes({ "50%": { opacity: 0.5 } });
+
+const styles = stylex.create({
+  loadingRow: {
+    animationDuration: "2s",
+    animationIterationCount: "infinite",
+    animationName: pulse,
+    animationTimingFunction: "cubic-bezier(0.4, 0, 0.6, 1)",
+    backgroundColor: "rgb(0 0 0 / 0.035)",
+    borderRadius: "0.5rem",
+    width: "100%"
+  },
+  viewport: { overflow: "auto" },
+  content: { position: "relative", width: "100%" },
+  item: { left: 0, position: "absolute", top: 0, width: "100%" }
+});

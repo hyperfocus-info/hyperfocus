@@ -1,4 +1,5 @@
 import type { JSX } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
 import { submitOnEnter } from "../../textarea-submit";
 import { Textarea } from "./textarea";
@@ -29,7 +30,7 @@ type ChatComposerProps = {
 
 export function ChatComposer(props: ChatComposerProps) {
   return (
-    <div data-test-chat-composer="" data-tour-id={props.dataTourId} class={cn("relative", props.class)}>
+    <div data-test-chat-composer="" data-tour-id={props.dataTourId} class={cn(stylex.attrs(styles.root).class, props.class)}>
       <Textarea
         ref={props.textareaRef}
         rows={props.rows ?? 2}
@@ -41,7 +42,7 @@ export function ChatComposer(props: ChatComposerProps) {
         attr:aria-controls={props.ariaControls}
         attr:aria-expanded={props.ariaExpanded === undefined ? undefined : props.ariaExpanded ? "true" : "false"}
         attr:aria-activedescendant={props.ariaActiveDescendant}
-        class={cn("w-full resize-none rounded-xl pb-12 pr-14", props.textareaClass)}
+        class={cn(stylex.attrs(styles.textarea).class, props.textareaClass)}
         onKeyDown={(event) => {
           if (typeof props.onKeyDown === "function") {
             props.onKeyDown(event);
@@ -57,8 +58,15 @@ export function ChatComposer(props: ChatComposerProps) {
         onSelect={props.onSelect}
         onFocus={props.onFocus}
       />
-      <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1.5">{props.rightActions}</div>
-      <div class="absolute bottom-2 left-2">{props.leftControls}</div>
+      <div {...stylex.attrs(styles.actions)}>{props.rightActions}</div>
+      <div {...stylex.attrs(styles.controls)}>{props.leftControls}</div>
     </div>
   );
 }
+
+const styles = stylex.create({
+  root: { position: "relative" },
+  textarea: { borderRadius: "0.75rem", paddingBottom: "3rem", paddingRight: "3.5rem", resize: "none", width: "100%" },
+  actions: { alignItems: "center", bottom: "0.5rem", display: "flex", gap: "0.375rem", pointerEvents: "none", position: "absolute", right: "0.5rem" },
+  controls: { bottom: "0.5rem", left: "0.5rem", position: "absolute" }
+});

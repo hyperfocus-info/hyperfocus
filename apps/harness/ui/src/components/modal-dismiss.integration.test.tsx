@@ -39,9 +39,9 @@ createUiTest("Modal dismiss integration", () => {
 
     render(() => <ExecutionPlanDialog executionPlan={harnessStore.state.selectedExecutionPlan} />);
     const dialog = screen.getByRole("dialog", { name: "Execution plan" });
-    const scrollBody = dialog.querySelector(".overflow-auto");
+    const scrollBody = dialog.querySelector("[data-test-dialog-content]");
     expect(scrollBody).not.toBeNull();
-    expect(scrollBody?.className).toContain("max-h-[80vh]");
+    expect(scrollBody?.className).toContain("dialogContent");
 
     fireEvent.keyDown(await screen.findByRole("dialog", { name: "Execution plan" }), { key: "Escape" });
     expect(harnessStore.state.executionPlanDialogOpen).toBe(false);

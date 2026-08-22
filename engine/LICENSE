@@ -8,9 +8,14 @@ This license is a source-available license, not an open-source license.
 
 "Licensor" means the copyright owner or owners of the Software.
 
-"Software" means the Hyperfocus engine source code, object code,
-documentation, and other materials distributed with this license. Software
-does not include Your Independent Content.
+"Software" means all source code, object code, documentation, applications,
+packages, tools, scripts, assets, and other first-party materials contained in
+the Hyperfocus repository or distributed from that repository with this
+license. This includes, without limitation, the Hyperfocus engine, engine
+editor, AI development harness, shared packages, and all other first-party
+code in the repository. Software does not include materials expressly
+identified as third-party materials or governed by separate license terms,
+and does not include Your Independent Content.
 
 "You" means the individual or legal entity exercising rights under this
 license. "Your Group" means You and every entity that directly or indirectly
@@ -86,9 +91,9 @@ before the transfer. No other sublicense or transfer is granted.
 3. Licensed Games and Independent Content
 
 You may keep a Licensed Game's source code and Independent Content private.
-You are not required to disclose game-specific code, engine Modifications used
-only in a Licensed Game, art, audio, writing, data, or other Independent
-Content merely because You use the Software.
+You are not required to disclose game-specific code, Modifications to the
+Software used only in a Licensed Game, art, audio, writing, data, or other
+Independent Content merely because You use the Software.
 
 You own Your Independent Content. This license does not grant the Licensor any
 ownership interest in it. You may use, export, convert, and migrate Your
@@ -137,7 +142,7 @@ as the underpayment.
 The Licensor and You may replace or modify the royalty, reporting, or other
 commercial terms through a separate written agreement.
 
-5. Free Engine Redistribution; No Monetized Engine Forks
+5. Free Software Redistribution; No Monetized Software Forks
 
 You may distribute the Software or a Modification only without Consideration
 and only if You:
@@ -158,9 +163,9 @@ support, hosting, a subscription, another product, or another service.
 This restriction does not prohibit charging for bona fide consulting,
 training, support, hosting, or development services when access to the
 Software or Modification remains available without charge and the fee is for
-the service rather than a disguised engine license. It also does not prohibit
-commercial Independent Content, plugins, libraries, or tools that interoperate
-with the Software but do not contain Software or a Modification.
+the service rather than a disguised Software license. It also does not
+prohibit commercial Independent Content, plugins, libraries, or tools that
+interoperate with the Software but do not contain Software or a Modification.
 
 6. Contributions
 

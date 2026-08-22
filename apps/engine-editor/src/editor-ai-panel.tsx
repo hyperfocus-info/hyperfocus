@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { createHarnessClient, type HarnessClientSnapshot } from "@hyperfocus/ai-core";
 import { Button, ChatComposer, ChatTranscript, type TranscriptMessage } from "@hyperfocus/ui";
 import { createMemo, createSignal, onCleanup, Show } from "solid-js";
-import { tokens } from "../../../packages/ui/src/theme/tokens.stylex";
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import { reduceTranscript, transcriptFromSnapshot } from "./editor-ai-model";
 
 const ENDPOINT_KEY = "hyperfocus.editor.harness-endpoint.v1";

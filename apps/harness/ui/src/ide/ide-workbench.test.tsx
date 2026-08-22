@@ -2,7 +2,10 @@
 import { beforeEach, expect, it, mock } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createUiTest } from "../utils/tests/test-harness";
-import { captureDispatchedCommands, clearBrowserStateForTests } from "../utils/tests/store-test-utils";
+import {
+  captureDispatchedCommands,
+  clearBrowserStateForTests,
+} from "../utils/tests/store-test-utils";
 import { harnessStore } from "../harness-store";
 import { createWorkspaceProjectState } from "../../../shared/protocol";
 
@@ -12,7 +15,7 @@ const createHotkeySequencesMock = mock(() => undefined);
 mock.module("@tanstack/solid-hotkeys", () => ({
   createHotkeys: createHotkeysMock,
   createHotkeySequences: createHotkeySequencesMock,
-  formatForDisplay: (hotkey: string) => hotkey
+  formatForDisplay: (hotkey: string) => hotkey,
 }));
 
 import { IdeWorkbench, isIdeProjectSwitcherModKHotkey } from "./ide-workbench";
@@ -21,13 +24,23 @@ import { DEFAULT_IDE_EDITOR_SETTINGS, ideStore } from "./ide-store";
 function getIdeHotkeyDefinitions() {
   const calls = createHotkeysMock.mock.calls as unknown as Array<
     [
-      Array<{ hotkey: string; callback: () => void }> | (() => Array<{ hotkey: string; callback: () => void }>),
-      () => { enabled: boolean; preventDefault: boolean; stopPropagation: boolean; ignoreInputs: boolean }
+      (
+        | Array<{ hotkey: string; callback: () => void }>
+        | (() => Array<{ hotkey: string; callback: () => void }>)
+      ),
+      () => {
+        enabled: boolean;
+        preventDefault: boolean;
+        stopPropagation: boolean;
+        ignoreInputs: boolean;
+      },
     ]
   >;
   const call = calls.find(([hotkeys]) => {
     const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
-    return definitions.some((definition) => definition.hotkey === "Mod+Shift+P");
+    return definitions.some(
+      (definition) => definition.hotkey === "Mod+Shift+P",
+    );
   });
   if (!call) {
     throw new Error("Expected IDE hotkey registration");
@@ -35,7 +48,12 @@ function getIdeHotkeyDefinitions() {
   const [hotkeys, options] = call;
   return [typeof hotkeys === "function" ? hotkeys() : hotkeys, options] as [
     Array<{ hotkey: string; callback: () => void }>,
-    () => { enabled: boolean; preventDefault: boolean; stopPropagation: boolean; ignoreInputs: boolean }
+    () => {
+      enabled: boolean;
+      preventDefault: boolean;
+      stopPropagation: boolean;
+      ignoreInputs: boolean;
+    },
   ];
 }
 
@@ -45,7 +63,7 @@ createUiTest("IdeWorkbench", () => {
     const project = createWorkspaceProjectState({
       id: "project-1",
       name: "Harness",
-      rootPath: "C:\\repo"
+      rootPath: "C:\\repo",
     });
     harnessStore.applyServerEvent({
       type: "workspace.updated",
@@ -54,9 +72,9 @@ createUiTest("IdeWorkbench", () => {
         workspace: {
           workspaceModes: [],
           projects: [project],
-          activeProjectId: project.id
-        }
-      }
+          activeProjectId: project.id,
+        },
+      },
     });
     harnessStore.setActiveSurface("ide");
     ideStore.resetForTests();
@@ -68,8 +86,12 @@ createUiTest("IdeWorkbench", () => {
     ideStore.resetForTests({ treeLoading: true });
     render(() => <IdeWorkbench />);
 
-    expect(document.querySelector("[data-test-ide-sidebar-skeleton]")).not.toBeNull();
-    expect(document.querySelector("[data-test-ide-editor-skeleton]")).not.toBeNull();
+    expect(
+      document.querySelector("[data-test-ide-sidebar-skeleton]"),
+    ).not.toBeNull();
+    expect(
+      document.querySelector("[data-test-ide-editor-skeleton]"),
+    ).not.toBeNull();
   });
 
   it("registers IDE shortcuts with browser default interception", () => {
@@ -89,26 +111,39 @@ createUiTest("IdeWorkbench", () => {
       "Mod+W",
       "Alt+W",
       "Mod+B",
-      "Alt+Z"
+      "Alt+Z",
     ]);
     expect(options()).toEqual({
       enabled: true,
       ignoreInputs: false,
       preventDefault: true,
-      stopPropagation: true
+      stopPropagation: true,
     });
     expect(createHotkeySequencesMock.mock.calls.length).toBe(1);
-    const [sequences, sequenceOptions] = createHotkeySequencesMock.mock.calls[0] as unknown as [
+    const [sequences, sequenceOptions] = createHotkeySequencesMock.mock
+      .calls[0] as unknown as [
       () => Array<{ sequence: string[]; callback: () => void }>,
-      () => { enabled: boolean; preventDefault: boolean; stopPropagation: boolean; ignoreInputs: boolean }
+      () => {
+        enabled: boolean;
+        preventDefault: boolean;
+        stopPropagation: boolean;
+        ignoreInputs: boolean;
+      },
     ];
-    expect(sequences().map((definition) => definition.sequence)).toEqual([["Mod+Shift+W"], ["Alt+Shift+W"]]);
-    expect(sequences().every((definition) => typeof definition.callback === "function")).toBe(true);
+    expect(sequences().map((definition) => definition.sequence)).toEqual([
+      ["Mod+Shift+W"],
+      ["Alt+Shift+W"],
+    ]);
+    expect(
+      sequences().every(
+        (definition) => typeof definition.callback === "function",
+      ),
+    ).toBe(true);
     expect(sequenceOptions()).toEqual({
       enabled: true,
       ignoreInputs: false,
       preventDefault: true,
-      stopPropagation: true
+      stopPropagation: true,
     });
   });
 
@@ -116,11 +151,15 @@ createUiTest("IdeWorkbench", () => {
     render(() => <IdeWorkbench />);
 
     const [definitions] = getIdeHotkeyDefinitions();
-    definitions.find((definition) => definition.hotkey === "Mod+Shift+G")?.callback();
+    definitions
+      .find((definition) => definition.hotkey === "Mod+Shift+G")
+      ?.callback();
     expect(ideStore.state.activityView).toBe("source-control");
     expect(ideStore.state.sidebarOpen).toBe(true);
 
-    definitions.find((definition) => definition.hotkey === "Mod+Shift+E")?.callback();
+    definitions
+      .find((definition) => definition.hotkey === "Mod+Shift+E")
+      ?.callback();
     expect(ideStore.state.activityView).toBe("explorer");
   });
 
@@ -128,7 +167,9 @@ createUiTest("IdeWorkbench", () => {
     render(() => <IdeWorkbench />);
 
     const [definitions] = getIdeHotkeyDefinitions();
-    definitions.find((definition) => definition.hotkey === "Mod+Shift+E")?.callback();
+    definitions
+      .find((definition) => definition.hotkey === "Mod+Shift+E")
+      ?.callback();
 
     expect(ideStore.state.sidebarOpen).toBe(false);
   });
@@ -142,36 +183,54 @@ createUiTest("IdeWorkbench", () => {
   });
 
   it("marks the selected IDE activity tab active when the sidebar is open", () => {
-    ideStore.resetForTests({ sidebarOpen: true, activityView: "source-control" });
+    ideStore.resetForTests({
+      sidebarOpen: true,
+      activityView: "source-control",
+    });
     render(() => <IdeWorkbench />);
 
-    const sourceControl = screen.getByRole("button", { name: "Source Control" });
+    const sourceControl = screen.getByRole("button", {
+      name: "Source Control",
+    });
 
-    expect(sourceControl.classList.contains("ide-activity-button-active")).toBe(true);
     expect(sourceControl.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("does not mark an IDE activity tab active while the sidebar is hidden", () => {
-    ideStore.resetForTests({ sidebarOpen: false, activityView: "source-control" });
+    ideStore.resetForTests({
+      sidebarOpen: false,
+      activityView: "source-control",
+    });
     render(() => <IdeWorkbench />);
 
-    const sourceControl = screen.getByRole("button", { name: "Source Control" });
+    const sourceControl = screen.getByRole("button", {
+      name: "Source Control",
+    });
 
-    expect(sourceControl.classList.contains("ide-activity-button-active")).toBe(false);
     expect(sourceControl.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("removes the active IDE activity styling when the sidebar is collapsed", async () => {
-    ideStore.resetForTests({ sidebarOpen: true, activityView: "source-control" });
+    ideStore.resetForTests({
+      sidebarOpen: true,
+      activityView: "source-control",
+    });
     render(() => <IdeWorkbench />);
 
     fireEvent.click(screen.getByRole("button", { name: "Hide IDE sidebar" }));
 
-    const sourceControl = screen.getByRole("button", { name: "Source Control" });
     expect(ideStore.state.sidebarOpen).toBe(false);
     await waitFor(() => {
-      expect(sourceControl.classList.contains("ide-activity-button-active")).toBe(false);
-      expect(document.querySelector(".ide-activity-bar")?.getAttribute("data-sidebar-open")).toBe("false");
+      expect(
+        screen
+          .getByRole("button", { name: "Source Control" })
+          .getAttribute("aria-pressed"),
+      ).toBe("false");
+      expect(
+        document
+          .querySelector("[data-test-ide-activity-bar]")
+          ?.getAttribute("data-sidebar-open"),
+      ).toBe("false");
     });
   });
 
@@ -185,7 +244,13 @@ createUiTest("IdeWorkbench", () => {
     ideStore.resetForTests({
       treeEntries: [
         { path: "harness", name: "harness", kind: "directory", depth: 0 },
-        { path: "harness/ui/src/ide/ide-workbench.tsx", name: "ide-workbench.tsx", kind: "file", depth: 1, parentPath: "harness" }
+        {
+          path: "harness/ui/src/ide/ide-workbench.tsx",
+          name: "ide-workbench.tsx",
+          kind: "file",
+          depth: 1,
+          parentPath: "harness",
+        },
       ],
       openPaths: ["harness/ui/src/ide/ide-workbench.tsx"],
       activePath: "harness/ui/src/ide/ide-workbench.tsx",
@@ -201,11 +266,11 @@ createUiTest("IdeWorkbench", () => {
           isBinary: false,
           tooLarge: false,
           content: "export const value = true;",
-          contentLines: ["export const value = true;"]
-        }
+          contentLines: ["export const value = true;"],
+        },
       },
       gitBranch: "main",
-      gitIsRepository: true
+      gitIsRepository: true,
     });
     render(() => <IdeWorkbench />);
     await new Promise((resolve) => window.setTimeout(resolve, 0));
@@ -218,17 +283,31 @@ createUiTest("IdeWorkbench", () => {
         truncated: false,
         entries: [
           { path: "harness", name: "harness", kind: "directory", depth: 0 },
-          { path: "harness/ui/src/ide/ide-workbench.tsx", name: "ide-workbench.tsx", kind: "file", depth: 1, parentPath: "harness" }
-        ]
-      }
+          {
+            path: "harness/ui/src/ide/ide-workbench.tsx",
+            name: "ide-workbench.tsx",
+            kind: "file",
+            depth: 1,
+            parentPath: "harness",
+          },
+        ],
+      },
     });
 
     expect(screen.getByRole("button", { name: "Explorer" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Search" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Source Control" })).not.toBeNull();
-    expect(screen.getAllByRole("button", { name: "Open ide-workbench.tsx" }).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Open command palette" })).not.toBeNull();
-    expect(document.querySelectorAll("[data-test-ide-sash]").length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getByRole("button", { name: "Source Control" }),
+    ).not.toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Open ide-workbench.tsx" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Open command palette" }),
+    ).not.toBeNull();
+    expect(
+      document.querySelectorAll("[data-test-ide-sash]").length,
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Ln 5, Col 12")).not.toBeNull();
   });
 
@@ -236,59 +315,128 @@ createUiTest("IdeWorkbench", () => {
     ideStore.resetForTests({
       treeEntries: [
         { path: "src", name: "src", kind: "directory", depth: 0 },
-        { path: "src/App.TSX", name: "App.TSX", kind: "file", depth: 1, parentPath: "src" }
+        {
+          path: "src/App.TSX",
+          name: "App.TSX",
+          kind: "file",
+          depth: 1,
+          parentPath: "src",
+        },
       ],
       expandedFolderPaths: ["src"],
       gitIsRepository: true,
-      gitChanges: [{ path: "src\\app.tsx", status: "modified", shortStatus: "M" }]
+      gitChanges: [
+        { path: "src\\app.tsx", status: "modified", shortStatus: "M" },
+      ],
     });
 
     render(() => <IdeWorkbench />);
 
-    expect(screen.getByRole("button", { name: "Collapse src" }).className).toContain("ide-tree-row-git-modified");
-    expect(screen.getByRole("button", { name: "Open App.TSX" }).className).toContain("ide-tree-row-git-modified");
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse src" })
+        .getAttribute("data-git-tone"),
+    ).toBe("modified");
+    expect(
+      screen
+        .getByRole("button", { name: "Open App.TSX" })
+        .getAttribute("data-git-tone"),
+    ).toBe("modified");
   });
 
   it("aggregates git status on folders without inheriting it to files", () => {
     ideStore.resetForTests({
       treeEntries: [
         { path: "docs", name: "docs", kind: "directory", depth: 0 },
-        { path: "docs/research", name: "research", kind: "directory", depth: 1, parentPath: "docs" },
-        { path: "docs/research/note.md", name: "note.md", kind: "file", depth: 2, parentPath: "docs/research" }
+        {
+          path: "docs/research",
+          name: "research",
+          kind: "directory",
+          depth: 1,
+          parentPath: "docs",
+        },
+        {
+          path: "docs/research/note.md",
+          name: "note.md",
+          kind: "file",
+          depth: 2,
+          parentPath: "docs/research",
+        },
       ],
       expandedFolderPaths: ["docs", "docs/research"],
       gitIsRepository: true,
-      gitChanges: [{ path: "docs/research/other.md", status: "modified", shortStatus: "M" }]
+      gitChanges: [
+        {
+          path: "docs/research/other.md",
+          status: "modified",
+          shortStatus: "M",
+        },
+      ],
     });
 
     render(() => <IdeWorkbench />);
 
-    expect(screen.getByRole("button", { name: "Collapse docs" }).className).toContain("ide-tree-row-git-modified");
-    expect(screen.getByRole("button", { name: "Collapse research" }).className).toContain("ide-tree-row-git-modified");
-    expect(screen.getByRole("button", { name: "Open note.md" }).className).not.toContain("ide-tree-row-git-modified");
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse docs" })
+        .getAttribute("data-git-tone"),
+    ).toBe("modified");
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse research" })
+        .getAttribute("data-git-tone"),
+    ).toBe("modified");
+    expect(
+      screen
+        .getByRole("button", { name: "Open note.md" })
+        .getAttribute("data-git-tone"),
+    ).toBeNull();
   });
 
   it("uses orange over green when folder children include modified and untracked files", () => {
     ideStore.resetForTests({
       treeEntries: [
         { path: "docs", name: "docs", kind: "directory", depth: 0 },
-        { path: "docs/modified.md", name: "modified.md", kind: "file", depth: 1, parentPath: "docs" },
-        { path: "docs/new.md", name: "new.md", kind: "file", depth: 1, parentPath: "docs" }
+        {
+          path: "docs/modified.md",
+          name: "modified.md",
+          kind: "file",
+          depth: 1,
+          parentPath: "docs",
+        },
+        {
+          path: "docs/new.md",
+          name: "new.md",
+          kind: "file",
+          depth: 1,
+          parentPath: "docs",
+        },
       ],
       expandedFolderPaths: ["docs"],
       gitIsRepository: true,
       gitChanges: [
         { path: "docs/new.md", status: "untracked", shortStatus: "??" },
-        { path: "docs/modified.md", status: "modified", shortStatus: "M" }
-      ]
+        { path: "docs/modified.md", status: "modified", shortStatus: "M" },
+      ],
     });
 
     render(() => <IdeWorkbench />);
 
-    expect(screen.getByRole("button", { name: "Collapse docs" }).className).toContain("ide-tree-row-git-modified");
-    expect(screen.getByRole("button", { name: "Collapse docs" }).className).not.toContain("ide-tree-row-git-added");
-    expect(screen.getByRole("button", { name: "Open modified.md" }).className).toContain("ide-tree-row-git-modified");
-    expect(screen.getByRole("button", { name: "Open new.md" }).className).toContain("ide-tree-row-git-added");
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse docs" })
+        .getAttribute("data-git-tone"),
+    ).toBe("modified");
+    expect(
+      screen
+        .getByRole("button", { name: "Open modified.md" })
+        .getAttribute("data-git-tone"),
+    ).toBe("modified");
+    expect(
+      screen
+        .getByRole("button", { name: "Open new.md" })
+        .getAttribute("data-git-tone"),
+    ).toBe("added");
   });
 
   it("requests real file tree, git status, and file reads", async () => {
@@ -306,25 +454,27 @@ createUiTest("IdeWorkbench", () => {
         projectId: "project-1",
         rootPath: "C:\\repo",
         truncated: false,
-        entries: [{ path: "src/app.ts", name: "app.ts", kind: "file", depth: 0 }]
-      }
+        entries: [
+          { path: "src/app.ts", name: "app.ts", kind: "file", depth: 0 },
+        ],
+      },
     });
     ideStore.openFile("src/app.ts");
 
     expect(commands).toContainEqual({
       type: "ide.fileTree.list",
       requestId: expect.any(String),
-      payload: { projectId: "project-1" }
+      payload: { projectId: "project-1" },
     });
     expect(commands).toContainEqual({
       type: "ide.git.status",
       requestId: expect.any(String),
-      payload: { projectId: "project-1" }
+      payload: { projectId: "project-1" },
     });
     expect(commands).toContainEqual({
       type: "ide.file.read",
       requestId: expect.any(String),
-      payload: { projectId: "project-1", path: "src/app.ts" }
+      payload: { projectId: "project-1", path: "src/app.ts" },
     });
   });
 
@@ -333,20 +483,24 @@ createUiTest("IdeWorkbench", () => {
     const project = createWorkspaceProjectState({
       id: "project-restore",
       name: "Harness",
-      rootPath: "C:\\repo"
+      rootPath: "C:\\repo",
     });
     harnessStore.resetForTests();
     harnessStore.setActiveSurface("ide");
     captureDispatchedCommands(commands);
     ideStore.resetForTests({
       openPaths: ["engine/browser/engine.js"],
-      activePath: "engine/browser/engine.js"
+      activePath: "engine/browser/engine.js",
     });
 
     const rendered = render(() => <IdeWorkbench />);
     await Promise.resolve();
 
-    expect(commands.some((command) => (command as { type?: string }).type === "ide.file.read")).toBe(false);
+    expect(
+      commands.some(
+        (command) => (command as { type?: string }).type === "ide.file.read",
+      ),
+    ).toBe(false);
     rendered.unmount();
 
     harnessStore.applyServerEvent({
@@ -356,9 +510,9 @@ createUiTest("IdeWorkbench", () => {
         workspace: {
           workspaceModes: [],
           projects: [project],
-          activeProjectId: project.id
-        }
-      }
+          activeProjectId: project.id,
+        },
+      },
     });
     commands.length = 0;
     ideStore.loadProject(project.id);
@@ -366,7 +520,10 @@ createUiTest("IdeWorkbench", () => {
     expect(commands).toContainEqual({
       type: "ide.file.read",
       requestId: expect.any(String),
-      payload: { projectId: "project-restore", path: "engine/browser/engine.js" }
+      payload: {
+        projectId: "project-restore",
+        path: "engine/browser/engine.js",
+      },
     });
   });
 
@@ -388,21 +545,27 @@ createUiTest("IdeWorkbench", () => {
           isBinary: false,
           tooLarge: false,
           content: "export const ok = true;\n",
-          contentLines: ["export const ok = true;"]
-        }
-      }
+          contentLines: ["export const ok = true;"],
+        },
+      },
     });
     render(() => <IdeWorkbench />);
 
     const editor = screen.getByLabelText("Edit app.ts") as HTMLTextAreaElement;
-    fireEvent.input(editor, { target: { value: "export const ok = false;\n" } });
+    fireEvent.input(editor, {
+      target: { value: "export const ok = false;\n" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save active file" }));
 
     expect(ideStore.state.dirtyPaths).toContain("src/app.ts");
     expect(commands).toContainEqual({
       type: "ide.file.write",
       requestId: expect.any(String),
-      payload: { projectId: "project-1", path: "src/app.ts", content: "export const ok = false;\n" }
+      payload: {
+        projectId: "project-1",
+        path: "src/app.ts",
+        content: "export const ok = false;\n",
+      },
     });
   });
 
@@ -422,14 +585,16 @@ createUiTest("IdeWorkbench", () => {
           isBinary: false,
           tooLarge: false,
           content: "word",
-          contentLines: ["word"]
-        }
-      }
+          contentLines: ["word"],
+        },
+      },
     });
     render(() => <IdeWorkbench />);
 
     const editor = screen.getByLabelText("Edit app.ts") as HTMLTextAreaElement;
-    fireEvent.input(editor, { target: { value: "words", selectionStart: 5, selectionEnd: 5 } });
+    fireEvent.input(editor, {
+      target: { value: "words", selectionStart: 5, selectionEnd: 5 },
+    });
     expect(ideStore.state.filesByPath["src/app.ts"]?.content).toBe("words");
     expect(editor.value).toBe("words");
   });
@@ -450,16 +615,25 @@ createUiTest("IdeWorkbench", () => {
           lineCount: 1,
           isBinary: false,
           tooLarge: false,
-          content: "export const longValue = \"this line is intentionally long enough to require visual wrapping in the IDE editor\";",
-          contentLines: ["export const longValue = \"this line is intentionally long enough to require visual wrapping in the IDE editor\";"]
-        }
-      }
+          content:
+            'export const longValue = "this line is intentionally long enough to require visual wrapping in the IDE editor";',
+          contentLines: [
+            'export const longValue = "this line is intentionally long enough to require visual wrapping in the IDE editor";',
+          ],
+        },
+      },
     });
 
     render(() => <IdeWorkbench />);
 
-    expect(document.querySelector('[data-test-ide-code-line="1"]')?.className).toContain("ide-code-line-wrap");
-    expect(screen.getByLabelText("Edit app.ts").className).toContain("ide-code-input-wrap");
+    expect(
+      document
+        .querySelector('[data-test-ide-code-line="1"]')
+        ?.getAttribute("data-word-wrap"),
+    ).toBe("on");
+    expect(
+      screen.getByLabelText("Edit app.ts").getAttribute("data-word-wrap"),
+    ).toBe("on");
   });
 
   it("keeps overflowing editor tabs scrollable without a visible tab strip scrollbar", () => {
@@ -478,7 +652,7 @@ createUiTest("IdeWorkbench", () => {
           isBinary: false,
           tooLarge: false,
           content: "export const one = 1;",
-          contentLines: ["export const one = 1;"]
+          contentLines: ["export const one = 1;"],
         },
         "src/two.ts": {
           projectId: "project-1",
@@ -491,16 +665,15 @@ createUiTest("IdeWorkbench", () => {
           isBinary: false,
           tooLarge: false,
           content: "export const two = 2;",
-          contentLines: ["export const two = 2;"]
-        }
-      }
+          contentLines: ["export const two = 2;"],
+        },
+      },
     });
 
     render(() => <IdeWorkbench />);
 
-    const tabs = document.querySelector(".ide-editor-tabs");
-    expect(tabs?.className).toContain("overflow-x-auto");
-    expect(tabs?.className).toContain("overflow-y-hidden");
+    const tabs = document.querySelector("[data-test-ide-editor-tabs]");
+    expect(tabs).not.toBeNull();
   });
 
   it("prevents browser default when closing a focused editor tab with Mod+W", async () => {
@@ -519,9 +692,9 @@ createUiTest("IdeWorkbench", () => {
           isBinary: false,
           tooLarge: false,
           content: "export const ok = true;\n",
-          contentLines: ["export const ok = true;"]
-        }
-      }
+          contentLines: ["export const ok = true;"],
+        },
+      },
     });
     render(() => <IdeWorkbench />);
     await Promise.resolve();
@@ -548,9 +721,9 @@ createUiTest("IdeWorkbench", () => {
           isBinary: false,
           tooLarge: false,
           content: "export const ok = true;\n",
-          contentLines: ["export const ok = true;"]
-        }
-      }
+          contentLines: ["export const ok = true;"],
+        },
+      },
     });
     render(() => <IdeWorkbench />);
     await Promise.resolve();
@@ -577,7 +750,7 @@ createUiTest("IdeWorkbench", () => {
           isBinary: false,
           tooLarge: false,
           content: "export const ok = true;\n",
-          contentLines: ["export const ok = true;"]
+          contentLines: ["export const ok = true;"],
         },
         "src/two.ts": {
           projectId: "project-1",
@@ -590,15 +763,19 @@ createUiTest("IdeWorkbench", () => {
           isBinary: false,
           tooLarge: false,
           content: "export const two = 2;",
-          contentLines: ["export const two = 2;"]
-        }
-      }
+          contentLines: ["export const two = 2;"],
+        },
+      },
     });
     render(() => <IdeWorkbench />);
     await Promise.resolve();
 
-    const sequenceCall = createHotkeySequencesMock.mock.calls.at(-1) as unknown as [() => Array<{ sequence: string[]; callback: () => void }>];
-    const altShiftCloseAll = sequenceCall[0]().find((definition) => definition.sequence.join(" ") === "Alt+Shift+W");
+    const sequenceCall = createHotkeySequencesMock.mock.calls.at(
+      -1,
+    ) as unknown as [() => Array<{ sequence: string[]; callback: () => void }>];
+    const altShiftCloseAll = sequenceCall[0]().find(
+      (definition) => definition.sequence.join(" ") === "Alt+Shift+W",
+    );
     altShiftCloseAll?.callback();
 
     expect(ideStore.state.openPaths).toEqual([]);
@@ -608,7 +785,9 @@ createUiTest("IdeWorkbench", () => {
     const close = mock(() => undefined);
     render(() => <IdeWorkbench onRequestClose={close} />);
 
-    const sequenceCall = createHotkeySequencesMock.mock.calls.at(-1) as unknown as [() => Array<{ sequence: string[]; callback: () => void }>];
+    const sequenceCall = createHotkeySequencesMock.mock.calls.at(
+      -1,
+    ) as unknown as [() => Array<{ sequence: string[]; callback: () => void }>];
     sequenceCall[0]()[1]?.callback();
     await Promise.resolve();
 

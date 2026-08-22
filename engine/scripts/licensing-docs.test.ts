@@ -36,8 +36,9 @@ describe("public licensing contract", () => {
     expect(publicLicensingText).not.toMatch(/owner decision still required|choose marginal|license is replaced/i);
   });
 
-  test("protects both free engine forks and a clean engine exit", () => {
-    expect(license).toContain("No Monetized Engine Forks");
+  test("protects both free Software forks and a clean engine exit", () => {
+    expect(license).toContain("No Monetized Software Forks");
+    expect(license).toContain("AI development harness, shared packages");
     expect(license).toContain("without Consideration");
     expect(license).toMatch(/migrate Your\s+Independent Content to another engine at any time/);
     expect(model).toContain(".hyperfocus/project.json");

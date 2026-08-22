@@ -4,7 +4,7 @@ import { transformFileAsync } from "@babel/core";
 import typescriptPreset from "@babel/preset-typescript";
 import stylexBabelPlugin from "@stylexjs/babel-plugin";
 import solidPreset from "babel-preset-solid";
-import { appendFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export type StyleXSolidPluginOptions = {
@@ -51,6 +51,11 @@ export function stylexSolidPlugin(options: StyleXSolidPluginOptions = {}): Bun.B
             [solidPreset, { generate: options.generate ?? "dom", hydratable: options.hydratable ?? false }]
           ],
           plugins: [[stylexBabelPlugin, {
+            // StyleX 0.19's query-order rewrite rejects valid responsive maps
+            // when exported style modules are consumed by the full Solid graph.
+            // Preserve authored order; the production-configuration regression
+            // covers multiple responsive entrypoints.
+            enableMediaQueryOrder: false,
             importSources,
             runtimeInjection: false,
             unstable_moduleResolution: { type: "commonJS", rootDir: process.cwd() }
@@ -75,6 +80,7 @@ export function stylexSolidPlugin(options: StyleXSolidPluginOptions = {}): Bun.B
         if (!cssPath) {
           throw new Error("StyleX requires Bun.build to specify outdir");
         }
+        await mkdir(path.dirname(cssPath), { recursive: true });
         if (await Bun.file(cssPath).exists()) {
           await appendFile(cssPath, `\n${css}`);
         } else {

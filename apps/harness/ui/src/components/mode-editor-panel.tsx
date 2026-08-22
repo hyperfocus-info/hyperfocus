@@ -1,10 +1,12 @@
 import { For, createEffect, createSignal } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { ClipboardList, FolderOpen, Play, RefreshCcw } from "lucide-solid";
 import type { ModeDefinition } from "../../../shared/protocol";
 import { ActionButton } from "./action-button";
 import { DropdownControl } from "./primitives/dropdown";
 import { Input } from "./primitives/input";
 import { Textarea } from "./primitives/textarea";
+import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 
 type ModeEditorPanelProps = {
   title: string;
@@ -40,6 +42,10 @@ const EMPTY_MODE_DRAFT: ModeDraft = {
   subagentWorktreeStrategyDefault: "same-worktree",
   correctnessIterationModeDefault: "ask-before-iterate"
 };
+
+const modePillClass = stylex.attrs(styles.modePill).class ?? "";
+const selectedModePillClass = stylex.attrs(styles.modePillSelected).class ?? "";
+const idleModePillClass = stylex.attrs(styles.modePillIdle).class ?? "";
 
 export function ModeEditorPanel(props: ModeEditorPanelProps) {
   const [selectedModeId, setSelectedModeId] = createSignal<string>();
@@ -138,15 +144,15 @@ export function ModeEditorPanel(props: ModeEditorPanelProps) {
   };
 
   return (
-    <section class="rounded-[1.25rem] border border-(--border) bg-white/55 p-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
+    <section {...stylex.attrs(styles.modePanel)}>
+      <div {...stylex.attrs(styles.modeHeader)}>
         <div>
-          <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">{props.title}</div>
-          <div class="mt-1 text-[0.675rem] leading-5 text-(--muted)">
+          <div {...stylex.attrs(styles.sectionEyebrow)}>{props.title}</div>
+          <div {...stylex.attrs(styles.modeDescription)}>
             Custom modes override built-ins inside {props.scope} scope.
           </div>
         </div>
-        <div class="flex gap-2">
+        <div {...stylex.attrs(styles.inlineActions)}>
           <ActionButton tooltip={`Create new ${props.scope} mode`} variant="secondary" size="sm" onClick={handleNewMode}>
             New mode
           </ActionButton>
@@ -166,19 +172,11 @@ export function ModeEditorPanel(props: ModeEditorPanelProps) {
         </div>
       </div>
 
-      <div class="mt-4 flex flex-wrap gap-2">
+      <div {...stylex.attrs(styles.modePills)}>
         <For each={customModes()}>
           {(mode) => (
             <button
-              class="rounded-full border px-3 py-1 text-[0.625rem] font-semibold transition"
-              classList={{
-                "border-(--accent)": selectedModeId() === mode.id,
-                "bg-(--accent)": selectedModeId() === mode.id,
-                "text-white": selectedModeId() === mode.id,
-                "border-(--border)": selectedModeId() !== mode.id,
-                "bg-white/70": selectedModeId() !== mode.id,
-                "text-(--foreground)": selectedModeId() !== mode.id
-              }}
+              class={`${modePillClass} ${selectedModeId() === mode.id ? selectedModePillClass : idleModePillClass}`}
               type="button"
               onClick={() => setSelectedModeId(mode.id)}
             >
@@ -188,81 +186,81 @@ export function ModeEditorPanel(props: ModeEditorPanelProps) {
         </For>
       </div>
 
-      <div class="mt-4 grid gap-3 md:grid-cols-2">
-        <label class="space-y-2">
-          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Mode id</span>
+      <div {...stylex.attrs(styles.fieldGridTwo)}>
+        <label {...stylex.attrs(styles.field)}>
+          <span {...stylex.attrs(styles.sectionEyebrow)}>Mode id</span>
           <Input value={draft().id} onInput={(event) => updateDraft("id", event.currentTarget.value)} />
         </label>
-        <label class="space-y-2">
-          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Label</span>
+        <label {...stylex.attrs(styles.field)}>
+          <span {...stylex.attrs(styles.sectionEyebrow)}>Label</span>
           <Input value={draft().label} onInput={(event) => updateDraft("label", event.currentTarget.value)} />
         </label>
       </div>
 
-      <label class="mt-3 block space-y-2">
-        <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Description</span>
+      <label {...stylex.attrs(styles.blockField)}>
+        <span {...stylex.attrs(styles.sectionEyebrow)}>Description</span>
         <Input value={draft().description} onInput={(event) => updateDraft("description", event.currentTarget.value)} />
       </label>
 
-      <div class="mt-3 grid gap-3 md:grid-cols-2">
-        <label class="space-y-2">
-          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Planner prompt</span>
+      <div {...stylex.attrs(styles.fieldGridTwoCompact)}>
+        <label {...stylex.attrs(styles.field)}>
+          <span {...stylex.attrs(styles.sectionEyebrow)}>Planner prompt</span>
           <Textarea rows="5" value={draft().plannerPrompt} onInput={(event) => updateDraft("plannerPrompt", event.currentTarget.value)} />
         </label>
-        <label class="space-y-2">
-          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Execution prompt</span>
+        <label {...stylex.attrs(styles.field)}>
+          <span {...stylex.attrs(styles.sectionEyebrow)}>Execution prompt</span>
           <Textarea rows="5" value={draft().executionPrompt} onInput={(event) => updateDraft("executionPrompt", event.currentTarget.value)} />
         </label>
       </div>
 
-      <div class="mt-3 grid gap-3 md:grid-cols-4">
-        <label class="space-y-2">
-          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Tool policy</span>
+      <div {...stylex.attrs(styles.fieldGridFour)}>
+        <label {...stylex.attrs(styles.field)}>
+          <span {...stylex.attrs(styles.sectionEyebrow)}>Tool policy</span>
           <DropdownControl
             kind="select"
             ariaLabel="Select tool policy"
-            icon={<ClipboardList class="h-3.5 w-3.5" />}
+            icon={<ClipboardList {...stylex.attrs(styles.iconSm)} />}
             size="md"
-            class="w-full"
+            class={stylex.attrs(styles.fullWidth).class}
             value={draft().toolPolicy}
             options={toolPolicyOptions()}
             onChange={(value) => updateDraft("toolPolicy", value as ModeDraft["toolPolicy"])}
           />
         </label>
-        <label class="space-y-2">
-          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Execution access</span>
+        <label {...stylex.attrs(styles.field)}>
+          <span {...stylex.attrs(styles.sectionEyebrow)}>Execution access</span>
           <DropdownControl
             kind="select"
             ariaLabel="Select execution access"
-            icon={<FolderOpen class="h-3.5 w-3.5" />}
+            icon={<FolderOpen {...stylex.attrs(styles.iconSm)} />}
             size="md"
-            class="w-full"
+            class={stylex.attrs(styles.fullWidth).class}
             value={draft().executionAccess}
             options={executionAccessOptions()}
             onChange={(value) => updateDraft("executionAccess", value as ModeDraft["executionAccess"])}
           />
         </label>
-        <label class="space-y-2">
-          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Plan gate</span>
+        <label {...stylex.attrs(styles.field)}>
+          <span {...stylex.attrs(styles.sectionEyebrow)}>Plan gate</span>
           <DropdownControl
             kind="select"
             ariaLabel="Select mode plan gate"
-            icon={<Play class="h-3.5 w-3.5" />}
+            icon={<Play {...stylex.attrs(styles.iconSm)} />}
             size="md"
-            class="w-full"
+            class={stylex.attrs(styles.fullWidth).class}
             value={draft().planExecutionModeDefault ?? "countdown"}
             options={planGateOptions()}
             onChange={(value) => updateDraft("planExecutionModeDefault", value as ModeDraft["planExecutionModeDefault"])}
           />
         </label>
-        <label class="space-y-2">
-          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Correctness</span>
+        <label {...stylex.attrs(styles.field)}>
+          <span {...stylex.attrs(styles.sectionEyebrow)}>Correctness</span>
           <DropdownControl
             kind="select"
             ariaLabel="Select correctness iteration"
-            icon={<RefreshCcw class="h-3.5 w-3.5" />}
+            icon={<RefreshCcw {...stylex.attrs(styles.iconSm)} />}
             size="md"
-            class="w-full"
+            class={stylex.attrs(styles.fullWidth).class}
             value={draft().correctnessIterationModeDefault ?? "ask-before-iterate"}
             options={correctnessOptions()}
             onChange={(value) =>

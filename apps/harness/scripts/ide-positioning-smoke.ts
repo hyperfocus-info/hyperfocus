@@ -1,9 +1,11 @@
 import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { SolidPlugin } from "@dschz/bun-plugin-solid";
+import { stylexSolidPlugin } from "../../../scripts/stylex-solid-plugin";
 
 const repoRoot = path.resolve(import.meta.dir, "..", "..", "..");
-const smokeRoot = path.join(repoRoot, ".local", "ide-positioning-smoke");
+// Keep the generated entry beneath the harness package so Bun resolves the
+// package-local Solid installation while bundling the browser fixture.
+const smokeRoot = path.join(repoRoot, "apps", "harness", ".local", "ide-positioning-smoke");
 const outDir = path.join(smokeRoot, "dist");
 const fixtureEntry = path.join(smokeRoot, "main.tsx");
 const progressPath = path.join(smokeRoot, "progress.log");
@@ -36,11 +38,9 @@ async function buildFixture() {
     target: "browser",
     sourcemap: "none",
     plugins: [
-      SolidPlugin({
-        generate: "dom",
-        hydratable: false,
-        sourceMaps: false,
-        debug: false
+      stylexSolidPlugin({
+        useCSSLayers: { before: ["reset"], prefix: "hyperfocus" },
+        importSources: ["@stylexjs/stylex"]
       })
     ]
   });
@@ -93,7 +93,7 @@ function fixtureSource() {
   return `/** @jsxImportSource solid-js */
 import { onMount } from "solid-js";
 import { render } from "solid-js/web";
-import "${toImportPath(path.join(repoRoot, "apps/harness/ui/src/legacy.css"))}";
+import "${toImportPath(path.join(repoRoot, "apps/harness/ui/src/global-styles.ts"))}";
 import { createWorkspaceProjectState } from "${toImportPath(path.join(repoRoot, "apps/harness/shared/protocol.ts"))}";
 import { UiStateProviders } from "${toImportPath(path.join(repoRoot, "apps/harness/ui/src/store-providers.tsx"))}";
 import { harnessStore } from "${toImportPath(path.join(repoRoot, "apps/harness/ui/src/harness-store.ts"))}";

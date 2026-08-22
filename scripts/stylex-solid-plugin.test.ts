@@ -12,28 +12,36 @@ afterEach(async () => {
 
 describe("stylexSolidPlugin", () => {
   test("emits Solid DOM code and extracted StyleX CSS in one build", async () => {
-    const outdir = await mkdtemp(path.join(tmpdir(), "hyperfocus-stylex-solid-"));
-    temporaryDirectories.push(outdir);
+    const temporaryRoot = await mkdtemp(path.join(tmpdir(), "hyperfocus-stylex-solid-"));
+    const outdir = path.join(temporaryRoot, "staging", "dist");
+    temporaryDirectories.push(temporaryRoot);
 
     const result = await Bun.build({
-      entrypoints: [path.join(import.meta.dir, "fixtures", "stylex-solid.tsx")],
+      entrypoints: [
+        path.join(import.meta.dir, "fixtures", "stylex-solid.tsx"),
+        path.join(import.meta.dir, "fixtures", "stylex-solid-secondary.tsx")
+      ],
       outdir,
       target: "browser",
       format: "esm",
       external: ["solid-js", "solid-js/web", "@stylexjs/stylex"],
-      plugins: [stylexSolidPlugin()]
+      plugins: [stylexSolidPlugin({ useCSSLayers: { before: ["reset", "legacy"], prefix: "hyperfocus" } })]
     });
 
     expect(result.success).toBe(true);
-    const javascriptOutput = result.outputs.find((output) => output.path.endsWith(".js"));
-    expect(javascriptOutput).toBeDefined();
+    const javascriptOutputs = result.outputs.filter((output) => output.path.endsWith(".js"));
+    expect(javascriptOutputs).toHaveLength(2);
 
-    const javascript = await readFile(javascriptOutput!.path, "utf8");
+    const javascript = (await Promise.all(javascriptOutputs.map((output) => readFile(output.path, "utf8")))).join("\n");
     const css = await readFile(path.join(outdir, "main.css"), "utf8");
     expect(javascript).not.toContain("React.");
     expect(javascript).not.toContain("stylex.create");
     expect(javascript).toContain("StyleX + Solid");
+    expect(javascript).toContain("Concurrent StyleX + Solid");
     expect(css).toContain("rgb(18,52,86)");
+    expect(css).toContain("rgb(86,52,18)");
     expect(css).toContain("display:grid");
+    expect(css).toContain("@media (min-width: 640px)");
+    expect(css).toContain("@media (min-width: 1024px)");
   });
 });

@@ -1,4 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
 import { PrimitivePortal } from "./primitive-portal";
 import { isTopOverlay, registerOverlay } from "./overlay-stack";
@@ -149,7 +150,7 @@ export function Popover(props: PopoverProps) {
         ref={contentRef}
         data-test-popover-content=""
         class={cn(
-          "app-zoom-portal-content fixed z-[130] w-max rounded-[1.25rem] border border-(--border) bg-(--panel) p-3 shadow-2xl",
+          stylex.attrs(styles.content).class,
           props.contentClass
         )}
         style={{
@@ -172,7 +173,7 @@ export function Popover(props: PopoverProps) {
   );
 
   return (
-    <div ref={triggerRef} data-test-popover="" class={cn("relative inline-flex", props.class)}>
+    <div ref={triggerRef} data-test-popover="" class={cn(stylex.attrs(styles.trigger).class, props.class)}>
       {props.children}
       <PrimitivePortal active={props.open} layer="popover">
         {content}
@@ -180,3 +181,19 @@ export function Popover(props: PopoverProps) {
     </div>
   );
 }
+
+const styles = stylex.create({
+  trigger: { display: "inline-flex", position: "relative" },
+  content: {
+    backgroundColor: "var(--panel)",
+    borderColor: "var(--border)",
+    borderRadius: "1.25rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+    padding: "0.75rem",
+    position: "fixed",
+    width: "max-content",
+    zIndex: 130
+  }
+});

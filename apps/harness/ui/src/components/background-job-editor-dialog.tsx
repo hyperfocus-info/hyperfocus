@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { Bot, Brain, ClipboardList, FolderOpen, Gauge, Play, Split, UserRound } from "lucide-solid";
 import { resolveModeCatalog } from "../../../shared/modes";
 import {
@@ -24,6 +25,7 @@ import { getModeDropdownIcon } from "./primitives/dropdown-option-icons";
 import { DialogField, DialogFormSection, DialogInlineNote } from "./primitives/form-layout";
 import { Input } from "./primitives/input";
 import { Textarea } from "./primitives/textarea";
+import { backgroundJobsStyles as styles } from "./background-jobs.styles";
 
 export function BackgroundJobEditorDialog() {
   const state = harnessStore.state;
@@ -73,39 +75,39 @@ export function BackgroundJobEditorDialog() {
       value: project.id,
       label: project.name,
       description: project.rootPath,
-      icon: <FolderOpen class="h-3 w-3" />
+      icon: <FolderOpen class={stylex.attrs(styles.iconXs).class} />
     }))
   );
   const assistantOptions = createMemo(() => [
-    { value: "", label: "Unowned", description: "Run as a project background job.", icon: <ClipboardList class="h-3 w-3" /> },
+    { value: "", label: "Unowned", description: "Run as a project background job.", icon: <ClipboardList class={stylex.attrs(styles.iconXs).class} /> },
     ...state.assistants.assistants
       .filter((assistant) => !assistant.projectId || assistant.projectId === projectId())
       .map((assistant) => ({
         value: assistant.id,
         label: assistant.name,
         description: assistant.projectId ? "Attach to this project assistant." : "Attach to this global assistant.",
-        icon: <UserRound class="h-3 w-3" />
+        icon: <UserRound class={stylex.attrs(styles.iconXs).class} />
       }))
   ]);
   const templateOptions = createMemo(() => [
-    { value: "", label: "Custom", description: "Start from blank scheduled task definition.", icon: <ClipboardList class="h-3 w-3" /> },
+    { value: "", label: "Custom", description: "Start from blank scheduled task definition.", icon: <ClipboardList class={stylex.attrs(styles.iconXs).class} /> },
     ...state.backgroundJobs.templates.map((template) => ({
       value: template.id,
       label: template.label,
       description: template.description,
-      icon: <ClipboardList class="h-3 w-3" />
+      icon: <ClipboardList class={stylex.attrs(styles.iconXs).class} />
     }))
   ]);
   const kindOptions = () => [
-    { value: "ai-routine", label: "AI routine", description: "Prompt-driven autonomous background task.", icon: <Bot class="h-3 w-3" /> },
-    { value: "shell", label: "Shell", description: "Typed executable plus args/env background task.", icon: <ClipboardList class="h-3 w-3" /> }
+    { value: "ai-routine", label: "AI routine", description: "Prompt-driven autonomous background task.", icon: <Bot class={stylex.attrs(styles.iconXs).class} /> },
+    { value: "shell", label: "Shell", description: "Typed executable plus args/env background task.", icon: <ClipboardList class={stylex.attrs(styles.iconXs).class} /> }
   ];
   const laneOptions = () => [
     { value: "exclusive", label: "Exclusive", description: "Serializes file edits and assistant memory updates." },
     { value: "concurrent", label: "Concurrent", description: "For read-only observation jobs that can run elastically." }
   ];
   const modeOptions = createMemo(() => [
-    { value: "", label: "Project default", description: "Use project-selected mode when job runs.", icon: <Split class="h-3 w-3" /> },
+    { value: "", label: "Project default", description: "Use project-selected mode when job runs.", icon: <Split class={stylex.attrs(styles.iconXs).class} /> },
     ...availableModes().map((mode) => ({
       value: mode.id,
       label: mode.label,
@@ -123,11 +125,11 @@ export function BackgroundJobEditorDialog() {
       value: strength,
       label: formatReasoningOptionLabel(strength),
       description: getReasoningStrengthDescription(strength),
-      icon: <Brain class="h-3 w-3" />
+      icon: <Brain class={stylex.attrs(styles.iconXs).class} />
     }));
   const fastModeOptions = () => [
-    { value: "false", label: "Off", description: "Use standard response path.", icon: <Gauge class="h-3 w-3" /> },
-    { value: "true", label: "On", description: "Prefer lower-latency responses when supported.", icon: <Gauge class="h-3 w-3" /> }
+    { value: "false", label: "Off", description: "Use standard response path.", icon: <Gauge class={stylex.attrs(styles.iconXs).class} /> },
+    { value: "true", label: "On", description: "Prefer lower-latency responses when supported.", icon: <Gauge class={stylex.attrs(styles.iconXs).class} /> }
   ];
   const worktreeOptions = () => [
     { value: "same-worktree", label: "Same checkout", description: "Run subagents in current working tree." },
@@ -343,8 +345,8 @@ export function BackgroundJobEditorDialog() {
       title={activeDraft()?.source === "edit" ? "Edit scheduled task" : "Scheduled task"}
       eyebrow="Background jobs"
       description="Save self-contained AI routines or typed shell jobs."
-      class="max-w-4xl"
-      contentClass="max-h-[80vh] gap-5 overflow-auto"
+      class={stylex.attrs(styles.editorDialog).class}
+      contentClass={stylex.attrs(styles.editorDialogContent).class}
       footer={
         <>
           <Button tooltip="Close scheduled task editor without saving" variant="ghost" onClick={handleClose}>
@@ -369,25 +371,25 @@ export function BackgroundJobEditorDialog() {
           <DropdownControl
             kind="select"
             ariaLabel="Select background job project"
-            icon={<FolderOpen class="h-3.5 w-3.5" />}
+            icon={<FolderOpen class={stylex.attrs(styles.iconSm).class} />}
             size="md"
-            class="w-full"
+            class={stylex.attrs(styles.controlFullWidth).class}
             value={projectId() ?? ""}
             options={projectOptions()}
             onChange={(value) => setProjectId(value || undefined)}
           />
         </DialogField>
 
-        <details class="rounded-lg border border-(--border) bg-white/45 p-3">
-          <summary class="cursor-pointer text-[0.675rem] font-semibold text-(--foreground)">Advanced task settings</summary>
-          <div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <details class={stylex.attrs(styles.advancedSettings).class}>
+          <summary class={stylex.attrs(styles.advancedSummary).class}>Advanced task settings</summary>
+          <div class={stylex.attrs(styles.advancedGrid).class}>
           <DialogField label="Owner">
           <DropdownControl
             kind="select"
             ariaLabel="Select background job owner assistant"
-            icon={<UserRound class="h-3.5 w-3.5" />}
+            icon={<UserRound class={stylex.attrs(styles.iconSm).class} />}
             size="md"
-            class="w-full"
+            class={stylex.attrs(styles.controlFullWidth).class}
             value={assistantId()}
             options={assistantOptions()}
             onChange={setAssistantId}
@@ -398,9 +400,9 @@ export function BackgroundJobEditorDialog() {
             <DropdownControl
               kind="select"
               ariaLabel="Select background job template"
-              icon={<ClipboardList class="h-3.5 w-3.5" />}
+              icon={<ClipboardList class={stylex.attrs(styles.iconSm).class} />}
               size="md"
-              class="w-full"
+              class={stylex.attrs(styles.controlFullWidth).class}
               value={templateId()}
               options={templateOptions()}
               onChange={applyTemplate}
@@ -411,9 +413,9 @@ export function BackgroundJobEditorDialog() {
           <DropdownControl
             kind="select"
             ariaLabel="Select background job kind"
-            icon={<Bot class="h-3.5 w-3.5" />}
+            icon={<Bot class={stylex.attrs(styles.iconSm).class} />}
             size="md"
-            class="w-full"
+            class={stylex.attrs(styles.controlFullWidth).class}
             value={kind()}
             options={kindOptions()}
             onChange={(value) => setKind(value as BackgroundJob["kind"])}
@@ -424,16 +426,16 @@ export function BackgroundJobEditorDialog() {
           <DropdownControl
             kind="select"
             ariaLabel="Select background job lane"
-            icon={<Split class="h-3.5 w-3.5" />}
+            icon={<Split class={stylex.attrs(styles.iconSm).class} />}
             size="md"
-            class="w-full"
+            class={stylex.attrs(styles.controlFullWidth).class}
             value={lane() ?? "exclusive"}
             options={laneOptions()}
             onChange={(value) => setLane(value === "concurrent" ? "concurrent" : "exclusive")}
           />
           </DialogField>
 
-          <DialogField label="Description" class="sm:col-span-2 xl:col-span-4">
+          <DialogField label="Description" class={stylex.attrs(styles.editorWideField).class}>
             <Textarea rows="2" value={description()} onInput={(event) => setDescription(event.currentTarget.value)} placeholder="Optional inbox summary." />
           </DialogField>
           </div>
@@ -441,7 +443,7 @@ export function BackgroundJobEditorDialog() {
       </DialogFormSection>
 
       <DialogFormSection title="Schedule" description="Use an interval, one-off datetime, or cron expression.">
-        <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]">
+        <div class={stylex.attrs(styles.scheduleGrid).class}>
           <DialogField label="Schedule">
           <Input value={scheduleInput()} onInput={(event) => setScheduleInput(event.currentTarget.value)} placeholder="daily | 3h | 2026-04-17 09:00 | */15 * * * *" />
           </DialogField>
@@ -477,14 +479,14 @@ export function BackgroundJobEditorDialog() {
         onNetworkAccessInput={setShellNetworkAccess}
       />}>
         <DialogFormSection title="AI routine" description="Prompt and execution defaults used each time the schedule fires.">
-          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div class={stylex.attrs(styles.aiGrid).class}>
             <DialogField label="Mode">
               <DropdownControl
                 kind="select"
                 ariaLabel="Select background job mode"
-                icon={<Split class="h-3.5 w-3.5" />}
+                icon={<Split class={stylex.attrs(styles.iconSm).class} />}
                 size="md"
-                class="w-full"
+                class={stylex.attrs(styles.controlFullWidth).class}
                 value={aiModeId()}
                 options={modeOptions()}
                 onChange={setAiModeId}
@@ -499,9 +501,9 @@ export function BackgroundJobEditorDialog() {
               <DropdownControl
                 kind="select"
                 ariaLabel="Select background job reasoning effort"
-                icon={<Brain class="h-3.5 w-3.5" />}
+                icon={<Brain class={stylex.attrs(styles.iconSm).class} />}
                 size="md"
-                class="w-full"
+                class={stylex.attrs(styles.controlFullWidth).class}
                 value={aiReasoningStrength()}
                 options={reasoningOptions()}
                 onChange={(value) => setAiReasoningStrength(value as ComposerReasoningStrength)}
@@ -512,9 +514,9 @@ export function BackgroundJobEditorDialog() {
               <DropdownControl
                 kind="select"
                 ariaLabel="Select background job fast mode"
-                icon={<Gauge class="h-3.5 w-3.5" />}
+                icon={<Gauge class={stylex.attrs(styles.iconSm).class} />}
                 size="md"
-                class="w-full"
+                class={stylex.attrs(styles.controlFullWidth).class}
                 value={aiFastMode() ? "true" : "false"}
                 options={fastModeOptions()}
                 onChange={(value) => setAiFastMode(value === "true")}
@@ -525,9 +527,9 @@ export function BackgroundJobEditorDialog() {
               <DropdownControl
                 kind="select"
                 ariaLabel="Select background job plan gate"
-                icon={<Play class="h-3.5 w-3.5" />}
+                icon={<Play class={stylex.attrs(styles.iconSm).class} />}
                 size="md"
-                class="w-full"
+                class={stylex.attrs(styles.controlFullWidth).class}
                 value={aiPlanExecutionMode()}
                 options={planGateOptions()}
                 onChange={(value) => setAiPlanExecutionMode(value as "countdown" | "approve" | "immediate")}
@@ -538,9 +540,9 @@ export function BackgroundJobEditorDialog() {
               <DropdownControl
                 kind="select"
                 ariaLabel="Select background job worktree strategy"
-                icon={<FolderOpen class="h-3.5 w-3.5" />}
+                icon={<FolderOpen class={stylex.attrs(styles.iconSm).class} />}
                 size="md"
-                class="w-full"
+                class={stylex.attrs(styles.controlFullWidth).class}
                 value={aiSubagentWorktreeStrategy()}
                 options={worktreeOptions()}
                 onChange={(value) => setAiSubagentWorktreeStrategy(value as "same-worktree" | "separate-worktrees")}
@@ -569,7 +571,7 @@ function ShellJobFields(props: {
 }) {
   return (
     <DialogFormSection title="Shell job" description="Command, arguments, environment, and runtime limits for typed background execution.">
-      <div class="grid gap-3 md:grid-cols-2">
+      <div class={stylex.attrs(styles.shellGrid).class}>
       <DialogField label="Executable">
         <Input value={props.executable} onInput={(event) => props.onExecutableInput(event.currentTarget.value)} placeholder="bun" />
       </DialogField>
@@ -585,11 +587,11 @@ function ShellJobFields(props: {
       <DialogField label="Timeout seconds">
         <Input type="number" min="1" max={String(24 * 60 * 60)} value={String(props.timeoutSeconds)} onInput={(event) => props.onTimeoutInput(event.currentTarget.value)} />
       </DialogField>
-      <label class="flex items-start gap-3 rounded-xl border border-(--border) bg-white/55 px-4 py-3">
-        <input class="mt-1" type="checkbox" checked={props.networkAccess} onInput={(event) => props.onNetworkAccessInput(event.currentTarget.checked)} />
+      <label class={stylex.attrs(styles.networkLabel).class}>
+        <input class={stylex.attrs(styles.marginTopXs).class} type="checkbox" checked={props.networkAccess} onInput={(event) => props.onNetworkAccessInput(event.currentTarget.checked)} />
         <div>
-          <div class="text-[0.675rem] font-semibold text-(--foreground)">Allow network access</div>
-          <div class="mt-1 text-[0.675rem] leading-5 text-(--muted)">Marks task unsafe. Leave off for repo-local commands.</div>
+          <div class={stylex.attrs(styles.networkTitle).class}>Allow network access</div>
+          <div class={stylex.attrs(styles.networkHelp).class}>Marks task unsafe. Leave off for repo-local commands.</div>
         </div>
       </label>
       </div>

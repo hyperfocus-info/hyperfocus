@@ -1,5 +1,21 @@
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
-import { createHotkeys, createHotkeySequences, formatForDisplay } from "@tanstack/solid-hotkeys";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js";
+import * as stylex from "@stylexjs/stylex";
+import {
+  createHotkeys,
+  createHotkeySequences,
+  formatForDisplay,
+} from "@tanstack/solid-hotkeys";
 import type { CreateHotkeyDefinition } from "@tanstack/solid-hotkeys";
 import {
   Braces,
@@ -23,20 +39,43 @@ import {
   Save,
   Search,
   Settings,
-  X
+  X,
 } from "lucide-solid";
 import { ActionButton } from "../components/action-button";
-import { ContextMenu, type ContextMenuAction } from "../components/primitives/context-menu";
+import {
+  ContextMenu,
+  type ContextMenuAction,
+} from "../components/primitives/context-menu";
 import { Input } from "../components/primitives/input";
 import { Tooltip } from "../components/primitives/tooltip";
 import { harnessStore } from "../harness-store";
-import { normalizeAppHotkeyPreferences, type AppHotkeyId } from "../lib/app-hotkeys";
+import {
+  normalizeAppHotkeyPreferences,
+  type AppHotkeyId,
+} from "../lib/app-hotkeys";
 import { cn } from "../lib/utils";
 import { terminalStore } from "../terminal/terminal-store";
 import { pushToast } from "../toast-store";
-import { ideStore, type IdeActivityView, type IdeEditorFile } from "./ide-store";
+import {
+  ideStore,
+  type IdeActivityView,
+  type IdeEditorFile,
+} from "./ide-store";
+import { ideStyles, ideUtilityStyles } from "./ide-workbench.styles";
 
-type IdeFile = Pick<IdeEditorFile, "path" | "name" | "language" | "encoding" | "content" | "contentLines" | "cursorLine" | "cursorColumn" | "isBinary" | "tooLarge"> & {
+type IdeFile = Pick<
+  IdeEditorFile,
+  | "path"
+  | "name"
+  | "language"
+  | "encoding"
+  | "content"
+  | "contentLines"
+  | "cursorLine"
+  | "cursorColumn"
+  | "isBinary"
+  | "tooLarge"
+> & {
   path: string;
   name: string;
   language: string;
@@ -86,7 +125,8 @@ export type IdeWorkbenchProps = {
   windowMode?: "docked" | "popped-out";
 };
 
-export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
+export function IdeWorkbench(props?: IdeWorkbenchProps) {
+  const resolvedProps: IdeWorkbenchProps = props ?? {};
   const [handledOpenRequestId, setHandledOpenRequestId] = createSignal("");
   const [restoredActiveFileKey, setRestoredActiveFileKey] = createSignal("");
   const [cursorLine, setCursorLine] = createSignal(5);
@@ -94,14 +134,21 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
   const [contextMenu, setContextMenu] = createSignal<IdeContextMenu>();
   const [completionState, setCompletionState] = createSignal<CompletionState>();
   const [toasts, setToasts] = createSignal<IdeToast[]>([]);
-  const [sidebarOpen, setSidebarOpenSignal] = createSignal(ideStore.state.sidebarOpen);
-  const [activityView, setActivityViewSignal] = createSignal<IdeActivityView>(ideStore.state.activityView);
+  const [sidebarOpen, setSidebarOpenSignal] = createSignal(
+    ideStore.state.sidebarOpen,
+  );
+  const [activityView, setActivityViewSignal] = createSignal<IdeActivityView>(
+    ideStore.state.activityView,
+  );
   let workbenchRef: HTMLElement | undefined;
   let documentFindInputRef: HTMLInputElement | undefined;
   let globalSearchInputRef: HTMLInputElement | undefined;
 
   const activeProject = createMemo(() => {
-    const project = harnessStore.state.workspace.projects.find((candidate) => candidate.id === harnessStore.state.workspace.activeProjectId);
+    const project = harnessStore.state.workspace.projects.find(
+      (candidate) =>
+        candidate.id === harnessStore.state.workspace.activeProjectId,
+    );
     return project ?? harnessStore.state.workspace.projects[0];
   });
   const fileForPath = (filePath: string): IdeFile => {
@@ -119,87 +166,129 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
       isBinary: false,
       tooLarge: false,
       content: undefined,
-      contentLines: [ideStore.state.pendingReadPath === filePath ? "Loading file..." : "Read-only preview unavailable."]
+      contentLines: [
+        ideStore.state.pendingReadPath === filePath
+          ? "Loading file..."
+          : "Read-only preview unavailable.",
+      ],
     };
   };
-  const activeFile = createMemo(() => ideStore.state.activePath ? fileForPath(ideStore.state.activePath) : undefined);
+  const activeFile = createMemo(() =>
+    ideStore.state.activePath
+      ? fileForPath(ideStore.state.activePath)
+      : undefined,
+  );
   const openFiles = createMemo(() => ideStore.state.openPaths.map(fileForPath));
   const dirtyPaths = () => ideStore.state.dirtyPaths ?? [];
   const dirtyCount = createMemo(() => dirtyPaths().length);
-  const hotkeyPreferences = () => normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
+  const hotkeyPreferences = () =>
+    normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
   const primaryHotkey = (id: AppHotkeyId) => hotkeyPreferences()[id][0];
-  const hotkeyHint = (id: AppHotkeyId) => formatHotkeyDisplay(primaryHotkey(id));
+  const hotkeyHint = (id: AppHotkeyId) =>
+    formatHotkeyDisplay(primaryHotkey(id));
   const commandPaletteCommands = createMemo(() => {
     const commands = [
-      { id: "save", label: "File: Save", detail: hotkeyHint("ideSave"), run: () => ideStore.saveFile() },
-      { id: "close-all", label: "View: Close All Editors", detail: "Close all open editor tabs", run: () => closeAllTabs() },
-      { id: "toggle-sidebar", label: "View: Toggle Sidebar", detail: "Collapse or restore file explorer", run: () => toggleSidebar() },
-      { id: "find", label: "Search: Find in File", detail: hotkeyHint("ideFindInFile"), run: () => openDocumentFind() },
-      { id: "search", label: "Search: Find in Files", detail: hotkeyHint("ideFindInFiles"), run: () => openGlobalSearch() },
-      { id: "window-mode", label: props.windowMode === "popped-out" ? "Window: Pop In" : "Window: Pop Out", detail: "Move IDE between main workspace and a separate window", run: () => props.onToggleWindowMode?.() }
+      {
+        id: "save",
+        label: "File: Save",
+        detail: hotkeyHint("ideSave"),
+        run: () => ideStore.saveFile(),
+      },
+      {
+        id: "close-all",
+        label: "View: Close All Editors",
+        detail: "Close all open editor tabs",
+        run: () => closeAllTabs(),
+      },
+      {
+        id: "toggle-sidebar",
+        label: "View: Toggle Sidebar",
+        detail: "Collapse or restore file explorer",
+        run: () => toggleSidebar(),
+      },
+      {
+        id: "find",
+        label: "Search: Find in File",
+        detail: hotkeyHint("ideFindInFile"),
+        run: () => openDocumentFind(),
+      },
+      {
+        id: "search",
+        label: "Search: Find in Files",
+        detail: hotkeyHint("ideFindInFiles"),
+        run: () => openGlobalSearch(),
+      },
+      {
+        id: "window-mode",
+        label:
+          resolvedProps.windowMode === "popped-out"
+            ? "Window: Pop In"
+            : "Window: Pop Out",
+        detail: "Move IDE between main workspace and a separate window",
+        run: () => resolvedProps.onToggleWindowMode?.(),
+      },
     ];
     const query = ideStore.state.commandQuery.trim().toLowerCase();
-    return query ? commands.filter((command) => `${command.label} ${command.detail}`.toLowerCase().includes(query)) : commands;
+    return query
+      ? commands.filter((command) =>
+          `${command.label} ${command.detail}`.toLowerCase().includes(query),
+        )
+      : commands;
   });
 
-  const ideHotkeys = createMemo<CreateHotkeyDefinition[]>(() => [
-    ...hotkeyPreferences().ideCommandPalette.map((hotkey) => (
-      {
+  const ideHotkeys = createMemo<CreateHotkeyDefinition[]>(() =>
+    [
+      ...hotkeyPreferences().ideCommandPalette.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => ideStore.setCommandPalette(true),
         options: {
           meta: {
             name: "Command palette",
-            description: "Open editor commands"
-          }
-        }
+            description: "Open editor commands",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideQuickOpen.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideQuickOpen.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => ideStore.setCommandPalette(true),
         options: {
           meta: {
             name: "Quick open",
-            description: "Open quick commands"
-          }
-        }
+            description: "Open quick commands",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideFindInFile.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideFindInFile.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => openDocumentFind(),
         options: {
           meta: {
             name: "Find in file",
-            description: "Search current document"
-          }
-        }
+            description: "Search current document",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideFindInFiles.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideFindInFiles.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => openGlobalSearch(),
         options: {
           meta: {
             name: "Find in files",
-            description: "Open global search panel"
-          }
-        }
+            description: "Open global search panel",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideToggleTerminal.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideToggleTerminal.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => terminalStore.toggleOpen(),
         options: {
           meta: {
             name: "Integrated terminal",
-            description: "Toggle the bottom terminal drawer"
-          }
-        }
+            description: "Toggle the bottom terminal drawer",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideExplorer.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideExplorer.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => {
           toggleActivityView("explorer");
@@ -207,12 +296,11 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
         options: {
           meta: {
             name: "Explorer",
-            description: "Open file explorer"
-          }
-        }
+            description: "Open file explorer",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideSourceControl.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideSourceControl.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => {
           toggleActivityView("source-control");
@@ -220,82 +308,81 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
         options: {
           meta: {
             name: "Source control",
-            description: "Open source control"
-          }
-        }
+            description: "Open source control",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideSave.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideSave.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => ideStore.saveFile(),
         options: {
           meta: {
             name: "Save",
-            description: "Save current editor"
-          }
-        }
+            description: "Save current editor",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideCloseEditor.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideCloseEditor.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => closeCurrentTab(),
         options: {
           meta: {
             name: "Close tab",
-            description: "Close current tab"
-          }
-        }
+            description: "Close current tab",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideToggleSidebar.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideToggleSidebar.map((hotkey) => ({
         hotkey: hotkey as never,
         callback: () => toggleSidebar(),
         options: {
           meta: {
             name: "Toggle sidebar",
-            description: "Collapse or restore the IDE sidebar"
-          }
-        }
+            description: "Collapse or restore the IDE sidebar",
+          },
+        },
       })),
-    ...hotkeyPreferences().ideToggleWordWrap.map((hotkey) => (
-      {
+      ...hotkeyPreferences().ideToggleWordWrap.map((hotkey) => ({
         hotkey: hotkey as never,
-        callback: () => ideStore.setEditorSetting("wordWrap", ideStore.state.editorSettings.wordWrap === "on" ? "off" : "on"),
+        callback: () =>
+          ideStore.setEditorSetting(
+            "wordWrap",
+            ideStore.state.editorSettings.wordWrap === "on" ? "off" : "on",
+          ),
         options: {
           meta: {
             name: "Word wrap",
-            description: "Toggle editor word wrap"
-          }
-        }
-      }))
+            description: "Toggle editor word wrap",
+          },
+        },
+      })),
     ].map((definition) => ({
       ...definition,
       options: {
         ...definition.options,
         // IDE and workspace shortcuts are mutually exclusive by active surface.
-        conflictBehavior: "allow" as const
-      }
-    })));
-  createHotkeys(
-    ideHotkeys,
-    () => ({
-      enabled: harnessStore.state.activeSurface === "ide",
-      ignoreInputs: false,
-      preventDefault: true,
-      stopPropagation: true
-    })
-  );
-  createHotkeySequences(
-    () => hotkeyPreferences().ideCloseAllEditors.map((hotkey) => ({
-      sequence: closeAllEditorSequence(hotkey) as never,
-      callback: () => closeAllTabs()
+        conflictBehavior: "allow" as const,
+      },
     })),
+  );
+  createHotkeys(ideHotkeys, () => ({
+    enabled: harnessStore.state.activeSurface === "ide",
+    ignoreInputs: false,
+    preventDefault: true,
+    stopPropagation: true,
+  }));
+  createHotkeySequences(
+    () =>
+      hotkeyPreferences().ideCloseAllEditors.map((hotkey) => ({
+        sequence: closeAllEditorSequence(hotkey) as never,
+        callback: () => closeAllTabs(),
+      })),
     () => ({
       enabled: harnessStore.state.activeSurface === "ide",
       ignoreInputs: false,
       preventDefault: true,
-      stopPropagation: true
-    })
+      stopPropagation: true,
+    }),
   );
 
   createEffect(() => {
@@ -317,7 +404,8 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
   createEffect(() => {
     const projectId = activeProject()?.id;
     const activePath = ideStore.state.activePath;
-    const restoreKey = projectId && activePath ? `${projectId}:${activePath}` : "";
+    const restoreKey =
+      projectId && activePath ? `${projectId}:${activePath}` : "";
     if (
       projectId &&
       activePath &&
@@ -349,9 +437,16 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
     let closeAllChordUntil = 0;
     let closeAllChordTails: string[][] = [];
     const interceptBrowserShortcuts = (event: KeyboardEvent) => {
-      const targetNode = event.target instanceof Node ? event.target : undefined;
-      const eventInsideWorkbench = Boolean(targetNode && workbenchRef?.contains(targetNode));
-      if (harnessStore.state.activeSurface !== "ide" && props.windowMode !== "popped-out" && !eventInsideWorkbench) {
+      const targetNode =
+        event.target instanceof Node ? event.target : undefined;
+      const eventInsideWorkbench = Boolean(
+        targetNode && workbenchRef?.contains(targetNode),
+      );
+      if (
+        harnessStore.state.activeSurface !== "ide" &&
+        resolvedProps.windowMode !== "popped-out" &&
+        !eventInsideWorkbench
+      ) {
         return;
       }
       const closeEditorHotkeys = hotkeyPreferences().ideCloseEditor;
@@ -411,7 +506,10 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
         event.stopImmediatePropagation();
         return;
       }
-      if (eventMatchesHotkeys(event, hotkeyPreferences().ideCommandPalette) || eventMatchesHotkeys(event, hotkeyPreferences().ideQuickOpen)) {
+      if (
+        eventMatchesHotkeys(event, hotkeyPreferences().ideCommandPalette) ||
+        eventMatchesHotkeys(event, hotkeyPreferences().ideQuickOpen)
+      ) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
@@ -422,31 +520,59 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        ideStore.setEditorSetting("wordWrap", ideStore.state.editorSettings.wordWrap === "on" ? "off" : "on");
+        ideStore.setEditorSetting(
+          "wordWrap",
+          ideStore.state.editorSettings.wordWrap === "on" ? "off" : "on",
+        );
         return;
       }
-      const closeAllSequences = hotkeyPreferences().ideCloseAllEditors.map(closeAllEditorSequence);
-      if (closeAllSequences.some((sequence) => sequence.length === 1 && eventMatchesHotkeys(event, sequence))) {
+      const closeAllSequences = hotkeyPreferences().ideCloseAllEditors.map(
+        closeAllEditorSequence,
+      );
+      if (
+        closeAllSequences.some(
+          (sequence) =>
+            sequence.length === 1 && eventMatchesHotkeys(event, sequence),
+        )
+      ) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
         closeAllTabs();
         return;
       }
-      const matchedCloseAllPrefixes = closeAllSequences.filter((sequence) => sequence.length > 1 && eventMatchesHotkeys(event, sequence.slice(0, 1)));
+      const matchedCloseAllPrefixes = closeAllSequences.filter(
+        (sequence) =>
+          sequence.length > 1 &&
+          eventMatchesHotkeys(event, sequence.slice(0, 1)),
+      );
       if (matchedCloseAllPrefixes.length > 0) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        if (matchedCloseAllPrefixes.some((sequence) => isIdeProjectSwitcherModKHotkey(sequence[0] ?? "")) && hotkeyPreferences().openProjectSwitcher.some(isIdeProjectSwitcherModKHotkey)) {
+        if (
+          matchedCloseAllPrefixes.some((sequence) =>
+            isIdeProjectSwitcherModKHotkey(sequence[0] ?? ""),
+          ) &&
+          hotkeyPreferences().openProjectSwitcher.some(
+            isIdeProjectSwitcherModKHotkey,
+          )
+        ) {
           harnessStore.openProjectSwitcher();
           return;
         }
         closeAllChordUntil = Date.now() + 1200;
-        closeAllChordTails = matchedCloseAllPrefixes.map((sequence) => sequence.slice(1));
+        closeAllChordTails = matchedCloseAllPrefixes.map((sequence) =>
+          sequence.slice(1),
+        );
         return;
       }
-      if (closeAllChordUntil > Date.now() && closeAllChordTails.some((sequence) => eventMatchesHotkeys(event, sequence))) {
+      if (
+        closeAllChordUntil > Date.now() &&
+        closeAllChordTails.some((sequence) =>
+          eventMatchesHotkeys(event, sequence),
+        )
+      ) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
@@ -458,18 +584,30 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
       closeAllChordUntil = 0;
       closeAllChordTails = [];
     };
-    window.addEventListener("keydown", interceptBrowserShortcuts, { capture: true });
-    document.addEventListener("keydown", interceptBrowserShortcuts, { capture: true });
+    window.addEventListener("keydown", interceptBrowserShortcuts, {
+      capture: true,
+    });
+    document.addEventListener("keydown", interceptBrowserShortcuts, {
+      capture: true,
+    });
     onCleanup(() => {
-      window.removeEventListener("keydown", interceptBrowserShortcuts, { capture: true });
-      document.removeEventListener("keydown", interceptBrowserShortcuts, { capture: true });
+      window.removeEventListener("keydown", interceptBrowserShortcuts, {
+        capture: true,
+      });
+      document.removeEventListener("keydown", interceptBrowserShortcuts, {
+        capture: true,
+      });
     });
   });
 
-  function notify(title: string, detail: string, tone: IdeToast["tone"] = "info") {
+  function notify(title: string, detail: string, tone?: IdeToast["tone"]) {
     const id = `ide-toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setToasts((current) => [...current.slice(-2), { id, title, detail, tone }]);
-    if (tone === "error") {
+    const resolvedTone = tone ?? "info";
+    setToasts((current) => [
+      ...current.slice(-2),
+      { id, title, detail, tone: resolvedTone },
+    ]);
+    if (resolvedTone === "error") {
       pushToast(title, detail, "error");
     }
     window.setTimeout(() => {
@@ -554,19 +692,31 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
   }
 
   function syncActivityBarChrome(open: boolean, view: IdeActivityView) {
-    const activityBar = document.querySelector<HTMLElement>(".ide-activity-bar");
+    const activityBar = document.querySelector<HTMLElement>(
+      "[data-test-ide-activity-bar]",
+    );
     if (!activityBar) {
       return;
     }
     activityBar.dataset.sidebarOpen = open ? "true" : "false";
-    activityBar.querySelectorAll<HTMLButtonElement>(".ide-activity-button[data-activity-view]").forEach((button) => {
-      const active = open && button.dataset.activityView === view;
-      button.classList.toggle("ide-activity-button-active", active);
-      button.setAttribute("aria-pressed", active ? "true" : "false");
-    });
+    activityBar
+      .querySelectorAll<HTMLButtonElement>("[data-activity-view]")
+      .forEach((button) => {
+        const active = open && button.dataset.activityView === view;
+        button.className = cn(
+          stylex.attrs(ideStyles.activityButton).class,
+          active
+            ? stylex.attrs(ideStyles.activityButtonActive).class
+            : undefined,
+        );
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
   }
 
-  function startHorizontalResize(kind: "sidebar" | "editor", event: PointerEvent) {
+  function startHorizontalResize(
+    kind: "sidebar" | "editor",
+    event: PointerEvent,
+  ) {
     event.preventDefault();
     const startX = event.clientX;
     const startSidebarWidth = ideStore.state.sidebarWidth;
@@ -574,10 +724,14 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
     const onPointerMove = (moveEvent: PointerEvent) => {
       const delta = moveEvent.clientX - startX;
       if (kind === "sidebar") {
-        ideStore.setSidebarWidth(Math.max(220, Math.min(420, startSidebarWidth + delta)));
+        ideStore.setSidebarWidth(
+          Math.max(220, Math.min(420, startSidebarWidth + delta)),
+        );
         return;
       }
-      ideStore.setPrimaryEditorWidth(Math.max(42, Math.min(72, startEditorWidth + delta / 12)));
+      ideStore.setPrimaryEditorWidth(
+        Math.max(42, Math.min(72, startEditorWidth + delta / 12)),
+      );
     };
     const onPointerUp = () => {
       window.removeEventListener("pointermove", onPointerMove);
@@ -587,7 +741,11 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
     window.addEventListener("pointerup", onPointerUp, { once: true });
   }
 
-  function openContextMenu(kind: IdeContextMenu["kind"], event: MouseEvent, filePath?: string) {
+  function openContextMenu(
+    kind: IdeContextMenu["kind"],
+    event: MouseEvent,
+    filePath?: string,
+  ) {
     event.preventDefault();
     setContextMenu({ kind, x: event.clientX, y: event.clientY, filePath });
   }
@@ -596,7 +754,7 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
     if (paths.length > 0) {
       return;
     }
-    queueMicrotask(() => props.onRequestClose?.());
+    queueMicrotask(() => resolvedProps.onRequestClose?.());
   }
 
   const contextMenuActions = createMemo<ContextMenuAction[]>(() => {
@@ -607,24 +765,80 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
     if (menu.kind === "tab") {
       const filePath = menu.filePath ?? ideStore.state.activePath ?? "";
       return [
-        { id: "close-tab", label: "Close", shortcut: formatForDisplay("Mod+W"), onSelect: () => closeTab(filePath) },
-        { id: "close-others", label: "Close Others", onSelect: () => closeOtherTabs(filePath) },
-        { id: "close-all", label: "Close All", onSelect: closeAllTabs }
+        {
+          id: "close-tab",
+          label: "Close",
+          shortcut: formatForDisplay("Mod+W"),
+          onSelect: () => closeTab(filePath),
+        },
+        {
+          id: "close-others",
+          label: "Close Others",
+          onSelect: () => closeOtherTabs(filePath),
+        },
+        { id: "close-all", label: "Close All", onSelect: closeAllTabs },
       ];
     }
     if (menu.kind === "tree") {
       return [
-        { id: "open", label: "Open", onSelect: () => menu.filePath && openFileByPath(menu.filePath) },
-        { id: "copy-path", label: "Copy Path", onSelect: () => notify("Path copied", menu.filePath ?? "Project path copied.") },
-        { id: "refresh", label: "Refresh Explorer", onSelect: () => activeProject()?.id && ideStore.loadProject(activeProject()?.id) },
-        { id: "reveal", label: "Reveal in Explorer", onSelect: () => openActivityView("explorer") }
+        {
+          id: "open",
+          label: "Open",
+          onSelect: () => menu.filePath && openFileByPath(menu.filePath),
+        },
+        {
+          id: "copy-path",
+          label: "Copy Path",
+          onSelect: () =>
+            notify("Path copied", menu.filePath ?? "Project path copied."),
+        },
+        {
+          id: "refresh",
+          label: "Refresh Explorer",
+          onSelect: () =>
+            activeProject()?.id && ideStore.loadProject(activeProject()?.id),
+        },
+        {
+          id: "reveal",
+          label: "Reveal in Explorer",
+          onSelect: () => openActivityView("explorer"),
+        },
       ];
     }
     return [
-      { id: "format", label: "Format Document", shortcut: formatForDisplay("Shift+Alt+F"), onSelect: () => notify("Formatted", "Document formatting queued.") },
-      { id: "symbol", label: "Go to Symbol", shortcut: formatForDisplay("Mod+Shift+O"), onSelect: () => ideStore.setCommandPalette(true) },
-      { id: "definition", label: "Go to Definition", shortcut: "F12", onSelect: () => activeFile() && goToDefinition(activeFile()!, activeFile()!.cursorLine ?? cursorLine(), activeFile()!.cursorColumn ?? cursorColumn()) },
-      { id: "run-selection", label: "Send Selection to Agent", onSelect: () => notify("Selection attached", "Selection ready for active harness thread.") }
+      {
+        id: "format",
+        label: "Format Document",
+        shortcut: formatForDisplay("Shift+Alt+F"),
+        onSelect: () => notify("Formatted", "Document formatting queued."),
+      },
+      {
+        id: "symbol",
+        label: "Go to Symbol",
+        shortcut: formatForDisplay("Mod+Shift+O"),
+        onSelect: () => ideStore.setCommandPalette(true),
+      },
+      {
+        id: "definition",
+        label: "Go to Definition",
+        shortcut: "F12",
+        onSelect: () =>
+          activeFile() &&
+          goToDefinition(
+            activeFile()!,
+            activeFile()!.cursorLine ?? cursorLine(),
+            activeFile()!.cursorColumn ?? cursorColumn(),
+          ),
+      },
+      {
+        id: "run-selection",
+        label: "Send Selection to Agent",
+        onSelect: () =>
+          notify(
+            "Selection attached",
+            "Selection ready for active harness thread.",
+          ),
+      },
     ];
   });
 
@@ -632,35 +846,87 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
     const symbol = getWordAtPosition(file.contentLines[line - 1] ?? "", column);
     const targetLine = findDefinitionLine(file.contentLines, symbol);
     if (!symbol || !targetLine) {
-      notify("Definition not found", "No matching symbol definition in the active file.", "warning");
+      notify(
+        "Definition not found",
+        "No matching symbol definition in the active file.",
+        "warning",
+      );
       return;
     }
     setCursorLine(targetLine);
     setCursorColumn(1);
     ideStore.setCursor(targetLine, 1);
-    document.querySelector(`[data-test-ide-code-line="${targetLine}"]`)?.scrollIntoView({ block: "center" });
+    document
+      .querySelector(`[data-test-ide-code-line="${targetLine}"]`)
+      ?.scrollIntoView({ block: "center" });
   }
 
   return (
     <section
       ref={workbenchRef}
       data-test-ide-workbench=""
-      class="panel-shell ide-shell flex h-full min-h-0 flex-col overflow-hidden rounded-none border-0"
+      class={
+        stylex.attrs(
+          ideStyles.shell,
+          ideUtilityStyles.flex,
+          ideUtilityStyles.hFull,
+          ideUtilityStyles.minH0,
+          ideUtilityStyles.flexCol,
+          ideUtilityStyles.overflowHidden,
+          ideUtilityStyles.roundedNone,
+          ideUtilityStyles.border0,
+        ).class
+      }
     >
-      <div class="flex min-h-0 flex-1">
-        <Show when={sidebarOpen()} fallback={<ActivityBar active={undefined} sidebarOpen={false} onSelect={toggleActivityView} />}>
-          <ActivityBar active={activityView()} sidebarOpen={true} onSelect={toggleActivityView} />
+      <div
+        class={
+          stylex.attrs(
+            ideUtilityStyles.flex,
+            ideUtilityStyles.minH0,
+            ideUtilityStyles.flex1,
+          ).class
+        }
+      >
+        <Show
+          when={sidebarOpen()}
+          fallback={
+            <ActivityBar
+              active={undefined}
+              sidebarOpen={false}
+              onSelect={toggleActivityView}
+            />
+          }
+        >
+          <ActivityBar
+            active={activityView()}
+            sidebarOpen={true}
+            onSelect={toggleActivityView}
+          />
         </Show>
 
         <Show when={sidebarOpen()}>
-          <aside class="ide-sidebar flex min-h-0 shrink-0 flex-col" style={{ width: `${ideStore.state.sidebarWidth}px` }}>
+          <aside
+            class={
+              stylex.attrs(
+                ideStyles.sidebar,
+                ideUtilityStyles.flex,
+                ideUtilityStyles.minH0,
+                ideUtilityStyles.shrink0,
+                ideUtilityStyles.flexCol,
+              ).class
+            }
+            style={{ width: `${ideStore.state.sidebarWidth}px` }}
+          >
             <SidebarHeader
               active={activityView()}
               projectName={activeProject()?.name ?? "Workspace"}
               onCollapse={() => setSidebarOpen(false)}
               onCollapseAll={ideStore.collapseAllFolders}
             />
-            <Show when={!ideStore.state.treeLoading} fallback={<SidebarSkeleton />}>
+            <Show
+              when={!ideStore.state.treeLoading}
+              fallback={<SidebarSkeleton />}
+            >
               <SwitchSidebar
                 active={activityView()}
                 searchQuery={ideStore.state.searchQuery}
@@ -691,127 +957,341 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
               />
             </Show>
           </aside>
-          <Sash label="Resize IDE sidebar" orientation="vertical" onPointerDown={(event) => startHorizontalResize("sidebar", event)} />
+          <Sash
+            label="Resize IDE sidebar"
+            orientation="vertical"
+            onPointerDown={(event) => startHorizontalResize("sidebar", event)}
+          />
         </Show>
 
-        <div class="ide-main flex min-w-0 flex-1 flex-col">
-        <div class="ide-toolbar flex h-10 shrink-0 items-center justify-between gap-2 px-2">
-          <div class="flex min-w-0 items-center gap-1.5">
-            <ActionButton
-              tooltip={`Save active file (${hotkeyHint("ideSave")})`}
-              ariaLabel="Save active file"
-              icon={<Save class="h-4 w-4" />}
-              variant={dirtyPaths().includes(ideStore.state.activePath ?? "") ? "secondary" : "ghost"}
-              size="icon"
-              class="h-8 w-8 rounded-lg"
-              onClick={() => ideStore.saveFile()}
-            />
-            <ActionButton
-              tooltip={`${sidebarOpen() ? "Hide" : "Show"} IDE sidebar (${hotkeyHint("ideToggleSidebar")})`}
-              ariaLabel={sidebarOpen() ? "Hide IDE sidebar" : "Show IDE sidebar"}
-              icon={sidebarOpen() ? <PanelLeftClose class="h-4 w-4" /> : <PanelLeftOpen class="h-4 w-4" />}
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8 rounded-lg"
-              onClick={() => toggleSidebar()}
-            />
-            <ActionButton
-              tooltip={`Open command palette (${hotkeyHint("ideCommandPalette")})`}
-              ariaLabel="Open command palette"
-              icon={<Code2 class="h-4 w-4" />}
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8 rounded-lg"
-              onClick={() => ideStore.setCommandPalette(true)}
-            />
-            <ActionButton
-              tooltip={props.windowMode === "popped-out" ? "Pop IDE into main window" : "Pop IDE out to new window"}
-              ariaLabel={props.windowMode === "popped-out" ? "Pop IDE into main window" : "Pop IDE out to new window"}
-              icon={<ExternalLink class="h-4 w-4" />}
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8 rounded-lg"
-              onClick={props.onToggleWindowMode}
-            />
-            <Show when={ideStore.state.editorSettings.breadcrumbsEnabled}>
-              <Breadcrumbs file={activeFile()} />
-            </Show>
-          </div>
-        </div>
-
-        <div class="ide-editor-tabs flex h-10 shrink-0 items-end overflow-x-auto overflow-y-hidden" data-open-count={openFiles().length}>
-          <Show when={openFiles().length > 0} fallback={<div class="px-3 pb-2 text-xs text-(--muted)">No editors open</div>}>
-            <For each={openFiles()}>
-              {(file) => (
-                <button
-                  type="button"
-                  data-test-ide-editor-tab=""
-                  class={cn("ide-editor-tab group", ideStore.state.activePath === file.path ? "ide-editor-tab-active" : "")}
-                  aria-label={`Open ${file.name}`}
-                  onClick={() => ideStore.state.filesByPath[file.path] ? ideStore.setActivePath(file.path) : ideStore.openFile(file.path)}
-                  onContextMenu={(event) => openContextMenu("tab", event, file.path)}
-                >
-                  <FileCode2 class="h-3.5 w-3.5" />
-                  <span class="truncate">{dirtyPaths().includes(file.path) ? `${file.name} *` : file.name}</span>
-                  <X class="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-70" onClick={(event) => { event.stopPropagation(); closeTab(file.path); }} />
-                </button>
-              )}
-            </For>
-          </Show>
-        </div>
-
-        <Show when={!ideStore.state.treeLoading} fallback={<EditorSkeleton />}>
-          <div class="flex min-h-0 flex-1 flex-col">
-            <div class="flex min-h-0 flex-1">
-              <EditorSurface
-                file={activeFile()}
-                widthPercent={ideStore.state.primaryEditorWidth}
-                documentFindOpen={ideStore.state.documentFindOpen}
-                documentFindQuery={ideStore.state.documentFindQuery}
-                findInputRef={(element) => {
-                  documentFindInputRef = element;
-                }}
-                onDocumentFindQuery={ideStore.setDocumentFindQuery}
-                onDocumentFindClose={() => ideStore.setDocumentFindOpen(false)}
-                wordWrap={ideStore.state.editorSettings.wordWrap}
-                tabSize={ideStore.state.editorSettings.tabSize}
-                bracketPairColorization={ideStore.state.editorSettings.bracketPairColorization}
-                dirty={dirtyPaths().includes(activeFile()?.path ?? "")}
-                completionState={completionState()}
-                onCompletionClose={() => setCompletionState(undefined)}
-                onCompletionSelect={(value) => {
-                  const completion = completionState();
-                  const file = activeFile();
-                  if (!file || !completion) {
-                    return;
-                  }
-                  ideStore.updateFileContent(file.path, applyCompletionAt(file.content ?? file.contentLines.join("\n"), completion.position, completion.prefix, value));
-                  setCompletionState(undefined);
-                }}
-                onContentChange={(path, content) => ideStore.updateFileContent(path, content)}
-                onSave={() => ideStore.saveFile()}
-                onCloseTab={closeCurrentTab}
-                onGoToDefinition={goToDefinition}
-                onCompletionRequest={(x, y, path, position, prefix, items) => setCompletionState({ x, y, path, position, prefix, items })}
-                onCursor={(line, column) => {
-                  setCursorLine(line);
-                  setCursorColumn(column);
-                  ideStore.setCursor(line, column);
-                }}
-                onContextMenu={(event) => openContextMenu("editor", event)}
+        <div
+          class={
+            stylex.attrs(
+              ideStyles.surface,
+              ideUtilityStyles.flex,
+              ideUtilityStyles.minW0,
+              ideUtilityStyles.flex1,
+              ideUtilityStyles.flexCol,
+            ).class
+          }
+        >
+          <div
+            class={
+              stylex.attrs(
+                ideStyles.chrome,
+                ideUtilityStyles.flex,
+                ideUtilityStyles.h10,
+                ideUtilityStyles.shrink0,
+                ideUtilityStyles.itemsCenter,
+                ideUtilityStyles.justifyBetween,
+                ideUtilityStyles.gap2,
+                ideUtilityStyles.px2,
+              ).class
+            }
+          >
+            <div
+              class={
+                stylex.attrs(
+                  ideUtilityStyles.flex,
+                  ideUtilityStyles.minW0,
+                  ideUtilityStyles.itemsCenter,
+                  ideUtilityStyles.gap15,
+                ).class
+              }
+            >
+              <ActionButton
+                tooltip={`Save active file (${hotkeyHint("ideSave")})`}
+                ariaLabel="Save active file"
+                icon={
+                  <Save
+                    class={
+                      stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
+                        .class
+                    }
+                  />
+                }
+                variant={
+                  dirtyPaths().includes(ideStore.state.activePath ?? "")
+                    ? "secondary"
+                    : "ghost"
+                }
+                size="icon"
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.h8,
+                    ideUtilityStyles.w8,
+                    ideUtilityStyles.roundedLg,
+                  ).class
+                }
+                onClick={() => ideStore.saveFile()}
               />
+              <ActionButton
+                tooltip={`${sidebarOpen() ? "Hide" : "Show"} IDE sidebar (${hotkeyHint("ideToggleSidebar")})`}
+                ariaLabel={
+                  sidebarOpen() ? "Hide IDE sidebar" : "Show IDE sidebar"
+                }
+                icon={
+                  sidebarOpen() ? (
+                    <PanelLeftClose
+                      class={
+                        stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
+                          .class
+                      }
+                    />
+                  ) : (
+                    <PanelLeftOpen
+                      class={
+                        stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
+                          .class
+                      }
+                    />
+                  )
+                }
+                variant="ghost"
+                size="icon"
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.h8,
+                    ideUtilityStyles.w8,
+                    ideUtilityStyles.roundedLg,
+                  ).class
+                }
+                onClick={() => toggleSidebar()}
+              />
+              <ActionButton
+                tooltip={`Open command palette (${hotkeyHint("ideCommandPalette")})`}
+                ariaLabel="Open command palette"
+                icon={
+                  <Code2
+                    class={
+                      stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
+                        .class
+                    }
+                  />
+                }
+                variant="ghost"
+                size="icon"
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.h8,
+                    ideUtilityStyles.w8,
+                    ideUtilityStyles.roundedLg,
+                  ).class
+                }
+                onClick={() => ideStore.setCommandPalette(true)}
+              />
+              <ActionButton
+                tooltip={
+                  resolvedProps.windowMode === "popped-out"
+                    ? "Pop IDE into main window"
+                    : "Pop IDE out to new window"
+                }
+                ariaLabel={
+                  resolvedProps.windowMode === "popped-out"
+                    ? "Pop IDE into main window"
+                    : "Pop IDE out to new window"
+                }
+                icon={
+                  <ExternalLink
+                    class={
+                      stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
+                        .class
+                    }
+                  />
+                }
+                variant="ghost"
+                size="icon"
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.h8,
+                    ideUtilityStyles.w8,
+                    ideUtilityStyles.roundedLg,
+                  ).class
+                }
+                onClick={resolvedProps.onToggleWindowMode}
+              />
+              <Show when={ideStore.state.editorSettings.breadcrumbsEnabled}>
+                <Breadcrumbs file={activeFile()} />
+              </Show>
             </div>
           </div>
-        </Show>
 
-        <StatusBar
-          branch={ideStore.state.gitBranch ?? (ideStore.state.gitIsRepository ? "detached" : "no git")}
-          dirtyCount={dirtyCount()}
-          line={cursorLine()}
-          column={cursorColumn()}
-          encoding={activeFile()?.encoding ?? "UTF-8"}
-          language={activeFile()?.language ?? "Plain Text"}
-        />
+          <div
+            class={
+              stylex.attrs(
+                ideStyles.chrome,
+                ideStyles.editorTabs,
+                ideUtilityStyles.flex,
+                ideUtilityStyles.h10,
+                ideUtilityStyles.shrink0,
+                ideUtilityStyles.itemsEnd,
+                ideUtilityStyles.overflowXAuto,
+                ideUtilityStyles.overflowYHidden,
+              ).class
+            }
+            data-test-ide-editor-tabs=""
+            data-open-count={openFiles().length}
+          >
+            <Show
+              when={openFiles().length > 0}
+              fallback={
+                <div
+                  class={
+                    stylex.attrs(
+                      ideUtilityStyles.px3,
+                      ideUtilityStyles.pb2,
+                      ideUtilityStyles.textXs,
+                      ideUtilityStyles.textMuted,
+                    ).class
+                  }
+                >
+                  No editors open
+                </div>
+              }
+            >
+              <For each={openFiles()}>
+                {(file) => (
+                  <button
+                    type="button"
+                    data-test-ide-editor-tab=""
+                    class={cn(
+                      stylex.attrs(ideStyles.editorTab).class,
+                      ideStore.state.activePath === file.path
+                        ? stylex.attrs(ideStyles.editorTabActive).class
+                        : undefined,
+                    )}
+                    aria-label={`Open ${file.name}`}
+                    onClick={() =>
+                      ideStore.state.filesByPath[file.path]
+                        ? ideStore.setActivePath(file.path)
+                        : ideStore.openFile(file.path)
+                    }
+                    onContextMenu={(event) =>
+                      openContextMenu("tab", event, file.path)
+                    }
+                  >
+                    <FileCode2
+                      class={
+                        stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35)
+                          .class
+                      }
+                    />
+                    <span class={stylex.attrs(ideUtilityStyles.truncate).class}>
+                      {dirtyPaths().includes(file.path)
+                        ? `${file.name} *`
+                        : file.name}
+                    </span>
+                    <X
+                      class={
+                        stylex.attrs(
+                          ideUtilityStyles.h35,
+                          ideUtilityStyles.w35,
+                          ideUtilityStyles.transition,
+                          ideStyles.tabClose,
+                        ).class
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        closeTab(file.path);
+                      }}
+                    />
+                  </button>
+                )}
+              </For>
+            </Show>
+          </div>
+
+          <Show
+            when={!ideStore.state.treeLoading}
+            fallback={<EditorSkeleton />}
+          >
+            <div
+              class={
+                stylex.attrs(
+                  ideUtilityStyles.flex,
+                  ideUtilityStyles.minH0,
+                  ideUtilityStyles.flex1,
+                  ideUtilityStyles.flexCol,
+                ).class
+              }
+            >
+              <div
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.flex,
+                    ideUtilityStyles.minH0,
+                    ideUtilityStyles.flex1,
+                  ).class
+                }
+              >
+                <EditorSurface
+                  file={activeFile()}
+                  widthPercent={ideStore.state.primaryEditorWidth}
+                  documentFindOpen={ideStore.state.documentFindOpen}
+                  documentFindQuery={ideStore.state.documentFindQuery}
+                  findInputRef={(element) => {
+                    documentFindInputRef = element;
+                  }}
+                  onDocumentFindQuery={ideStore.setDocumentFindQuery}
+                  onDocumentFindClose={() =>
+                    ideStore.setDocumentFindOpen(false)
+                  }
+                  wordWrap={ideStore.state.editorSettings.wordWrap}
+                  tabSize={ideStore.state.editorSettings.tabSize}
+                  bracketPairColorization={
+                    ideStore.state.editorSettings.bracketPairColorization
+                  }
+                  dirty={dirtyPaths().includes(activeFile()?.path ?? "")}
+                  completionState={completionState()}
+                  onCompletionClose={() => setCompletionState(undefined)}
+                  onCompletionSelect={(value) => {
+                    const completion = completionState();
+                    const file = activeFile();
+                    if (!file || !completion) {
+                      return;
+                    }
+                    ideStore.updateFileContent(
+                      file.path,
+                      applyCompletionAt(
+                        file.content ?? file.contentLines.join("\n"),
+                        completion.position,
+                        completion.prefix,
+                        value,
+                      ),
+                    );
+                    setCompletionState(undefined);
+                  }}
+                  onContentChange={(path, content) =>
+                    ideStore.updateFileContent(path, content)
+                  }
+                  onSave={() => ideStore.saveFile()}
+                  onCloseTab={closeCurrentTab}
+                  onGoToDefinition={goToDefinition}
+                  onCompletionRequest={(x, y, path, position, prefix, items) =>
+                    setCompletionState({ x, y, path, position, prefix, items })
+                  }
+                  onCursor={(line, column) => {
+                    setCursorLine(line);
+                    setCursorColumn(column);
+                    ideStore.setCursor(line, column);
+                  }}
+                  onContextMenu={(event) => openContextMenu("editor", event)}
+                />
+              </div>
+            </div>
+          </Show>
+
+          <StatusBar
+            branch={
+              ideStore.state.gitBranch ??
+              (ideStore.state.gitIsRepository ? "detached" : "no git")
+            }
+            dirtyCount={dirtyCount()}
+            line={cursorLine()}
+            column={cursorColumn()}
+            encoding={activeFile()?.encoding ?? "UTF-8"}
+            language={activeFile()?.language ?? "Plain Text"}
+          />
         </div>
       </div>
 
@@ -832,18 +1312,43 @@ export function IdeWorkbench(props: IdeWorkbenchProps = {}) {
         actions={contextMenuActions()}
         onClose={() => setContextMenu(undefined)}
       />
-      <IdeToasts toasts={toasts()} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
+      <IdeToasts
+        toasts={toasts()}
+        onDismiss={(id) =>
+          setToasts((current) => current.filter((toast) => toast.id !== id))
+        }
+      />
     </section>
   );
 }
 
-function ActivityBar(props: { active: IdeActivityView | undefined; sidebarOpen: boolean; onSelect: (view: IdeActivityView) => void }) {
+function ActivityBar(props: {
+  active: IdeActivityView | undefined;
+  sidebarOpen: boolean;
+  onSelect: (view: IdeActivityView) => void;
+}) {
   const views = [
-    { id: "explorer" as const, label: "Explorer", hotkeyId: "ideExplorer" as const, icon: Files },
-    { id: "search" as const, label: "Search", hotkeyId: "ideFindInFiles" as const, icon: Search },
-    { id: "source-control" as const, label: "Source Control", hotkeyId: "ideSourceControl" as const, icon: GitBranch }
+    {
+      id: "explorer" as const,
+      label: "Explorer",
+      hotkeyId: "ideExplorer" as const,
+      icon: Files,
+    },
+    {
+      id: "search" as const,
+      label: "Search",
+      hotkeyId: "ideFindInFiles" as const,
+      icon: Search,
+    },
+    {
+      id: "source-control" as const,
+      label: "Source Control",
+      hotkeyId: "ideSourceControl" as const,
+      icon: GitBranch,
+    },
   ];
-  const hotkeys = () => normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
+  const hotkeys = () =>
+    normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
   const tooltip = (label: string, hotkeyId: AppHotkeyId) => {
     const hotkey = hotkeys()[hotkeyId][0];
     return hotkey ? `${label} (${formatHotkeyDisplay(hotkey)})` : label;
@@ -851,8 +1356,20 @@ function ActivityBar(props: { active: IdeActivityView | undefined; sidebarOpen: 
 
   return (
     <nav
-      class="ide-activity-bar flex w-12 shrink-0 flex-col items-center gap-1 py-2"
+      class={
+        stylex.attrs(
+          ideStyles.activityBar,
+          ideUtilityStyles.flex,
+          ideUtilityStyles.w12,
+          ideUtilityStyles.shrink0,
+          ideUtilityStyles.flexCol,
+          ideUtilityStyles.itemsCenter,
+          ideUtilityStyles.gap1,
+          ideUtilityStyles.py2,
+        ).class
+      }
       aria-label="IDE activity bar"
+      data-test-ide-activity-bar=""
       data-sidebar-open={props.sidebarOpen ? "true" : "false"}
     >
       <For each={views}>
@@ -863,64 +1380,160 @@ function ActivityBar(props: { active: IdeActivityView | undefined; sidebarOpen: 
             <Tooltip content={tooltip(view.label, view.hotkeyId)} side="right">
               <button
                 type="button"
-                class={cn("ide-activity-button", active() ? "ide-activity-button-active" : "")}
+                class={cn(
+                  stylex.attrs(ideStyles.activityButton).class,
+                  active()
+                    ? stylex.attrs(ideStyles.activityButtonActive).class
+                    : undefined,
+                )}
                 aria-label={view.label}
                 aria-pressed={active()}
                 data-activity-view={view.id}
                 onClick={() => props.onSelect(view.id)}
               >
-                <Icon class="h-5 w-5" />
+                <Icon
+                  class={
+                    stylex.attrs(ideUtilityStyles.h5, ideUtilityStyles.w5).class
+                  }
+                />
               </button>
             </Tooltip>
           );
         }}
       </For>
-      <div class="min-h-0 flex-1" />
+      <div
+        class={
+          stylex.attrs(ideUtilityStyles.minH0, ideUtilityStyles.flex1).class
+        }
+      />
       <Tooltip content="Manage IDE settings" side="right">
         <button
           type="button"
-          class="ide-activity-button"
+          class={stylex.attrs(ideStyles.activityButton).class}
           aria-label="Manage IDE settings"
           onClick={() => {
             harnessStore.openPreferencesModal();
             harnessStore.setPreferencesActiveSectionId("ide-settings");
           }}
         >
-          <Settings class="h-5 w-5" />
+          <Settings
+            class={stylex.attrs(ideUtilityStyles.h5, ideUtilityStyles.w5).class}
+          />
         </button>
       </Tooltip>
     </nav>
   );
 }
 
-function SidebarHeader(props: { active: IdeActivityView; projectName: string; onCollapse: () => void; onCollapseAll: () => void }) {
-  const title = () => props.active === "source-control" ? "Source Control" : props.active === "search" ? "Search" : "Explorer";
+function SidebarHeader(props: {
+  active: IdeActivityView;
+  projectName: string;
+  onCollapse: () => void;
+  onCollapseAll: () => void;
+}) {
+  const title = () =>
+    props.active === "source-control"
+      ? "Source Control"
+      : props.active === "search"
+        ? "Search"
+        : "Explorer";
   return (
-    <div class="ide-sidebar-header flex h-12 shrink-0 items-center justify-between gap-2 px-3">
-      <div class="min-w-0">
-        <div class="text-[0.62rem] font-semibold uppercase text-(--ide-muted)">{title()}</div>
-        <button type="button" class="ide-sidebar-project-select" aria-label="Select project" onClick={() => harnessStore.openProjectSwitcher()}>
-          <span class="truncate">{props.projectName}</span>
-          <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+    <div
+      class={
+        stylex.attrs(
+          ideStyles.chrome,
+          ideUtilityStyles.flex,
+          ideUtilityStyles.h12,
+          ideUtilityStyles.shrink0,
+          ideUtilityStyles.itemsCenter,
+          ideUtilityStyles.justifyBetween,
+          ideUtilityStyles.gap2,
+          ideUtilityStyles.px3,
+        ).class
+      }
+    >
+      <div class={stylex.attrs(ideUtilityStyles.minW0).class}>
+        <div
+          class={
+            stylex.attrs(
+              ideUtilityStyles.text062,
+              ideUtilityStyles.fontSemibold,
+              ideUtilityStyles.uppercase,
+              ideUtilityStyles.textIdeMuted,
+            ).class
+          }
+        >
+          {title()}
+        </div>
+        <button
+          type="button"
+          class={stylex.attrs(ideStyles.projectSelect).class}
+          aria-label="Select project"
+          onClick={() => harnessStore.openProjectSwitcher()}
+        >
+          <span class={stylex.attrs(ideUtilityStyles.truncate).class}>
+            {props.projectName}
+          </span>
+          <ChevronDown
+            class={
+              stylex.attrs(
+                ideUtilityStyles.h35,
+                ideUtilityStyles.w35,
+                ideUtilityStyles.shrink0,
+              ).class
+            }
+          />
         </button>
       </div>
-      <div class="flex items-center gap-1">
+      <div
+        class={
+          stylex.attrs(
+            ideUtilityStyles.flex,
+            ideUtilityStyles.itemsCenter,
+            ideUtilityStyles.gap1,
+          ).class
+        }
+      >
         <ActionButton
           tooltip="Collapse all folders"
           ariaLabel="Collapse all folders"
-          icon={<Files class="h-4 w-4" />}
+          icon={
+            <Files
+              class={
+                stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4).class
+              }
+            />
+          }
           variant="ghost"
           size="icon"
-          class="h-8 w-8 rounded-lg"
+          class={
+            stylex.attrs(
+              ideUtilityStyles.h8,
+              ideUtilityStyles.w8,
+              ideUtilityStyles.roundedLg,
+            ).class
+          }
           onClick={props.onCollapseAll}
         />
         <ActionButton
           tooltip={`Collapse IDE sidebar (${formatHotkeyDisplay(normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences).ideToggleSidebar[0])})`}
           ariaLabel="Collapse IDE sidebar"
-          icon={<PanelLeftClose class="h-4 w-4" />}
+          icon={
+            <PanelLeftClose
+              class={
+                stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4).class
+              }
+            />
+          }
           variant="ghost"
           size="icon"
-          class="h-8 w-8 rounded-lg"
+          class={
+            stylex.attrs(
+              ideUtilityStyles.h8,
+              ideUtilityStyles.w8,
+              ideUtilityStyles.roundedLg,
+            ).class
+          }
           onClick={props.onCollapse}
         />
       </div>
@@ -952,16 +1565,37 @@ function SwitchSidebar(props: {
   onCaseSensitiveSearch: (value: boolean) => void;
   onWholeWordSearch: (value: boolean) => void;
   onOpenPath: (path: string, line?: number, column?: number) => void;
-  onContextMenu: (kind: IdeContextMenu["kind"], event: MouseEvent, filePath?: string) => void;
+  onContextMenu: (
+    kind: IdeContextMenu["kind"],
+    event: MouseEvent,
+    filePath?: string,
+  ) => void;
 }) {
   const active = createMemo(() => props.active);
   return (
-    <Switch fallback={<ExplorerView entries={props.treeEntries} error={props.treeError} truncated={props.treeTruncated} gitChanges={props.gitChanges} onOpenPath={props.onOpenPath} onContextMenu={props.onContextMenu} />}>
+    <Switch
+      fallback={
+        <ExplorerView
+          entries={props.treeEntries}
+          error={props.treeError}
+          truncated={props.treeTruncated}
+          gitChanges={props.gitChanges}
+          onOpenPath={props.onOpenPath}
+          onContextMenu={props.onContextMenu}
+        />
+      }
+    >
       <Match when={active() === "search"}>
         <GlobalSearchView {...props} />
       </Match>
       <Match when={active() === "source-control"}>
-        <SourceControlView branch={props.gitBranch} isRepository={props.gitIsRepository} changes={props.gitChanges} loading={props.gitLoading} onOpenPath={props.onOpenPath} />
+        <SourceControlView
+          branch={props.gitBranch}
+          isRepository={props.gitIsRepository}
+          changes={props.gitChanges}
+          loading={props.gitLoading}
+          onOpenPath={props.onOpenPath}
+        />
       </Match>
     </Switch>
   );
@@ -973,16 +1607,75 @@ function ExplorerView(props: {
   truncated: boolean;
   gitChanges: import("../../../shared/protocol").IdeGitChange[];
   onOpenPath: (path: string) => void;
-  onContextMenu: (kind: IdeContextMenu["kind"], event: MouseEvent, filePath?: string) => void;
+  onContextMenu: (
+    kind: IdeContextMenu["kind"],
+    event: MouseEvent,
+    filePath?: string,
+  ) => void;
 }) {
-  const visibleEntries = createMemo(() => flattenVisibleTree(props.entries, ideStore.state.expandedFolderPaths));
-  const expanded = createMemo(() => new Set(ideStore.state.expandedFolderPaths));
+  const visibleEntries = createMemo(() =>
+    flattenVisibleTree(props.entries, ideStore.state.expandedFolderPaths),
+  );
+  const expanded = createMemo(
+    () => new Set(ideStore.state.expandedFolderPaths),
+  );
   const loading = createMemo(() => new Set(ideStore.state.loadingFolderPaths));
-  const gitStatusByPath = createMemo(() => createGitStatusByPath(props.gitChanges));
+  const gitStatusByPath = createMemo(() =>
+    createGitStatusByPath(props.gitChanges),
+  );
   return (
-    <div class="min-h-0 flex-1 overflow-auto px-2 py-2 text-xs">
-      <Show when={!props.error} fallback={<div class="rounded-lg border border-dashed border-(--ide-border) p-3 text-xs text-(--ide-muted)">{props.error}</div>}>
-        <Show when={props.entries.length > 0} fallback={<div class="rounded-lg border border-dashed border-(--ide-border) p-3 text-xs text-(--ide-muted)">No files found.</div>}>
+    <div
+      class={
+        stylex.attrs(
+          ideUtilityStyles.minH0,
+          ideUtilityStyles.flex1,
+          ideUtilityStyles.overflowAuto,
+          ideUtilityStyles.px2,
+          ideUtilityStyles.py2,
+          ideUtilityStyles.textXs,
+        ).class
+      }
+    >
+      <Show
+        when={!props.error}
+        fallback={
+          <div
+            class={
+              stylex.attrs(
+                ideUtilityStyles.roundedLg,
+                ideUtilityStyles.border,
+                ideUtilityStyles.borderDashed,
+                ideUtilityStyles.borderIde,
+                ideUtilityStyles.p3,
+                ideUtilityStyles.textXs,
+                ideUtilityStyles.textIdeMuted,
+              ).class
+            }
+          >
+            {props.error}
+          </div>
+        }
+      >
+        <Show
+          when={props.entries.length > 0}
+          fallback={
+            <div
+              class={
+                stylex.attrs(
+                  ideUtilityStyles.roundedLg,
+                  ideUtilityStyles.border,
+                  ideUtilityStyles.borderDashed,
+                  ideUtilityStyles.borderIde,
+                  ideUtilityStyles.p3,
+                  ideUtilityStyles.textXs,
+                  ideUtilityStyles.textIdeMuted,
+                ).class
+              }
+            >
+              No files found.
+            </div>
+          }
+        >
           <For each={visibleEntries()}>
             {(entry) => (
               <FileRow
@@ -990,13 +1683,30 @@ function ExplorerView(props: {
                 expanded={expanded().has(entry.path)}
                 loading={loading().has(entry.path)}
                 gitStatus={findGitStatusForTreeEntry(gitStatusByPath(), entry)}
-                onOpen={() => entry.kind === "file" ? props.onOpenPath(entry.path) : ideStore.toggleFolder(entry.path)}
-                onContextMenu={(event) => props.onContextMenu("tree", event, entry.path)}
+                onOpen={() =>
+                  entry.kind === "file"
+                    ? props.onOpenPath(entry.path)
+                    : ideStore.toggleFolder(entry.path)
+                }
+                onContextMenu={(event) =>
+                  props.onContextMenu("tree", event, entry.path)
+                }
               />
             )}
           </For>
           <Show when={props.truncated}>
-            <div class="px-2 py-2 text-[0.68rem] text-(--ide-muted)">File tree truncated.</div>
+            <div
+              class={
+                stylex.attrs(
+                  ideUtilityStyles.px2,
+                  ideUtilityStyles.py2,
+                  ideUtilityStyles.text068,
+                  ideUtilityStyles.textIdeMuted,
+                ).class
+              }
+            >
+              File tree truncated.
+            </div>
           </Show>
         </Show>
       </Show>
@@ -1004,32 +1714,114 @@ function ExplorerView(props: {
   );
 }
 
-function FileRow(props: { entry: import("../../../shared/protocol").IdeFileTreeEntry; expanded: boolean; loading: boolean; gitStatus?: GitStatusBadge; onOpen: () => void; onContextMenu: (event: MouseEvent) => void }) {
+function FileRow(props: {
+  entry: import("../../../shared/protocol").IdeFileTreeEntry;
+  expanded: boolean;
+  loading: boolean;
+  gitStatus?: GitStatusBadge;
+  onOpen: () => void;
+  onContextMenu: (event: MouseEvent) => void;
+}) {
   return (
     <button
       type="button"
-      class="ide-tree-row"
-      classList={{
-        "ide-tree-row-git": Boolean(props.gitStatus),
-        [`ide-tree-row-git-${props.gitStatus?.tone}`]: Boolean(props.gitStatus)
-      }}
+      class={cn(
+        stylex.attrs(ideStyles.treeRow).class,
+        props.gitStatus ? stylex.attrs(ideStyles.treeRowGit).class : undefined,
+        props.gitStatus?.tone === "modified"
+          ? stylex.attrs(ideStyles.treeModified).class
+          : props.gitStatus?.tone === "added"
+            ? stylex.attrs(ideStyles.treeAdded).class
+            : undefined,
+      )}
       style={{ "padding-left": `${0.5 + props.entry.depth * 0.85}rem` }}
-      aria-label={props.entry.kind === "file" ? `Open ${props.entry.name}` : `${props.expanded ? "Collapse" : "Expand"} ${props.entry.name}`}
-      aria-expanded={props.entry.kind === "directory" ? props.expanded : undefined}
+      aria-label={
+        props.entry.kind === "file"
+          ? `Open ${props.entry.name}`
+          : `${props.expanded ? "Collapse" : "Expand"} ${props.entry.name}`
+      }
+      aria-expanded={
+        props.entry.kind === "directory" ? props.expanded : undefined
+      }
+      data-git-tone={props.gitStatus?.tone}
       onClick={props.onOpen}
       onContextMenu={props.onContextMenu}
     >
-      <Show when={props.entry.kind === "directory"} fallback={<FileCode2 class="h-3.5 w-3.5" />}>
-        <Show when={props.entry.hasChildren !== false} fallback={<Folder class="h-3.5 w-3.5" />}>
-          <span class="inline-flex items-center gap-0.5">
-            {props.expanded ? <ChevronDown class="h-3.5 w-3.5" /> : <ChevronRight class="h-3.5 w-3.5" />}
-            {props.expanded ? <FolderOpen class="h-3.5 w-3.5" /> : <Folder class="h-3.5 w-3.5" />}
+      <Show
+        when={props.entry.kind === "directory"}
+        fallback={
+          <FileCode2
+            class={
+              stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+            }
+          />
+        }
+      >
+        <Show
+          when={props.entry.hasChildren !== false}
+          fallback={
+            <Folder
+              class={
+                stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+              }
+            />
+          }
+        >
+          <span
+            class={
+              stylex.attrs(
+                ideUtilityStyles.inlineFlex,
+                ideUtilityStyles.itemsCenter,
+                ideUtilityStyles.gap05,
+              ).class
+            }
+          >
+            {props.expanded ? (
+              <ChevronDown
+                class={
+                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+                }
+              />
+            ) : (
+              <ChevronRight
+                class={
+                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+                }
+              />
+            )}
+            {props.expanded ? (
+              <FolderOpen
+                class={
+                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+                }
+              />
+            ) : (
+              <Folder
+                class={
+                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+                }
+              />
+            )}
           </span>
         </Show>
       </Show>
-      <span class="truncate">{props.entry.name}{props.loading ? "..." : ""}</span>
+      <span class={stylex.attrs(ideUtilityStyles.truncate).class}>
+        {props.entry.name}
+        {props.loading ? "..." : ""}
+      </span>
       <Show when={props.gitStatus}>
-        {(status) => <span class={`ide-git-badge ide-git-badge-${status().tone}`}>{status().label}</span>}
+        {(status) => (
+          <span
+            class={cn(
+              stylex.attrs(ideStyles.gitBadge).class,
+              status().tone === "modified"
+                ? stylex.attrs(ideStyles.gitModified).class
+                : stylex.attrs(ideStyles.gitAdded).class,
+            )}
+          >
+            {status().label}
+          </span>
+        )}
       </Show>
     </button>
   );
@@ -1041,7 +1833,9 @@ type GitStatusBadge = {
   source: "file" | "folder";
 };
 
-function createGitStatusByPath(changes: import("../../../shared/protocol").IdeGitChange[]) {
+function createGitStatusByPath(
+  changes: import("../../../shared/protocol").IdeGitChange[],
+) {
   const statuses = new Map<string, GitStatusBadge>();
   for (const change of changes) {
     const fileStatus = toGitStatusBadge(change);
@@ -1054,7 +1848,12 @@ function createGitStatusByPath(changes: import("../../../shared/protocol").IdeGi
     for (let index = 1; index < parts.length; index += 1) {
       const directoryPath = parts.slice(0, index).join("/");
       const current = statuses.get(directoryPath);
-      if (!current || (current.source === "folder" && current.tone !== "modified" && fileStatus.tone === "modified")) {
+      if (
+        !current ||
+        (current.source === "folder" &&
+          current.tone !== "modified" &&
+          fileStatus.tone === "modified")
+      ) {
         statuses.set(directoryPath, createFolderGitStatus(fileStatus.tone));
       }
     }
@@ -1062,7 +1861,10 @@ function createGitStatusByPath(changes: import("../../../shared/protocol").IdeGi
   return statuses;
 }
 
-function findGitStatusForTreeEntry(statuses: Map<string, GitStatusBadge>, entry: import("../../../shared/protocol").IdeFileTreeEntry) {
+function findGitStatusForTreeEntry(
+  statuses: Map<string, GitStatusBadge>,
+  entry: import("../../../shared/protocol").IdeFileTreeEntry,
+) {
   const exact = statuses.get(normalizeGitStatusPath(entry.path));
   if (!exact) {
     return undefined;
@@ -1088,7 +1890,9 @@ function normalizeGitStatusPath(path: string) {
     .toLowerCase();
 }
 
-function toGitStatusBadge(change: import("../../../shared/protocol").IdeGitChange): GitStatusBadge | undefined {
+function toGitStatusBadge(
+  change: import("../../../shared/protocol").IdeGitChange,
+): GitStatusBadge | undefined {
   if (change.status === "untracked" || change.status === "added") {
     return { label: change.shortStatus, tone: "added", source: "file" };
   }
@@ -1098,15 +1902,28 @@ function toGitStatusBadge(change: import("../../../shared/protocol").IdeGitChang
   return undefined;
 }
 
-function flattenVisibleTree(entries: import("../../../shared/protocol").IdeFileTreeEntry[], expandedFolderPaths: string[]) {
+function flattenVisibleTree(
+  entries: import("../../../shared/protocol").IdeFileTreeEntry[],
+  expandedFolderPaths: string[],
+) {
   const expanded = new Set(expandedFolderPaths);
-  const byParent = new Map<string, import("../../../shared/protocol").IdeFileTreeEntry[]>();
+  const byParent = new Map<
+    string,
+    import("../../../shared/protocol").IdeFileTreeEntry[]
+  >();
   for (const entry of entries) {
     const parent = entry.parentPath ?? "";
     byParent.set(parent, [...(byParent.get(parent) ?? []), entry]);
   }
-  const sortEntries = (items: import("../../../shared/protocol").IdeFileTreeEntry[]) =>
-    [...items].sort((left, right) => Number(right.kind === "directory") - Number(left.kind === "directory") || left.name.localeCompare(right.name));
+  const sortEntries = (
+    items: import("../../../shared/protocol").IdeFileTreeEntry[],
+  ) =>
+    [...items].sort(
+      (left, right) =>
+        Number(right.kind === "directory") -
+          Number(left.kind === "directory") ||
+        left.name.localeCompare(right.name),
+    );
   const output: import("../../../shared/protocol").IdeFileTreeEntry[] = [];
   const visit = (parentPath: string, depth: number) => {
     for (const entry of sortEntries(byParent.get(parentPath) ?? [])) {
@@ -1137,61 +1954,220 @@ function GlobalSearchView(props: {
   onCaseSensitiveSearch: (value: boolean) => void;
   onWholeWordSearch: (value: boolean) => void;
 }) {
-  const resultCount = createMemo(() => props.searchResults.reduce((sum, result) => sum + result.matches.length, 0));
+  const resultCount = createMemo(() =>
+    props.searchResults.reduce((sum, result) => sum + result.matches.length, 0),
+  );
   return (
-    <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
-      <div class="flex flex-col gap-2">
-        <Input ref={props.searchInputRef} aria-label="Find in files" placeholder="Find" value={props.searchQuery} onInput={(event) => props.onSearchQuery(event.currentTarget.value)} class="ide-input" />
-        <Input aria-label="Replace in files" placeholder="Replace" value={props.replaceQuery} onInput={(event) => props.onReplaceQuery(event.currentTarget.value)} class="ide-input" />
-        <div class="flex items-center gap-1">
+    <div
+      class={
+        stylex.attrs(
+          ideUtilityStyles.flex,
+          ideUtilityStyles.minH0,
+          ideUtilityStyles.flex1,
+          ideUtilityStyles.flexCol,
+          ideUtilityStyles.gap3,
+          ideUtilityStyles.overflowAuto,
+          ideUtilityStyles.p3,
+        ).class
+      }
+    >
+      <div
+        class={
+          stylex.attrs(
+            ideUtilityStyles.flex,
+            ideUtilityStyles.flexCol,
+            ideUtilityStyles.gap2,
+          ).class
+        }
+      >
+        <Input
+          ref={props.searchInputRef}
+          aria-label="Find in files"
+          placeholder="Find"
+          value={props.searchQuery}
+          onInput={(event) => props.onSearchQuery(event.currentTarget.value)}
+          class={stylex.attrs(ideStyles.input).class}
+        />
+        <Input
+          aria-label="Replace in files"
+          placeholder="Replace"
+          value={props.replaceQuery}
+          onInput={(event) => props.onReplaceQuery(event.currentTarget.value)}
+          class={stylex.attrs(ideStyles.input).class}
+        />
+        <div
+          class={
+            stylex.attrs(
+              ideUtilityStyles.flex,
+              ideUtilityStyles.itemsCenter,
+              ideUtilityStyles.gap1,
+            ).class
+          }
+        >
           <ActionButton
             tooltip="Use regular expression search"
             ariaLabel="Use regular expression search"
-            icon={<Regex class="h-3.5 w-3.5" />}
+            icon={
+              <Regex
+                class={
+                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+                }
+              />
+            }
             variant={props.regexSearch ? "secondary" : "ghost"}
             size="icon"
-            class="h-8 w-8 rounded-lg"
+            class={
+              stylex.attrs(
+                ideUtilityStyles.h8,
+                ideUtilityStyles.w8,
+                ideUtilityStyles.roundedLg,
+              ).class
+            }
             onClick={() => props.onRegexSearch(!props.regexSearch)}
           />
           <ActionButton
             tooltip="Match case"
             ariaLabel="Match case"
-            icon={<CaseSensitive class="h-3.5 w-3.5" />}
+            icon={
+              <CaseSensitive
+                class={
+                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+                }
+              />
+            }
             variant={props.caseSensitiveSearch ? "secondary" : "ghost"}
             size="icon"
-            class="h-8 w-8 rounded-lg"
-            onClick={() => props.onCaseSensitiveSearch(!props.caseSensitiveSearch)}
+            class={
+              stylex.attrs(
+                ideUtilityStyles.h8,
+                ideUtilityStyles.w8,
+                ideUtilityStyles.roundedLg,
+              ).class
+            }
+            onClick={() =>
+              props.onCaseSensitiveSearch(!props.caseSensitiveSearch)
+            }
           />
           <ActionButton
             tooltip="Match whole word"
             ariaLabel="Match whole word"
-            icon={<Braces class="h-3.5 w-3.5" />}
+            icon={
+              <Braces
+                class={
+                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+                }
+              />
+            }
             variant={props.wholeWordSearch ? "secondary" : "ghost"}
             size="icon"
-            class="h-8 w-8 rounded-lg"
+            class={
+              stylex.attrs(
+                ideUtilityStyles.h8,
+                ideUtilityStyles.w8,
+                ideUtilityStyles.roundedLg,
+              ).class
+            }
             onClick={() => props.onWholeWordSearch(!props.wholeWordSearch)}
           />
-          <ActionButton tooltip="Replace is planned for the editing pass" icon={<Replace class="h-3.5 w-3.5" />} variant="secondary" size="sm">
+          <ActionButton
+            tooltip="Replace is planned for the editing pass"
+            icon={
+              <Replace
+                class={
+                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+                }
+              />
+            }
+            variant="secondary"
+            size="sm"
+          >
             Replace
           </ActionButton>
         </div>
       </div>
-      <div class="text-[0.65rem] font-semibold uppercase text-(--ide-muted)">
-        {props.searchLoading ? "Searching..." : `${resultCount()} results${props.searchTruncated ? " (truncated)" : ""}`}
+      <div
+        class={
+          stylex.attrs(
+            ideUtilityStyles.text065,
+            ideUtilityStyles.fontSemibold,
+            ideUtilityStyles.uppercase,
+            ideUtilityStyles.textIdeMuted,
+          ).class
+        }
+      >
+        {props.searchLoading
+          ? "Searching..."
+          : `${resultCount()} results${props.searchTruncated ? " (truncated)" : ""}`}
       </div>
-      <Show when={resultCount() > 0} fallback={<div class="rounded-lg border border-dashed border-(--ide-border) p-3 text-xs text-(--ide-muted)">Type to search files.</div>}>
+      <Show
+        when={resultCount() > 0}
+        fallback={
+          <div
+            class={
+              stylex.attrs(
+                ideUtilityStyles.roundedLg,
+                ideUtilityStyles.border,
+                ideUtilityStyles.borderDashed,
+                ideUtilityStyles.borderIde,
+                ideUtilityStyles.p3,
+                ideUtilityStyles.textXs,
+                ideUtilityStyles.textIdeMuted,
+              ).class
+            }
+          >
+            Type to search files.
+          </div>
+        }
+      >
         <For each={props.searchResults}>
           {(result) => (
-            <div class="rounded-lg border border-(--ide-border) bg-(--ide-row) p-2">
-              <button type="button" class="block w-full truncate text-left text-xs font-semibold text-(--ide-text)" onClick={() => props.onOpenPath(result.path)}>
+            <div
+              class={
+                stylex.attrs(
+                  ideUtilityStyles.roundedLg,
+                  ideUtilityStyles.border,
+                  ideUtilityStyles.borderIde,
+                  ideUtilityStyles.bgIdeRow,
+                  ideUtilityStyles.p2,
+                ).class
+              }
+            >
+              <button
+                type="button"
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.block,
+                    ideUtilityStyles.wFull,
+                    ideUtilityStyles.truncate,
+                    ideUtilityStyles.textLeft,
+                    ideUtilityStyles.textXs,
+                    ideUtilityStyles.fontSemibold,
+                    ideUtilityStyles.textIdeText,
+                  ).class
+                }
+                onClick={() => props.onOpenPath(result.path)}
+              >
                 {result.path}
               </button>
               <For each={result.matches}>
                 {(match) => (
                   <button
                     type="button"
-                    class="mt-1 block w-full truncate text-left font-mono text-[0.7rem] text-(--ide-muted)"
-                    onClick={() => props.onOpenPath(result.path, match.line, match.column)}
+                    class={
+                      stylex.attrs(
+                        ideUtilityStyles.mt1,
+                        ideUtilityStyles.block,
+                        ideUtilityStyles.wFull,
+                        ideUtilityStyles.truncate,
+                        ideUtilityStyles.textLeft,
+                        ideUtilityStyles.fontMono,
+                        ideUtilityStyles.text07,
+                        ideUtilityStyles.textIdeMuted,
+                      ).class
+                    }
+                    onClick={() =>
+                      props.onOpenPath(result.path, match.line, match.column)
+                    }
                   >
                     {match.line}:{match.column} {match.preview}
                   </button>
@@ -1213,19 +2189,74 @@ function SourceControlView(props: {
   onOpenPath: (path: string) => void;
 }) {
   return (
-    <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 text-xs">
-      <div class="rounded-lg border border-(--ide-border) bg-(--ide-row) p-2">
-        <div class="flex items-center gap-2 font-semibold text-(--ide-text)">
-          <GitBranch class="h-3.5 w-3.5" />
-          {props.branch ?? (props.isRepository ? "detached" : "No git repository")}
+    <div
+      class={
+        stylex.attrs(
+          ideUtilityStyles.flex,
+          ideUtilityStyles.minH0,
+          ideUtilityStyles.flex1,
+          ideUtilityStyles.flexCol,
+          ideUtilityStyles.gap3,
+          ideUtilityStyles.overflowAuto,
+          ideUtilityStyles.p3,
+          ideUtilityStyles.textXs,
+        ).class
+      }
+    >
+      <div
+        class={
+          stylex.attrs(
+            ideUtilityStyles.roundedLg,
+            ideUtilityStyles.border,
+            ideUtilityStyles.borderIde,
+            ideUtilityStyles.bgIdeRow,
+            ideUtilityStyles.p2,
+          ).class
+        }
+      >
+        <div
+          class={
+            stylex.attrs(
+              ideUtilityStyles.flex,
+              ideUtilityStyles.itemsCenter,
+              ideUtilityStyles.gap2,
+              ideUtilityStyles.fontSemibold,
+              ideUtilityStyles.textIdeText,
+            ).class
+          }
+        >
+          <GitBranch
+            class={
+              stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+            }
+          />
+          {props.branch ??
+            (props.isRepository ? "detached" : "No git repository")}
         </div>
-        <div class="mt-1 text-(--ide-muted)">{props.loading ? "Loading..." : `${props.changes.length} pending changes`}</div>
+        <div
+          class={
+            stylex.attrs(ideUtilityStyles.mt1, ideUtilityStyles.textIdeMuted)
+              .class
+          }
+        >
+          {props.loading
+            ? "Loading..."
+            : `${props.changes.length} pending changes`}
+        </div>
       </div>
       <For each={props.changes}>
         {(item) => (
-          <button type="button" class="ide-scm-row" onClick={() => props.onOpenPath(item.path)}>
-            <span class="ide-scm-badge">{item.shortStatus}</span>
-            <span class="truncate">{item.path}</span>
+          <button
+            type="button"
+            class={stylex.attrs(ideStyles.scmRow).class}
+            onClick={() => props.onOpenPath(item.path)}
+          >
+            <span class={stylex.attrs(ideStyles.scmBadge).class}>
+              {item.shortStatus}
+            </span>
+            <span class={stylex.attrs(ideUtilityStyles.truncate).class}>
+              {item.path}
+            </span>
           </button>
         )}
       </For>
@@ -1234,15 +2265,51 @@ function SourceControlView(props: {
 }
 
 function Breadcrumbs(props: { file?: IdeFile }) {
-  const parts = createMemo(() => props.file ? [...props.file.path.split("/"), ...props.file.symbols.slice(0, 1)] : ["No editor"]);
+  const parts = createMemo(() =>
+    props.file
+      ? [...props.file.path.split("/"), ...props.file.symbols.slice(0, 1)]
+      : ["No editor"],
+  );
   return (
-    <nav class="flex min-w-0 items-center gap-1 text-xs text-(--ide-muted)" aria-label="Editor breadcrumbs">
+    <nav
+      class={
+        stylex.attrs(
+          ideUtilityStyles.flex,
+          ideUtilityStyles.minW0,
+          ideUtilityStyles.itemsCenter,
+          ideUtilityStyles.gap1,
+          ideUtilityStyles.textXs,
+          ideUtilityStyles.textIdeMuted,
+        ).class
+      }
+      aria-label="Editor breadcrumbs"
+    >
       <For each={parts()}>
         {(part, index) => (
           <>
-            <span class={cn("truncate", index() === parts().length - 1 ? "font-semibold text-(--ide-text)" : "")}>{part}</span>
+            <span
+              class={cn(
+                stylex.attrs(ideUtilityStyles.truncate).class,
+                index() === parts().length - 1
+                  ? stylex.attrs(
+                      ideUtilityStyles.fontSemibold,
+                      ideUtilityStyles.textIdeText,
+                    ).class
+                  : undefined,
+              )}
+            >
+              {part}
+            </span>
             <Show when={index() < parts().length - 1}>
-              <ChevronRight class="h-3 w-3 shrink-0" />
+              <ChevronRight
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.h3,
+                    ideUtilityStyles.w3,
+                    ideUtilityStyles.shrink0,
+                  ).class
+                }
+              />
             </Show>
           </>
         )}
@@ -1268,7 +2335,14 @@ function EditorSurface(props: {
   onSave: () => void;
   onCloseTab: () => void;
   onGoToDefinition: (file: IdeFile, line: number, column: number) => void;
-  onCompletionRequest: (x: number, y: number, path: string, position: number, prefix: string, items: string[]) => void;
+  onCompletionRequest: (
+    x: number,
+    y: number,
+    path: string,
+    position: number,
+    prefix: string,
+    items: string[],
+  ) => void;
   onCompletionSelect: (value: string) => void;
   onCompletionClose: () => void;
   onCursor: (line: number, column: number) => void;
@@ -1276,7 +2350,10 @@ function EditorSurface(props: {
 }) {
   const [scrollPosition, setScrollPosition] = createSignal({ left: 0, top: 0 });
   const [symbolHover, setSymbolHover] = createSignal<SymbolHoverState>();
-  const [draft, setDraft] = createSignal<EditorDraft>({ text: "", sourceText: "" });
+  const [draft, setDraft] = createSignal<EditorDraft>({
+    text: "",
+    sourceText: "",
+  });
   let textareaRef: HTMLTextAreaElement | undefined;
   let hoverTimer: ReturnType<typeof setTimeout> | undefined;
   const editorText = createMemo(() => {
@@ -1285,11 +2362,20 @@ function EditorSurface(props: {
       return "";
     }
     const currentFile = ideStore.state.filesByPath[file.path];
-    return currentFile?.content ?? currentFile?.contentLines.join("\n") ?? file.content ?? file.contentLines.join("\n") ?? "";
+    return (
+      currentFile?.content ??
+      currentFile?.contentLines.join("\n") ??
+      file.content ??
+      file.contentLines.join("\n") ??
+      ""
+    );
   });
-  const displayedText = () => props.file?.path === draft().path ? draft().text : editorText();
+  const displayedText = () =>
+    props.file?.path === draft().path ? draft().text : editorText();
   const displayedLines = () => displayedText().split(/\r\n|\r|\n/);
-  const matchCount = createMemo(() => countDocumentMatches(displayedLines(), props.documentFindQuery));
+  const matchCount = createMemo(() =>
+    countDocumentMatches(displayedLines(), props.documentFindQuery),
+  );
 
   createEffect(() => {
     const file = props.file;
@@ -1297,7 +2383,11 @@ function EditorSurface(props: {
     const current = untrack(draft);
     setDraft(() => {
       if (current.path !== file?.path || current.sourceText !== sourceText) {
-        if (current.path === file?.path && current.text !== current.sourceText && sourceText === current.sourceText) {
+        if (
+          current.path === file?.path &&
+          current.text !== current.sourceText &&
+          sourceText === current.sourceText
+        ) {
           return current;
         }
         if (current.path === file?.path && current.text === sourceText) {
@@ -1340,7 +2430,10 @@ function EditorSurface(props: {
     setDraft({
       path: file.path,
       text: textarea.value,
-      sourceText: currentDraft.path === file.path ? currentDraft.sourceText : editorText()
+      sourceText:
+        currentDraft.path === file.path
+          ? currentDraft.sourceText
+          : editorText(),
     });
     setScrollPosition({ left: textarea.scrollLeft, top: textarea.scrollTop });
     props.onContentChange(file.path, textarea.value);
@@ -1356,7 +2449,10 @@ function EditorSurface(props: {
       return;
     }
     event.preventDefault();
-    const position = getTextPosition(textareaRef?.value ?? "", textareaRef?.selectionStart ?? 0);
+    const position = getTextPosition(
+      textareaRef?.value ?? "",
+      textareaRef?.selectionStart ?? 0,
+    );
     props.onCursor(position.line, position.column);
     props.onGoToDefinition(file, position.line, position.column);
   }
@@ -1370,7 +2466,14 @@ function EditorSurface(props: {
     const prefix = getCompletionPrefix(textarea.value, textarea.selectionStart);
     const items = buildCompletionItems(file, prefix);
     if (items.length > 0) {
-      props.onCompletionRequest(64, 44, file.path, textarea.selectionStart, prefix, items);
+      props.onCompletionRequest(
+        64,
+        44,
+        file.path,
+        textarea.selectionStart,
+        prefix,
+        items,
+      );
     }
   }
 
@@ -1412,53 +2515,224 @@ function EditorSurface(props: {
   }
 
   return (
-    <div class="ide-editor-surface relative min-w-0 flex-1 overflow-hidden" style={{ width: `${props.widthPercent}%` }} onContextMenu={props.onContextMenu}>
+    <div
+      class={
+        stylex.attrs(
+          ideStyles.editorSurface,
+          ideUtilityStyles.relative,
+          ideUtilityStyles.minW0,
+          ideUtilityStyles.flex1,
+          ideUtilityStyles.overflowHidden,
+        ).class
+      }
+      style={{ width: `${props.widthPercent}%` }}
+      onContextMenu={props.onContextMenu}
+    >
       <Show when={props.documentFindOpen}>
-        <div class="ide-document-find absolute right-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-(--ide-border) bg-(--ide-surface) p-1 shadow-xl">
-          <Search class="h-3.5 w-3.5 text-(--ide-muted)" />
+        <div
+          class={
+            stylex.attrs(
+              ideStyles.commandSurface,
+              ideUtilityStyles.absolute,
+              ideUtilityStyles.right3,
+              ideUtilityStyles.top3,
+              ideUtilityStyles.z10,
+              ideUtilityStyles.flex,
+              ideUtilityStyles.itemsCenter,
+              ideUtilityStyles.gap1,
+              ideUtilityStyles.roundedLg,
+              ideUtilityStyles.border,
+              ideUtilityStyles.borderIde,
+              ideUtilityStyles.bgIdeSurface,
+              ideUtilityStyles.p1,
+              ideUtilityStyles.shadowXl,
+            ).class
+          }
+        >
+          <Search
+            class={
+              stylex.attrs(
+                ideUtilityStyles.h35,
+                ideUtilityStyles.w35,
+                ideUtilityStyles.textIdeMuted,
+              ).class
+            }
+          />
           <input
             ref={props.findInputRef}
-            class="h-7 w-44 bg-transparent px-1 text-xs text-(--ide-text) outline-none"
+            class={
+              stylex.attrs(
+                ideUtilityStyles.h7,
+                ideUtilityStyles.w44,
+                ideUtilityStyles.bgTransparent,
+                ideUtilityStyles.px1,
+                ideUtilityStyles.textXs,
+                ideUtilityStyles.textIdeText,
+                ideUtilityStyles.outlineNone,
+              ).class
+            }
             aria-label="Find in current document"
             value={props.documentFindQuery}
             placeholder="Find"
-            onInput={(event) => props.onDocumentFindQuery(event.currentTarget.value)}
+            onInput={(event) =>
+              props.onDocumentFindQuery(event.currentTarget.value)
+            }
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 props.onDocumentFindClose();
               }
             }}
           />
-          <span class="min-w-10 text-right text-[0.65rem] text-(--ide-muted)">{matchCount()}</span>
+          <span
+            class={
+              stylex.attrs(
+                ideUtilityStyles.minW10,
+                ideUtilityStyles.textRight,
+                ideUtilityStyles.text065,
+                ideUtilityStyles.textIdeMuted,
+              ).class
+            }
+          >
+            {matchCount()}
+          </span>
           <ActionButton
             tooltip="Close document search"
             ariaLabel="Close document search"
-            icon={<X class="h-3.5 w-3.5" />}
+            icon={
+              <X
+                class={
+                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+                }
+              />
+            }
             variant="ghost"
             size="icon"
-            class="h-7 w-7 rounded-md"
+            class={
+              stylex.attrs(
+                ideUtilityStyles.h7,
+                ideUtilityStyles.w7,
+                ideUtilityStyles.roundedMd,
+              ).class
+            }
             onClick={props.onDocumentFindClose}
           />
         </div>
       </Show>
-      <Show when={props.file} fallback={<div class="flex h-full items-center justify-center text-xs text-(--ide-muted)">Open a file from Explorer.</div>}>
+      <Show
+        when={props.file}
+        fallback={
+          <div
+            class={
+              stylex.attrs(
+                ideUtilityStyles.flex,
+                ideUtilityStyles.hFull,
+                ideUtilityStyles.itemsCenter,
+                ideUtilityStyles.justifyCenter,
+                ideUtilityStyles.textXs,
+                ideUtilityStyles.textIdeMuted,
+              ).class
+            }
+          >
+            Open a file from Explorer.
+          </div>
+        }
+      >
         {(file) => (
-          <div class="relative h-full min-w-0 overflow-hidden font-mono text-[0.78rem] leading-6" style={{ "tab-size": String(props.tabSize) }}>
-            <Show when={!file().isBinary && !file().tooLarge} fallback={<div class="p-3 text-xs text-(--ide-muted)">Binary or oversized file preview is unavailable.</div>}>
+          <div
+            class={
+              stylex.attrs(
+                ideUtilityStyles.relative,
+                ideUtilityStyles.hFull,
+                ideUtilityStyles.minW0,
+                ideUtilityStyles.overflowHidden,
+                ideUtilityStyles.fontMono,
+                ideUtilityStyles.text078,
+                ideUtilityStyles.leading6,
+              ).class
+            }
+            style={{ "tab-size": String(props.tabSize) }}
+          >
+            <Show
+              when={!file().isBinary && !file().tooLarge}
+              fallback={
+                <div
+                  class={
+                    stylex.attrs(
+                      ideUtilityStyles.p3,
+                      ideUtilityStyles.textXs,
+                      ideUtilityStyles.textIdeMuted,
+                    ).class
+                  }
+                >
+                  Binary or oversized file preview is unavailable.
+                </div>
+              }
+            >
               <div
-                class="pointer-events-none absolute inset-0 min-h-full p-3 pr-6"
-                style={{ transform: `translate(${-scrollPosition().left}px, ${-scrollPosition().top}px)` }}
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.pointerEventsNone,
+                    ideUtilityStyles.absolute,
+                    ideUtilityStyles.inset0,
+                    ideUtilityStyles.minHFull,
+                    ideUtilityStyles.p3,
+                    ideUtilityStyles.pr6,
+                  ).class
+                }
+                style={{
+                  transform: `translate(${-scrollPosition().left}px, ${-scrollPosition().top}px)`,
+                }}
               >
                 <For each={displayedLines()}>
                   {(line, index) => (
                     <div
                       data-test-ide-code-line={String(index() + 1)}
-                      class="ide-code-line ide-code-line-preview grid grid-cols-[3rem_minmax(0,1fr)]"
-                      classList={{ "ide-code-line-wrap": props.wordWrap === "on" }}
+                      data-word-wrap={props.wordWrap}
+                      class={cn(
+                        stylex.attrs(
+                          ideStyles.codeLine,
+                          ideUtilityStyles.grid,
+                          ideUtilityStyles.gridCode,
+                        ).class,
+                        props.wordWrap === "on"
+                          ? stylex.attrs(ideStyles.codeLineWrap).class
+                          : undefined,
+                      )}
                     >
-                      <span class="select-none pr-3 text-right text-(--ide-muted)">{index() + 1}</span>
-                      <span data-test-ide-code-text={String(index() + 1)} class="ide-code-cell whitespace-pre" classList={{ "ide-code-line-colorized": props.bracketPairColorization }}>
-                        <For each={syntaxHighlightLine(line, file().language)}>{(token) => <span class={`ide-token ide-token-${token.kind}`}>{token.text}</span>}</For>
+                      <span
+                        class={
+                          stylex.attrs(
+                            ideUtilityStyles.selectNone,
+                            ideUtilityStyles.pr3,
+                            ideUtilityStyles.textRight,
+                            ideUtilityStyles.textIdeMuted,
+                          ).class
+                        }
+                      >
+                        {index() + 1}
+                      </span>
+                      <span
+                        data-test-ide-code-text={String(index() + 1)}
+                        class={cn(
+                          stylex.attrs(
+                            ideStyles.codeCell,
+                            ideUtilityStyles.whitespacePre,
+                          ).class,
+                          props.wordWrap === "on"
+                            ? stylex.attrs(ideStyles.codeCellWrap).class
+                            : undefined,
+                          props.bracketPairColorization
+                            ? stylex.attrs(ideStyles.codeColorized).class
+                            : undefined,
+                        )}
+                      >
+                        <For each={syntaxHighlightLine(line, file().language)}>
+                          {(token) => (
+                            <span class={tokenClass(token.kind)}>
+                              {token.text}
+                            </span>
+                          )}
+                        </For>
                       </span>
                     </div>
                   )}
@@ -1467,13 +2741,34 @@ function EditorSurface(props: {
               <textarea
                 ref={textareaRef}
                 aria-label={`Edit ${file().name}`}
+                data-word-wrap={props.wordWrap}
                 spellcheck={false}
-                class="ide-code-input absolute inset-0 h-full w-full resize-none p-3 pr-6 font-mono text-[0.78rem] leading-6 outline-none"
-                classList={{ "ide-code-input-wrap": props.wordWrap === "on" }}
+                class={cn(
+                  stylex.attrs(
+                    ideStyles.codeInput,
+                    ideUtilityStyles.absolute,
+                    ideUtilityStyles.inset0,
+                    ideUtilityStyles.hFull,
+                    ideUtilityStyles.wFull,
+                    ideUtilityStyles.resizeNone,
+                    ideUtilityStyles.p3,
+                    ideUtilityStyles.pr6,
+                    ideUtilityStyles.fontMono,
+                    ideUtilityStyles.text078,
+                    ideUtilityStyles.leading6,
+                    ideUtilityStyles.outlineNone,
+                  ).class,
+                  props.wordWrap === "on"
+                    ? stylex.attrs(ideStyles.codeInputWrap).class
+                    : undefined,
+                )}
                 value={displayedText()}
                 onInput={(event) => handleInput(event.currentTarget)}
                 onScroll={(event) => {
-                  setScrollPosition({ left: event.currentTarget.scrollLeft, top: event.currentTarget.scrollTop });
+                  setScrollPosition({
+                    left: event.currentTarget.scrollLeft,
+                    top: event.currentTarget.scrollTop,
+                  });
                   clearSymbolHover();
                 }}
                 onMouseMove={scheduleSymbolHover}
@@ -1487,13 +2782,23 @@ function EditorSurface(props: {
                 onSelect={updateCursor}
                 onKeyDown={(event) => {
                   clearSymbolHover();
-                  if (eventMatchesHotkeys(event, normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences).ideCloseEditor)) {
+                  if (
+                    eventMatchesHotkeys(
+                      event,
+                      normalizeAppHotkeyPreferences(
+                        harnessStore.state.appHotkeyPreferences,
+                      ).ideCloseEditor,
+                    )
+                  ) {
                     event.preventDefault();
                     event.stopPropagation();
                     props.onCloseTab();
                     return;
                   }
-                  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+                  if (
+                    (event.ctrlKey || event.metaKey) &&
+                    event.key.toLowerCase() === "s"
+                  ) {
                     event.preventDefault();
                     props.onSave();
                     return;
@@ -1512,10 +2817,34 @@ function EditorSurface(props: {
               />
               <Show when={props.completionState}>
                 {(completion) => (
-                  <div class="ide-completion absolute z-20 w-56 overflow-hidden rounded-lg border border-(--ide-border) bg-(--ide-surface) shadow-xl" style={{ left: `${completion().x}px`, top: `${completion().y}px` }}>
+                  <div
+                    class={
+                      stylex.attrs(
+                        ideStyles.completion,
+                        ideUtilityStyles.absolute,
+                        ideUtilityStyles.z20,
+                        ideUtilityStyles.w56,
+                        ideUtilityStyles.overflowHidden,
+                        ideUtilityStyles.roundedLg,
+                        ideUtilityStyles.border,
+                        ideUtilityStyles.borderIde,
+                        ideUtilityStyles.bgIdeSurface,
+                        ideUtilityStyles.shadowXl,
+                      ).class
+                    }
+                    style={{
+                      left: `${completion().x}px`,
+                      top: `${completion().y}px`,
+                    }}
+                  >
                     <For each={completion().items}>
                       {(item) => (
-                        <button type="button" class="ide-completion-row" onMouseDown={(event) => event.preventDefault()} onClick={() => props.onCompletionSelect(item)}>
+                        <button
+                          type="button"
+                          class={stylex.attrs(ideStyles.completionRow).class}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => props.onCompletionSelect(item)}
+                        >
                           {item}
                         </button>
                       )}
@@ -1527,17 +2856,77 @@ function EditorSurface(props: {
                 {(hover) => (
                   <div
                     data-test-ide-symbol-tooltip=""
-                    class="ide-symbol-tooltip fixed z-30 max-w-sm overflow-hidden rounded-lg border border-(--ide-border) bg-(--ide-surface) p-3 text-xs shadow-xl"
-                    style={{ left: `${hover().x - 48}px`, top: `${hover().y - 88}px` }}
+                    class={
+                      stylex.attrs(
+                        ideStyles.tooltip,
+                        ideUtilityStyles.fixed,
+                        ideUtilityStyles.z30,
+                        ideUtilityStyles.maxWSm,
+                        ideUtilityStyles.overflowHidden,
+                        ideUtilityStyles.roundedLg,
+                        ideUtilityStyles.border,
+                        ideUtilityStyles.borderIde,
+                        ideUtilityStyles.bgIdeSurface,
+                        ideUtilityStyles.p3,
+                        ideUtilityStyles.textXs,
+                        ideUtilityStyles.shadowXl,
+                      ).class
+                    }
+                    style={{
+                      left: `${hover().x - 48}px`,
+                      top: `${hover().y - 88}px`,
+                    }}
                   >
-                    <div class="font-mono text-[0.72rem] font-semibold text-(--ide-text)">{hover().symbol}</div>
-                    <div class="mt-1 whitespace-pre-wrap text-[0.68rem] leading-5 text-(--ide-muted)">{hover().detail}</div>
+                    <div
+                      class={
+                        stylex.attrs(
+                          ideUtilityStyles.fontMono,
+                          ideUtilityStyles.text072,
+                          ideUtilityStyles.fontSemibold,
+                          ideUtilityStyles.textIdeText,
+                        ).class
+                      }
+                    >
+                      {hover().symbol}
+                    </div>
+                    <div
+                      class={
+                        stylex.attrs(
+                          ideUtilityStyles.mt1,
+                          ideUtilityStyles.whitespacePreWrap,
+                          ideUtilityStyles.text068,
+                          ideUtilityStyles.leading5,
+                          ideUtilityStyles.textIdeMuted,
+                        ).class
+                      }
+                    >
+                      {hover().detail}
+                    </div>
                   </div>
                 )}
               </Show>
             </Show>
             <Show when={props.dirty}>
-              <div class="absolute bottom-3 right-3 rounded-md border border-(--ide-border) bg-(--ide-surface) px-2 py-1 text-[0.65rem] font-semibold text-(--ide-muted)">Unsaved</div>
+              <div
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.absolute,
+                    ideUtilityStyles.bottom3,
+                    ideUtilityStyles.right3,
+                    ideUtilityStyles.roundedMd,
+                    ideUtilityStyles.border,
+                    ideUtilityStyles.borderIde,
+                    ideUtilityStyles.bgIdeSurface,
+                    ideUtilityStyles.px2,
+                    ideUtilityStyles.py1,
+                    ideUtilityStyles.text065,
+                    ideUtilityStyles.fontSemibold,
+                    ideUtilityStyles.textIdeMuted,
+                  ).class
+                }
+              >
+                Unsaved
+              </div>
             </Show>
           </div>
         )}
@@ -1566,27 +2955,203 @@ function countDocumentMatches(lines: string[], query: string) {
 
 type SyntaxToken = {
   text: string;
-  kind: "plain" | "keyword" | "string" | "number" | "comment" | "property" | "punctuation";
+  kind:
+    | "plain"
+    | "keyword"
+    | "string"
+    | "number"
+    | "comment"
+    | "property"
+    | "punctuation";
 };
 
+function tokenClass(kind: SyntaxToken["kind"]) {
+  switch (kind) {
+    case "keyword":
+      return stylex.attrs(ideStyles.tokenKeyword).class;
+    case "string":
+      return stylex.attrs(ideStyles.tokenString).class;
+    case "number":
+      return stylex.attrs(ideStyles.tokenNumber).class;
+    case "comment":
+      return stylex.attrs(ideStyles.tokenComment).class;
+    case "property":
+      return stylex.attrs(ideStyles.tokenProperty).class;
+    case "punctuation":
+      return stylex.attrs(ideStyles.tokenPunctuation).class;
+    case "plain":
+      return undefined;
+  }
+}
+
 const languageKeywords = new Map<string, Set<string>>([
-  ["TypeScript", new Set(["async", "await", "break", "case", "catch", "class", "const", "continue", "default", "else", "export", "extends", "false", "for", "from", "function", "if", "import", "interface", "let", "new", "null", "return", "true", "try", "type", "undefined", "while"])],
-  ["JavaScript", new Set(["async", "await", "break", "case", "catch", "class", "const", "continue", "default", "else", "export", "extends", "false", "for", "from", "function", "if", "import", "let", "new", "null", "return", "true", "try", "undefined", "while"])],
-  ["Python", new Set(["and", "as", "async", "await", "class", "def", "elif", "else", "except", "False", "for", "from", "if", "import", "in", "is", "None", "not", "or", "pass", "return", "True", "try", "while", "with"])],
-  ["Rust", new Set(["async", "await", "const", "crate", "else", "enum", "false", "fn", "for", "if", "impl", "let", "match", "mod", "mut", "pub", "return", "self", "struct", "true", "use", "where", "while"])],
-  ["CSS", new Set(["display", "flex", "grid", "color", "background", "border", "padding", "margin", "width", "height", "position"])],
-  ["HTML", new Set(["html", "head", "body", "script", "style", "div", "span", "button", "input", "section", "main"])],
+  [
+    "TypeScript",
+    new Set([
+      "async",
+      "await",
+      "break",
+      "case",
+      "catch",
+      "class",
+      "const",
+      "continue",
+      "default",
+      "else",
+      "export",
+      "extends",
+      "false",
+      "for",
+      "from",
+      "function",
+      "if",
+      "import",
+      "interface",
+      "let",
+      "new",
+      "null",
+      "return",
+      "true",
+      "try",
+      "type",
+      "undefined",
+      "while",
+    ]),
+  ],
+  [
+    "JavaScript",
+    new Set([
+      "async",
+      "await",
+      "break",
+      "case",
+      "catch",
+      "class",
+      "const",
+      "continue",
+      "default",
+      "else",
+      "export",
+      "extends",
+      "false",
+      "for",
+      "from",
+      "function",
+      "if",
+      "import",
+      "let",
+      "new",
+      "null",
+      "return",
+      "true",
+      "try",
+      "undefined",
+      "while",
+    ]),
+  ],
+  [
+    "Python",
+    new Set([
+      "and",
+      "as",
+      "async",
+      "await",
+      "class",
+      "def",
+      "elif",
+      "else",
+      "except",
+      "False",
+      "for",
+      "from",
+      "if",
+      "import",
+      "in",
+      "is",
+      "None",
+      "not",
+      "or",
+      "pass",
+      "return",
+      "True",
+      "try",
+      "while",
+      "with",
+    ]),
+  ],
+  [
+    "Rust",
+    new Set([
+      "async",
+      "await",
+      "const",
+      "crate",
+      "else",
+      "enum",
+      "false",
+      "fn",
+      "for",
+      "if",
+      "impl",
+      "let",
+      "match",
+      "mod",
+      "mut",
+      "pub",
+      "return",
+      "self",
+      "struct",
+      "true",
+      "use",
+      "where",
+      "while",
+    ]),
+  ],
+  [
+    "CSS",
+    new Set([
+      "display",
+      "flex",
+      "grid",
+      "color",
+      "background",
+      "border",
+      "padding",
+      "margin",
+      "width",
+      "height",
+      "position",
+    ]),
+  ],
+  [
+    "HTML",
+    new Set([
+      "html",
+      "head",
+      "body",
+      "script",
+      "style",
+      "div",
+      "span",
+      "button",
+      "input",
+      "section",
+      "main",
+    ]),
+  ],
   ["Markdown", new Set(["TODO", "NOTE", "FIXME"])],
-  ["JSON", new Set(["true", "false", "null"])]
+  ["JSON", new Set(["true", "false", "null"])],
 ]);
 
 function syntaxHighlightLine(line: string, language: string): SyntaxToken[] {
-  const commentIndex = language === "Python" ? line.indexOf("#") : line.indexOf("//");
+  const commentIndex =
+    language === "Python" ? line.indexOf("#") : line.indexOf("//");
   const code = commentIndex >= 0 ? line.slice(0, commentIndex) : line;
   const comment = commentIndex >= 0 ? line.slice(commentIndex) : "";
   const keywords = languageKeywords.get(language) ?? new Set<string>();
   const tokens: SyntaxToken[] = [];
-  const pattern = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][\w$-]*\b|[{}()[\].,:;=+\-*/<>!&|?]+)/g;
+  const pattern =
+    /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][\w$-]*\b|[{}()[\].,:;=+\-*/<>!&|?]+)/g;
   let cursor = 0;
   for (const match of code.matchAll(pattern)) {
     const index = match.index ?? 0;
@@ -1597,7 +3162,17 @@ function syntaxHighlightLine(line: string, language: string): SyntaxToken[] {
     const next = code.slice(index + text.length).trimStart();
     tokens.push({
       text,
-      kind: /^["'`]/.test(text) ? "string" : /^\d/.test(text) ? "number" : keywords.has(text) ? "keyword" : next.startsWith(":") ? "property" : /^[{}()[\].,:;=+\-*/<>!&|?]+$/.test(text) ? "punctuation" : "plain"
+      kind: /^["'`]/.test(text)
+        ? "string"
+        : /^\d/.test(text)
+          ? "number"
+          : keywords.has(text)
+            ? "keyword"
+            : next.startsWith(":")
+              ? "property"
+              : /^[{}()[\].,:;=+\-*/<>!&|?]+$/.test(text)
+                ? "punctuation"
+                : "plain",
     });
     cursor = index + text.length;
   }
@@ -1623,12 +3198,18 @@ function findDefinitionLine(lines: string[], symbol: string) {
   }
   const escaped = escapeRegExp(symbol);
   const patterns = [
-    new RegExp(`\\b(function|class|interface|type|const|let|var)\\s+${escaped}\\b`),
-    new RegExp(`\\b${escaped}\\s*[:=]\\s*(async\\s*)?(function|\\([^)]*\\)\\s*=>|[A-Za-z_$][\\w$]*\\s*=>)`),
+    new RegExp(
+      `\\b(function|class|interface|type|const|let|var)\\s+${escaped}\\b`,
+    ),
+    new RegExp(
+      `\\b${escaped}\\s*[:=]\\s*(async\\s*)?(function|\\([^)]*\\)\\s*=>|[A-Za-z_$][\\w$]*\\s*=>)`,
+    ),
     new RegExp(`\\bdef\\s+${escaped}\\b`),
-    new RegExp(`\\bfn\\s+${escaped}\\b`)
+    new RegExp(`\\bfn\\s+${escaped}\\b`),
   ];
-  const index = lines.findIndex((line) => patterns.some((pattern) => pattern.test(line)));
+  const index = lines.findIndex((line) =>
+    patterns.some((pattern) => pattern.test(line)),
+  );
   return index >= 0 ? index + 1 : undefined;
 }
 
@@ -1638,27 +3219,42 @@ function getCompletionPrefix(text: string, position: number) {
 
 function buildCompletionItems(file: IdeFile, prefix: string) {
   const words = new Set<string>(languageKeywords.get(file.language) ?? []);
-  for (const match of (file.content ?? file.contentLines.join("\n")).matchAll(/\b[A-Za-z_$][\w$]{2,}\b/g)) {
+  for (const match of (file.content ?? file.contentLines.join("\n")).matchAll(
+    /\b[A-Za-z_$][\w$]{2,}\b/g,
+  )) {
     words.add(match[0]);
   }
   return [...words]
-    .filter((word) => word !== prefix && (!prefix || word.toLowerCase().startsWith(prefix.toLowerCase())))
+    .filter(
+      (word) =>
+        word !== prefix &&
+        (!prefix || word.toLowerCase().startsWith(prefix.toLowerCase())),
+    )
     .sort((left, right) => left.localeCompare(right))
     .slice(0, 8);
 }
 
-function getHoverTextPosition(textarea: HTMLTextAreaElement, event: MouseEvent) {
+function getHoverTextPosition(
+  textarea: HTMLTextAreaElement,
+  event: MouseEvent,
+) {
   const rect = textarea.getBoundingClientRect();
   const computed = window.getComputedStyle(textarea);
   const lineHeight = Number.parseFloat(computed.lineHeight) || 24;
   const paddingLeft = Number.parseFloat(computed.paddingLeft) || 0;
   const paddingTop = Number.parseFloat(computed.paddingTop) || 0;
   const charWidth = getMonospaceCharacterWidth(textarea);
-  const x = Math.max(0, event.clientX - rect.left + textarea.scrollLeft - paddingLeft);
-  const y = Math.max(0, event.clientY - rect.top + textarea.scrollTop - paddingTop);
+  const x = Math.max(
+    0,
+    event.clientX - rect.left + textarea.scrollLeft - paddingLeft,
+  );
+  const y = Math.max(
+    0,
+    event.clientY - rect.top + textarea.scrollTop - paddingTop,
+  );
   return {
     line: Math.floor(y / lineHeight) + 1,
-    column: Math.floor(x / charWidth) + 1
+    column: Math.floor(x / charWidth) + 1,
   };
 }
 
@@ -1680,8 +3276,12 @@ function getMonospaceCharacterWidth(element: HTMLElement) {
 
 function describeSymbolHover(file: IdeFile, symbol: string) {
   const definitionLine = findDefinitionLine(file.contentLines, symbol);
-  const declaration = definitionLine ? file.contentLines[definitionLine - 1]?.trim() : undefined;
-  const keyword = languageKeywords.get(file.language)?.has(symbol) ? `${symbol}: ${file.language} keyword` : undefined;
+  const declaration = definitionLine
+    ? file.contentLines[definitionLine - 1]?.trim()
+    : undefined;
+  const keyword = languageKeywords.get(file.language)?.has(symbol)
+    ? `${symbol}: ${file.language} keyword`
+    : undefined;
   if (declaration) {
     return `${declaration}\n\nDefined in ${file.name}:${definitionLine}`;
   }
@@ -1693,7 +3293,12 @@ function getTextPosition(text: string, position: number) {
   return { line: before.length, column: (before.at(-1)?.length ?? 0) + 1 };
 }
 
-function applyCompletionAt(text: string, position: number, prefix: string, completion: string) {
+function applyCompletionAt(
+  text: string,
+  position: number,
+  prefix: string,
+  completion: string,
+) {
   return `${text.slice(0, Math.max(0, position - prefix.length))}${completion}${text.slice(position)}`;
 }
 
@@ -1718,16 +3323,103 @@ function inferLanguage(name: string) {
   return "Plain Text";
 }
 
-function StatusBar(props: { branch: string; dirtyCount: number; line: number; column: number; encoding: string; language: string }) {
+function StatusBar(props: {
+  branch: string;
+  dirtyCount: number;
+  line: number;
+  column: number;
+  encoding: string;
+  language: string;
+}) {
   return (
-    <footer class="ide-status-bar flex h-7 shrink-0 items-center justify-between gap-3 px-3 text-[0.68rem] font-medium">
-      <div class="flex min-w-0 items-center gap-3">
-        <span class="inline-flex items-center gap-1"><GitBranch class="h-3.5 w-3.5" />{props.branch}</span>
-        <span class="inline-flex items-center gap-1"><GitCommit class="h-3.5 w-3.5" />{props.dirtyCount} dirty</span>
-        <span class="inline-flex items-center gap-1"><GitPullRequest class="h-3.5 w-3.5" />0 PR</span>
+    <footer
+      class={
+        stylex.attrs(
+          ideStyles.statusBar,
+          ideUtilityStyles.flex,
+          ideUtilityStyles.h7,
+          ideUtilityStyles.shrink0,
+          ideUtilityStyles.itemsCenter,
+          ideUtilityStyles.justifyBetween,
+          ideUtilityStyles.gap3,
+          ideUtilityStyles.px3,
+          ideUtilityStyles.text068,
+          ideUtilityStyles.fontMedium,
+        ).class
+      }
+    >
+      <div
+        class={
+          stylex.attrs(
+            ideUtilityStyles.flex,
+            ideUtilityStyles.minW0,
+            ideUtilityStyles.itemsCenter,
+            ideUtilityStyles.gap3,
+          ).class
+        }
+      >
+        <span
+          class={
+            stylex.attrs(
+              ideUtilityStyles.inlineFlex,
+              ideUtilityStyles.itemsCenter,
+              ideUtilityStyles.gap1,
+            ).class
+          }
+        >
+          <GitBranch
+            class={
+              stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+            }
+          />
+          {props.branch}
+        </span>
+        <span
+          class={
+            stylex.attrs(
+              ideUtilityStyles.inlineFlex,
+              ideUtilityStyles.itemsCenter,
+              ideUtilityStyles.gap1,
+            ).class
+          }
+        >
+          <GitCommit
+            class={
+              stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+            }
+          />
+          {props.dirtyCount} dirty
+        </span>
+        <span
+          class={
+            stylex.attrs(
+              ideUtilityStyles.inlineFlex,
+              ideUtilityStyles.itemsCenter,
+              ideUtilityStyles.gap1,
+            ).class
+          }
+        >
+          <GitPullRequest
+            class={
+              stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
+            }
+          />
+          0 PR
+        </span>
       </div>
-      <div class="flex shrink-0 items-center gap-3">
-        <span>Ln {props.line}, Col {props.column}</span>
+      <div
+        class={
+          stylex.attrs(
+            ideUtilityStyles.flex,
+            ideUtilityStyles.shrink0,
+            ideUtilityStyles.itemsCenter,
+            ideUtilityStyles.gap3,
+          ).class
+        }
+      >
+        <span>
+          Ln {props.line}, Col {props.column}
+        </span>
         <span>{props.encoding}</span>
         <span>{props.language}</span>
       </div>
@@ -1738,7 +3430,12 @@ function StatusBar(props: { branch: string; dirtyCount: number; line: number; co
 function CommandPalette(props: {
   open: boolean;
   query: string;
-  commands: Array<{ id: string; label: string; detail: string; run: () => void }>;
+  commands: Array<{
+    id: string;
+    label: string;
+    detail: string;
+    run: () => void;
+  }>;
   onQuery: (query: string) => void;
   onClose: () => void;
 }) {
@@ -1753,14 +3450,74 @@ function CommandPalette(props: {
 
   return (
     <Show when={isOpen()}>
-      <div class="fixed inset-0 z-[90] bg-black/35 px-3 pt-[12vh]" onPointerDown={props.onClose}>
-        <section class="ide-command-palette mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-(--ide-border) bg-(--ide-surface) shadow-2xl" onPointerDown={(event) => event.stopPropagation()}>
-          <div class="flex items-center gap-2 border-b border-(--ide-border) px-3 py-2">
-            <Code2 class="h-4 w-4 text-(--ide-muted)" />
+      <div
+        class={
+          stylex.attrs(
+            ideUtilityStyles.fixed,
+            ideUtilityStyles.inset0,
+            ideUtilityStyles.z90,
+            ideUtilityStyles.bgBlack35,
+            ideUtilityStyles.px3,
+            ideUtilityStyles.ptViewport,
+          ).class
+        }
+        onPointerDown={props.onClose}
+      >
+        <section
+          class={
+            stylex.attrs(
+              ideStyles.commandSurface,
+              ideUtilityStyles.mxAuto,
+              ideUtilityStyles.flex,
+              ideUtilityStyles.wFull,
+              ideUtilityStyles.maxW2xl,
+              ideUtilityStyles.flexCol,
+              ideUtilityStyles.overflowHidden,
+              ideUtilityStyles.rounded2xl,
+              ideUtilityStyles.border,
+              ideUtilityStyles.borderIde,
+              ideUtilityStyles.bgIdeSurface,
+              ideUtilityStyles.shadow2xl,
+            ).class
+          }
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div
+            class={
+              stylex.attrs(
+                ideUtilityStyles.flex,
+                ideUtilityStyles.itemsCenter,
+                ideUtilityStyles.gap2,
+                ideUtilityStyles.borderB,
+                ideUtilityStyles.borderIde,
+                ideUtilityStyles.px3,
+                ideUtilityStyles.py2,
+              ).class
+            }
+          >
+            <Code2
+              class={
+                stylex.attrs(
+                  ideUtilityStyles.h4,
+                  ideUtilityStyles.w4,
+                  ideUtilityStyles.textIdeMuted,
+                ).class
+              }
+            />
             <input
               ref={inputRef}
               data-test-ide-command-input=""
-              class="h-9 min-w-0 flex-1 bg-transparent text-sm text-(--ide-text) outline-none"
+              class={
+                stylex.attrs(
+                  ideUtilityStyles.h9,
+                  ideUtilityStyles.minW0,
+                  ideUtilityStyles.flex1,
+                  ideUtilityStyles.bgTransparent,
+                  ideUtilityStyles.textSm,
+                  ideUtilityStyles.textIdeText,
+                  ideUtilityStyles.outlineNone,
+                ).class
+              }
               aria-label="IDE command palette"
               value={props.query}
               placeholder="Type a command"
@@ -1776,19 +3533,45 @@ function CommandPalette(props: {
               }}
             />
           </div>
-          <div class="max-h-80 overflow-auto p-1.5">
+          <div
+            class={
+              stylex.attrs(
+                ideUtilityStyles.maxH80,
+                ideUtilityStyles.overflowAuto,
+                ideUtilityStyles.p15,
+              ).class
+            }
+          >
             <For each={props.commands}>
               {(command) => (
                 <button
                   type="button"
-                  class="ide-command-row"
+                  class={stylex.attrs(ideStyles.commandRow).class}
                   onClick={() => {
                     command.run();
                     props.onClose();
                   }}
                 >
-                  <span class="font-semibold text-(--ide-text)">{command.label}</span>
-                  <span class="truncate text-(--ide-muted)">{command.detail}</span>
+                  <span
+                    class={
+                      stylex.attrs(
+                        ideUtilityStyles.fontSemibold,
+                        ideUtilityStyles.textIdeText,
+                      ).class
+                    }
+                  >
+                    {command.label}
+                  </span>
+                  <span
+                    class={
+                      stylex.attrs(
+                        ideUtilityStyles.truncate,
+                        ideUtilityStyles.textIdeMuted,
+                      ).class
+                    }
+                  >
+                    {command.detail}
+                  </span>
                 </button>
               )}
             </For>
@@ -1833,7 +3616,11 @@ function eventMatchesHotkey(event: KeyboardEvent, hotkey: string | undefined) {
   }
   const actual = normalizeKeyboardEventChord(event);
   const expected = normalizeHotkeyChord(hotkey);
-  return actual.key === expected.key && actual.modifiers.size === expected.modifiers.size && [...actual.modifiers].every((modifier) => expected.modifiers.has(modifier));
+  return (
+    actual.key === expected.key &&
+    actual.modifiers.size === expected.modifiers.size &&
+    [...actual.modifiers].every((modifier) => expected.modifiers.has(modifier))
+  );
 }
 
 function normalizeKeyboardEventChord(event: KeyboardEvent) {
@@ -1849,7 +3636,7 @@ function normalizeKeyboardEventChord(event: KeyboardEvent) {
   }
   return {
     modifiers,
-    key: normalizeHotkeyKey(event.key === " " ? "space" : event.key)
+    key: normalizeHotkeyKey(event.key === " " ? "space" : event.key),
   };
 }
 
@@ -1861,7 +3648,9 @@ function normalizeHotkeyChord(hotkey: string) {
   const modifiers = new Set<string>();
   for (const part of parts.slice(0, -1)) {
     const normalized = part.toLowerCase();
-    if (["mod", "meta", "cmd", "command", "ctrl", "control"].includes(normalized)) {
+    if (
+      ["mod", "meta", "cmd", "command", "ctrl", "control"].includes(normalized)
+    ) {
       modifiers.add("mod");
     } else if (normalized === "alt" || normalized === "option") {
       modifiers.add("alt");
@@ -1871,21 +3660,32 @@ function normalizeHotkeyChord(hotkey: string) {
   }
   return {
     modifiers,
-    key: normalizeHotkeyKey(parts.at(-1) ?? "")
+    key: normalizeHotkeyKey(parts.at(-1) ?? ""),
   };
 }
 
 function normalizeHotkeyKey(key: string) {
-  return key.length === 1 ? key.toLowerCase() : key.toLowerCase().replace(/^arrow/, "");
+  return key.length === 1
+    ? key.toLowerCase()
+    : key.toLowerCase().replace(/^arrow/, "");
 }
 
-function Sash(props: { label: string; orientation: "vertical" | "horizontal"; onPointerDown: (event: PointerEvent) => void }) {
+function Sash(props: {
+  label: string;
+  orientation: "vertical" | "horizontal";
+  onPointerDown: (event: PointerEvent) => void;
+}) {
   return (
     <Tooltip content={props.label}>
       <button
         type="button"
         data-test-ide-sash=""
-        class={props.orientation === "vertical" ? "ide-sash ide-sash-vertical" : "ide-sash ide-sash-horizontal"}
+        class={cn(
+          stylex.attrs(ideStyles.sash).class,
+          props.orientation === "vertical"
+            ? stylex.attrs(ideStyles.sashVertical).class
+            : stylex.attrs(ideStyles.sashHorizontal).class,
+        )}
         aria-label={props.label}
         onPointerDown={props.onPointerDown}
       />
@@ -1895,9 +3695,29 @@ function Sash(props: { label: string; orientation: "vertical" | "horizontal"; on
 
 function SidebarSkeleton() {
   return (
-    <div data-test-ide-sidebar-skeleton="" class="flex flex-col gap-2 p-3">
+    <div
+      data-test-ide-sidebar-skeleton=""
+      class={
+        stylex.attrs(
+          ideUtilityStyles.flex,
+          ideUtilityStyles.flexCol,
+          ideUtilityStyles.gap2,
+          ideUtilityStyles.p3,
+        ).class
+      }
+    >
       <For each={[1, 2, 3, 4, 5, 6]}>
-        {() => <div class="ide-skeleton h-7 rounded-lg" />}
+        {() => (
+          <div
+            class={
+              stylex.attrs(
+                ideStyles.skeleton,
+                ideUtilityStyles.h7,
+                ideUtilityStyles.roundedLg,
+              ).class
+            }
+          />
+        )}
       </For>
     </div>
   );
@@ -1905,34 +3725,145 @@ function SidebarSkeleton() {
 
 function EditorSkeleton() {
   return (
-    <div data-test-ide-editor-skeleton="" class="flex min-h-0 flex-1 flex-col gap-2 p-4">
-      <div class="ide-skeleton h-7 w-2/5 rounded-lg" />
+    <div
+      data-test-ide-editor-skeleton=""
+      class={
+        stylex.attrs(
+          ideUtilityStyles.flex,
+          ideUtilityStyles.minH0,
+          ideUtilityStyles.flex1,
+          ideUtilityStyles.flexCol,
+          ideUtilityStyles.gap2,
+          ideUtilityStyles.p4,
+        ).class
+      }
+    >
+      <div
+        class={
+          stylex.attrs(
+            ideStyles.skeleton,
+            ideUtilityStyles.h7,
+            ideUtilityStyles.wTwoFifths,
+            ideUtilityStyles.roundedLg,
+          ).class
+        }
+      />
       <For each={[1, 2, 3, 4, 5, 6, 7]}>
-        {(index) => <div class="ide-skeleton h-5 rounded-md" style={{ width: `${80 - index * 6}%` }} />}
+        {(index) => (
+          <div
+            class={
+              stylex.attrs(
+                ideStyles.skeleton,
+                ideUtilityStyles.h5,
+                ideUtilityStyles.roundedMd,
+              ).class
+            }
+            style={{ width: `${80 - index * 6}%` }}
+          />
+        )}
       </For>
     </div>
   );
 }
 
-function IdeToasts(props: { toasts: IdeToast[]; onDismiss: (id: string) => void }) {
+function IdeToasts(props: {
+  toasts: IdeToast[];
+  onDismiss: (id: string) => void;
+}) {
   return (
-    <div class="pointer-events-none absolute bottom-10 right-4 z-[60] flex w-[min(22rem,calc(100%-2rem))] flex-col gap-2">
+    <div
+      class={
+        stylex.attrs(
+          ideUtilityStyles.pointerEventsNone,
+          ideUtilityStyles.absolute,
+          ideUtilityStyles.bottom10,
+          ideUtilityStyles.right4,
+          ideUtilityStyles.z60,
+          ideUtilityStyles.flex,
+          ideUtilityStyles.toastWidth,
+          ideUtilityStyles.flexCol,
+          ideUtilityStyles.gap2,
+        ).class
+      }
+    >
       <For each={props.toasts}>
         {(toast) => (
           <div
             class={cn(
-              "pointer-events-auto rounded-xl border bg-(--ide-surface) p-3 text-xs shadow-2xl",
-              toast.tone === "error" ? "border-red-400" : toast.tone === "warning" ? "border-amber-400" : "border-(--ide-border)"
+              stylex.attrs(
+                ideUtilityStyles.pointerEventsAuto,
+                ideUtilityStyles.roundedXl,
+                ideUtilityStyles.border,
+                ideUtilityStyles.bgIdeSurface,
+                ideUtilityStyles.p3,
+                ideUtilityStyles.textXs,
+                ideUtilityStyles.shadow2xl,
+              ).class,
+              toast.tone === "error"
+                ? stylex.attrs(ideStyles.toastError).class
+                : toast.tone === "warning"
+                  ? stylex.attrs(ideStyles.toastWarning).class
+                  : stylex.attrs(ideStyles.toastInfo).class,
             )}
           >
-            <div class="flex items-start gap-2">
-              <CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-(--ide-accent)" />
-              <div class="min-w-0 flex-1">
-                <div class="font-semibold text-(--ide-text)">{toast.title}</div>
-                <div class="mt-1 text-(--ide-muted)">{toast.detail}</div>
+            <div
+              class={
+                stylex.attrs(
+                  ideUtilityStyles.flex,
+                  ideUtilityStyles.itemsStart,
+                  ideUtilityStyles.gap2,
+                ).class
+              }
+            >
+              <CheckCircle2
+                class={
+                  stylex.attrs(
+                    ideUtilityStyles.mt05,
+                    ideUtilityStyles.h4,
+                    ideUtilityStyles.w4,
+                    ideUtilityStyles.shrink0,
+                    ideUtilityStyles.textIdeAccent,
+                  ).class
+                }
+              />
+              <div
+                class={
+                  stylex.attrs(ideUtilityStyles.minW0, ideUtilityStyles.flex1)
+                    .class
+                }
+              >
+                <div
+                  class={
+                    stylex.attrs(
+                      ideUtilityStyles.fontSemibold,
+                      ideUtilityStyles.textIdeText,
+                    ).class
+                  }
+                >
+                  {toast.title}
+                </div>
+                <div
+                  class={
+                    stylex.attrs(
+                      ideUtilityStyles.mt1,
+                      ideUtilityStyles.textIdeMuted,
+                    ).class
+                  }
+                >
+                  {toast.detail}
+                </div>
               </div>
-              <button type="button" class="text-(--ide-muted)" aria-label={`Dismiss ${toast.title}`} onClick={() => props.onDismiss(toast.id)}>
-                <X class="h-4 w-4" />
+              <button
+                type="button"
+                class={stylex.attrs(ideUtilityStyles.textIdeMuted).class}
+                aria-label={`Dismiss ${toast.title}`}
+                onClick={() => props.onDismiss(toast.id)}
+              >
+                <X
+                  class={
+                    stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4).class
+                  }
+                />
               </button>
             </div>
           </div>

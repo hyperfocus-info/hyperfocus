@@ -6,7 +6,7 @@ import { createToastStoreForProvider, setActiveToastStore } from "../toast-store
 import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
 import { AssistantsPanel } from "./assistants-panel";
 import { createAssistantChatBrowserMessages } from "./chat-panel.browser-data";
-import "../legacy.css";
+import "../global-styles";
 
 setActiveHarnessStore(createHarnessStore());
 setActiveToastStore(createToastStoreForProvider());

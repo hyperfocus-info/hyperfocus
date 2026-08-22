@@ -41,7 +41,8 @@ createUiTest("Dialog", () => {
     expect(screen.getByText("Dialog description")).not.toBeNull();
     expect(screen.getByText("Visible body")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Footer action" })).not.toBeNull();
-    expect(dialog.classList.contains("app-zoom-portal-dialog")).toBe(true);
+    expect(dialog.hasAttribute("data-test-dialog")).toBe(true);
+    expect(dialog.classList.contains("surface")).toBe(true);
     expect(dialog.querySelector(".test-dialog-body")).not.toBeNull();
   });
 

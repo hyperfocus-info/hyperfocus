@@ -43,7 +43,8 @@ if (process.env.HARNESS_TEST_SKIP_UI_PRELOAD !== "1") {
     const defineVars = (variables: Record<string, unknown>) => Object.fromEntries(
       Object.keys(variables).map((key) => [key, `--hyperfocus-${key}`])
     );
-    return { default: { create, attrs, defineVars }, create, attrs, defineVars };
+    const keyframes = () => "stylex-test-keyframes";
+    return { default: { create, attrs, defineVars, keyframes }, create, attrs, defineVars, keyframes };
   });
 
   (globalThis as typeof globalThis & { __padPilotDisablePortals?: boolean }).__padPilotDisablePortals = true;

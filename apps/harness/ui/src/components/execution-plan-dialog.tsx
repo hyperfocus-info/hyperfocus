@@ -1,4 +1,5 @@
 import { For, Show } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { AlertTriangle } from "lucide-solid";
 import type { ExecutionPlan } from "../../../shared/protocol";
 import { harnessStore } from "../harness-store";
@@ -7,6 +8,7 @@ import { openIdeWindow } from "../lib/ide-window";
 import { FileLinkedText, type FileLinkConfig } from "./file-linked-text";
 import { MarkdownContent } from "./markdown-content";
 import { Dialog } from "./primitives/dialog";
+import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 
 type ExecutionPlanDialogProps = {
   executionPlan?: ExecutionPlan;
@@ -47,13 +49,13 @@ export function ExecutionPlanDialog(props: ExecutionPlanDialogProps) {
       title="Execution plan"
       eyebrow="Plan"
       description="Planner summary, prerequisites, contract buckets, verification scope, and correctness policy."
-      class="max-w-4xl"
-      contentClass="flex max-h-[80vh] flex-col gap-4 overflow-auto"
+      class={stylex.attrs(styles.dialogWide).class}
+      contentClass={stylex.attrs(styles.dialogContent).class}
     >
       <Show when={props.executionPlan}>
         {(executionPlan) => (
-          <div class="space-y-5 text-[0.75rem] leading-6 text-(--foreground)">
-            <div class="grid gap-2 md:grid-cols-2">
+          <div {...stylex.attrs(styles.planBody)}>
+            <div {...stylex.attrs(styles.planFacts)}>
               <div>Run: {executionPlan().runId}</div>
               <div>Iteration: {executionPlan().iteration}</div>
               <div>Route: {executionPlan().route}</div>
@@ -70,43 +72,43 @@ export function ExecutionPlanDialog(props: ExecutionPlanDialogProps) {
               <div>Origin: {executionPlan().origin}</div>
             </div>
             <Show when={hasBranchfsSizeWarning()}>
-              <div class="inline-flex w-fit items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[0.625rem] font-medium text-amber-800">
-                <AlertTriangle class="h-3 w-3" />
+              <div {...stylex.attrs(styles.warningBadge)}>
+                <AlertTriangle {...stylex.attrs(styles.iconXs)} />
                 BranchFS large
               </div>
             </Show>
 
             <section>
-              <div class="text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
+              <div {...stylex.attrs(styles.planSectionLabel)}>
                 Summary
               </div>
-              <MarkdownContent content={() => executionPlan().summary} class="mt-2" fileLinks={fileLinks()} />
+              <MarkdownContent content={() => executionPlan().summary} class={stylex.attrs(styles.marginTopMd).class} fileLinks={fileLinks()} />
             </section>
 
             <section>
-              <div class="text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
+              <div {...stylex.attrs(styles.planSectionLabel)}>
                 Execution brief
               </div>
-              <MarkdownContent content={() => executionPlan().finalExecutionBrief} class="mt-2" fileLinks={fileLinks()} />
+              <MarkdownContent content={() => executionPlan().finalExecutionBrief} class={stylex.attrs(styles.marginTopMd).class} fileLinks={fileLinks()} />
             </section>
 
             <section>
-              <div class="text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
+              <div {...stylex.attrs(styles.planSectionLabel)}>
                 Prerequisites
               </div>
               <Show
                 when={executionPlan().prerequisites.length > 0}
-                fallback={<div class="mt-2 text-(--muted)">No explicit prerequisites.</div>}
+                fallback={<div {...stylex.attrs(styles.planEmpty)}>No explicit prerequisites.</div>}
               >
-                <div class="mt-2 space-y-2">
+                <div {...stylex.attrs(styles.planStack)}>
                   <For each={executionPlan().prerequisites}>
                     {(prerequisite) => (
-                      <div class="rounded-2xl border border-(--border) bg-white/60 p-3">
-                        <div class="font-semibold">{prerequisite.title}</div>
-                        <MarkdownContent content={() => prerequisite.instruction} class="mt-1" tone="muted" size="compact" fileLinks={fileLinks()} />
-                        <div class="mt-1 text-(--muted)">Reason:</div>
+                      <div {...stylex.attrs(styles.planCard)}>
+                        <div {...stylex.attrs(styles.semibold)}>{prerequisite.title}</div>
+                        <MarkdownContent content={() => prerequisite.instruction} class={stylex.attrs(styles.marginTopSm).class} tone="muted" size="compact" fileLinks={fileLinks()} />
+                        <div {...stylex.attrs(styles.planMeta)}>Reason:</div>
                         <MarkdownContent content={() => prerequisite.reason} tone="muted" size="compact" fileLinks={fileLinks()} />
-                        <div class="mt-1 text-(--muted)">Owner: {prerequisite.owner}</div>
+                        <div {...stylex.attrs(styles.planMeta)}>Owner: {prerequisite.owner}</div>
                       </div>
                     )}
                   </For>
@@ -115,28 +117,28 @@ export function ExecutionPlanDialog(props: ExecutionPlanDialogProps) {
             </section>
 
             <section>
-              <div class="text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
+              <div {...stylex.attrs(styles.planSectionLabel)}>
                 Contracts
               </div>
-              <div class="mt-2 space-y-2">
+              <div {...stylex.attrs(styles.planStack)}>
                 <For each={executionPlan().contracts}>
                   {(contract) => (
-                    <div class="rounded-2xl border border-(--border) bg-white/60 p-3">
-                      <div class="font-semibold">{contract.title}</div>
-                      <MarkdownContent content={() => contract.instruction} class="mt-1" tone="muted" size="compact" fileLinks={fileLinks()} />
-                      <div class="mt-1 text-(--muted)">
+                    <div {...stylex.attrs(styles.planCard)}>
+                      <div {...stylex.attrs(styles.semibold)}>{contract.title}</div>
+                      <MarkdownContent content={() => contract.instruction} class={stylex.attrs(styles.marginTopSm).class} tone="muted" size="compact" fileLinks={fileLinks()} />
+                      <div {...stylex.attrs(styles.planMeta)}>
                         <FileLinkedText text={`Owned paths: ${contract.ownedPaths.join(", ")}`} fileLinks={fileLinks()} />
                       </div>
-                      <div class="mt-1 text-(--muted)">
+                      <div {...stylex.attrs(styles.planMeta)}>
                         <FileLinkedText text={`Deliverables: ${contract.deliverables.join(", ")}`} fileLinks={fileLinks()} />
                       </div>
-                      <div class="mt-1 text-(--muted)">
+                      <div {...stylex.attrs(styles.planMeta)}>
                         <FileLinkedText text={`Integrates with: ${contract.integrationPoints.join(", ") || "none"}`} fileLinks={fileLinks()} />
                       </div>
-                      <div class="mt-1 text-(--muted)">
+                      <div {...stylex.attrs(styles.planMeta)}>
                         <FileLinkedText text={`Verify: ${contract.verificationCommands.join(" && ")}`} fileLinks={fileLinks()} />
                       </div>
-                      <div class="mt-1 text-(--muted)">
+                      <div {...stylex.attrs(styles.planMeta)}>
                         <FileLinkedText text={`Merge notes: ${contract.mergeNotes}`} fileLinks={fileLinks()} />
                       </div>
                     </div>

@@ -7,7 +7,7 @@ import {
   type ServerEvent
 } from "../../../shared/protocol";
 import { defaultAgentCatalog } from "../../../shared/agent-catalog";
-import "../legacy.css";
+import "../global-styles";
 import { App } from "../app";
 import {
   createEmptyAssistantsState,

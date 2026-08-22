@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { FolderOpen, Search } from "lucide-solid";
 import { createRequestId, type ProjectSearchResult } from "../../../shared/protocol";
 import { harnessStore } from "../harness-store";
@@ -13,6 +14,7 @@ import { Dialog } from "./primitives/dialog";
 import { Input } from "./primitives/input";
 import { Button } from "./primitives/button";
 import { Tooltip } from "./primitives/tooltip";
+import { projectNavigationStyles as styles } from "./project-navigation.styles";
 
 type WorkspaceMatch = {
   projectId: string;
@@ -318,12 +320,12 @@ export function ProjectSwitcherDialog() {
       title="Open or switch project"
       eyebrow="Projects"
       description="Cmd/Ctrl+K reliable. Cmd/Ctrl+Space works when browser receives it."
-      class="max-w-3xl"
+      class={stylex.attrs(styles.switcherDialog).class}
       onClose={() => harnessStore.closeProjectSwitcher()}
       footer={
         <ActionButton
           tooltip="Browse for project folder"
-          icon={<FolderOpen class="h-4 w-4" />}
+          icon={<FolderOpen class={stylex.attrs(styles.iconMd).class} />}
           variant="secondary"
           onClick={handleBrowse}
         >
@@ -331,35 +333,35 @@ export function ProjectSwitcherDialog() {
         </ActionButton>
       }
     >
-      <div class="space-y-3">
-        <div class="relative">
+      <div class={stylex.attrs(styles.switcherStack).class}>
+        <div class={stylex.attrs(styles.searchField).class}>
           <Input
             ref={inputRef}
             value={query()}
             placeholder="Search recent projects or type a path"
-            class="relative bg-white"
+            class={stylex.attrs(styles.searchInput).class}
             data-project-switcher-input="true"
             onInput={(event) => harnessStore.setProjectSearchQuery(event.currentTarget.value)}
             onKeyDown={handleInputKeyDown}
           />
           <Show when={completionSuffix()}>
             {(suffix) => (
-              <div class="pointer-events-none absolute inset-0 flex items-center rounded-xl border border-transparent px-3 py-2 text-xs">
-                <span class="invisible whitespace-pre">{query()}</span>
-                <span class="truncate text-(--muted)">{suffix()}</span>
+              <div class={stylex.attrs(styles.completionOverlay).class}>
+                <span class={stylex.attrs(styles.completionPrefix).class}>{query()}</span>
+                <span class={stylex.attrs(styles.completionSuffix).class}>{suffix()}</span>
               </div>
             )}
           </Show>
-          <Search class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-(--muted)" />
+          <Search class={stylex.attrs(styles.searchIcon).class} />
         </div>
 
-        <div class="flex flex-wrap gap-2 text-[0.625rem] uppercase tracking-[0.14em] text-(--muted)">
+        <div class={stylex.attrs(styles.keyboardHints).class}>
           <span>Tab autocomplete</span>
           <span>Enter open</span>
           <span>↑↓ move</span>
         </div>
 
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div class={stylex.attrs(styles.resultGrid).class}>
           <ResultSection title="Recent projects">
             <Show
               when={workspaceMatches().length > 0}
@@ -432,16 +434,16 @@ export function ProjectSwitcherDialog() {
 
 function ResultSection(props: { title: string; children: any }) {
   return (
-    <section class="space-y-2">
-      <div class="text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">{props.title}</div>
-      <div class="space-y-2">{props.children}</div>
+    <section class={stylex.attrs(styles.resultSection).class}>
+      <div class={stylex.attrs(styles.resultSectionTitle).class}>{props.title}</div>
+      <div class={stylex.attrs(styles.resultSection).class}>{props.children}</div>
     </section>
   );
 }
 
 function ResultEmptyState(props: { message: string }) {
   return (
-    <div class="rounded-2xl border border-dashed border-(--border) bg-white/45 p-4 text-xs leading-5 text-(--muted)">
+    <div class={stylex.attrs(styles.resultEmpty).class}>
       {props.message}
     </div>
   );
@@ -458,24 +460,26 @@ function ResultRow(props: {
     <Button
       tooltip={props.result.source === "workspace" && props.result.disabled ? "Project is already in workspace" : props.result.actionLabel}
       variant={props.selected ? "default" : "secondary"}
-      class="h-auto w-full justify-start rounded-2xl px-3 py-3 text-left"
-      classList={{ "bg-white/60": !props.selected }}
+      class={[
+        stylex.attrs(styles.resultRow).class,
+        props.selected ? "" : stylex.attrs(styles.resultRowIdle).class
+      ].filter(Boolean).join(" ")}
       aria-label={`${props.result.actionLabel} ${props.result.rootPath}`}
       disabled={props.result.source === "workspace" && props.result.disabled}
       onMouseEnter={props.onHover}
       onClick={props.onOpen}
     >
-      <div class="min-w-0 flex-1">
-        <div class="flex min-w-0 items-center gap-2">
+      <div class={stylex.attrs(styles.resultBody).class}>
+        <div class={stylex.attrs(styles.resultHeading).class}>
           <Tooltip content={props.result.name}>
-            <span class="min-w-0 flex-1 truncate font-semibold">{props.result.name}</span>
+            <span class={stylex.attrs(styles.resultName).class}>{props.result.name}</span>
           </Tooltip>
-          <span class="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[0.55rem] uppercase tracking-[0.14em]">
+          <span class={stylex.attrs(styles.resultBadge).class}>
             {props.badgeLabel}
           </span>
-          <span class="shrink-0 text-[0.55rem] uppercase tracking-[0.14em] opacity-80">{props.result.actionLabel}</span>
+          <span class={stylex.attrs(styles.resultAction).class}>{props.result.actionLabel}</span>
         </div>
-        <div class="mt-1 truncate text-[0.675rem] opacity-80">{truncateMiddle(props.result.rootPath, 52)}</div>
+        <div class={stylex.attrs(styles.resultPath).class}>{truncateMiddle(props.result.rootPath, 52)}</div>
         <ProjectActivityBadges result={props.result} />
       </div>
     </Button>
@@ -493,13 +497,13 @@ function ProjectActivityBadges(props: { result: DialogResult }) {
 
   return (
     <Show when={badges().length > 0 || props.result.lastThreadPreview}>
-      <div class="mt-2 grid gap-1">
+      <div class={stylex.attrs(styles.activity).class}>
         <Show when={props.result.lastThreadPreview}>
-          {(preview) => <div class="truncate text-[0.625rem] opacity-75">{preview()}</div>}
+          {(preview) => <div class={stylex.attrs(styles.activityPreview).class}>{preview()}</div>}
         </Show>
-        <div class="flex flex-wrap gap-1">
+        <div class={stylex.attrs(styles.activityBadges).class}>
           <For each={badges()}>
-            {(badge) => <span class="rounded-full border border-current/15 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-[0.12em] opacity-80">{badge}</span>}
+            {(badge) => <span class={stylex.attrs(styles.activityBadge).class}>{badge}</span>}
           </For>
         </div>
       </div>

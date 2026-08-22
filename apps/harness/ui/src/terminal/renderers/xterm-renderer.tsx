@@ -6,12 +6,14 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import { createEffect, onCleanup, onMount } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { resolveTerminalKeyboardAction } from "../terminal-keybindings";
 import { findTerminalLinks, openTerminalLink, resolveTerminalFileTarget, type TerminalLinkTarget } from "../terminal-links";
 import { closeTerminalSearch, toggleTerminalSearch } from "../terminal-search-actions";
 import { terminalStore } from "../terminal-store";
 import { sendTerminalInput } from "../terminal-transport";
 import { readTerminalTheme } from "../terminal-theme";
+import { terminalStyles as styles, terminalUtilities as utilities } from "../terminal.styles";
 
 export type XtermRendererHandle = {
   findNext: (query: string) => boolean;
@@ -128,7 +130,6 @@ export function XtermRenderer(props: {
       // WebGL is an optional acceleration path; xterm continues with DOM/canvas rendering.
     }
     terminal.open(host!);
-    terminal.element?.classList.add("terminal-xterm-instance");
     fitTerminal();
     terminal.onData((data) => {
       if (props.readOnly) {
@@ -290,8 +291,8 @@ export function XtermRenderer(props: {
   });
 
   return (
-    <div class="terminal-xterm-shell h-full min-h-0 w-full overflow-hidden" data-test-xterm-renderer="">
-      <div ref={host} class="h-full min-h-0 w-full overflow-hidden" />
+    <div class={stylex.attrs(styles.xtermShell, utilities.hFull, utilities.minH0, utilities.wFull, utilities.overflowHidden).class} data-test-xterm-renderer="">
+      <div ref={host} class={stylex.attrs(utilities.hFull, utilities.minH0, utilities.wFull, utilities.overflowHidden).class} />
     </div>
   );
 }

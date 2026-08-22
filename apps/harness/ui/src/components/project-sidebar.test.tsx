@@ -160,7 +160,7 @@ createUiTest("ProjectSidebar", () => {
     render(() => <ProjectSidebar />);
 
     const doneBadge = screen.getByText("Done");
-    expect(doneBadge.closest("[data-test-status-chip]")?.className).toContain("status-chip-success");
+    expect(doneBadge.closest("[data-test-status-chip]")?.className).toContain("success");
     expect((screen.getByRole("button", { name: `Remove ${project.name}` }) as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -190,9 +190,9 @@ createUiTest("ProjectSidebar", () => {
 
     const projectCard = document.querySelector("[data-test-project-card][data-project-id='project-themed-active']");
     const threadCard = document.querySelector("[data-test-project-thread-card][data-thread-id='thread-active']");
-    expect(projectCard?.className).toContain("dense-card-selected");
+    expect(projectCard?.className).toContain("selectedCard");
     expect(projectCard?.className).not.toContain("rgba(255");
-    expect(threadCard?.className).toContain("dense-card-selected");
+    expect(threadCard?.className).toContain("selectedCard");
   });
 
   it("activates the project before activating a thread in another project", () => {
@@ -408,14 +408,13 @@ createUiTest("ProjectSidebar", () => {
 
     render(() => <ProjectSidebar />);
 
-    const deleteButton = screen.getAllByRole("button", { name: "Delete" })[1] as HTMLButtonElement;
-    fireEvent.click(deleteButton);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[1]);
     await Promise.resolve();
 
     expect(commands).toEqual([]);
-    expect(deleteButton.className).toContain("text-(--danger)");
+    expect(screen.getAllByRole("button", { name: "Delete" })[1].className).toContain("dangerAction");
 
-    fireEvent.click(deleteButton);
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[1]);
 
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({
@@ -577,17 +576,16 @@ createUiTest("ProjectSidebar", () => {
 
       render(() => <ProjectSidebar />);
 
-      const deleteButton = screen.getAllByRole("button", { name: "Delete" })[1] as HTMLButtonElement;
-      fireEvent.click(deleteButton);
+      fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[1]);
       await Promise.resolve();
       for (const callback of [...timerCallbacks.values()]) {
         callback();
       }
       await Promise.resolve();
-      fireEvent.click(deleteButton);
+      fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[1]);
 
       expect(commands).toEqual([]);
-      expect(deleteButton.className).toContain("text-(--danger)");
+      expect(screen.getAllByRole("button", { name: "Delete" })[1].className).toContain("dangerAction");
     } finally {
       globalThis.setTimeout = originalSetTimeout;
       globalThis.clearTimeout = originalClearTimeout;

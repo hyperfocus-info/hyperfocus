@@ -1,6 +1,14 @@
 import { createSignal, For, Show } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import type { SetupAction, SetupCheck } from "../../../shared/protocol";
 import { ActionButton } from "./action-button";
+import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
+
+const checkCardClass = stylex.attrs(styles.checkCard).class ?? "";
+const readyCheckClass = stylex.attrs(styles.checkReady).class ?? "";
+const unsupportedCheckClass = stylex.attrs(styles.checkUnsupported).class ?? "";
+const warningCheckClass = stylex.attrs(styles.checkWarning).class ?? "";
+const actionRequiredCheckClass = stylex.attrs(styles.checkActionRequired).class ?? "";
 
 type SetupChecklistCardProps = {
   checks: SetupCheck[];
@@ -22,20 +30,20 @@ export function SetupChecklistCard(props: SetupChecklistCardProps) {
     });
 
   return (
-    <section class="rounded-3xl border border-amber-300/80 bg-amber-50/90 p-4 text-(--foreground) shadow-sm">
-      <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div class="space-y-2">
-          <div class="text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-amber-900">Activation center</div>
-          <div class="text-[0.875rem] font-semibold">
+    <section {...stylex.attrs(styles.activationCard)}>
+      <div {...stylex.attrs(styles.activationHeader)}>
+        <div {...stylex.attrs(styles.stackSm)}>
+          <div {...stylex.attrs(styles.activationEyebrow)}>Activation center</div>
+          <div {...stylex.attrs(styles.activationCount)}>
             Required checks ready: {props.readyRequiredCount}/{props.totalRequiredCount}
           </div>
-          <p class="max-w-3xl text-[0.7rem] leading-6 text-amber-950/80">
+          <p {...stylex.attrs(styles.activationDescription)}>
             {allRequiredReady()
               ? "Ready to start. Optional integrations can be configured now or later."
               : "Fix the blocking items below, or run a guided walkthrough for help."}
           </p>
         </div>
-        <div class="flex flex-wrap gap-2">
+        <div {...stylex.attrs(styles.wrapActions)}>
           <Show when={props.onOpenHelp}>
             <ActionButton tooltip="Open guided help and tutorials" type="button" variant="secondary" onClick={props.onOpenHelp}>
               ? Help
@@ -55,39 +63,27 @@ export function SetupChecklistCard(props: SetupChecklistCardProps) {
       </div>
 
       <Show when={!allRequiredReady() || showDetails()}>
-        <div class="mt-4 grid gap-3">
+        <div {...stylex.attrs(styles.checksGrid)}>
           <For each={orderedChecks()}>
           {(check) => (
-            <article
-              class="rounded-[1.2rem] border px-4 py-3"
-              classList={{
-                "border-emerald-200": check.status === "ready",
-                "bg-white/75": check.status === "ready",
-                "border-slate-200": check.status === "unsupported",
-                "bg-slate-50/75": check.status === "unsupported",
-                "border-sky-200": check.status === "warning",
-                "bg-sky-50/80": check.status === "warning",
-                "border-amber-300": check.status !== "ready" && check.status !== "unsupported" && check.status !== "warning",
-                "bg-white/80": check.status !== "ready" && check.status !== "unsupported" && check.status !== "warning"
-              }}
-            >
-              <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                <div class="space-y-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">
+            <article class={`${checkCardClass} ${check.status === "ready" ? readyCheckClass : check.status === "unsupported" ? unsupportedCheckClass : check.status === "warning" ? warningCheckClass : actionRequiredCheckClass}`}>
+              <div {...stylex.attrs(styles.checkLayout)}>
+                <div {...stylex.attrs(styles.stackXs)}>
+                  <div {...stylex.attrs(styles.checkMetaRow)}>
+                    <span {...stylex.attrs(styles.checkMeta)}>
                       {check.requiredForFirstTask ? "Required" : "Optional"}
                     </span>
-                    <span class="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">
+                    <span {...stylex.attrs(styles.checkMeta)}>
                       {check.status}
                     </span>
                   </div>
-                  <div class="text-[0.85rem] font-semibold">{check.title}</div>
-                  <div class="text-[0.7rem] leading-6 text-(--muted)">{check.summary}</div>
+                  <div {...stylex.attrs(styles.checkTitle)}>{check.title}</div>
+                  <div {...stylex.attrs(styles.checkSummary)}>{check.summary}</div>
                   <Show when={check.detail}>
-                    <div class="text-[0.68rem] leading-6 text-(--muted)">{check.detail}</div>
+                    <div {...stylex.attrs(styles.checkDetail)}>{check.detail}</div>
                   </Show>
                 </div>
-                <div class="flex flex-wrap gap-2">
+                <div {...stylex.attrs(styles.wrapActions)}>
                   <Show when={check.primaryAction}>
                     {(action) => (
                       <ActionButton tooltip={action().label} type="button" onClick={() => props.onAction(action())}>

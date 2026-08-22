@@ -12,13 +12,14 @@
 - Added optional editor-to-harness AI chat.
 - Removed the Tailwind compiler and packages from the harness build.
 - Added a combined Solid/StyleX compiler pass so browser bundles contain Solid DOM output and extracted atomic CSS, with no React or StyleX runtime transform fallbacks.
+- Migrated the harness shell and every feature surface off Tailwind utility strings, deleted the 155 KB compatibility stylesheet, and retained only document-level base CSS plus Xterm's official vendor stylesheet.
+- Moved editor shell, navigation, sidebar/layout state, console, optional AI panel, and visible CodeMirror source editing under Solid/StyleX ownership while keeping the canvas render loops framework-neutral.
 
 ## Remaining migration debt
 
-- Port the editor's large imperative canvas/tool controllers into smaller Solid-owned feature islands without rewriting performance-sensitive render loops.
-- Replace the harness compatibility CSS and legacy utility class strings component-by-component with `@hyperfocus/ui` StyleX components.
+- Port the editor's remaining imperative workspace/tool controllers and generated inspector/tree surfaces into smaller Solid-owned feature islands without rewriting performance-sensitive render loops.
 - Move harness-specific workbench and terminal session composition onto the shared presentation surfaces while keeping transport and process ownership in the harness.
 - Publish package/release signing identities and settle license owner/reporting details.
 - Bring `C:\Users\MindOverMelee\pad-pilot` into the ecosystem after its architecture and licensing are inventoried.
 
-The compatibility stylesheet is deliberately frozen. New UI must use StyleX.
+New UI must use colocated StyleX. Global CSS is limited to document defaults and third-party vendor boundaries that cannot be expressed as component styles.

@@ -1,6 +1,7 @@
 /** @jsxImportSource solid-js */
 import { Show, createMemo, createSignal } from "solid-js";
 import { Logs } from "lucide-solid";
+import * as stylex from "@stylexjs/stylex";
 import { formatShortTimestamp } from "../../lib/time-format";
 import { cn } from "../../lib/utils";
 import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
@@ -75,16 +76,13 @@ export function ExecutionLog(props: ExecutionLogProps) {
   }
 
   return (
-    <div data-test-execution-log="" class={cn("flex min-h-0 flex-1 flex-col", props.class)}>
+    <div data-test-execution-log="" class={cn(stylex.attrs(styles.root).class, props.class)}>
       <Show
         when={props.entries.length > 0}
         fallback={
           <div
             class={cn(
-              "text-[0.675rem] text-(--muted)",
-              props.rowVariant === "flat"
-                ? "border-l-2 border-dashed border-(--border) py-3 pl-4"
-                : "rounded-[0.9rem] border border-dashed border-(--border) bg-white/45 p-3"
+              stylex.attrs(styles.empty, props.rowVariant === "flat" ? styles.flatEmpty : styles.cardEmpty).class
             )}
           >
             {props.emptyMessage ?? "No execution log yet."}
@@ -92,9 +90,9 @@ export function ExecutionLog(props: ExecutionLogProps) {
         }
       >
         <VirtualList
-          class="min-h-0 min-w-0 flex-1 overflow-x-hidden pr-2"
-          contentClass="w-full min-w-0"
-          itemClass="min-w-0 pb-3"
+          class={stylex.attrs(styles.list).class}
+          contentClass={stylex.attrs(styles.listContent).class}
+          itemClass={stylex.attrs(styles.listItem).class}
           items={props.entries}
           getKey={(entry) => entry.id}
           estimateSize={118}
@@ -106,12 +104,12 @@ export function ExecutionLog(props: ExecutionLogProps) {
               <>
                 <article
                   class={cn(
-                    "dense-action-parent",
-                    props.rowVariant === "flat"
-                      ? "border-l-2 py-3 pl-4 pr-2"
-                      : "rounded-[0.9rem] border border-(--border) bg-white/70 p-3",
-                    executionLogLevelBorderClass(entry.level),
-                    props.onEntrySourceClick ? "cursor-pointer transition hover:border-(--accent-strong) hover:bg-white/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring)" : undefined
+                    stylex.attrs(
+                      styles.row,
+                      props.rowVariant === "flat" ? styles.flatRow : styles.cardRow,
+                      styles[executionLogLevelTone(entry.level)],
+                      Boolean(props.onEntrySourceClick) && styles.interactiveRow
+                    ).class
                   )}
                   onClick={(event) => {
                     if (!props.onEntrySourceClick || shouldIgnoreRowSourceClick(event.target)) {
@@ -120,11 +118,10 @@ export function ExecutionLog(props: ExecutionLogProps) {
                     openEntrySource(entry);
                   }}
                 >
-                  <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div {...stylex.attrs(styles.rowLayout)}>
                     <div
                       class={cn(
-                        "min-w-0 flex-1",
-                        props.onEntrySourceClick ? "rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring)" : undefined
+                        stylex.attrs(styles.rowCopy, Boolean(props.onEntrySourceClick) && styles.interactiveCopy).class
                       )}
                       data-execution-log-source-action={props.onEntrySourceClick ? "" : undefined}
                       role={props.onEntrySourceClick ? "button" : undefined}
@@ -145,16 +142,16 @@ export function ExecutionLog(props: ExecutionLogProps) {
                         openEntrySource(entry);
                       }}
                     >
-                      <div class="break-words text-[0.675rem] text-(--foreground)">
+                      <div {...stylex.attrs(styles.summary)}>
                         <FileLinkedText text={() => truncateLogText(rowSummary(), summaryLength())} fileLinks={props.fileLinks} />
                       </div>
-                      <div class="mt-1 text-[0.575rem] uppercase tracking-[0.14em] text-(--muted)">
+                      <div {...stylex.attrs(styles.metadata)}>
                         {entry.level} | {formatShortTimestamp(entry.createdAt)}
                       </div>
                     </div>
                     <Tooltip content="Show execution log details">
                       <button
-                        class={cn(buttonVariants({ variant: "secondary", size: "icon" }), "dense-secondary-actions shrink-0")}
+                        class={cn(buttonVariants({ variant: "secondary", size: "icon" }), stylex.attrs(styles.detailsButton).class)}
                         type="button"
                         aria-label={`Show details for ${entry.message}`}
                         onClick={(event) => {
@@ -162,7 +159,7 @@ export function ExecutionLog(props: ExecutionLogProps) {
                           openEntryDetails(entry.id);
                         }}
                       >
-                        <Logs class="h-4 w-4" />
+                        <Logs {...stylex.attrs(styles.icon)} />
                       </button>
                     </Tooltip>
                   </div>
@@ -180,14 +177,14 @@ export function ExecutionLog(props: ExecutionLogProps) {
             title={truncateLogText(entry().message, 96)}
             eyebrow={props.detailEyebrow ?? "Execution log details"}
             description={`${entry().level} | ${formatShortTimestamp(entry().createdAt)}`}
-            class="max-w-3xl"
-            contentClass="max-h-[80vh]"
+            class={stylex.attrs(styles.dialog).class}
+            contentClass={stylex.attrs(styles.dialogContent).class}
             onClose={() => setSelectedEntryId(undefined)}
           >
-            <div class="flex flex-col gap-3">
+            <div {...stylex.attrs(styles.details)}>
               <Show when={entry().copyText}>
                 {(copyText) => (
-                  <div class="flex justify-end">
+                  <div {...stylex.attrs(styles.copyAction)}>
                     <CopyTextButton
                       value={copyText()}
                       tooltip="Copy execution log details"
@@ -209,20 +206,20 @@ export function ExecutionLog(props: ExecutionLogProps) {
                     when={entry().detailKind === "plain"}
                     fallback={<MarkdownContent content={detail()} tone="muted" size="compact" fileLinks={props.fileLinks} />}
                   >
-                    <pre class="overflow-visible whitespace-pre-wrap wrap-break-word rounded-[0.9rem] border border-(--border) bg-white/70 p-3 text-[0.7rem] leading-5 text-(--foreground)">
+                    <pre {...stylex.attrs(styles.plainDetail)}>
                       <FileLinkedText text={detail()} fileLinks={props.fileLinks} />
                     </pre>
                   </Show>
                 )}
               </Show>
               <Show when={entry().detailsJson !== undefined}>
-                <pre class="overflow-auto rounded-[0.9rem] bg-slate-950/95 p-3 text-[0.625rem] leading-5 text-slate-100">
+                <pre {...stylex.attrs(styles.json)}>
                   <FileLinkedText text={() => JSON.stringify(entry().detailsJson, null, 2)} fileLinks={props.fileLinks} />
                 </pre>
               </Show>
               <Show when={entry().detailsJsonSummary}>
                 {(summary) => (
-                  <div class="rounded-[0.9rem] border border-amber-200 bg-amber-50 p-3 text-[0.675rem] text-amber-900">
+                  <div {...stylex.attrs(styles.warning)}>
                     <FileLinkedText text={summary()} fileLinks={props.fileLinks} />
                   </div>
                 )}
@@ -243,19 +240,52 @@ export function truncateLogText(value: string, maxLength = defaultSummaryLength)
   return `${normalized.slice(0, maxLength).trimEnd()}...`;
 }
 
-function executionLogLevelBorderClass(level: string) {
+function executionLogLevelTone(level: string): "error" | "warningBorder" | "success" | "running" | "neutralBorder" {
   const normalized = level.toLowerCase();
   if (normalized.includes("fail") || normalized.includes("error") || normalized.includes("cancel")) {
-    return "border-rose-400";
+    return "error";
   }
   if (normalized.includes("warn") || normalized.includes("approval") || normalized.includes("input")) {
-    return "border-amber-400";
+    return "warningBorder";
   }
   if (normalized.includes("done") || normalized.includes("complete") || normalized.includes("success")) {
-    return "border-emerald-500";
+    return "success";
   }
   if (normalized.includes("run") || normalized.includes("exec")) {
-    return "border-sky-400";
+    return "running";
   }
-  return "border-(--border)";
+  return "neutralBorder";
 }
+
+const styles = stylex.create({
+  root: { display: "flex", flex: "1", flexDirection: "column", minHeight: 0 },
+  empty: { color: "var(--muted)", fontSize: "0.675rem" },
+  flatEmpty: { borderColor: "var(--border)", borderStyle: "dashed", borderWidth: "0 0 0 2px", padding: "0.75rem 0 0.75rem 1rem" },
+  cardEmpty: { backgroundColor: "rgb(255 255 255 / 0.45)", borderColor: "var(--border)", borderRadius: "0.9rem", borderStyle: "dashed", borderWidth: "1px", padding: "0.75rem" },
+  list: { flex: "1", minHeight: 0, minWidth: 0, overflowX: "hidden", paddingRight: "0.5rem" },
+  listContent: { minWidth: 0, width: "100%" },
+  listItem: { minWidth: 0, paddingBottom: "0.75rem" },
+  row: { borderColor: "var(--border)", borderStyle: "solid" },
+  flatRow: { borderWidth: "0 0 0 2px", padding: "0.75rem 0.5rem 0.75rem 1rem" },
+  cardRow: { backgroundColor: "rgb(255 255 255 / 0.7)", borderRadius: "0.9rem", borderWidth: "1px", padding: "0.75rem" },
+  interactiveRow: { backgroundColor: { default: null, ":hover": "rgb(255 255 255 / 0.85)" }, borderColor: { default: null, ":hover": "var(--accent-strong)" }, boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, cursor: "pointer", outline: { default: null, ":focus-visible": "none" }, transitionProperty: "background-color, border-color", transitionDuration: "150ms" },
+  error: { borderColor: "rgb(251 113 133)" },
+  warningBorder: { borderColor: "rgb(251 191 36)" },
+  success: { borderColor: "rgb(16 185 129)" },
+  running: { borderColor: "rgb(56 189 248)" },
+  neutralBorder: { borderColor: "var(--border)" },
+  rowLayout: { alignItems: "flex-start", display: "flex", flexWrap: "wrap", gap: "0.75rem", justifyContent: "space-between" },
+  rowCopy: { flex: "1", minWidth: 0 },
+  interactiveCopy: { borderRadius: "0.5rem", boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, outline: { default: null, ":focus-visible": "none" } },
+  summary: { color: "var(--foreground)", fontSize: "0.675rem", overflowWrap: "break-word" },
+  metadata: { color: "var(--muted)", fontSize: "0.575rem", letterSpacing: "0.14em", marginTop: "0.25rem", textTransform: "uppercase" },
+  detailsButton: { flexShrink: 0, opacity: { default: 0.42, ":hover": 1, ":focus-visible": 1 }, transitionProperty: "opacity, transform", transitionDuration: "160ms" },
+  icon: { height: "1rem", width: "1rem" },
+  dialog: { maxWidth: "48rem" },
+  dialogContent: { maxHeight: "80vh" },
+  details: { display: "flex", flexDirection: "column", gap: "0.75rem" },
+  copyAction: { display: "flex", justifyContent: "flex-end" },
+  plainDetail: { backgroundColor: "rgb(255 255 255 / 0.7)", borderColor: "var(--border)", borderRadius: "0.9rem", borderStyle: "solid", borderWidth: "1px", color: "var(--foreground)", fontSize: "0.7rem", lineHeight: "1.25rem", overflow: "visible", overflowWrap: "break-word", padding: "0.75rem", whiteSpace: "pre-wrap" },
+  json: { backgroundColor: "rgb(2 6 23 / 0.95)", borderRadius: "0.9rem", color: "rgb(241 245 249)", fontSize: "0.625rem", lineHeight: "1.25rem", overflow: "auto", padding: "0.75rem" },
+  warning: { backgroundColor: "rgb(255 251 235)", borderColor: "rgb(253 230 138)", borderRadius: "0.9rem", borderStyle: "solid", borderWidth: "1px", color: "rgb(120 53 15)", fontSize: "0.675rem", padding: "0.75rem" }
+});

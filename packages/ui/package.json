@@ -12,7 +12,8 @@
     "./terminal": "./src/terminal/index.ts",
     "./workbench": "./src/workbench/index.ts",
     "./source-editor": "./src/source-editor/index.ts",
-    "./tokens": "./src/theme/tokens.stylex.ts"
+    "./tokens": "./src/theme/tokens.stylex.ts",
+    "./tokens.stylex": "./src/theme/tokens.stylex.ts"
   },
   "files": ["src", "dist", "README.md"],
   "scripts": {

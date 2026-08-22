@@ -1,15 +1,29 @@
 import { Show, createEffect, createSignal, type JSX } from "solid-js";
 import { createComponent } from "solid-js/web";
+import * as stylex from "@stylexjs/stylex";
 // Bun's test runtime selects solid-markdown's Node/SSR export even though the
 // Happy DOM test harness renders a client tree. Use the package's client build
 // explicitly; browser bundles resolve to the same implementation.
 import { SolidMarkdown } from "../../../node_modules/solid-markdown/dist/index.js";
 import type { SolidMarkdownComponents } from "solid-markdown";
 import type { Element, Properties } from "hast";
-import type { ChatFileLinkContext, ChatFileTarget } from "../lib/chat-file-links";
+import type {
+  ChatFileLinkContext,
+  ChatFileTarget,
+} from "../lib/chat-file-links";
 import { resolveChatFileTarget } from "../lib/chat-file-links";
-import { createMarkdownRehypePlugins, markdownRemarkPlugins, classifyLinkHref, extractTextContent, findFirstChildElement, getCodeLanguage, getElementClassNames, normalizeAllowedHref } from "../lib/markdown";
+import {
+  createMarkdownRehypePlugins,
+  markdownRemarkPlugins,
+  classifyLinkHref,
+  extractTextContent,
+  findFirstChildElement,
+  getCodeLanguage,
+  getElementClassNames,
+  normalizeAllowedHref,
+} from "../lib/markdown";
 import { cn } from "../lib/utils";
+import { markdownStyles } from "./markdown-content.styles";
 import { CopyTextButton } from "./primitives/copy-text-button";
 
 export type MarkdownContentProps = {
@@ -23,27 +37,43 @@ export type MarkdownContentProps = {
   };
 };
 
-const toneClassNames: Record<NonNullable<MarkdownContentProps["tone"]>, string> = {
-  default: "text-(--foreground)",
-  muted: "text-(--muted)",
-  danger: "text-rose-900/80",
-  warning: "text-amber-900/80"
-};
-
-const sizeClassNames: Record<NonNullable<MarkdownContentProps["size"]>, string> = {
-  body: "text-[0.75rem] leading-6",
-  compact: "text-[0.675rem] leading-5"
-};
-
-type MarkdownComponentProps<T> = T extends (props: infer P) => unknown ? P : never;
-type AnchorProps = MarkdownComponentProps<Exclude<NonNullable<SolidMarkdownComponents["a"]>, keyof JSX.IntrinsicElements>>;
-type ImageProps = MarkdownComponentProps<Exclude<NonNullable<SolidMarkdownComponents["img"]>, keyof JSX.IntrinsicElements>>;
-type TableProps = MarkdownComponentProps<Exclude<NonNullable<SolidMarkdownComponents["table"]>, keyof JSX.IntrinsicElements>>;
-type PreProps = MarkdownComponentProps<Exclude<NonNullable<SolidMarkdownComponents["pre"]>, keyof JSX.IntrinsicElements>>;
-type CodeProps = MarkdownComponentProps<Exclude<NonNullable<SolidMarkdownComponents["code"]>, keyof JSX.IntrinsicElements>>;
+type MarkdownComponentProps<T> = T extends (props: infer P) => unknown
+  ? P
+  : never;
+type AnchorProps = MarkdownComponentProps<
+  Exclude<
+    NonNullable<SolidMarkdownComponents["a"]>,
+    keyof JSX.IntrinsicElements
+  >
+>;
+type ImageProps = MarkdownComponentProps<
+  Exclude<
+    NonNullable<SolidMarkdownComponents["img"]>,
+    keyof JSX.IntrinsicElements
+  >
+>;
+type TableProps = MarkdownComponentProps<
+  Exclude<
+    NonNullable<SolidMarkdownComponents["table"]>,
+    keyof JSX.IntrinsicElements
+  >
+>;
+type PreProps = MarkdownComponentProps<
+  Exclude<
+    NonNullable<SolidMarkdownComponents["pre"]>,
+    keyof JSX.IntrinsicElements
+  >
+>;
+type CodeProps = MarkdownComponentProps<
+  Exclude<
+    NonNullable<SolidMarkdownComponents["code"]>,
+    keyof JSX.IntrinsicElements
+  >
+>;
 
 export function MarkdownContent(props: MarkdownContentProps) {
-  const readContent = () => (typeof props.content === "function" ? props.content() : props.content);
+  const readContent = () =>
+    typeof props.content === "function" ? props.content() : props.content;
   const [content, setContent] = createSignal(readContent());
 
   createEffect(() => {
@@ -51,15 +81,173 @@ export function MarkdownContent(props: MarkdownContentProps) {
   });
 
   const components: SolidMarkdownComponents = {
+    h1(headingProps) {
+      return (
+        <h1
+          id={headingProps.id}
+          class={
+            stylex.attrs(markdownStyles.heading, markdownStyles.heading1).class
+          }
+        >
+          {headingProps.children}
+        </h1>
+      );
+    },
+    h2(headingProps) {
+      return (
+        <h2
+          id={headingProps.id}
+          class={
+            stylex.attrs(markdownStyles.heading, markdownStyles.heading2).class
+          }
+        >
+          {headingProps.children}
+        </h2>
+      );
+    },
+    h3(headingProps) {
+      return (
+        <h3
+          id={headingProps.id}
+          class={
+            stylex.attrs(markdownStyles.heading, markdownStyles.heading3).class
+          }
+        >
+          {headingProps.children}
+        </h3>
+      );
+    },
+    h4(headingProps) {
+      return (
+        <h4
+          id={headingProps.id}
+          class={stylex.attrs(markdownStyles.heading).class}
+        >
+          {headingProps.children}
+        </h4>
+      );
+    },
+    h5(headingProps) {
+      return (
+        <h5
+          id={headingProps.id}
+          class={stylex.attrs(markdownStyles.heading).class}
+        >
+          {headingProps.children}
+        </h5>
+      );
+    },
+    h6(headingProps) {
+      return (
+        <h6
+          id={headingProps.id}
+          class={stylex.attrs(markdownStyles.heading).class}
+        >
+          {headingProps.children}
+        </h6>
+      );
+    },
+    p(paragraphProps) {
+      return (
+        <p class={stylex.attrs(markdownStyles.paragraph).class}>
+          {paragraphProps.children}
+        </p>
+      );
+    },
+    ul(listProps) {
+      return (
+        <ul
+          class={
+            stylex.attrs(
+              markdownStyles.blockSpacing,
+              markdownStyles.list,
+              listProps.depth > 0 ? markdownStyles.nestedList : undefined,
+            ).class
+          }
+        >
+          {listProps.children}
+        </ul>
+      );
+    },
+    ol(listProps) {
+      return (
+        <ol
+          start={listProps.start}
+          reversed={listProps.reversed}
+          class={
+            stylex.attrs(
+              markdownStyles.blockSpacing,
+              markdownStyles.list,
+              listProps.depth > 0 ? markdownStyles.nestedList : undefined,
+            ).class
+          }
+        >
+          {listProps.children}
+        </ol>
+      );
+    },
+    li(listItemProps) {
+      const taskItem = getElementClassNames(
+        listItemProps.node.properties,
+      ).includes("task-list-item");
+      return (
+        <li
+          value={listItemProps.value}
+          data-task-list-item={taskItem ? "" : undefined}
+          class={
+            stylex.attrs(
+              listItemProps.index > 0
+                ? markdownStyles.listItemSibling
+                : undefined,
+              taskItem ? markdownStyles.taskListItem : undefined,
+            ).class
+          }
+        >
+          {listItemProps.children}
+        </li>
+      );
+    },
+    blockquote(blockquoteProps) {
+      return (
+        <blockquote
+          class={
+            stylex.attrs(markdownStyles.blockSpacing, markdownStyles.blockquote)
+              .class
+          }
+        >
+          {blockquoteProps.children}
+        </blockquote>
+      );
+    },
+    hr() {
+      return (
+        <hr
+          class={
+            stylex.attrs(
+              markdownStyles.blockSpacing,
+              markdownStyles.horizontalRule,
+            ).class
+          }
+        />
+      );
+    },
     a(anchorProps: AnchorProps) {
-      const fileTarget = resolveMarkdownFileTarget(anchorProps.node, anchorProps.href, props.fileLinks);
+      const fileTarget = resolveMarkdownFileTarget(
+        anchorProps.node,
+        anchorProps.href,
+        props.fileLinks,
+      );
       if (fileTarget) {
         return (
           <button
             type="button"
             data-test-chat-file-link=""
-            class="markdown-link markdown-file-link"
-            onClick={(event) => handleFileLinkClick(event, fileTarget, props.fileLinks)}
+            class={
+              stylex.attrs(markdownStyles.link, markdownStyles.fileLink).class
+            }
+            onClick={(event) =>
+              handleFileLinkClick(event, fileTarget, props.fileLinks)
+            }
           >
             {anchorProps.children}
           </button>
@@ -70,7 +258,11 @@ export function MarkdownContent(props: MarkdownContentProps) {
       const linkKind = classifyLinkHref(href);
 
       if (!href || linkKind === "invalid") {
-        return <span class="markdown-link-invalid">{anchorProps.children}</span>;
+        return (
+          <span class={stylex.attrs(markdownStyles.invalidLink).class}>
+            {anchorProps.children}
+          </span>
+        );
       }
 
       return (
@@ -78,25 +270,102 @@ export function MarkdownContent(props: MarkdownContentProps) {
           href={href}
           target={linkKind === "hash" ? undefined : "_blank"}
           rel={linkKind === "hash" ? undefined : "noopener noreferrer"}
-          class="markdown-link"
+          class={stylex.attrs(markdownStyles.link).class}
         >
           {anchorProps.children}
         </a>
       );
     },
     img(imageProps: ImageProps) {
-      const description = [imageProps.alt, typeof imageProps.src === "string" ? imageProps.src : undefined].filter(Boolean).join(" | ");
+      const description = [
+        imageProps.alt,
+        typeof imageProps.src === "string" ? imageProps.src : undefined,
+      ]
+        .filter(Boolean)
+        .join(" | ");
       return (
-        <span class="markdown-image-placeholder" role="img" aria-label={imageProps.alt || "Image omitted"}>
+        <span
+          class={stylex.attrs(markdownStyles.imagePlaceholder).class}
+          role="img"
+          aria-label={imageProps.alt || "Image omitted"}
+        >
           Image omitted{description ? `: ${description}` : ""}
         </span>
       );
     },
     table(tableProps: TableProps) {
       return (
-        <div class="markdown-table-scroll">
-          <table class="markdown-table">{tableProps.children}</table>
+        <div
+          data-test-markdown-table-scroll=""
+          class={
+            stylex.attrs(
+              markdownStyles.blockSpacing,
+              markdownStyles.tableScroll,
+            ).class
+          }
+        >
+          <table class={stylex.attrs(markdownStyles.table).class}>
+            {tableProps.children}
+          </table>
         </div>
+      );
+    },
+    tr(rowProps) {
+      return (
+        <tr class={stylex.attrs(markdownStyles.tableRow).class}>
+          {rowProps.children}
+        </tr>
+      );
+    },
+    th(cellProps) {
+      return (
+        <th
+          class={
+            stylex.attrs(markdownStyles.tableCell, markdownStyles.tableHeader)
+              .class
+          }
+        >
+          {cellProps.children}
+        </th>
+      );
+    },
+    td(cellProps) {
+      return (
+        <td class={stylex.attrs(markdownStyles.tableCell).class}>
+          {cellProps.children}
+        </td>
+      );
+    },
+    input(inputProps) {
+      const disabled = Boolean(inputProps.disabled);
+      return (
+        <input
+          type={inputProps.type}
+          checked={inputProps.checked}
+          disabled={disabled}
+          class={
+            stylex.attrs(
+              markdownStyles.checkbox,
+              disabled ? markdownStyles.disabledCheckbox : undefined,
+            ).class
+          }
+        />
+      );
+    },
+    section(sectionProps) {
+      const footnotes = getElementClassNames(
+        sectionProps.node.properties,
+      ).includes("footnotes");
+      return (
+        <section
+          data-footnotes={footnotes ? "" : undefined}
+          aria-label={sectionProps["aria-label"]}
+          class={
+            footnotes ? stylex.attrs(markdownStyles.footnotes).class : undefined
+          }
+        >
+          {sectionProps.children}
+        </section>
       );
     },
     pre(preProps: PreProps) {
@@ -105,9 +374,17 @@ export function MarkdownContent(props: MarkdownContentProps) {
       const language = getCodeLanguage(codeElement)?.toUpperCase() ?? "TEXT";
 
       return (
-        <div class="markdown-code-block">
-          <div class="markdown-code-header">
-            <span class="markdown-code-language">{language}</span>
+        <div
+          data-test-markdown-code-block=""
+          class={
+            stylex.attrs(markdownStyles.blockSpacing, markdownStyles.codeBlock)
+              .class
+          }
+        >
+          <div class={stylex.attrs(markdownStyles.codeHeader).class}>
+            <span class={stylex.attrs(markdownStyles.codeLanguage).class}>
+              {language}
+            </span>
             <CopyTextButton
               value={codeText}
               tooltip="Copy code block"
@@ -121,18 +398,50 @@ export function MarkdownContent(props: MarkdownContentProps) {
               Copy
             </CopyTextButton>
           </div>
-          <pre class="markdown-code-pre">{preProps.children}</pre>
+          <pre class={stylex.attrs(markdownStyles.codePre).class}>
+            {preProps.children}
+          </pre>
         </div>
       );
     },
     code(codeProps: CodeProps) {
       const classNames = getClassAttr(codeProps.node.properties);
       if (codeProps.inline) {
-        return <code class={cn("markdown-inline-code", classNames)}>{codeProps.children}</code>;
+        return (
+          <code
+            data-test-markdown-inline-code=""
+            class={cn(
+              stylex.attrs(markdownStyles.inlineCode).class,
+              classNames,
+            )}
+          >
+            {codeProps.children}
+          </code>
+        );
       }
 
-      return <code class={cn("markdown-code-content", classNames)}>{codeProps.children}</code>;
-    }
+      return (
+        <code
+          data-test-markdown-code-content=""
+          class={cn(stylex.attrs(markdownStyles.codeContent).class, classNames)}
+        >
+          {codeProps.children}
+        </code>
+      );
+    },
+    span(spanProps) {
+      const classNames = getElementClassNames(spanProps.node.properties);
+      return (
+        <span
+          class={cn(
+            classNames.join(" ") || undefined,
+            syntaxTokenClass(classNames),
+          )}
+        >
+          {spanProps.children}
+        </span>
+      );
+    },
   };
 
   const markdownProps = {
@@ -141,22 +450,34 @@ export function MarkdownContent(props: MarkdownContentProps) {
     },
     get class() {
       return cn(
-        "markdown-content",
-        props.size === "compact" ? "compact" : undefined,
-        toneClassNames[props.tone ?? "default"],
-        sizeClassNames[props.size ?? "body"],
-        props.class
+        stylex.attrs(
+          markdownStyles.root,
+          props.size === "compact"
+            ? markdownStyles.compact
+            : markdownStyles.body,
+          props.tone === "muted"
+            ? markdownStyles.toneMuted
+            : props.tone === "danger"
+              ? markdownStyles.toneDanger
+              : props.tone === "warning"
+                ? markdownStyles.toneWarning
+                : markdownStyles.toneDefault,
+        ).class,
+        props.class,
       );
     },
     skipHtml: true,
     remarkPlugins: markdownRemarkPlugins,
     get rehypePlugins() {
-      return createMarkdownRehypePlugins({ live: props.live, fileLinks: props.fileLinks });
+      return createMarkdownRehypePlugins({
+        live: props.live,
+        fileLinks: props.fileLinks,
+      });
     },
     get renderingStrategy() {
       return props.live ? ("reconcile" as const) : ("memo" as const);
     },
-    components
+    components,
   };
 
   if (props.live) {
@@ -166,7 +487,7 @@ export function MarkdownContent(props: MarkdownContentProps) {
           createComponent(SolidMarkdown, {
             ...markdownProps,
             children: liveContent,
-            renderingStrategy: "reconcile"
+            renderingStrategy: "reconcile",
           })
         }
       </Show>
@@ -181,10 +502,74 @@ function getClassAttr(properties: Properties | undefined) {
   return classNames.length > 0 ? classNames.join(" ") : undefined;
 }
 
+function syntaxTokenClass(classNames: string[]) {
+  if (classNames.includes("hljs-meta")) {
+    return stylex.attrs(markdownStyles.syntaxMeta).class;
+  }
+  if (
+    classNames.includes("hljs-built_in") ||
+    (classNames.includes("hljs-title") && classNames.includes("class_"))
+  ) {
+    return stylex.attrs(markdownStyles.syntaxTitle).class;
+  }
+  if (classNames.includes("hljs-class")) {
+    return stylex.attrs(markdownStyles.syntaxClassScope).class;
+  }
+  if (
+    classNames.includes("hljs-comment") ||
+    classNames.includes("hljs-quote")
+  ) {
+    return stylex.attrs(markdownStyles.syntaxComment).class;
+  }
+  if (
+    classNames.some((className) =>
+      [
+        "hljs-keyword",
+        "hljs-selector-tag",
+        "hljs-literal",
+        "hljs-section",
+        "hljs-doctag",
+        "hljs-type",
+      ].includes(className),
+    )
+  ) {
+    return stylex.attrs(markdownStyles.syntaxKeyword).class;
+  }
+  if (classNames.includes("hljs-title")) {
+    return stylex.attrs(markdownStyles.syntaxTitleCandidate).class;
+  }
+  if (
+    classNames.some((className) =>
+      [
+        "hljs-string",
+        "hljs-attr",
+        "hljs-template-tag",
+        "hljs-template-variable",
+      ].includes(className),
+    )
+  ) {
+    return stylex.attrs(markdownStyles.syntaxString).class;
+  }
+  if (
+    classNames.some((className) =>
+      [
+        "hljs-number",
+        "hljs-symbol",
+        "hljs-bullet",
+        "hljs-variable",
+        "hljs-addition",
+      ].includes(className),
+    )
+  ) {
+    return stylex.attrs(markdownStyles.syntaxNumber).class;
+  }
+  return undefined;
+}
+
 function resolveMarkdownFileTarget(
   node: Element | undefined,
   href: string | null | undefined,
-  fileLinks: MarkdownContentProps["fileLinks"]
+  fileLinks: MarkdownContentProps["fileLinks"],
 ) {
   if (!fileLinks) {
     return undefined;
@@ -195,14 +580,18 @@ function resolveMarkdownFileTarget(
     return {
       path,
       line: getNumberProperty(node?.properties, "dataHarnessFileLine"),
-      column: getNumberProperty(node?.properties, "dataHarnessFileColumn")
+      column: getNumberProperty(node?.properties, "dataHarnessFileColumn"),
     };
   }
 
   return resolveChatFileTarget(href ?? undefined, fileLinks);
 }
 
-function handleFileLinkClick(event: MouseEvent, target: ChatFileTarget, fileLinks: MarkdownContentProps["fileLinks"]) {
+function handleFileLinkClick(
+  event: MouseEvent,
+  target: ChatFileTarget,
+  fileLinks: MarkdownContentProps["fileLinks"],
+) {
   event.preventDefault();
   event.stopPropagation();
   if (!fileLinks || (!event.ctrlKey && !event.metaKey)) {

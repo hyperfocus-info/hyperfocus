@@ -1,6 +1,7 @@
 /** @jsxImportSource solid-js */
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { render as renderSolidRoot } from "solid-js/web";
+import * as stylex from "@stylexjs/stylex";
 import { formatForDisplay } from "@tanstack/solid-hotkeys";
 import { createRequestId, type ComposerReasoningStrength, type ProviderBrand, type RunModelPreference, type TerminalPreferences } from "../../../shared/protocol";
 import {
@@ -85,6 +86,7 @@ import {
   RangeControl,
   SegmentedControl
 } from "./preferences/preferences-controls";
+import { preferenceStyles } from "./preferences/preferences.styles";
 import {
   getPreferencesSection,
   preferencesSections,
@@ -143,7 +145,7 @@ function Highlight(props: { value: string; query: string }) {
       <For each={parts()}>
         {(part) =>
           part.toLowerCase() === normalizedQuery().toLowerCase() ? (
-            <mark class="rounded bg-amber-100 px-0.5 text-(--foreground)">{part}</mark>
+            <mark class={stylex.attrs(preferenceStyles.rounded, preferenceStyles.backgroundAmber100, preferenceStyles.paddingInline05, preferenceStyles.colorForeground).class}>{part}</mark>
           ) : (
             part
           )
@@ -762,10 +764,10 @@ export function PreferencesPanel() {
 
   function renderToggle(checked: boolean, onInput: (checked: boolean) => void, label: string) {
     return (
-      <label class="inline-flex min-h-9 cursor-pointer items-center justify-between gap-3 rounded-xl border border-(--border) bg-(--panel-strong) px-3 py-2 transition hover:bg-[color-mix(in_srgb,var(--accent)_8%,var(--panel)_92%)]">
-        <span class="text-xs font-medium text-(--foreground)">{label}</span>
+      <label class={stylex.attrs(preferenceStyles.inlineFlex, preferenceStyles.minHeight9, preferenceStyles.cursorPointer, preferenceStyles.itemsCenter, preferenceStyles.justifyBetween, preferenceStyles.gap3, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanelStrong, preferenceStyles.paddingInline3, preferenceStyles.paddingBlock2, preferenceStyles.transition, preferenceStyles.hoverBackgroundSoftAccent).class}>
+        <span class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.fontMedium, preferenceStyles.colorForeground).class}>{label}</span>
         <input
-          class="h-4 w-4 accent-(--accent)"
+          class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4, preferenceStyles.accentColor).class}
           type="checkbox"
           checked={checked}
           onInput={(event) => updateSavedPreference(() => onInput(event.currentTarget.checked))}
@@ -800,12 +802,12 @@ export function PreferencesPanel() {
 
   function renderSettingControl(title: string, description: string, control: JSX.Element) {
     return (
-      <div class="grid min-w-0 gap-2 rounded-xl border border-(--border) bg-white/45 p-3 md:grid-cols-[minmax(10rem,0.8fr)_minmax(0,1.4fr)] md:items-center">
-        <div class="min-w-0">
-          <div class="text-xs font-semibold text-(--foreground)">{title}</div>
-          <div class="mt-1 text-[0.7rem] leading-4 text-(--muted)">{description}</div>
+      <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap2, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite45, preferenceStyles.padding3, preferenceStyles.mdGridColumnsSetting, preferenceStyles.mdItemsCenter).class}>
+        <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
+          <div class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>{title}</div>
+          <div class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.text07, preferenceStyles.leading4, preferenceStyles.colorMuted).class}>{description}</div>
         </div>
-        <div class="min-w-0">{control}</div>
+        <div class={stylex.attrs(preferenceStyles.minWidth0).class}>{control}</div>
       </div>
     );
   }
@@ -817,12 +819,12 @@ export function PreferencesPanel() {
     tooltip: string
   ) {
     return (
-      <div class="grid gap-2">
-        <div class="flex min-w-0 items-center gap-2 text-[0.585rem] font-semibold tracking-[0.18em] text-(--muted)">
-          <span class="truncate">{ariaLabel}</span>
+      <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
+        <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.itemsCenter, preferenceStyles.gap2, preferenceStyles.text0585, preferenceStyles.fontSemibold, preferenceStyles.tracking018, preferenceStyles.colorMuted).class}>
+          <span class={stylex.attrs(preferenceStyles.truncate).class}>{ariaLabel}</span>
           <Tooltip content={tooltip} side="right">
-            <span tabIndex={0} aria-label={`${ariaLabel} help`} class="inline-flex cursor-help text-(--muted)">
-              <HelpCircle class="h-3.5 w-3.5" />
+            <span tabIndex={0} aria-label={`${ariaLabel} help`} class={stylex.attrs(preferenceStyles.inlineFlex, preferenceStyles.cursorHelp, preferenceStyles.colorMuted).class}>
+              <HelpCircle class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />
             </span>
           </Tooltip>
         </div>
@@ -900,14 +902,14 @@ export function PreferencesPanel() {
 
     return (
       <PreferenceSection title="Keybinds" description="Customize app and IDE hotkeys for this browser.">
-        <div id="keyboard-shortcuts" tabIndex={-1} class="grid gap-4">
-          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-(--border) pb-3">
-            <div class="text-[0.675rem] leading-5 text-(--muted)">{filteredSettings().length} keybindings</div>
-            <div class="flex min-w-0 flex-wrap items-center gap-2">
-              <label class="relative min-w-48 flex-1">
-                <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-(--muted)" />
+        <div id="keyboard-shortcuts" tabIndex={-1} class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap4).class}>
+          <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.flexWrap, preferenceStyles.itemsCenter, preferenceStyles.justifyBetween, preferenceStyles.gap3, preferenceStyles.borderBottom, preferenceStyles.borderDefault, preferenceStyles.paddingBottom3).class}>
+            <div class={stylex.attrs(preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{filteredSettings().length} keybindings</div>
+            <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.flexWrap, preferenceStyles.itemsCenter, preferenceStyles.gap2).class}>
+              <label class={stylex.attrs(preferenceStyles.relative, preferenceStyles.minWidth48, preferenceStyles.flex1).class}>
+                <Search class={stylex.attrs(preferenceStyles.pointerEventsNone, preferenceStyles.absolute, preferenceStyles.left3, preferenceStyles.topHalf, preferenceStyles.height35, preferenceStyles.width35, preferenceStyles.translateYHalfNegative, preferenceStyles.colorMuted).class} />
                 <Input
-                  class="h-9 pl-8"
+                  class={stylex.attrs(preferenceStyles.height9, preferenceStyles.paddingLeft8).class}
                   aria-label="Search keybindings"
                   value={keybindSearchQuery()}
                   placeholder="Search keybindings..."
@@ -917,7 +919,7 @@ export function PreferencesPanel() {
             </div>
           </div>
 
-          <div class="grid gap-4">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap4).class}>
             {renderHotkeyGroup("App keybinds", filteredSettings().filter((setting) => setting.scope !== "ide"))}
             {renderHotkeyGroup("IDE keybinds", filteredSettings().filter((setting) => setting.scope === "ide"))}
           </div>
@@ -926,7 +928,7 @@ export function PreferencesPanel() {
             <ActionButton
               tooltip="Restore default keyboard shortcuts"
               variant="secondary"
-              icon={<RotateCcw class="h-4 w-4" />}
+              icon={<RotateCcw class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />}
               onClick={() => {
                 setHotkeyDrafts({ ...DEFAULT_APP_HOTKEY_PREFERENCES });
                 for (const setting of appHotkeySettings) {
@@ -946,8 +948,8 @@ export function PreferencesPanel() {
   function renderHotkeyGroup(title: string, settings: typeof appHotkeySettings) {
     const preferences = () => normalizeAppHotkeyPreferences(state.appHotkeyPreferences);
     return (
-      <section class="grid gap-2" data-test-keybind-group={title.toLowerCase().replace(/\s+/g, "-")}>
-        <div class="text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">{title}</div>
+      <section class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class} data-test-keybind-group={title.toLowerCase().replace(/\s+/g, "-")}>
+        <div class={stylex.attrs(preferenceStyles.text062, preferenceStyles.fontSemibold, preferenceStyles.uppercase, preferenceStyles.tracking018, preferenceStyles.colorMuted).class}>{title}</div>
         <For each={settings}>
               {(setting) => {
                 const draftValue = () => hotkeyDrafts()[setting.id];
@@ -967,33 +969,33 @@ export function PreferencesPanel() {
                     id={keybindRowElementId(setting.id)}
                     data-test-keybind-row={setting.id}
                     tabIndex={-1}
-                    class="rounded-2xl border border-(--border) bg-white/55 px-4 py-3 shadow-sm transition hover:bg-white/70"
+                    class={stylex.attrs(preferenceStyles.rounded2xl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite55, preferenceStyles.paddingInline4, preferenceStyles.paddingBlock3, preferenceStyles.shadowSm, preferenceStyles.transition, preferenceStyles.hoverBackgroundWhite70).class}
                   >
-                    <div class="grid items-center gap-4 md:grid-cols-[minmax(12rem,0.85fr)_minmax(0,2.15fr)_auto]">
-                      <div class="min-w-0">
-                        <div class="flex min-w-0 items-center gap-2">
-                          <Keyboard class="h-3.5 w-3.5 shrink-0 text-(--muted)" />
-                          <h4 class="truncate text-[0.62rem] font-semibold tracking-[0.16em] text-(--muted)">{setting.label}</h4>
+                    <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.itemsCenter, preferenceStyles.gap4, preferenceStyles.mdGridColumnsKeybind).class}>
+                      <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
+                        <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.itemsCenter, preferenceStyles.gap2).class}>
+                          <Keyboard class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35, preferenceStyles.shrink0, preferenceStyles.colorMuted).class} />
+                          <h4 class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.text062, preferenceStyles.fontSemibold, preferenceStyles.tracking016, preferenceStyles.colorMuted).class}>{setting.label}</h4>
                           <ActionButton
                             tooltip={setting.description}
                             ariaLabel={`${setting.label} description`}
                             variant="ghost"
                             size="icon"
-                            class="h-6 w-6 rounded-lg text-(--muted)"
-                            icon={<HelpCircle class="h-3.5 w-3.5" />}
+                            class={stylex.attrs(preferenceStyles.height6, preferenceStyles.width6, preferenceStyles.roundedLg, preferenceStyles.colorMuted).class}
+                            icon={<HelpCircle class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
                           />
                         </div>
                       </div>
-                      <div class="min-w-0">
-                        <div class="flex min-w-0 flex-wrap items-center gap-2.5">
+                      <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
+                        <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.flexWrap, preferenceStyles.itemsCenter, preferenceStyles.gap25).class}>
                           <For each={draftValue()}>
                             {(hotkey, index) => (
-                              <label class="relative inline-flex min-w-0 rounded-xl">
+                              <label class={stylex.attrs(preferenceStyles.relative, preferenceStyles.inlineFlex, preferenceStyles.minWidth0, preferenceStyles.roundedXl).class}>
                                 <Input
                                   aria-label={`${setting.label} hotkey`}
                                   value={formatHotkeyForDisplay(hotkey)}
                                   placeholder="Press keys..."
-                                  class="h-10 rounded-xl border-(--border) bg-white px-4 pr-8 text-center text-[0.72rem] font-semibold shadow-md"
+                                  class={stylex.attrs(preferenceStyles.height10, preferenceStyles.roundedXl, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite, preferenceStyles.paddingInline4, preferenceStyles.paddingRight8, preferenceStyles.textCenter, preferenceStyles.text072, preferenceStyles.fontSemibold, preferenceStyles.shadowMd).class}
                                   style={{ width: `${Math.max(9, formatHotkeyForDisplay(hotkey).length + 4)}ch`, "min-width": "7.5rem" }}
                                   onKeyDown={(event) => {
                                     event.preventDefault();
@@ -1014,8 +1016,8 @@ export function PreferencesPanel() {
                                   ariaLabel={`Delete ${setting.label} keybinding`}
                                   variant="ghost"
                                   size="icon"
-                                  class="absolute -right-2 -top-2 h-5 w-5 rounded-full border border-(--border) bg-(--panel) p-0 shadow-sm"
-                                  icon={<X class="h-3 w-3" />}
+                                  class={stylex.attrs(preferenceStyles.absolute, preferenceStyles.rightNegative2, preferenceStyles.topNegative2, preferenceStyles.height5, preferenceStyles.width5, preferenceStyles.roundedFull, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanel, preferenceStyles.padding0, preferenceStyles.shadowSm).class}
+                                  icon={<X class={stylex.attrs(preferenceStyles.height3, preferenceStyles.width3).class} />}
                                   onClick={() => deleteHotkeyPreference(setting.id, index())}
                                 />
                               </label>
@@ -1026,17 +1028,17 @@ export function PreferencesPanel() {
                             ariaLabel={`Add ${setting.label} keybinding`}
                             variant="secondary"
                             size="icon"
-                            class="h-10 w-10 rounded-xl shadow-sm"
-                            icon={<Plus class="h-3.5 w-3.5" />}
+                            class={stylex.attrs(preferenceStyles.height10, preferenceStyles.width10, preferenceStyles.roundedXl, preferenceStyles.shadowSm).class}
+                            icon={<Plus class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
                             onClick={() => addHotkeyDraft(setting.id)}
                           />
                         </div>
                       </div>
-                      <div class="flex min-w-0 items-center justify-end gap-2">
+                      <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.itemsCenter, preferenceStyles.justifyEnd, preferenceStyles.gap2).class}>
                         <Show when={duplicate()}>
-                          <AlertTriangle class="h-4 w-4 text-amber-600" />
+                          <AlertTriangle class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4, preferenceStyles.colorAmber600).class} />
                         </Show>
-                        <div class="rounded-xl border border-(--border) bg-white/60 px-3 py-2 text-[0.675rem] font-medium text-(--muted)">Always</div>
+                        <div class={stylex.attrs(preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite60, preferenceStyles.paddingInline3, preferenceStyles.paddingBlock2, preferenceStyles.text0675, preferenceStyles.fontMedium, preferenceStyles.colorMuted).class}>Always</div>
                       </div>
                     </div>
                   </div>
@@ -1058,9 +1060,9 @@ export function PreferencesPanel() {
           id="ide-editor-settings"
           title="IDE behavior"
           description="Each IDE default is labeled with its effect."
-          class="md:grid-cols-[minmax(0,0.45fr)_minmax(0,1.55fr)]"
+          layout="wide-label"
         >
-          <div class="grid gap-2">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
             {renderSettingControl(
               "Auto save",
               "Choose when dirty IDE files save without pressing the save command.",
@@ -1132,8 +1134,8 @@ export function PreferencesPanel() {
             <ActionButton
               tooltip="Restore IDE defaults"
               variant="secondary"
-              class="justify-self-start"
-              icon={<RotateCcw class="h-4 w-4" />}
+              class={stylex.attrs(preferenceStyles.justifySelfStart).class}
+              icon={<RotateCcw class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />}
               onClick={() => {
                 for (const [key, value] of Object.entries(DEFAULT_IDE_EDITOR_SETTINGS)) {
                   ideStore.setEditorSetting(key as keyof typeof DEFAULT_IDE_EDITOR_SETTINGS, value as never);
@@ -1246,11 +1248,11 @@ export function PreferencesPanel() {
   function themeModeIcon() {
     switch (state.themePreference.mode) {
       case "system":
-        return <Monitor class="h-4 w-4" />;
+        return <Monitor class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />;
       case "light":
-        return <Sun class="h-4 w-4" />;
+        return <Sun class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />;
       case "dark":
-        return <Moon class="h-4 w-4" />;
+        return <Moon class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />;
     }
   }
 
@@ -1273,18 +1275,18 @@ export function PreferencesPanel() {
       { label: "Danger", value: tokens()["--danger"] }
     ];
     return (
-      <div class="grid gap-2 rounded-xl border border-(--border) bg-(--panel-strong) p-3 text-xs">
-        <div class="grid min-w-0 gap-2 sm:flex sm:items-center sm:justify-between sm:gap-3">
-          <div class="min-w-0">
-            <div class="font-semibold text-(--foreground)">Preview</div>
-            <div class="text-[0.675rem] leading-4 text-(--muted)">Resolved {resolvedThemeMode()} tokens and theme fonts.</div>
+      <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanelStrong, preferenceStyles.padding3, preferenceStyles.textXs).class}>
+        <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap2, preferenceStyles.smFlex, preferenceStyles.smItemsCenter, preferenceStyles.smJustifyBetween, preferenceStyles.smGap3).class}>
+          <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
+            <div class={stylex.attrs(preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>Preview</div>
+            <div class={stylex.attrs(preferenceStyles.text0675, preferenceStyles.leading4, preferenceStyles.colorMuted).class}>Resolved {resolvedThemeMode()} tokens and theme fonts.</div>
           </div>
-          <div class="flex shrink-0 items-center gap-1.5">
+          <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.shrink0, preferenceStyles.itemsCenter, preferenceStyles.gap15).class}>
             <For each={swatches()}>
               {(swatch) => (
                 <Tooltip content={swatch.label}>
                   <span
-                    class="h-5 w-5 rounded-md border border-(--border)"
+                    class={stylex.attrs(preferenceStyles.height5, preferenceStyles.width5, preferenceStyles.roundedMd, preferenceStyles.border, preferenceStyles.borderDefault).class}
                     style={{ background: swatch.value }}
                   />
                 </Tooltip>
@@ -1292,12 +1294,12 @@ export function PreferencesPanel() {
             </For>
           </div>
         </div>
-        <div class="grid gap-2 rounded-lg border border-(--border) bg-(--panel) p-3">
-          <div class="font-display text-sm font-semibold text-(--foreground)">Workspace typography</div>
-          <div class="text-[0.7rem] leading-4 text-(--muted)">Panel text, muted metadata, and accent controls stay readable.</div>
-          <div class="flex flex-wrap gap-2">
-            <span class="rounded-lg bg-(--accent) px-2 py-1 text-[0.675rem] font-semibold text-(--accent-foreground)">Build</span>
-            <span class="rounded-lg border border-(--border) bg-(--row) px-2 py-1 text-[0.675rem] text-(--foreground)">Row surface</span>
+        <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.roundedLg, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanel, preferenceStyles.padding3).class}>
+          <div class={stylex.attrs(preferenceStyles.fontDisplay, preferenceStyles.textSm, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>Workspace typography</div>
+          <div class={stylex.attrs(preferenceStyles.text07, preferenceStyles.leading4, preferenceStyles.colorMuted).class}>Panel text, muted metadata, and accent controls stay readable.</div>
+          <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.flexWrap, preferenceStyles.gap2).class}>
+            <span class={stylex.attrs(preferenceStyles.roundedLg, preferenceStyles.backgroundAccent, preferenceStyles.paddingInline2, preferenceStyles.paddingBlock1, preferenceStyles.text0675, preferenceStyles.fontSemibold, preferenceStyles.colorAccentForeground).class}>Build</span>
+            <span class={stylex.attrs(preferenceStyles.roundedLg, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundRow, preferenceStyles.paddingInline2, preferenceStyles.paddingBlock1, preferenceStyles.text0675, preferenceStyles.colorForeground).class}>Row surface</span>
           </div>
         </div>
       </div>
@@ -1308,14 +1310,14 @@ export function PreferencesPanel() {
     const custom = () => customThemeDefinition();
     const baseThemeId = () => custom().baseThemeId ?? DEFAULT_CUSTOM_BASE_THEME_ID;
     return (
-      <div class="grid gap-3 rounded-xl border border-(--border) bg-(--panel) p-3" data-test-custom-theme-editor="">
-        <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanel, preferenceStyles.padding3).class} data-test-custom-theme-editor="">
+        <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.smGridColumnsControl, preferenceStyles.smItemsCenter).class}>
           <DropdownControl
             kind="select"
             ariaLabel="Custom theme base"
-            icon={<Palette class="h-3.5 w-3.5" />}
+            icon={<Palette class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
             size="md"
-            class="w-full"
+            class={stylex.attrs(preferenceStyles.widthFull).class}
             value={baseThemeId()}
             options={customBaseThemeOptions()}
             onChange={updateCustomThemeBase}
@@ -1324,28 +1326,28 @@ export function PreferencesPanel() {
             tooltip="Reset custom theme"
             ariaLabel="Reset custom theme"
             variant="secondary"
-            icon={<RotateCcw class="h-4 w-4" />}
+            icon={<RotateCcw class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />}
             onClick={() => store.resetCustomTheme()}
           >
             Reset
           </ActionButton>
         </div>
-        <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.smGridColumns2, preferenceStyles.xlGridColumns3).class}>
           <For each={CUSTOM_THEME_COLOR_VARIABLES}>
             {(entry) => (
-              <label class="grid min-w-0 gap-1 rounded-lg border border-(--border) bg-(--panel-strong) p-2">
-                <span class="truncate text-[0.585rem] font-semibold tracking-[0.16em] text-(--muted)">{entry.label}</span>
-                <div class="flex min-w-0 items-center gap-2">
+              <label class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap1, preferenceStyles.roundedLg, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanelStrong, preferenceStyles.padding2).class}>
+                <span class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.text0585, preferenceStyles.fontSemibold, preferenceStyles.tracking016, preferenceStyles.colorMuted).class}>{entry.label}</span>
+                <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.itemsCenter, preferenceStyles.gap2).class}>
                   <input
                     aria-label={`${entry.label} color`}
-                    class="h-8 w-10 shrink-0 cursor-pointer rounded-lg border border-(--border) bg-transparent p-0.5"
+                    class={stylex.attrs(preferenceStyles.height8, preferenceStyles.width10, preferenceStyles.shrink0, preferenceStyles.cursorPointer, preferenceStyles.roundedLg, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundTransparent, preferenceStyles.padding05).class}
                     type="color"
                     value={colorInputValue(entry.variable)}
                     onInput={(event) => updateCustomThemeVariable(entry.variable, event.currentTarget.value)}
                   />
                   <Input
                     aria-label={`${entry.label} hex`}
-                    class="h-8 min-w-0 font-mono text-[0.675rem]"
+                    class={stylex.attrs(preferenceStyles.height8, preferenceStyles.minWidth0, preferenceStyles.fontMono, preferenceStyles.text0675).class}
                     value={colorInputValue(entry.variable).toUpperCase()}
                     onChange={(event) => updateCustomThemeVariable(entry.variable, event.currentTarget.value)}
                   />
@@ -1354,20 +1356,20 @@ export function PreferencesPanel() {
             )}
           </For>
         </div>
-        <div class="grid gap-2">
+        <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
           <For each={CUSTOM_THEME_FONT_VARIABLES}>
             {(entry) => (
-              <div class="grid gap-1 rounded-lg border border-(--border) bg-(--panel-strong) p-2">
-                <span class="flex items-center gap-1.5 text-[0.585rem] font-semibold tracking-[0.16em] text-(--muted)">
-                  <Type class="h-3.5 w-3.5" />
+              <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap1, preferenceStyles.roundedLg, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanelStrong, preferenceStyles.padding2).class}>
+                <span class={stylex.attrs(preferenceStyles.flex, preferenceStyles.itemsCenter, preferenceStyles.gap15, preferenceStyles.text0585, preferenceStyles.fontSemibold, preferenceStyles.tracking016, preferenceStyles.colorMuted).class}>
+                  <Type class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />
                   {entry.label}
                 </span>
                 <DropdownControl
                   kind="select"
                   ariaLabel={entry.label}
-                  icon={<Type class="h-3.5 w-3.5" />}
+                  icon={<Type class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
                   size="md"
-                  class="w-full"
+                  class={stylex.attrs(preferenceStyles.widthFull).class}
                   value={normalizeThemeFontInput(entry.variable, resolvedThemeTokens()[entry.variable], resolvedThemeTokens()[entry.variable])}
                   options={getCustomThemeFontOptions(entry.variable)}
                   onChange={(value) => updateCustomThemeVariable(entry.variable, value)}
@@ -1384,14 +1386,14 @@ export function PreferencesPanel() {
     return (
       <PreferenceSection title="General & UI" description="Compact workspace defaults with theme and density controls.">
         <PreferenceRow id="appearance-density" title="Appearance and density" description="Pick a theme, mode, fonts, and optional custom colors.">
-          <div class="grid gap-3">
-            <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
+            <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.smGridColumnsControl, preferenceStyles.smItemsCenter).class}>
               <DropdownControl
                 kind="select"
                 ariaLabel="Theme"
-                icon={<Palette class="h-3.5 w-3.5" />}
+                icon={<Palette class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
                 size="md"
-                class="w-full"
+                class={stylex.attrs(preferenceStyles.widthFull).class}
                 value={state.themePreference.themeId}
                 options={themeOptions()}
                 onChange={(value) => {
@@ -1403,11 +1405,11 @@ export function PreferencesPanel() {
                 tooltip={themeModeTooltip()}
                 ariaLabel={`Theme mode: ${themeModeLabel(state.themePreference.mode)}`}
                 variant="secondary"
-                class="h-9 justify-start rounded-lg px-3"
+                class={stylex.attrs(preferenceStyles.height9, preferenceStyles.justifyStart, preferenceStyles.roundedLg, preferenceStyles.paddingInline3).class}
                 icon={themeModeIcon()}
                 onClick={cycleThemeMode}
               >
-                <span class="min-w-11 text-left">{themeModeLabel(state.themePreference.mode)}</span>
+                <span class={stylex.attrs(preferenceStyles.minWidth11, preferenceStyles.textLeft).class}>{themeModeLabel(state.themePreference.mode)}</span>
               </ActionButton>
             </div>
             {renderThemePreview()}
@@ -1417,7 +1419,7 @@ export function PreferencesPanel() {
           </div>
         </PreferenceRow>
         <PreferenceRow id="terminal-display" title="Terminal and numeric display" description="Choose terminal rendering and dense numeric alignment defaults.">
-          <div class="grid gap-3">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
             {renderSettingControl(
               "Terminal renderer",
               "Solid is the default lightweight renderer; xterm keeps the full emulator path available.",
@@ -1439,15 +1441,15 @@ export function PreferencesPanel() {
           </div>
         </PreferenceRow>
         <PreferenceRow id="navigation-sidebar" title="Sidebar and layout" description="Restore main panel sizes and choose project sidebar sorting/grouping.">
-          <div class="grid gap-3">
-            <ActionButton tooltip="Restore panel sizes" variant="secondary" icon={<LayoutPanelLeft class="h-4 w-4" />} onClick={handleResetPanelSizes}>
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
+            <ActionButton tooltip="Restore panel sizes" variant="secondary" icon={<LayoutPanelLeft class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={handleResetPanelSizes}>
               Restore panel sizes
             </ActionButton>
-            <div class="grid gap-2 sm:grid-cols-3">
+            <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.smGridColumns3).class}>
               <DropdownControl
                 kind="select"
                 ariaLabel="Project sort"
-                icon={<FolderOpen class="h-3.5 w-3.5" />}
+                icon={<FolderOpen class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
                 size="md"
                 value={state.projectSidebarPreferences.projectSort}
                 options={projectSortOptions()}
@@ -1456,7 +1458,7 @@ export function PreferencesPanel() {
               <DropdownControl
                 kind="select"
                 ariaLabel="Thread sort"
-                icon={<FolderOpen class="h-3.5 w-3.5" />}
+                icon={<FolderOpen class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
                 size="md"
                 value={state.projectSidebarPreferences.threadSort}
                 options={threadSortOptions()}
@@ -1465,7 +1467,7 @@ export function PreferencesPanel() {
               <DropdownControl
                 kind="select"
                 ariaLabel="Project grouping"
-                icon={<FolderOpen class="h-3.5 w-3.5" />}
+                icon={<FolderOpen class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
                 size="md"
                 value={state.projectSidebarPreferences.grouping}
                 options={groupingOptions()}
@@ -1475,7 +1477,7 @@ export function PreferencesPanel() {
           </div>
         </PreferenceRow>
         <PreferenceRow id="notifications" title="Notifications" description="Background job alerts and CLI update checks.">
-          <div class="grid gap-2">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
             {renderToggle(state.backgroundJobNotificationsEnabled, store.setBackgroundJobNotificationsEnabled, "Background job notifications")}
             {renderToggle(state.checkCliUpdatesDefault, store.setCheckCliUpdatesDefault, "Check CLI updates")}
           </div>
@@ -1488,7 +1490,7 @@ export function PreferencesPanel() {
     return (
       <PreferenceSection title="AI & Providers" description="Credentials and composer defaults for AI runs.">
         <PreferenceRow id="provider-keys" title="Provider API keys" description="Keys stay local to this machine; test checks provider model-list access without saving drafts.">
-          <div class="grid gap-4">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap4).class}>
             <PasswordKeyInput
               label="OpenAI API key"
               value={state.openAiApiKeyDraft}
@@ -1537,7 +1539,7 @@ export function PreferencesPanel() {
           />
         </PreferenceRow>
         <PreferenceRow id="composer-defaults" title="Composer defaults" description="Browser-local defaults for reasoning effort and fast mode.">
-          <div class="grid gap-3">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
             <SegmentedControl
               ariaLabel="Reasoning effort"
               value={state.selectedReasoningStrength}
@@ -1559,7 +1561,7 @@ export function PreferencesPanel() {
     return (
       <PreferenceSection title="Safety & Guardrails" description="Execution gates, worktree strategy, and run-risk defaults.">
         <PreferenceRow id="plan-gate" title="Planning and approval" description="Choose what happens after an execution plan is ready.">
-          <div class="grid gap-3">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
             <SegmentedControl
               ariaLabel="Plan gate mode"
               value={state.planExecutionModeDefault}
@@ -1583,13 +1585,13 @@ export function PreferencesPanel() {
           </div>
         </PreferenceRow>
         <PreferenceRow id="worktree-git" title="Worktree and git safety" description="Control subagent isolation and dirty working tree guardrails.">
-          <div class="grid gap-3">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
             <DropdownControl
               kind="select"
               ariaLabel="Select subagent worktree strategy"
-              icon={<FolderOpen class="h-3.5 w-3.5" />}
+              icon={<FolderOpen class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
               size="md"
-              class="w-full"
+              class={stylex.attrs(preferenceStyles.widthFull).class}
               value={state.subagentWorktreeStrategyDefault}
               options={subagentWorktreeOptions()}
               onChange={(value) =>
@@ -1610,10 +1612,10 @@ export function PreferencesPanel() {
                 }
               />
             </AdvancedDisclosure>
-            <div class="flex flex-wrap items-center gap-2">
+            <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.flexWrap, preferenceStyles.itemsCenter, preferenceStyles.gap2).class}>
               <ActionButton
                 tooltip="Delete retained BranchFS workspaces and stop stale interrupted runs"
-                icon={<Trash2 class="h-3.5 w-3.5" />}
+                icon={<Trash2 class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
                 size="sm"
                 variant="secondary"
                 onClick={handleBranchfsCleanup}
@@ -1622,7 +1624,7 @@ export function PreferencesPanel() {
               </ActionButton>
               <Show when={state.branchfsCleanupSummary}>
                 {(summary) => (
-                  <span class="text-[0.675rem] text-(--muted)">
+                  <span class={stylex.attrs(preferenceStyles.text0675, preferenceStyles.colorMuted).class}>
                     {summary().rootsDeleted} roots deleted | {formatBytes(summary().bytesDeleted)} freed
                     {summary().staleRunsStopped ? ` | ${summary().staleRunsStopped} stale runs stopped` : ""}
                   </span>
@@ -1632,7 +1634,7 @@ export function PreferencesPanel() {
           </div>
         </PreferenceRow>
         <PreferenceRow id="run-safety" title="Run safety" description="Context compaction and correctness follow-up defaults.">
-          <div class="grid gap-3">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
             <RangeControl
               label="Auto-compact threshold"
               min={10}
@@ -1664,7 +1666,7 @@ export function PreferencesPanel() {
               onChange={(value) => updateSavedPreference(() => store.setCorrectnessIterationModeDefault(value))}
             />
             <AdvancedDisclosure title="Context compaction details" description="Pi compacts session context after threshold crossing, then continues with reduced history.">
-              <p class="text-xs leading-5 text-(--muted)">Lower values compact sooner. Higher values preserve more transcript before compaction.</p>
+              <p class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>Lower values compact sooner. Higher values preserve more transcript before compaction.</p>
             </AdvancedDisclosure>
           </div>
         </PreferenceRow>
@@ -1676,22 +1678,22 @@ export function PreferencesPanel() {
     return (
       <PreferenceSection title="Workspace & Memory" description="Shared context, memory bank defaults, and archive behavior.">
         <PreferenceRow id="workspace-context" title="Workspace rules and context" description="Shared rules and memory apply before project-specific context.">
-          <div class="grid gap-3">
-            <label class="grid gap-2">
-              <span class="text-xs font-medium text-(--foreground)">Workspace rules</span>
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
+            <label class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
+              <span class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.fontMedium, preferenceStyles.colorForeground).class}>Workspace rules</span>
               <Textarea rows="5" value={workspaceRuleDraft()} onInput={(event) => updateWorkspaceDraft("rules", event.currentTarget.value)} />
             </label>
-            <label class="grid gap-2">
-              <span class="text-xs font-medium text-(--foreground)">Workspace memory</span>
+            <label class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
+              <span class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.fontMedium, preferenceStyles.colorForeground).class}>Workspace memory</span>
               <Textarea rows="5" value={workspaceMemoryDraft()} onInput={(event) => updateWorkspaceDraft("memory", event.currentTarget.value)} />
             </label>
-            <ActionButton tooltip="Save workspace context" variant="secondary" icon={<Save class="h-4 w-4" />} onClick={handleSaveWorkspaceContext}>
+            <ActionButton tooltip="Save workspace context" variant="secondary" icon={<Save class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={handleSaveWorkspaceContext}>
               Save workspace context
             </ActionButton>
           </div>
         </PreferenceRow>
         <PreferenceRow id="memory-bank" title="Memory bank settings" description="Inject active memories and record compact run memories.">
-          <div class="grid gap-2">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
             {renderToggle(state.memoryBankEnabledDefault, store.setMemoryBankEnabledDefault, "Use memory bank in runs")}
             {renderToggle(state.memoryBankRecordRunsDefault, store.setMemoryBankRecordRunsDefault, "Record run memories")}
           </div>
@@ -1772,7 +1774,7 @@ export function PreferencesPanel() {
     return (
       <PreferenceSection title="Background Jobs" description="Approval policy, capacity, notifications, and current jobs pane defaults.">
         <PreferenceRow id="job-defaults" title="Background job defaults" description="Choose approval posture and concurrent capacity for background work.">
-          <div class="grid gap-3">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
             <SegmentedControl
               ariaLabel="Background approval policy"
               value={state.backgroundJobApprovalPolicyDefault}
@@ -1815,26 +1817,26 @@ export function PreferencesPanel() {
           </div>
         </PreferenceRow>
         <PreferenceRow id="assistant-job-controls" title="Assistant job controls" description="Pause enabled jobs owned by assistants across projects.">
-          <div class="grid gap-2">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
             <ActionButton
               tooltip="Pause every enabled assistant-owned background job"
               disabled={enabledAssistantBackgroundJobCount() === 0}
               disabledReason="No enabled assistant-owned background jobs"
               variant="secondary"
-              icon={<CirclePause class="h-4 w-4" />}
+              icon={<CirclePause class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />}
               ariaLabel="Pause assistant jobs"
               onClick={handlePauseAssistantBackgroundJobs}
             >
               Pause assistant jobs
             </ActionButton>
-            <div class="text-[0.675rem] leading-5 text-(--muted)">
+            <div class={stylex.attrs(preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>
               Enabled assistant jobs: {enabledAssistantBackgroundJobCount()}
             </div>
           </div>
         </PreferenceRow>
         <PreferenceRow id="jobs-view" title="Jobs view and sync state" description="Current jobs pane view preferences saved in this browser.">
-          <div class="grid gap-2 text-xs text-(--muted)">
-            <div class="rounded-xl border border-(--border) bg-white/60 p-3 text-(--foreground)">Segment: {state.jobsPanePreferences.segment}</div>
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.textXs, preferenceStyles.colorMuted).class}>
+            <div class={stylex.attrs(preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite60, preferenceStyles.padding3, preferenceStyles.colorForeground).class}>Segment: {state.jobsPanePreferences.segment}</div>
             <div>Sort: {state.jobsPanePreferences.jobSort}</div>
             <div>Search: {state.jobsPanePreferences.search || "None"}</div>
           </div>
@@ -1845,27 +1847,27 @@ export function PreferencesPanel() {
 
   function renderTokenUsageTotal(label: string, value: number, description: string) {
     return (
-      <div class="grid min-w-0 gap-1 rounded-lg bg-white/55 px-3 py-2">
-        <div class="truncate text-[0.585rem] font-semibold tracking-[0.16em] text-(--muted)">{label}</div>
-        <div class="truncate text-base font-semibold text-(--foreground)">{formatTokenCount(value)}</div>
-        <div class="truncate text-[0.65rem] text-(--muted)">{description}</div>
+      <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap1, preferenceStyles.roundedLg, preferenceStyles.backgroundWhite55, preferenceStyles.paddingInline3, preferenceStyles.paddingBlock2).class}>
+        <div class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.text0585, preferenceStyles.fontSemibold, preferenceStyles.tracking016, preferenceStyles.colorMuted).class}>{label}</div>
+        <div class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.textBase, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>{formatTokenCount(value)}</div>
+        <div class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.text065, preferenceStyles.colorMuted).class}>{description}</div>
       </div>
     );
   }
 
   function renderTokenUsageScope(label: string, description: string, totals: typeof state.tokenUsage.session) {
     return (
-      <section class="grid gap-2">
-        <div class="flex min-w-0 items-center justify-between gap-3">
-          <div class="min-w-0">
-            <div class="truncate text-xs font-semibold text-(--foreground)">{label}</div>
-            <div class="truncate text-[0.675rem] leading-5 text-(--muted)">{description}</div>
+      <section class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
+        <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.itemsCenter, preferenceStyles.justifyBetween, preferenceStyles.gap3).class}>
+          <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
+            <div class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.textXs, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>{label}</div>
+            <div class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{description}</div>
           </div>
-          <div class="shrink-0 rounded-lg bg-white/55 px-2 py-1 text-[0.65rem] font-medium text-(--muted)">
+          <div class={stylex.attrs(preferenceStyles.shrink0, preferenceStyles.roundedLg, preferenceStyles.backgroundWhite55, preferenceStyles.paddingInline2, preferenceStyles.paddingBlock1, preferenceStyles.text065, preferenceStyles.fontMedium, preferenceStyles.colorMuted).class}>
             {formatTokenCount(totals.events)} updates
           </div>
         </div>
-        <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.smGridColumns2, preferenceStyles.xlGridColumns4).class}>
           {renderTokenUsageTotal("Total", totals.totalTokensIncludingCached, "processed + cached")}
           {renderTokenUsageTotal("Input", totals.inputTokens, "prompt context")}
           {renderTokenUsageTotal("Output", totals.outputTokens, "model response")}
@@ -1880,14 +1882,14 @@ export function PreferencesPanel() {
       <>
         <PreferenceSection title="Usage" description="App session and lifetime token totals, including cached input.">
           <PreferenceRow id="token-usage" title="Token usage" description="Counters update from observed model context events.">
-            <div class="grid gap-4">
+            <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap4).class}>
               {renderTokenUsageScope("Current session", "Since the app server started or usage was reset.", state.tokenUsage.session)}
               {renderTokenUsageScope("Lifetime", "Persisted on the app server until reset.", state.tokenUsage.lifetime)}
-              <div class="flex flex-wrap items-center gap-2">
+              <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.flexWrap, preferenceStyles.itemsCenter, preferenceStyles.gap2).class}>
                 <ActionButton
                   tooltip="Reset current session and lifetime token usage"
                   variant="secondary"
-                  icon={<RotateCcw class="h-4 w-4" />}
+                  icon={<RotateCcw class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />}
                   ariaLabel="Reset token usage"
                   onClick={() => {
                     store.openTokenUsageResetDialog();
@@ -1897,7 +1899,7 @@ export function PreferencesPanel() {
                   Reset usage
                 </ActionButton>
                 <Show when={state.tokenUsage.resetAt}>
-                  {(resetAt) => <div class="text-[0.675rem] leading-5 text-(--muted)">Last reset: {formatShortTimestamp(resetAt())}</div>}
+                  {(resetAt) => <div class={stylex.attrs(preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>Last reset: {formatShortTimestamp(resetAt())}</div>}
                 </Show>
               </div>
             </div>
@@ -1925,7 +1927,7 @@ export function PreferencesPanel() {
               </ActionButton>
               <ActionButton
                 tooltip="Confirm token usage reset"
-                icon={<RotateCcw class="h-4 w-4" />}
+                icon={<RotateCcw class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />}
                 onClick={() => {
                   store.resetTokenUsage();
                   pushToast("Token usage reset", "Session and lifetime counters cleared.");
@@ -1937,7 +1939,7 @@ export function PreferencesPanel() {
             </>
           }
         >
-          <p class="text-sm leading-6 text-(--muted)">Token counters will start again from the next observed model usage event.</p>
+          <p class={stylex.attrs(preferenceStyles.textSm, preferenceStyles.leading6, preferenceStyles.colorMuted).class}>Token counters will start again from the next observed model usage event.</p>
         </Dialog>
       </>
     );
@@ -1951,27 +1953,27 @@ export function PreferencesPanel() {
     return (
       <PreferenceSection title="Developer & Advanced" description="Developer logging, trace defaults, portability, and reset controls.">
         <PreferenceRow id="logging-trace" title="Logging and trace UI" description="Defaults for developer visibility in new sessions.">
-          <div class="grid gap-2">
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
             {renderToggle(state.debugEnabled, store.setDebugEnabled, "Verbose developer logging")}
             {renderToggle(state.tracePanelDefaultOpen, store.setTracePanelDefaultOpen, "Open trace panel by default")}
           </div>
         </PreferenceRow>
         <PreferenceRow id="portable-json" title="Import and export JSON" description="Portable preferences exclude API keys.">
-          <div class="flex flex-wrap gap-2">
-            <ActionButton tooltip="Export preferences JSON" variant="secondary" icon={<Download class="h-4 w-4" />} onClick={handleExportPreferences}>
+          <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.flexWrap, preferenceStyles.gap2).class}>
+            <ActionButton tooltip="Export preferences JSON" variant="secondary" icon={<Download class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={handleExportPreferences}>
               Export prefs
             </ActionButton>
-            <ActionButton tooltip="Import preferences JSON" variant="secondary" icon={<Import class="h-4 w-4" />} onClick={() => importInput?.click()}>
+            <ActionButton tooltip="Import preferences JSON" variant="secondary" icon={<Import class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={() => importInput?.click()}>
               Import prefs
             </ActionButton>
           </div>
         </PreferenceRow>
         <PreferenceRow id="advanced-reset" title="Advanced reset controls" description="Clear provider keys or reset local layout state.">
-          <div class="flex flex-wrap gap-2">
-            <ActionButton tooltip="Clear all provider keys" variant="secondary" icon={<Trash2 class="h-4 w-4" />} onClick={handleClearApiKey}>
+          <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.flexWrap, preferenceStyles.gap2).class}>
+            <ActionButton tooltip="Clear all provider keys" variant="secondary" icon={<Trash2 class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={handleClearApiKey}>
               Clear keys
             </ActionButton>
-            <ActionButton tooltip="Restore panel sizes" variant="secondary" icon={<RotateCcw class="h-4 w-4" />} onClick={handleResetPanelSizes}>
+            <ActionButton tooltip="Restore panel sizes" variant="secondary" icon={<RotateCcw class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={handleResetPanelSizes}>
               Reset layout
             </ActionButton>
           </div>
@@ -1983,24 +1985,24 @@ export function PreferencesPanel() {
   function renderSearchResults() {
     return (
       <PreferenceSection title="Search results" description={`${searchResults().length} matching settings`}>
-        <Show when={searchResults().length > 0} fallback={<div class="rounded-xl border border-dashed border-(--border) bg-white/45 p-4 text-xs text-(--muted)">No matching settings.</div>}>
-          <div class="grid gap-4">
+        <Show when={searchResults().length > 0} fallback={<div class={stylex.attrs(preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDashed, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite45, preferenceStyles.padding4, preferenceStyles.textXs, preferenceStyles.colorMuted).class}>No matching settings.</div>}>
+          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap4).class}>
             <For each={groupedSearchResults()}>
               {(group) => (
-                <section class="grid gap-2">
-                  <div class="text-[0.7rem] font-semibold tracking-[0.14em] text-(--muted)">{group.section.label}</div>
-                  <div class="grid gap-2">
+                <section class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
+                  <div class={stylex.attrs(preferenceStyles.text07, preferenceStyles.fontSemibold, preferenceStyles.tracking014, preferenceStyles.colorMuted).class}>{group.section.label}</div>
+                  <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
                     <For each={group.results}>
                       {(setting) => (
                         <button
                           type="button"
-                          class="cursor-pointer rounded-xl border border-(--border) bg-white/60 p-3 text-left transition hover:bg-white/80"
+                          class={stylex.attrs(preferenceStyles.cursorPointer, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite60, preferenceStyles.padding3, preferenceStyles.textLeft, preferenceStyles.transition, preferenceStyles.hoverBackgroundWhite80).class}
                           onClick={() => openSearchResult(setting)}
                         >
-                          <div class="text-sm font-semibold text-(--foreground)">
+                          <div class={stylex.attrs(preferenceStyles.textSm, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>
                             <Highlight value={setting.title} query={searchQuery()} />
                           </div>
-                          <div class="mt-1 text-xs leading-5 text-(--muted)">
+                          <div class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.textXs, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>
                             <Highlight value={setting.description} query={searchQuery()} />
                           </div>
                         </button>
@@ -2055,11 +2057,11 @@ export function PreferencesPanel() {
   onMount(renderDetailRoot);
 
   return (
-    <section data-test-preferences-panel="" class="panel-shell flex min-h-0 flex-col overflow-visible rounded-2xl bg-(--panel) lg:h-full lg:overflow-hidden">
-      <input ref={importInput} type="file" accept="application/json" class="hidden" onChange={handleImportPreferences} />
-      <div class="flex min-h-0 flex-1 overflow-visible lg:overflow-hidden">
-        <main class="flex min-w-0 flex-1 flex-col bg-(--panel)">
-          <div ref={detailContainer} class="min-h-0 flex-1 overflow-visible p-4 lg:overflow-auto">
+    <section data-test-preferences-panel="" class={stylex.attrs(preferenceStyles.panelShell, preferenceStyles.flex, preferenceStyles.minHeight0, preferenceStyles.flexColumn, preferenceStyles.overflowVisible, preferenceStyles.rounded2xl, preferenceStyles.backgroundPanel, preferenceStyles.lgHeightFull, preferenceStyles.lgOverflowHidden).class}>
+      <input ref={importInput} type="file" accept="application/json" class={stylex.attrs(preferenceStyles.hidden).class} onChange={handleImportPreferences} />
+      <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minHeight0, preferenceStyles.flex1, preferenceStyles.overflowVisible, preferenceStyles.lgOverflowHidden).class}>
+        <main class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.flex1, preferenceStyles.flexColumn, preferenceStyles.backgroundPanel).class}>
+          <div ref={detailContainer} class={stylex.attrs(preferenceStyles.minHeight0, preferenceStyles.flex1, preferenceStyles.overflowVisible, preferenceStyles.padding4, preferenceStyles.lgOverflowAuto).class}>
             {renderAiProviders()}
           </div>
         </main>
@@ -2076,7 +2078,7 @@ export function PreferencesPanel() {
             </ActionButton>
             <ActionButton
               tooltip="Save this duplicate keybind anyway"
-              icon={<AlertTriangle class="h-4 w-4" />}
+              icon={<AlertTriangle class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />}
               onClick={() => {
                 const pending = pendingDuplicateHotkey();
                 if (!pending) {
@@ -2090,19 +2092,19 @@ export function PreferencesPanel() {
           </>
         }
       >
-        <p class="text-sm leading-6 text-(--muted)">Both commands can keep the same keybind. The command that handles it first may win when pressed.</p>
+        <p class={stylex.attrs(preferenceStyles.textSm, preferenceStyles.leading6, preferenceStyles.colorMuted).class}>Both commands can keep the same keybind. The command that handles it first may win when pressed.</p>
       </Dialog>
-      <footer class="flex w-full shrink-0 flex-wrap justify-end gap-2 border-t border-(--border) bg-(--panel-strong) px-5 py-4">
+      <footer class={stylex.attrs(preferenceStyles.flex, preferenceStyles.widthFull, preferenceStyles.shrink0, preferenceStyles.flexWrap, preferenceStyles.justifyEnd, preferenceStyles.gap2, preferenceStyles.borderTop, preferenceStyles.borderDefault, preferenceStyles.backgroundPanelStrong, preferenceStyles.paddingInline5, preferenceStyles.paddingBlock4).class}>
           <ActionButton tooltip="Close preferences" ariaLabel="Dismiss" variant="ghost" onClick={() => store.closePreferencesModal()}>
             Dismiss
           </ActionButton>
-          <ActionButton tooltip="Export preferences JSON" ariaLabel="Export" variant="ghost" icon={<FileJson class="h-4 w-4" />} onClick={handleExportPreferences}>
+          <ActionButton tooltip="Export preferences JSON" ariaLabel="Export" variant="ghost" icon={<FileJson class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={handleExportPreferences}>
             Export
           </ActionButton>
-          <ActionButton tooltip="Import preferences JSON" ariaLabel="Import" variant="ghost" icon={<Import class="h-4 w-4" />} onClick={() => importInput?.click()}>
+          <ActionButton tooltip="Import preferences JSON" ariaLabel="Import" variant="ghost" icon={<Import class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={() => importInput?.click()}>
             Import
           </ActionButton>
-          <ActionButton tooltip="Clear all provider keys" ariaLabel="Clear keys" variant="secondary" icon={<Trash2 class="h-4 w-4" />} onClick={handleClearApiKey}>
+          <ActionButton tooltip="Clear all provider keys" ariaLabel="Clear keys" variant="secondary" icon={<Trash2 class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={handleClearApiKey}>
             Clear keys
           </ActionButton>
       </footer>
@@ -2116,6 +2118,43 @@ export function PreferenceSectionNav(props: { onNavigate?: () => void } = {}) {
   const store = harnessStore;
   const state = store.state;
   const [activeSectionId, setActiveSectionId] = createSignal(state.preferencesActiveSectionId);
+  const navigationButtonClass = stylex.attrs(
+    preferenceStyles.flex,
+    preferenceStyles.widthFull,
+    preferenceStyles.cursorPointer,
+    preferenceStyles.itemsCenter,
+    preferenceStyles.gap2,
+    preferenceStyles.overflowHidden,
+    preferenceStyles.rounded2xl,
+    preferenceStyles.paddingInline3,
+    preferenceStyles.paddingBlock2,
+    preferenceStyles.textLeft,
+    preferenceStyles.textXs,
+    preferenceStyles.fontMedium,
+    preferenceStyles.colorMuted,
+    preferenceStyles.transition,
+    preferenceStyles.hoverBackgroundWhite60,
+    preferenceStyles.hoverColorForeground
+  ).class;
+  const selectedNavigationButtonClass = stylex.attrs(
+    preferenceStyles.flex,
+    preferenceStyles.widthFull,
+    preferenceStyles.cursorPointer,
+    preferenceStyles.itemsCenter,
+    preferenceStyles.gap2,
+    preferenceStyles.overflowHidden,
+    preferenceStyles.rounded2xl,
+    preferenceStyles.paddingInline3,
+    preferenceStyles.paddingBlock2,
+    preferenceStyles.textLeft,
+    preferenceStyles.textXs,
+    preferenceStyles.fontMedium,
+    preferenceStyles.colorMuted,
+    preferenceStyles.transition,
+    preferenceStyles.hoverBackgroundWhite60,
+    preferenceStyles.hoverColorForeground,
+    preferenceStyles.navigationSelected
+  ).class;
 
   const handleSectionChange = (event: Event) => {
     if (!isPreferencesSectionEvent(event)) {
@@ -2146,13 +2185,13 @@ export function PreferenceSectionNav(props: { onNavigate?: () => void } = {}) {
   });
 
   return (
-    <nav class="grid gap-3 p-3" aria-label="Preference sections">
-      <div class="grid gap-3 border-b border-(--border) pb-3">
-        <div class="flex items-center gap-2">
-          <div class="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Preferences</div>
+    <nav class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3, preferenceStyles.padding3).class} aria-label="Preference sections">
+      <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3, preferenceStyles.borderBottom, preferenceStyles.borderDefault, preferenceStyles.paddingBottom3).class}>
+        <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.itemsCenter, preferenceStyles.gap2).class}>
+          <div class={stylex.attrs(preferenceStyles.text065, preferenceStyles.fontSemibold, preferenceStyles.uppercase, preferenceStyles.tracking018, preferenceStyles.colorMuted).class}>Preferences</div>
           <Tooltip content="Manage provider keys and workspace defaults.">
-            <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg text-(--muted)">
-              <HelpCircle class="h-3.5 w-3.5" />
+            <span class={stylex.attrs(preferenceStyles.inlineFlex, preferenceStyles.height6, preferenceStyles.width6, preferenceStyles.itemsCenter, preferenceStyles.justifyCenter, preferenceStyles.roundedLg, preferenceStyles.colorMuted).class}>
+              <HelpCircle class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />
             </span>
           </Tooltip>
         </div>
@@ -2166,27 +2205,26 @@ export function PreferenceSectionNav(props: { onNavigate?: () => void } = {}) {
           }}
         />
       </div>
-      <div class="grid gap-1">
+      <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap1).class}>
       <For each={preferencesSections}>
         {(section) => {
           const Icon = section.icon;
           const active = () => !state.preferencesSearchQuery.trim() && activeSectionId() === section.id;
           return (
-            <Tooltip content={`${section.label}\n${section.description}`} triggerClass="block min-w-0">
+            <Tooltip content={`${section.label}\n${section.description}`} triggerClass={stylex.attrs(preferenceStyles.block, preferenceStyles.minWidth0).class}>
               <button
                 type="button"
-                class="preference-section-nav-button flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-2xl px-3 py-2 text-left text-xs font-medium text-(--muted) transition hover:bg-white/60 hover:text-(--foreground)"
-                classList={{ "bg-white/75": active(), "text-(--foreground)": active(), "shadow-sm": active() }}
+                class={active() ? selectedNavigationButtonClass : navigationButtonClass}
                 aria-label={section.label}
                 aria-current={active() ? "page" : undefined}
                 onClick={() => {
                   selectSection(section.id as PreferencesActiveSectionId);
                 }}
               >
-                <Icon class="h-4 w-4 shrink-0" />
-                <span class="preference-section-nav-copy min-w-0 flex-1 overflow-hidden">
-                  <span class="block truncate">{section.label}</span>
-                  <span class="mt-0.5 block truncate text-[0.65rem] font-normal text-(--muted)">{section.description}</span>
+                <Icon class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4, preferenceStyles.shrink0).class} />
+                <span class={stylex.attrs(preferenceStyles.minWidth0, preferenceStyles.flex1, preferenceStyles.overflowHidden).class}>
+                  <span class={stylex.attrs(preferenceStyles.block, preferenceStyles.truncate).class}>{section.label}</span>
+                  <span class={stylex.attrs(preferenceStyles.marginTop05, preferenceStyles.block, preferenceStyles.truncate, preferenceStyles.text065, preferenceStyles.fontNormal, preferenceStyles.colorMuted).class}>{section.description}</span>
                 </span>
               </button>
             </Tooltip>

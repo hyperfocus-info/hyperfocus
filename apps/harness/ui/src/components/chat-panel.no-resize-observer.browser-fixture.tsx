@@ -2,7 +2,7 @@
 import { onMount } from "solid-js";
 import { render } from "solid-js/web";
 import { createEmptySession } from "../../../shared/protocol";
-import "../legacy.css";
+import "../global-styles";
 import { createHarnessStore, harnessStore, setActiveHarnessStore } from "../harness-store";
 import { createToastStoreForProvider, setActiveToastStore } from "../toast-store";
 import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";

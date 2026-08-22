@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { createRequestId, type AgentRunState, type BackgroundJob, type BackgroundJobRun, type BulkOperationAction, type BulkOperationTarget, type RunDiagnosticsWindowDays } from "../../../shared/protocol";
 import { formatForDisplay } from "@tanstack/solid-hotkeys";
 import {
@@ -41,6 +42,7 @@ import { ScrollArea } from "./primitives/scroll-area";
 import { StatusChip, type StatusChipTone } from "./primitives/status-chip";
 import { Tooltip } from "./primitives/tooltip";
 import { VirtualList } from "./primitives/virtual-list";
+import { backgroundJobsStyles as styles } from "./background-jobs.styles";
 import { rightAlignedNumbersEnabled } from "../lib/visual-flags";
 import {
   Bell,
@@ -125,7 +127,7 @@ function formatBulkActionLabel(action: BulkOperationAction) {
   }
 }
 
-export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
+export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
   let runDetailViewport: HTMLDivElement | undefined;
   let pendingHealthRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let lastHealthRefreshAt = 0;
@@ -855,7 +857,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                     "Create scheduled AI routine",
                     normalizeAppHotkeyPreferences(state.appHotkeyPreferences).createBackgroundJob[0]
                   )}
-                  icon={<Bot class="h-4 w-4" />}
+                  icon={<Bot class={stylex.attrs(styles.iconMd).class} />}
                   size="icon"
                   variant="ghost"
                   ariaLabel="Create scheduled AI routine"
@@ -863,7 +865,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                 />
                 <ActionButton
                   tooltip="Create scheduled shell task"
-                  icon={<Terminal class="h-4 w-4" />}
+                  icon={<Terminal class={stylex.attrs(styles.iconMd).class} />}
                   size="icon"
                   variant="ghost"
                   ariaLabel="Create scheduled shell task"
@@ -871,7 +873,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                 />
                 <ActionButton
                   tooltip={state.backgroundJobNotificationsEnabled ? "Disable desktop notifications" : "Enable desktop notifications"}
-                  icon={state.backgroundJobNotificationsEnabled ? <Bell class="h-4 w-4" /> : <BellOff class="h-4 w-4" />}
+                  icon={state.backgroundJobNotificationsEnabled ? <Bell class={stylex.attrs(styles.iconMd).class} /> : <BellOff class={stylex.attrs(styles.iconMd).class} />}
                   size="icon"
                   variant="ghost"
                   ariaLabel={state.backgroundJobNotificationsEnabled ? "Disable desktop notifications" : "Enable desktop notifications"}
@@ -883,7 +885,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
           />
           <Show when={formatSchedulerHeartbeatWarning(state.backgroundJobs.schedulerHeartbeatAt)}>
             {(warning) => (
-              <div class="mt-3 rounded-[0.9rem] border border-amber-300/70 bg-amber-50 px-3 py-2 text-[0.675rem] leading-5 text-amber-900">
+              <div class={stylex.attrs(styles.warningBanner).class}>
                 <SchedulerWarningContent text={warning()} onRetryScheduler={retryScheduler} />
               </div>
             )}
@@ -919,11 +921,15 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
       </Show>
 
       <div
-        class="grid min-h-0 min-w-0 flex-1 gap-4"
-        classList={{ "2xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]": showLeft() && showDetail() && activeSegment() !== "health" }}
+        class={[
+          stylex.attrs(styles.panelLayout).class,
+          showLeft() && showDetail() && activeSegment() !== "health"
+            ? stylex.attrs(styles.panelLayoutSplit).class
+            : ""
+        ].filter(Boolean).join(" ")}
       >
         <Show when={showLeft()}>
-          <div class="grid min-h-0 min-w-0 gap-4">
+          <div class={stylex.attrs(styles.paneGrid).class}>
             <Show when={activeSegment() === "health"}>
               <HealthView
                 diagnostics={diagnostics}
@@ -936,32 +942,32 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
               />
             </Show>
             <Show when={activeSegment() === "jobs"}>
-              <LeftPaneListSection title="Jobs" count={`${jobs().length} total`} class="min-w-0 border-0 bg-transparent p-0">
+              <LeftPaneListSection title="Jobs" count={`${jobs().length} total`} class={stylex.attrs(styles.listSection).class}>
                 <CapacityBar jobs={jobs()} />
                 <Show when={selectedJobs().length > 0}>
-                  <div class="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-(--border) bg-(--panel-strong) p-2 text-[0.675rem] text-(--foreground)">
-                    <span class="font-semibold">{selectedJobs().length} selected</span>
-                    <ActionButton tooltip="Run selected jobs now" disabled={executionPaused()} disabledReason={executionPauseReason} size="sm" icon={<Play class="h-3.5 w-3.5" />} onClick={() => sendBulkOperation("run-now", selectedJobs().map(jobBulkTarget))}>
+                  <div class={stylex.attrs(styles.selectionToolbar).class}>
+                    <span class={stylex.attrs(styles.selectionCount).class}>{selectedJobs().length} selected</span>
+                    <ActionButton tooltip="Run selected jobs now" disabled={executionPaused()} disabledReason={executionPauseReason} size="sm" icon={<Play class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("run-now", selectedJobs().map(jobBulkTarget))}>
                       Run now
                     </ActionButton>
-                    <ActionButton tooltip="Pause selected jobs" size="sm" variant="secondary" icon={<Pause class="h-3.5 w-3.5" />} onClick={() => sendBulkOperation("pause", selectedJobs().map(jobBulkTarget))}>
+                    <ActionButton tooltip="Pause selected jobs" size="sm" variant="secondary" icon={<Pause class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("pause", selectedJobs().map(jobBulkTarget))}>
                       Pause
                     </ActionButton>
-                    <ActionButton tooltip="Resume selected jobs" size="sm" variant="secondary" icon={<Play class="h-3.5 w-3.5" />} onClick={() => sendBulkOperation("resume", selectedJobs().map(jobBulkTarget))}>
+                    <ActionButton tooltip="Resume selected jobs" size="sm" variant="secondary" icon={<Play class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("resume", selectedJobs().map(jobBulkTarget))}>
                       Resume
                     </ActionButton>
-                    <ActionButton tooltip="Delete selected jobs" size="sm" variant="secondary" icon={<Trash2 class="h-3.5 w-3.5" />} onClick={() => sendBulkOperation("delete", selectedJobs().map(jobBulkTarget))}>
+                    <ActionButton tooltip="Delete selected jobs" size="sm" variant="secondary" icon={<Trash2 class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("delete", selectedJobs().map(jobBulkTarget))}>
                       Delete
                     </ActionButton>
-                    <ActionButton tooltip="Clear selection" size="sm" variant="ghost" icon={<CircleX class="h-3.5 w-3.5" />} onClick={() => setSelectedJobIds([])}>
+                    <ActionButton tooltip="Clear selection" size="sm" variant="ghost" icon={<CircleX class={stylex.attrs(styles.iconSm).class} />} onClick={() => setSelectedJobIds([])}>
                       Clear
                     </ActionButton>
                   </div>
                 </Show>
                 <VirtualList
-                  class="min-h-0 flex-1 pr-2"
-                  contentClass="w-full"
-                  itemClass="pb-3"
+                  class={stylex.attrs(styles.virtualViewport).class}
+                  contentClass={stylex.attrs(styles.virtualContent).class}
+                  itemClass={stylex.attrs(styles.virtualItem).class}
                   items={jobs()}
                   getKey={(job) => job.id}
                   estimateSize={210}
@@ -979,12 +985,12 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                             )}
                             ariaLabel="Schedule job"
                             size="sm"
-                            icon={<Bot class="h-3.5 w-3.5" />}
+                            icon={<Bot class={stylex.attrs(styles.iconSm).class} />}
                             onClick={() => handleCreateJob("ai-routine")}
                           >
                             Schedule job
                           </ActionButton>
-                          <ActionButton tooltip="Run shell job" size="sm" variant="secondary" icon={<Terminal class="h-3.5 w-3.5" />} onClick={() => handleCreateJob("shell")}>
+                          <ActionButton tooltip="Run shell job" size="sm" variant="secondary" icon={<Terminal class={stylex.attrs(styles.iconSm).class} />} onClick={() => handleCreateJob("shell")}>
                             Run shell job
                           </ActionButton>
                         </>
@@ -994,12 +1000,15 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                 >
                   {(job) => (
                     <article
-                      class="dense-action-parent dense-card min-w-0 cursor-pointer border-l-4 p-3 transition hover:border-(--accent-strong)"
-                      classList={{
-                        "dense-card-selected": selectedJob()?.id === job.id || selectedJobIdSet().has(job.id),
-                        "border-l-emerald-500": selectedJob()?.id !== job.id && !selectedJobIdSet().has(job.id) && job.status === "enabled",
-                        "border-l-slate-300": selectedJob()?.id !== job.id && !selectedJobIdSet().has(job.id) && job.status !== "enabled"
-                      }}
+                      class={stylex.attrs(
+                        styles.denseCard,
+                        styles.selectableCard,
+                        selectedJob()?.id === job.id || selectedJobIdSet().has(job.id)
+                          ? styles.selectedCard
+                          : job.status === "enabled"
+                            ? styles.borderSuccess
+                            : styles.borderNeutral
+                      ).class}
                       onPointerDown={(event) => scheduleDelayedSelection("job", job.id, event)}
                       onPointerUp={clearPendingSelectionTimer}
                       onPointerCancel={clearPendingSelectionTimer}
@@ -1007,18 +1016,18 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                       onClick={(event) => handleJobCardClick(job, event)}
                       onContextMenu={(event) => openJobBulkContextMenu(job, event)}
                     >
-                      <div class="flex items-start justify-between gap-3">
-                        <button type="button" class="min-w-0 flex-1 text-left cursor-pointer" aria-label={`Select ${job.name}`} onClick={(event) => { event.stopPropagation(); handleJobCardClick(job, event); }}>
-                          <span class="break-words text-[0.75rem] font-semibold text-(--foreground) [overflow-wrap:anywhere]">{job.name}</span>
+                      <div class={stylex.attrs(styles.cardHeader).class}>
+                        <button type="button" class={stylex.attrs(styles.cardTitleButton).class} aria-label={`Select ${job.name}`} onClick={(event) => { event.stopPropagation(); handleJobCardClick(job, event); }}>
+                          <span class={stylex.attrs(styles.cardTitle).class}>{job.name}</span>
                         </button>
-                        <StatusChip tone={jobStatusTone(job.status)} class="shrink-0">
+                        <StatusChip tone={jobStatusTone(job.status)} class={stylex.attrs(styles.statusChip).class}>
                           {job.status}
                         </StatusChip>
                       </div>
-                      <div class="dense-secondary-actions flex gap-0.25">
+                      <div class={stylex.attrs(styles.cardActions).class}>
                         <ActionButton
                           tooltip={selectedJobIdSet().has(job.id) ? "Remove from bulk selection" : "Add to bulk selection"}
-                          icon={selectedJobIdSet().has(job.id) ? <CheckSquare2 class="h-3 w-3" /> : <Square class="h-3 w-3" />}
+                          icon={selectedJobIdSet().has(job.id) ? <CheckSquare2 class={stylex.attrs(styles.iconXs).class} /> : <Square class={stylex.attrs(styles.iconXs).class} />}
                           size="icon"
                           variant="ghost"
                           ariaLabel={selectedJobIdSet().has(job.id) ? `Remove ${job.name} from bulk selection` : `Add ${job.name} to bulk selection`}
@@ -1033,7 +1042,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                           {(assistantId) => (
                             <ActionButton
                               tooltip="Open owning assistant"
-                              icon={<Bot class="h-3 w-3" />}
+                              icon={<Bot class={stylex.attrs(styles.iconXs).class} />}
                               size="icon"
                               variant="ghost"
                               ariaLabel={`Open assistant for ${job.name}`}
@@ -1044,13 +1053,13 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                             />
                           )}
                         </Show>
-                        <ActionButton tooltip="Run task now" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<Play class="h-3 w-3" />} size="icon" variant="ghost" ariaLabel={`Run ${job.name} now`} onClick={(event) => { event.stopPropagation(); sendCommand({ type: "background-job.run-now", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } }); }} />
-                        <ActionButton tooltip={job.status === "enabled" ? "Pause task" : "Resume task"} icon={job.status === "enabled" ? <Pause class="h-3 w-3" /> : <Play class="h-3 w-3" />} size="icon" variant="ghost" ariaLabel={job.status === "enabled" ? `Pause ${job.name}` : `Resume ${job.name}`} onClick={(event) => { event.stopPropagation(); sendCommand({ type: job.status === "enabled" ? "background-job.pause" : "background-job.resume", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } }); }} />
-                        <ActionButton tooltip="Edit task" icon={<RefreshCcw class="h-3 w-3" />} size="icon" variant="ghost" ariaLabel={`Edit ${job.name}`} onClick={(event) => { event.stopPropagation(); handleEditJob(job); }} />
-                        <ActionButton tooltip="Delete task" icon={<Trash2 class="h-3 w-3" />} size="icon" variant="ghost" ariaLabel={`Delete ${job.name}`} onClick={(event) => { event.stopPropagation(); sendCommand({ type: "background-job.delete", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } }); }} />
+                        <ActionButton tooltip="Run task now" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<Play class={stylex.attrs(styles.iconXs).class} />} size="icon" variant="ghost" ariaLabel={`Run ${job.name} now`} onClick={(event) => { event.stopPropagation(); sendCommand({ type: "background-job.run-now", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } }); }} />
+                        <ActionButton tooltip={job.status === "enabled" ? "Pause task" : "Resume task"} icon={job.status === "enabled" ? <Pause class={stylex.attrs(styles.iconXs).class} /> : <Play class={stylex.attrs(styles.iconXs).class} />} size="icon" variant="ghost" ariaLabel={job.status === "enabled" ? `Pause ${job.name}` : `Resume ${job.name}`} onClick={(event) => { event.stopPropagation(); sendCommand({ type: job.status === "enabled" ? "background-job.pause" : "background-job.resume", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } }); }} />
+                        <ActionButton tooltip="Edit task" icon={<RefreshCcw class={stylex.attrs(styles.iconXs).class} />} size="icon" variant="ghost" ariaLabel={`Edit ${job.name}`} onClick={(event) => { event.stopPropagation(); handleEditJob(job); }} />
+                        <ActionButton tooltip="Delete task" icon={<Trash2 class={stylex.attrs(styles.iconXs).class} />} size="icon" variant="ghost" ariaLabel={`Delete ${job.name}`} onClick={(event) => { event.stopPropagation(); sendCommand({ type: "background-job.delete", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } }); }} />
                       </div>
-                      <div class="mt-3 break-words text-[0.675rem] leading-5 text-(--muted) [overflow-wrap:anywhere]">
-                        <div class="mt-1 flex flex-wrap gap-1">
+                      <div class={stylex.attrs(styles.cardBody).class}>
+                        <div class={stylex.attrs(styles.chipRow).class}>
                           <StatusChip tone={jobKindTone(job.kind)}>{job.kind}</StatusChip>
                           <StatusChip tone={riskTone(job.riskLevel)}>{job.riskLevel}</StatusChip>
                           <StatusChip tone="neutral">{job.lane ?? "exclusive"}</StatusChip>
@@ -1058,7 +1067,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                         <div>
                           <FileLinkedText text={job.description ?? job.scheduleInput} fileLinks={getBackgroundRunFileLinks(job.projectId)} />
                         </div>
-                        <div class="mt-1">
+                        <div class={stylex.attrs(styles.marginTopXs).class}>
                           Next: <NextRunContent text={formatJobNextRun(job, state.backgroundJobs.runs, state.backgroundJobs.schedulerHeartbeatAt)} onRetryScheduler={retryScheduler} />
                         </div>
                         <Show when={formatFailureTrackingLine(job)}>{(line) => <div><FileLinkedText text={line()} fileLinks={getBackgroundRunFileLinks(job.projectId)} /></div>}</Show>
@@ -1079,31 +1088,31 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
             </Show>
 
             <Show when={activeSegment() === "inbox"}>
-              <LeftPaneListSection title="Runs" count={`${runListItems().length} total`} class="min-w-0 border-0 bg-transparent p-0">
+              <LeftPaneListSection title="Runs" count={`${runListItems().length} total`} class={stylex.attrs(styles.listSection).class}>
                 <Show when={selectedBackgroundRuns().length > 0}>
-                  <div class="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-(--border) bg-(--panel-strong) p-2 text-[0.675rem] text-(--foreground)">
-                    <span class="font-semibold">{selectedBackgroundRuns().length} selected</span>
-                    <ActionButton tooltip="Stop selected runs" size="sm" icon={<CircleX class="h-3.5 w-3.5" />} onClick={() => sendBulkOperation("stop", selectedBackgroundRuns().map(runBulkTarget))}>
+                  <div class={stylex.attrs(styles.selectionToolbar).class}>
+                    <span class={stylex.attrs(styles.selectionCount).class}>{selectedBackgroundRuns().length} selected</span>
+                    <ActionButton tooltip="Stop selected runs" size="sm" icon={<CircleX class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("stop", selectedBackgroundRuns().map(runBulkTarget))}>
                       Stop
                     </ActionButton>
-                    <ActionButton tooltip="Retry selected runs" disabled={executionPaused()} disabledReason={executionPauseReason} size="sm" variant="secondary" icon={<RefreshCcw class="h-3.5 w-3.5" />} onClick={() => sendBulkOperation("retry", selectedBackgroundRuns().map(runBulkTarget))}>
+                    <ActionButton tooltip="Retry selected runs" disabled={executionPaused()} disabledReason={executionPauseReason} size="sm" variant="secondary" icon={<RefreshCcw class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("retry", selectedBackgroundRuns().map(runBulkTarget))}>
                       Retry
                     </ActionButton>
-                    <ActionButton tooltip="Approve selected runs" disabled={executionPaused()} disabledReason={executionPauseReason} size="sm" variant="secondary" icon={<CheckCircle2 class="h-3.5 w-3.5" />} onClick={() => sendBulkOperation("approve", selectedBackgroundRuns().map(runBulkTarget))}>
+                    <ActionButton tooltip="Approve selected runs" disabled={executionPaused()} disabledReason={executionPauseReason} size="sm" variant="secondary" icon={<CheckCircle2 class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("approve", selectedBackgroundRuns().map(runBulkTarget))}>
                       Approve
                     </ActionButton>
-                    <ActionButton tooltip="Reject selected runs" size="sm" variant="secondary" icon={<Trash2 class="h-3.5 w-3.5" />} onClick={() => sendBulkOperation("reject", selectedBackgroundRuns().map(runBulkTarget))}>
+                    <ActionButton tooltip="Reject selected runs" size="sm" variant="secondary" icon={<Trash2 class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("reject", selectedBackgroundRuns().map(runBulkTarget))}>
                       Reject
                     </ActionButton>
-                    <ActionButton tooltip="Clear selection" size="sm" variant="ghost" icon={<CircleX class="h-3.5 w-3.5" />} onClick={() => setSelectedRunIds([])}>
+                    <ActionButton tooltip="Clear selection" size="sm" variant="ghost" icon={<CircleX class={stylex.attrs(styles.iconSm).class} />} onClick={() => setSelectedRunIds([])}>
                       Clear
                     </ActionButton>
                   </div>
                 </Show>
                 <VirtualList
-                  class="min-h-0 flex-1 pr-2"
-                  contentClass="w-full"
-                  itemClass="pb-3"
+                  class={stylex.attrs(styles.virtualViewport).class}
+                  contentClass={stylex.attrs(styles.virtualContent).class}
+                  itemClass={stylex.attrs(styles.virtualItem).class}
                   items={runListItems()}
                   getKey={(item) => (item.kind === "project-chat" ? `project-chat:${item.entry.project.id}:${item.entry.run.id}` : `background:${item.run.id}`)}
                   estimateSize={135}
@@ -1141,7 +1150,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
         </Show>
 
         <Show when={showDetail() && activeSegment() !== "health"}>
-          <section class="flex min-h-0 min-w-0 flex-col p-4">
+          <section class={stylex.attrs(styles.detailPane).class}>
             <Show when={activeSegment() === "jobs" && !selectedRun()}>
               <JobDetail
                 job={selectedJob()}
@@ -1160,19 +1169,19 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
             <Show when={activeSegment() !== "jobs" || selectedRun()} fallback={null}>
               <Show when={selectedRun()} fallback={<DetailEmptyState>Select background run or job to inspect details.</DetailEmptyState>}>
                 {(run) => (
-                  <div class="flex h-full min-h-0 min-w-0 flex-col gap-4">
-                    <div class="flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-(--border) pb-4">
-                      <div class="min-w-0">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Run detail</div>
+                  <div class={stylex.attrs(styles.detailContent).class}>
+                    <div class={stylex.attrs(styles.detailHeader).class}>
+                      <div class={stylex.attrs(styles.minWidthZero).class}>
+                        <div class={stylex.attrs(styles.inlineChips).class}>
+                          <div class={stylex.attrs(styles.eyebrow).class}>Run detail</div>
                           <StatusChip tone={runStatusTone(run().status)}>
                             {run().status}
                           </StatusChip>
                         </div>
-                        <h2 class="mt-1 break-words text-[1.2rem] font-semibold text-(--foreground) [overflow-wrap:anywhere]">{selectedRunItem() ? formatRunListItemTitle(selectedRunItem()!) : selectedJob()?.name}</h2>
-                        <div class="mt-3 grid gap-x-5 gap-y-1 border-l-2 border-(--border) pl-4 text-[0.675rem] leading-5 text-(--muted) sm:grid-cols-2 xl:grid-cols-3">
+                        <h2 class={stylex.attrs(styles.detailTitle).class}>{selectedRunItem() ? formatRunListItemTitle(selectedRunItem()!) : selectedJob()?.name}</h2>
+                        <div class={stylex.attrs(styles.factGrid).class}>
                           <RunFact label="Run">
-                            <span class="min-w-0 break-all">{run().id}</span>
+                            <span class={stylex.attrs(styles.breakAll).class}>{run().id}</span>
                             <CopyTextButton
                               value={run().id}
                               tooltip="Copy run id"
@@ -1206,23 +1215,23 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                         </div>
                       </div>
 
-                      <div class="flex flex-wrap gap-2">
+                      <div class={stylex.attrs(styles.actionRow).class}>
                         <Show when={selectedJob()?.assistantId}>
                           {(assistantId) => (
-                            <ActionButton tooltip="Open owning assistant" variant="secondary" icon={<Bot class="h-4 w-4" />} onClick={() => openAssistantDetails(assistantId())}>
+                            <ActionButton tooltip="Open owning assistant" variant="secondary" icon={<Bot class={stylex.attrs(styles.iconMd).class} />} onClick={() => openAssistantDetails(assistantId())}>
                               Assistant
                             </ActionButton>
                           )}
                         </Show>
                         <Show when={selectedRunItem()?.kind === "background" && run().status === "awaiting-approval"}>
-                          <ActionButton tooltip="Approve this background run" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<Play class="h-4 w-4" />} onClick={() => sendCommand({ type: "background-job.approve-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Approve</ActionButton>
+                          <ActionButton tooltip="Approve this background run" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<Play class={stylex.attrs(styles.iconMd).class} />} onClick={() => sendCommand({ type: "background-job.approve-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Approve</ActionButton>
                           <ActionButton tooltip="Reject this background run" variant="secondary" onClick={() => sendCommand({ type: "background-job.reject-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Reject</ActionButton>
                         </Show>
                         <Show when={selectedRunItem()?.kind === "background" && run().status === "running"}>
-                          <ActionButton tooltip="Stop this background run" variant="secondary" icon={<Pause class="h-4 w-4" />} onClick={() => sendCommand({ type: "background-job.stop-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Stop</ActionButton>
+                          <ActionButton tooltip="Stop this background run" variant="secondary" icon={<Pause class={stylex.attrs(styles.iconMd).class} />} onClick={() => sendCommand({ type: "background-job.stop-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Stop</ActionButton>
                         </Show>
                         <Show when={selectedRunItem()?.kind === "background" && (run().status === "failed" || run().status === "cancelled")}>
-                          <ActionButton tooltip="Retry this background run" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<RefreshCcw class="h-4 w-4" />} onClick={() => sendCommand({ type: "background-job.retry-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Retry</ActionButton>
+                          <ActionButton tooltip="Retry this background run" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<RefreshCcw class={stylex.attrs(styles.iconMd).class} />} onClick={() => sendCommand({ type: "background-job.retry-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Retry</ActionButton>
                         </Show>
                       </div>
                     </div>
@@ -1231,9 +1240,9 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                         runDetailViewport = element;
                         scrollRunDetailToBottom();
                       }}
-                      class="flex-1 min-h-0 pr-2"
-                      contentClass="w-full"
-                      itemClass="pb-3"
+                      class={stylex.attrs(styles.detailViewport).class}
+                      contentClass={stylex.attrs(styles.virtualContent).class}
+                      itemClass={stylex.attrs(styles.virtualItem).class}
                       items={selectedRunItem()?.kind === "background" ? (run() as BackgroundJobRun).events : []}
                       getKey={(event) => event.id}
                       estimateSize={135}
@@ -1241,17 +1250,17 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
                       stickToEnd
                     >
                       {(event) => (
-                        <article class={`min-w-0 border-l-2 py-3 pl-4 pr-2 ${runEventStageBorderClass(event.stage)}`}>
-                          <div class="flex items-center justify-between gap-3 text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">
+                        <article class={[stylex.attrs(styles.eventRow).class, runEventStageBorderClass(event.stage)].join(" ")}>
+                          <div class={stylex.attrs(styles.eventMeta).class}>
                             <span>{event.stage}</span>
                             <span>{formatShortTimestamp(event.createdAt)}</span>
                           </div>
-                          <div class="mt-2 break-words text-[0.75rem] font-semibold text-(--foreground) [overflow-wrap:anywhere]">
+                          <div class={stylex.attrs(styles.eventTitle).class}>
                             <FileLinkedText text={event.message} fileLinks={selectedRunItemFileLinks()} />
                           </div>
                           <Show when={event.detail}>
                             {(detail) => (
-                              <div class="mt-2 whitespace-pre-wrap break-words text-[0.675rem] leading-5 text-(--muted) [overflow-wrap:anywhere]">
+                              <div class={stylex.attrs(styles.eventDetail).class}>
                                 <FileLinkedText text={detail()} fileLinks={selectedRunItemFileLinks()} />
                               </div>
                             )}
@@ -1272,13 +1281,13 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
             title={detailsJob()?.name ?? detailsRun()?.jobId ?? "Background run"}
             eyebrow="Execution details"
             description={detailsRun() ? `${detailsRun()!.status} | ${formatShortTimestamp(detailsRun()!.updatedAt)}` : undefined}
-            class="max-w-3xl"
-            contentClass="max-h-[80vh]"
+            class={stylex.attrs(styles.dialogWide).class}
+            contentClass={stylex.attrs(styles.dialogBody).class}
             onClose={() => harnessStore.closeBackgroundJobDetailsDialog()}
           >
-            <div class="flex min-h-0 flex-col gap-4">
-              <div class="grid gap-1 text-[0.675rem] leading-5 text-(--muted)">
-                <div class="flex flex-wrap items-center gap-2">
+            <div class={stylex.attrs(styles.dialogStack).class}>
+              <div class={stylex.attrs(styles.metadataStack).class}>
+                <div class={stylex.attrs(styles.inlineChips).class}>
                   <span>Run: {detailsRun()?.id}</span>
                   <Show when={detailsRun()?.id}>
                     {(runId) => (
@@ -1338,8 +1347,8 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps = {}) {
 
 function RunFact(props: { label: string; children: JSX.Element }) {
   return (
-    <div class="min-w-0 break-words [overflow-wrap:anywhere]">
-      <span class="font-semibold text-(--foreground)">{props.label}: </span>
+    <div class={stylex.attrs(styles.runFact).class}>
+      <span class={stylex.attrs(styles.runFactLabel).class}>{props.label}: </span>
       <span>{props.children}</span>
     </div>
   );
@@ -1357,15 +1366,15 @@ function NextRunContent(props: { text: string; onRetryScheduler: () => void }) {
 
 function SchedulerWarningContent(props: { text: string; fileLinks?: FileLinkConfig; onRetryScheduler: () => void }) {
   return (
-    <span class="inline-flex min-w-0 flex-wrap items-center gap-2 align-baseline">
-      <FileLinkedText text={props.text} fileLinks={props.fileLinks} class="min-w-0 break-words [overflow-wrap:anywhere]" />
+    <span class={stylex.attrs(styles.schedulerContent).class}>
+      <FileLinkedText text={props.text} fileLinks={props.fileLinks} class={stylex.attrs(styles.runFact).class} />
       <Show when={props.text.startsWith(SCHEDULER_HEARTBEAT_WARNING_PREFIX)}>
         <ActionButton
           tooltip="Ask scheduler to check for due background jobs now"
           ariaLabel="Retry scheduler"
           size="sm"
           variant="secondary"
-          icon={<RefreshCcw class="h-3.5 w-3.5" />}
+          icon={<RefreshCcw class={stylex.attrs(styles.iconSm).class} />}
           onClick={(event) => {
             event.stopPropagation();
             props.onRetryScheduler();
@@ -1406,11 +1415,12 @@ function RunListButton(props: {
   };
   return (
     <div
-      class="dense-card min-w-0 w-full cursor-pointer border-l-4 p-3 text-left transition hover:border-(--accent-strong)"
-      classList={{
-        "dense-card-selected": selected() || props.selectedForBulk,
-        [runListItemBorderClass(props.item)]: !selected() && !props.selectedForBulk,
-      }}
+      class={[
+        stylex.attrs(styles.denseCard, styles.runCard).class,
+        selected() || props.selectedForBulk
+          ? stylex.attrs(styles.selectedCard).class
+          : runListItemBorderClass(props.item)
+      ].join(" ")}
       role="button"
       tabIndex={0}
       onPointerDown={(event) => props.onPointerDownItem?.(props.item, event)}
@@ -1427,12 +1437,12 @@ function RunListButton(props: {
       onContextMenu={(event) => props.onContextMenuItem?.(props.item, event)}
       onKeyDown={handleKeyDown}
     >
-      <div class="flex min-w-0 items-center justify-between gap-3">
-        <div class="flex min-w-0 items-center gap-2">
+      <div class={stylex.attrs(styles.runCardHeader).class}>
+        <div class={stylex.attrs(styles.runCardHeading).class}>
           <Show when={props.item.kind === "background"}>
             <ActionButton
               tooltip={props.selectedForBulk ? "Remove from bulk selection" : "Add to bulk selection"}
-              icon={props.selectedForBulk ? <CheckSquare2 class="h-3 w-3" /> : <Square class="h-3 w-3" />}
+              icon={props.selectedForBulk ? <CheckSquare2 class={stylex.attrs(styles.iconXs).class} /> : <Square class={stylex.attrs(styles.iconXs).class} />}
               size="icon"
               variant="ghost"
               ariaLabel={props.selectedForBulk ? `Remove ${formatRunListItemTitle(props.item)} from bulk selection` : `Add ${formatRunListItemTitle(props.item)} to bulk selection`}
@@ -1446,7 +1456,7 @@ function RunListButton(props: {
           </Show>
           <button
             type="button"
-            class="min-w-0 truncate text-left text-[0.725rem] font-semibold text-(--foreground) underline-offset-2 hover:text-(--accent-strong) hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong)"
+            class={stylex.attrs(styles.runSourceButton).class}
             aria-label={`Open source for ${formatRunListItemTitle(props.item)}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -1456,18 +1466,18 @@ function RunListButton(props: {
             {formatRunListItemTitle(props.item)}
           </button>
         </div>
-        <StatusChip tone={runListItemTone(props.item)} class="shrink-0">
+        <StatusChip tone={runListItemTone(props.item)} class={stylex.attrs(styles.statusChip).class}>
           {runListItemStatus(props.item)}
         </StatusChip>
       </div>
-      <div class="mt-2 break-words text-[0.675rem] leading-5 text-(--muted) [overflow-wrap:anywhere]">
-        <div class="[display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden">
+      <div class={stylex.attrs(styles.runSummary).class}>
+        <div class={stylex.attrs(styles.lineClampThree).class}>
           <FileLinkedText text={() => formatRunListItemSummary(props.item) ?? ""} fileLinks={props.fileLinks} />
         </div>
         <Show when={props.item.kind === "background" && formatRunProgress((props.item as { kind: "background"; run: BackgroundJobRun }).run)}>
-          {(progress) => <div class="truncate">{progress()}</div>}
+          {(progress) => <div class={stylex.attrs(styles.truncate).class}>{progress()}</div>}
         </Show>
-        <div class="mt-1 truncate">{formatRunListItemTime(props.item)}</div>
+        <div class={stylex.attrs(styles.timeLine).class}>{formatRunListItemTime(props.item)}</div>
       </div>
     </div>
   );
@@ -1487,23 +1497,18 @@ function HealthView(props: {
   };
 
   return (
-    <section class="flex min-h-0 flex-col gap-4 rounded-[1.35rem] border border-(--border) bg-white/55 p-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="flex flex-wrap items-center gap-2">
+    <section class={stylex.attrs(styles.healthPanel).class}>
+      <div class={stylex.attrs(styles.healthHeader).class}>
+        <div class={stylex.attrs(styles.inlineChips).class}>
           <For each={[1, 7, 30] as const}>
             {(windowDays) => (
               <Tooltip content={`Inspect the last ${windowDays === 1 ? "24 hours" : `${windowDays} days`}`}>
                 <button
                   type="button"
-                  class="rounded-full px-3 py-1.5 text-[0.675rem] font-semibold"
-                  classList={{
-                    "bg-(--accent)": props.healthWindowDays === windowDays,
-                    "text-white": props.healthWindowDays === windowDays,
-                    "border": props.healthWindowDays !== windowDays,
-                    "border-(--border)": props.healthWindowDays !== windowDays,
-                    "bg-white/70": props.healthWindowDays !== windowDays,
-                    "text-(--foreground)": props.healthWindowDays !== windowDays
-                  }}
+                  class={stylex.attrs(
+                    styles.healthWindowButton,
+                    props.healthWindowDays === windowDays ? styles.healthWindowSelected : styles.healthWindowIdle
+                  ).class}
                   onClick={() => props.onSelectWindow(windowDays)}
                 >
                   {windowDays === 1 ? "24h" : `${windowDays}d`}
@@ -1516,7 +1521,7 @@ function HealthView(props: {
           tooltip={props.diagnostics().loading ? "Refreshing diagnostics" : "Refresh diagnostics"}
           disabled={props.diagnostics().loading}
           disabledReason={props.diagnostics().loading ? "Diagnostics request already in flight" : undefined}
-          icon={<RefreshCcw class="h-4 w-4" />}
+          icon={<RefreshCcw class={stylex.attrs(styles.iconMd).class} />}
           variant="secondary"
           onClick={props.onRefresh}
         >
@@ -1527,20 +1532,20 @@ function HealthView(props: {
       <Show
         when={props.diagnostics().report}
         fallback={
-          <div class="rounded-[1.2rem] border border-dashed border-(--border) bg-white/45 p-4 text-[0.675rem] leading-5 text-(--muted)">
+          <div class={stylex.attrs(styles.emptyHealth).class}>
             {props.diagnostics().loading ? "Loading diagnostics..." : "Open Health to inspect recent reliability."}
           </div>
         }
       >
         {(report) => (
-          <ScrollArea class="min-h-0 flex-1 pr-2">
-            <div class="space-y-6">
-              <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <ScrollArea class={stylex.attrs(styles.virtualViewport).class}>
+            <div class={stylex.attrs(styles.healthSections).class}>
+              <div class={stylex.attrs(styles.summaryGrid).class}>
                 <For each={buildHealthSummaryRows(report())}>
                   {(row) => (
-                    <div class="dense-card p-3">
-                      <div class="text-[0.575rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">{row.label}</div>
-                      <div class="mt-2 text-[1.1rem] font-semibold text-(--foreground)" classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() }}>{row.value}</div>
+                    <div class={stylex.attrs(styles.denseCard, styles.summaryCard).class}>
+                      <div class={stylex.attrs(styles.summaryLabel).class}>{row.label}</div>
+                      <div class={stylex.attrs(styles.summaryValue, rightAlignedNumbersEnabled() && styles.numeric).class}>{row.value}</div>
                     </div>
                   )}
                 </For>
@@ -1572,7 +1577,7 @@ function HealthView(props: {
                 ])}
               />
 
-              <div class="grid gap-4 xl:grid-cols-2">
+              <div class={stylex.attrs(styles.healthPairGrid).class}>
                 <HealthTable
                   title="Repeated Prompt Hashes"
                   emptyMessage="No repeated prompt hashes in this window."
@@ -1627,20 +1632,20 @@ function HealthTable(props: {
 }) {
   return (
     <section>
-      <div class="mb-2 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">{props.title}</div>
+      <div class={stylex.attrs(styles.healthTableTitle).class}>{props.title}</div>
       <Show
         when={props.rows.length > 0}
-        fallback={<div class="rounded-[1rem] border border-dashed border-(--border) bg-white/45 p-3 text-[0.675rem] text-(--muted)">{props.emptyMessage}</div>}
+        fallback={<div class={stylex.attrs(styles.healthTableEmpty).class}>{props.emptyMessage}</div>}
       >
-        <div class="overflow-hidden rounded-[1rem] border border-(--border) bg-white/70">
-          <div class={`grid gap-2 border-b border-(--border) px-3 py-2 text-[0.575rem] font-semibold uppercase tracking-[0.16em] text-(--muted) ${healthTableColumns(props.headers.length)}`}>
-            <For each={props.headers}>{(header) => <div classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() && isRightAlignedHealthHeader(header) }}>{header}</div>}</For>
+        <div class={stylex.attrs(styles.healthTable).class}>
+          <div class={[stylex.attrs(styles.healthTableHeader).class, healthTableColumnClass(props.headers.length)].join(" ")}>
+            <For each={props.headers}>{(header) => <div class={stylex.attrs(rightAlignedNumbersEnabled() && isRightAlignedHealthHeader(header) && styles.numeric).class}>{header}</div>}</For>
           </div>
-          <div class="divide-y divide-(--border)">
+          <div class={stylex.attrs(styles.healthTableBody).class}>
             <For each={props.rows}>
               {(row) => (
-                <div class={`grid gap-2 px-3 py-2 text-[0.675rem] leading-5 text-(--foreground) ${healthTableColumns(row.length)}`}>
-                  <For each={row}>{(cell, index) => <div class="truncate" classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() && isRightAlignedHealthHeader(props.headers[index()]) }}>{cell}</div>}</For>
+                <div class={[stylex.attrs(styles.healthTableRow).class, healthTableColumnClass(row.length)].join(" ")}>
+                  <For each={row}>{(cell, index) => <div class={stylex.attrs(styles.truncate, rightAlignedNumbersEnabled() && isRightAlignedHealthHeader(props.headers[index()]) && styles.numeric).class}>{cell}</div>}</For>
                 </div>
               )}
             </For>
@@ -1678,26 +1683,26 @@ function jobsPaneMenuItems(
           kind: "submenu",
           label: "View",
           value: segment === "jobs" ? "Jobs" : segment === "inbox" ? "Runs" : "Health",
-          icon: <BriefcaseBusiness class="h-3.5 w-3.5" />,
+          icon: <BriefcaseBusiness class={stylex.attrs(styles.iconSm).class} />,
           items: [
             {
               kind: "option",
               label: "Jobs",
-              icon: <BriefcaseBusiness class="h-3.5 w-3.5" />,
+              icon: <BriefcaseBusiness class={stylex.attrs(styles.iconSm).class} />,
               selected: segment === "jobs",
               onSelect: () => setPreferences({ segment: "jobs" })
             },
             {
               kind: "option",
               label: "Runs",
-              icon: <Clock3 class="h-3.5 w-3.5" />,
+              icon: <Clock3 class={stylex.attrs(styles.iconSm).class} />,
               selected: segment === "inbox",
               onSelect: () => setPreferences({ segment: "inbox" })
             },
             {
               kind: "option",
               label: "Health",
-              icon: <ShieldCheck class="h-3.5 w-3.5" />,
+              icon: <ShieldCheck class={stylex.attrs(styles.iconSm).class} />,
               selected: segment === "health",
               onSelect: () => setPreferences({ segment: "health" })
             }
@@ -1713,33 +1718,33 @@ function jobsPaneMenuItems(
         kind: "submenu",
         label: "Sort jobs",
         value: formatJobSortLabel(preferences.jobSort),
-        icon: <Clock3 class="h-3.5 w-3.5" />,
+        icon: <Clock3 class={stylex.attrs(styles.iconSm).class} />,
         items: [
-          jobSortOption("Next run", "next-run", <Clock3 class="h-3.5 w-3.5" />),
-          jobSortOption("Updated", "updated", <Calendar class="h-3.5 w-3.5" />),
-          jobSortOption("Created", "created", <Calendar class="h-3.5 w-3.5" />),
-          jobSortOption("Status", "status", <ListFilter class="h-3.5 w-3.5" />),
-          jobSortOption("Risk", "risk", <ShieldCheck class="h-3.5 w-3.5" />)
+          jobSortOption("Next run", "next-run", <Clock3 class={stylex.attrs(styles.iconSm).class} />),
+          jobSortOption("Updated", "updated", <Calendar class={stylex.attrs(styles.iconSm).class} />),
+          jobSortOption("Created", "created", <Calendar class={stylex.attrs(styles.iconSm).class} />),
+          jobSortOption("Status", "status", <ListFilter class={stylex.attrs(styles.iconSm).class} />),
+          jobSortOption("Risk", "risk", <ShieldCheck class={stylex.attrs(styles.iconSm).class} />)
         ] as Array<Extract<LeftPaneSearchMenuItem, { kind: "option" }>>
       },
       {
         kind: "submenu",
         label: "Kind",
         value: preferences.kind === "ai-routine" ? "AI" : preferences.kind === "shell" ? "Shell" : "All",
-        icon: <ListFilter class="h-3.5 w-3.5" />,
+        icon: <ListFilter class={stylex.attrs(styles.iconSm).class} />,
         active: Boolean(preferences.kind),
         items: [
           {
             kind: "option",
             label: "All kinds",
-            icon: <ListFilter class="h-3.5 w-3.5" />,
+            icon: <ListFilter class={stylex.attrs(styles.iconSm).class} />,
             selected: !preferences.kind,
             onSelect: () => setPreferences({ kind: undefined })
           },
           {
             kind: "option",
             label: "AI routine",
-            icon: <Bot class="h-3.5 w-3.5" />,
+            icon: <Bot class={stylex.attrs(styles.iconSm).class} />,
             selected: preferences.kind === "ai-routine",
             active: preferences.kind === "ai-routine",
             onSelect: () => setPreferences({ kind: "ai-routine" })
@@ -1747,7 +1752,7 @@ function jobsPaneMenuItems(
           {
             kind: "option",
             label: "Shell",
-            icon: <Terminal class="h-3.5 w-3.5" />,
+            icon: <Terminal class={stylex.attrs(styles.iconSm).class} />,
             selected: preferences.kind === "shell",
             active: preferences.kind === "shell",
             onSelect: () => setPreferences({ kind: "shell" })
@@ -1758,20 +1763,20 @@ function jobsPaneMenuItems(
         kind: "submenu",
         label: "Status",
         value: preferences.status ? toProperCase(preferences.status) : "All",
-        icon: <Pause class="h-3.5 w-3.5" />,
+        icon: <Pause class={stylex.attrs(styles.iconSm).class} />,
         active: Boolean(preferences.status),
         items: [
           {
             kind: "option",
             label: "All statuses",
-            icon: <ListFilter class="h-3.5 w-3.5" />,
+            icon: <ListFilter class={stylex.attrs(styles.iconSm).class} />,
             selected: !preferences.status,
             onSelect: () => setPreferences({ status: undefined })
           },
           ...(["enabled", "paused", "disabled"] as const).map((status) => ({
             kind: "option" as const,
             label: toProperCase(status),
-            icon: <Pause class="h-3.5 w-3.5" />,
+            icon: <Pause class={stylex.attrs(styles.iconSm).class} />,
             selected: preferences.status === status,
             active: preferences.status === status,
             onSelect: () => setPreferences({ status })
@@ -1782,7 +1787,7 @@ function jobsPaneMenuItems(
         kind: "submenu",
         label: "Job state",
         value: jobStateFilterLabel(preferences.jobState ?? "all"),
-        icon: <ShieldCheck class="h-3.5 w-3.5" />,
+        icon: <ShieldCheck class={stylex.attrs(styles.iconSm).class} />,
         active: (preferences.jobState ?? "all") !== "all",
         items: (["all", "idle", "due", "queued", "blocked", "running", "stale", "backoff"] satisfies JobsJobStateFilter[]).map((jobState) => ({
           kind: "option" as const,
@@ -1797,20 +1802,20 @@ function jobsPaneMenuItems(
         kind: "submenu",
         label: "Risk",
         value: preferences.risk ? toProperCase(preferences.risk) : "All",
-        icon: <ShieldCheck class="h-3.5 w-3.5" />,
+        icon: <ShieldCheck class={stylex.attrs(styles.iconSm).class} />,
         active: Boolean(preferences.risk),
         items: [
           {
             kind: "option",
             label: "All risk",
-            icon: <ListFilter class="h-3.5 w-3.5" />,
+            icon: <ListFilter class={stylex.attrs(styles.iconSm).class} />,
             selected: !preferences.risk,
             onSelect: () => setPreferences({ risk: undefined })
           },
           ...(["safe", "slightly-unsafe", "unsafe"] as const).map((risk) => ({
             kind: "option" as const,
             label: toProperCase(risk),
-            icon: <ShieldCheck class="h-3.5 w-3.5" />,
+            icon: <ShieldCheck class={stylex.attrs(styles.iconSm).class} />,
             selected: preferences.risk === risk,
             active: preferences.risk === risk,
             onSelect: () => setPreferences({ risk })
@@ -1821,7 +1826,7 @@ function jobsPaneMenuItems(
       {
         kind: "option",
         label: "Clear search and filters",
-        icon: <Trash2 class="h-3.5 w-3.5" />,
+        icon: <Trash2 class={stylex.attrs(styles.iconSm).class} />,
         onSelect: () => setPreferences({ jobSearch: "", kind: undefined, status: undefined, jobState: "all", risk: undefined })
       }
     ];
@@ -1833,19 +1838,19 @@ function jobsPaneMenuItems(
       kind: "submenu",
       label: "Sort runs",
       value: formatRunSortLabel(preferences.runSort ?? "urgency"),
-      icon: <Clock3 class="h-3.5 w-3.5" />,
+      icon: <Clock3 class={stylex.attrs(styles.iconSm).class} />,
       items: [
-        runSortOption("Urgency", "urgency", <ShieldCheck class="h-3.5 w-3.5" />),
-        runSortOption("Updated", "updated", <Calendar class="h-3.5 w-3.5" />),
-        runSortOption("Queued", "queued", <Clock3 class="h-3.5 w-3.5" />),
-        runSortOption("Status", "status", <ListFilter class="h-3.5 w-3.5" />)
+        runSortOption("Urgency", "urgency", <ShieldCheck class={stylex.attrs(styles.iconSm).class} />),
+        runSortOption("Updated", "updated", <Calendar class={stylex.attrs(styles.iconSm).class} />),
+        runSortOption("Queued", "queued", <Clock3 class={stylex.attrs(styles.iconSm).class} />),
+        runSortOption("Status", "status", <ListFilter class={stylex.attrs(styles.iconSm).class} />)
       ] as Array<Extract<LeftPaneSearchMenuItem, { kind: "option" }>>
     },
     {
       kind: "submenu",
       label: "Run state",
       value: runFilterLabel(state.jobsRunFilter),
-      icon: <ShieldCheck class="h-3.5 w-3.5" />,
+      icon: <ShieldCheck class={stylex.attrs(styles.iconSm).class} />,
       active: state.jobsRunFilter !== "all",
       items: (["all", "approval", "input", "queued", "running", "failed", "done"] satisfies JobsRunFilter[]).map((filter) => ({
         kind: "option" as const,
@@ -1860,7 +1865,7 @@ function jobsPaneMenuItems(
     {
       kind: "option",
       label: "Clear search and filters",
-      icon: <Trash2 class="h-3.5 w-3.5" />,
+      icon: <Trash2 class={stylex.attrs(styles.iconSm).class} />,
       onSelect: () => {
         setPreferences({ runSearch: "" });
         harnessStore.setJobsRunFilter("all");
@@ -1918,9 +1923,9 @@ function EmptyFilteredState(props: { message: string; onClear: () => void; actio
     <LeftPaneEmptyState>
       <div>{props.message}</div>
       <Show when={props.actions}>
-        <div class="mt-3 flex flex-wrap gap-2">{props.actions}</div>
+        <div class={stylex.attrs(styles.emptyActions).class}>{props.actions}</div>
       </Show>
-      <div class="mt-3">
+      <div class={stylex.attrs(styles.emptyClear).class}>
         <ActionButton tooltip="Clear search and filters" size="sm" variant="ghost" onClick={props.onClear}>
           Clear
         </ActionButton>
@@ -1943,18 +1948,18 @@ function buildHealthSummaryRows(report: NonNullable<RunDiagnosticsViewState["rep
   ];
 }
 
-function healthTableColumns(columnCount: number) {
+function healthTableColumnClass(columnCount: number) {
   switch (columnCount) {
     case 3:
-      return "md:grid-cols-3";
+      return stylex.attrs(styles.columnsThree).class;
     case 4:
-      return "md:grid-cols-4";
+      return stylex.attrs(styles.columnsFour).class;
     case 5:
-      return "md:grid-cols-5";
+      return stylex.attrs(styles.columnsFive).class;
     case 6:
-      return "md:grid-cols-6";
+      return stylex.attrs(styles.columnsSix).class;
     default:
-      return "md:grid-cols-3";
+      return stylex.attrs(styles.columnsThree).class;
   }
 }
 
@@ -2186,22 +2191,22 @@ function CapacityBar(props: { jobs: BackgroundJob[] }) {
   });
   const barClass = createMemo(() => {
     if (ratio() > 1) {
-      return "bg-rose-500";
+      return stylex.attrs(styles.capacityCongested).class;
     }
     if (ratio() >= 0.8) {
-      return "bg-amber-500";
+      return stylex.attrs(styles.capacityTight).class;
     }
-    return "bg-emerald-500";
+    return stylex.attrs(styles.capacityHealthy).class;
   });
   return (
     <Tooltip content="Recurring tasks are taking longer than their frequency. Some runs will be skipped to prevent state corruption.">
-      <div class="mb-3 border-l-2 border-(--border) px-3 py-2">
-        <div class="flex items-center justify-between gap-3 text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-(--muted)">
+      <div class={stylex.attrs(styles.capacity).class}>
+        <div class={stylex.attrs(styles.capacityHeader).class}>
           <span>Capacity</span>
           <span>{status()}</span>
         </div>
-        <div class="mt-2 h-2 overflow-hidden rounded-full bg-(--muted)/15">
-          <div class={`h-full rounded-full ${barClass()}`} style={{ width: `${Math.min(100, percent())}%` }} />
+        <div class={stylex.attrs(styles.capacityTrack).class}>
+          <div class={[stylex.attrs(styles.capacityBar).class, barClass()].join(" ")} style={{ width: `${Math.min(100, percent())}%` }} />
         </div>
       </div>
     </Tooltip>
@@ -2503,21 +2508,21 @@ function riskTone(risk: BackgroundJob["riskLevel"]): StatusChipTone {
 function runStatusBorderClass(status: BackgroundJobRun["status"]) {
   switch (status) {
     case "succeeded":
-      return "border-l-emerald-500";
+      return stylex.attrs(styles.borderSuccess).class;
     case "partial-complete":
-      return "border-l-amber-400";
+      return stylex.attrs(styles.borderWarning).class;
     case "failed":
     case "cancelled":
-      return "border-l-rose-400";
+      return stylex.attrs(styles.borderDanger).class;
     case "awaiting-approval":
     case "awaiting-user-input":
-      return "border-l-amber-400";
+      return stylex.attrs(styles.borderWarning).class;
     case "running":
-      return "border-l-sky-400";
+      return stylex.attrs(styles.borderInfo).class;
     case "queued":
-      return "border-l-slate-300";
+      return stylex.attrs(styles.borderNeutral).class;
     case "skipped":
-      return "border-l-stone-300";
+      return stylex.attrs(styles.borderStone).class;
   }
 }
 
@@ -2527,39 +2532,39 @@ function runListItemBorderClass(item: RunListItem) {
   }
   switch (item.entry.run.status) {
     case "completed":
-      return "border-l-emerald-500";
+      return stylex.attrs(styles.borderSuccess).class;
     case "partial-complete":
-      return "border-l-amber-400";
+      return stylex.attrs(styles.borderWarning).class;
     case "failed":
     case "stopped":
-      return "border-l-rose-400";
+      return stylex.attrs(styles.borderDanger).class;
     case "awaiting-user-input":
-      return "border-l-amber-400";
+      return stylex.attrs(styles.borderWarning).class;
     case "running-main":
     case "running-subagents":
     case "aggregating":
-      return "border-l-sky-400";
+      return stylex.attrs(styles.borderInfo).class;
     case "planning":
     case "ready":
-      return "border-l-slate-300";
+      return stylex.attrs(styles.borderNeutral).class;
   }
 }
 
 function runEventStageBorderClass(stage: string) {
   const normalized = stage.toLowerCase();
   if (normalized.includes("fail") || normalized.includes("error") || normalized.includes("cancel")) {
-    return "border-rose-400";
+    return stylex.attrs(styles.borderDanger).class;
   }
   if (normalized.includes("approval") || normalized.includes("input") || normalized.includes("warn")) {
-    return "border-amber-400";
+    return stylex.attrs(styles.borderWarning).class;
   }
   if (normalized.includes("done") || normalized.includes("complete") || normalized.includes("success")) {
-    return "border-emerald-500";
+    return stylex.attrs(styles.borderSuccess).class;
   }
   if (normalized.includes("exec") || normalized.includes("run")) {
-    return "border-sky-400";
+    return stylex.attrs(styles.borderInfo).class;
   }
-  return "border-(--border)";
+  return stylex.attrs(styles.borderDefault).class;
 }
 
 function formatPromptStats(promptStats: BackgroundJobRun["promptStats"] | undefined) {
@@ -2620,24 +2625,24 @@ function JobDetail(props: {
     <Show
       when={props.job}
       fallback={
-        <div class="flex h-full min-h-80 items-center justify-center border border-dashed border-(--border) p-6 text-center text-[0.675rem] text-(--muted)">
+        <div class={stylex.attrs(styles.detailEmpty).class}>
           Select background job to inspect schedule and actions.
         </div>
       }
     >
       {(job) => (
-        <div class="flex h-full min-h-0 flex-col gap-4">
-          <div class="border-b border-(--border) pb-4">
-            <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class={stylex.attrs(styles.jobDetail).class}>
+          <div class={stylex.attrs(styles.jobDetailHeader).class}>
+            <div class={stylex.attrs(styles.jobDetailTop).class}>
               <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Job detail</div>
+                <div class={stylex.attrs(styles.inlineChips).class}>
+                  <div class={stylex.attrs(styles.eyebrow).class}>Job detail</div>
                   <StatusChip tone={jobStatusTone(job().status)}>
                     {job().status}
                   </StatusChip>
                 </div>
-                <h2 class="mt-1 break-words text-[1.2rem] font-semibold text-(--foreground) [overflow-wrap:anywhere]">{job().name}</h2>
-                <div class="mt-3 grid gap-x-5 gap-y-1 border-l-2 border-(--border) pl-4 text-[0.675rem] leading-5 text-(--muted) sm:grid-cols-2 xl:grid-cols-3">
+                <h2 class={stylex.attrs(styles.detailTitle).class}>{job().name}</h2>
+                <div class={stylex.attrs(styles.factGrid).class}>
                   <RunFact label="Kind">{job().kind === "ai-routine" ? "AI routine" : "Shell command"}</RunFact>
                   <RunFact label="Risk">{job().riskLevel === "safe" ? "Safe: no elevated approval expected" : "Needs safety review"}</RunFact>
                   <RunFact label="Lane">{job().lane === "concurrent" ? "Can overlap" : "One at a time"}</RunFact>
@@ -2668,7 +2673,7 @@ function JobDetail(props: {
                     )}
                   </For>
                   <Show when={activeRun()}>
-                    {(run) => <div class="min-w-0 break-words [overflow-wrap:anywhere]">Blocked by: {run().status} run {run().id}</div>}
+                    {(run) => <div class={stylex.attrs(styles.runFact).class}>Blocked by: {run().status} run {run().id}</div>}
                   </Show>
                   <Show when={job().description}>
                     {(description) => (
@@ -2679,10 +2684,10 @@ function JobDetail(props: {
                   </Show>
                 </div>
               </div>
-              <div class="flex flex-wrap gap-2">
+              <div class={stylex.attrs(styles.actionRow).class}>
                 <Show when={job().assistantId}>
                   {(assistantId) => (
-                    <ActionButton tooltip="Open owning assistant" variant="secondary" icon={<Bot class="h-4 w-4" />} onClick={() => props.onOpenAssistant(assistantId())}>
+                    <ActionButton tooltip="Open owning assistant" variant="secondary" icon={<Bot class={stylex.attrs(styles.iconMd).class} />} onClick={() => props.onOpenAssistant(assistantId())}>
                       Assistant
                     </ActionButton>
                   )}
@@ -2691,34 +2696,34 @@ function JobDetail(props: {
                   tooltip="Run task now"
                   disabled={props.executionPaused || Boolean(activeRun())}
                   disabledReason={props.executionPaused ? props.executionPauseReason : activeRun() ? "Stop the active run before starting another" : undefined}
-                  icon={<Play class="h-4 w-4" />}
+                  icon={<Play class={stylex.attrs(styles.iconMd).class} />}
                   onClick={() => props.onRunNow(job())}
                 >
                   Run now
                 </ActionButton>
                 <Show when={activeRun()}>
                   {(run) => (
-                    <ActionButton tooltip="Stop active background run" variant="secondary" icon={<Pause class="h-4 w-4" />} onClick={() => props.onStopRun(run())}>
+                    <ActionButton tooltip="Stop active background run" variant="secondary" icon={<Pause class={stylex.attrs(styles.iconMd).class} />} onClick={() => props.onStopRun(run())}>
                       Stop run
                     </ActionButton>
                   )}
                 </Show>
-                <ActionButton tooltip="Edit task" variant="secondary" icon={<RefreshCcw class="h-4 w-4" />} onClick={() => props.onEdit(job())}>
+                <ActionButton tooltip="Edit task" variant="secondary" icon={<RefreshCcw class={stylex.attrs(styles.iconMd).class} />} onClick={() => props.onEdit(job())}>
                   Edit
                 </ActionButton>
               </div>
             </div>
           </div>
-          <section class="flex min-h-0 flex-1 flex-col">
-            <div class="mb-3 flex items-center justify-between gap-3">
-              <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Execution log</div>
+          <section class={stylex.attrs(styles.executionSection).class}>
+            <div class={stylex.attrs(styles.executionHeader).class}>
+              <div class={stylex.attrs(styles.eyebrow).class}>Execution log</div>
               <Show when={latestRun()}>
-                {(run) => <div class="text-[0.625rem] text-(--muted)">{run().status}</div>}
+                {(run) => <div class={stylex.attrs(styles.executionStatus).class}>{run().status}</div>}
               </Show>
             </div>
             <Show
               when={latestRun()?.events.length}
-              fallback={<div class="border-l-2 border-dashed border-(--border) py-3 pl-4 text-[0.675rem] text-(--muted)">No execution log yet.</div>}
+              fallback={<div class={stylex.attrs(styles.executionEmpty).class}>No execution log yet.</div>}
             >
               <ExecutionLog entries={latestRunEvents()} emptyMessage="No execution log yet." rowVariant="flat" fileLinks={props.fileLinks} />
             </Show>
@@ -2767,37 +2772,37 @@ function jobStateFilterLabel(filter: JobsJobStateFilter) {
 function jobStateFilterIcon(filter: JobsJobStateFilter) {
   switch (filter) {
     case "all":
-      return <ListFilter class="h-3.5 w-3.5" />;
+      return <ListFilter class={stylex.attrs(styles.iconSm).class} />;
     case "due":
     case "queued":
-      return <Clock3 class="h-3.5 w-3.5" />;
+      return <Clock3 class={stylex.attrs(styles.iconSm).class} />;
     case "blocked":
     case "backoff":
-      return <CircleX class="h-3.5 w-3.5" />;
+      return <CircleX class={stylex.attrs(styles.iconSm).class} />;
     case "running":
-      return <LoaderCircle class="h-3.5 w-3.5" />;
+      return <LoaderCircle class={stylex.attrs(styles.iconSm).class} />;
     case "stale":
-      return <RefreshCcw class="h-3.5 w-3.5" />;
+      return <RefreshCcw class={stylex.attrs(styles.iconSm).class} />;
     case "idle":
-      return <CheckCircle2 class="h-3.5 w-3.5" />;
+      return <CheckCircle2 class={stylex.attrs(styles.iconSm).class} />;
   }
 }
 
 function runFilterIcon(filter: JobsRunFilter) {
   switch (filter) {
     case "all":
-      return <ListFilter class="h-3.5 w-3.5" />;
+      return <ListFilter class={stylex.attrs(styles.iconSm).class} />;
     case "approval":
-      return <ShieldCheck class="h-3.5 w-3.5" />;
+      return <ShieldCheck class={stylex.attrs(styles.iconSm).class} />;
     case "input":
-      return <MessageSquareText class="h-3.5 w-3.5" />;
+      return <MessageSquareText class={stylex.attrs(styles.iconSm).class} />;
     case "queued":
-      return <Plus class="h-3.5 w-3.5" />;
+      return <Plus class={stylex.attrs(styles.iconSm).class} />;
     case "running":
-      return <LoaderCircle class="h-3.5 w-3.5" />;
+      return <LoaderCircle class={stylex.attrs(styles.iconSm).class} />;
     case "failed":
-      return <CircleX class="h-3.5 w-3.5" />;
+      return <CircleX class={stylex.attrs(styles.iconSm).class} />;
     case "done":
-      return <CheckCircle2 class="h-3.5 w-3.5" />;
+      return <CheckCircle2 class={stylex.attrs(styles.iconSm).class} />;
   }
 }

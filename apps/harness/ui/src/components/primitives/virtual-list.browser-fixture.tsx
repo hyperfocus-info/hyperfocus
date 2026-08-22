@@ -1,7 +1,8 @@
 /** @jsxImportSource solid-js */
 import { createMemo, createSignal, onMount } from "solid-js";
 import { render } from "solid-js/web";
-import "../../legacy.css";
+import * as stylex from "@stylexjs/stylex";
+import "../../global-styles";
 import { VirtualList } from "./virtual-list";
 
 type FixtureItem = {
@@ -73,9 +74,9 @@ function FixtureApp() {
         {tab() === "reverse" ? (
           <VirtualList
             dataTest="browser-reverse"
-            class="min-h-0 flex-1 pr-2"
-            contentClass="w-full"
-            itemClass="pb-2"
+            class={stylex.attrs(styles.viewport).class}
+            contentClass={stylex.attrs(styles.content).class}
+            itemClass={stylex.attrs(styles.item).class}
             items={reverseItems}
             getKey={(item) => item.id}
             estimateSize={44}
@@ -89,9 +90,9 @@ function FixtureApp() {
         {tab() === "forward" ? (
           <VirtualList
             dataTest="browser-forward"
-            class="min-h-0 flex-1 pr-2"
-            contentClass="w-full"
-            itemClass="pb-2"
+            class={stylex.attrs(styles.viewport).class}
+            contentClass={stylex.attrs(styles.content).class}
+            itemClass={stylex.attrs(styles.item).class}
             items={forwardItems}
             getKey={(item) => item.id}
             estimateSize={48}
@@ -125,3 +126,9 @@ function FixtureRow(props: { item: FixtureItem }) {
 }
 
 render(() => <FixtureApp />, document.getElementById("root")!);
+
+const styles = stylex.create({
+  viewport: { flex: "1 1 0%", minHeight: 0, paddingRight: "0.5rem" },
+  content: { width: "100%" },
+  item: { paddingBottom: "0.5rem" },
+});

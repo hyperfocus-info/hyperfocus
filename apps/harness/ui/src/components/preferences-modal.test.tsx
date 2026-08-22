@@ -84,9 +84,9 @@ createUiTest("PreferencesModal", () => {
 
     const panel = document.querySelector("[data-test-preferences-panel]");
     const footer = panel?.querySelector("footer");
-    expect(panel?.className).toContain("overflow-visible");
-    expect(panel?.className).toContain("lg:overflow-hidden");
-    expect(footer?.className).toContain("shrink-0");
+    expect(panel?.className).toContain("overflowVisible");
+    expect(panel?.className).toContain("lgOverflowHidden");
+    expect(footer?.className).toContain("shrink0");
   });
 
   it("does not expose hidden interactive test shims", () => {
@@ -123,7 +123,8 @@ createUiTest("PreferencesModal", () => {
     expect(screen.getByRole("button", { name: /Background Jobs/i })).not.toBeNull();
     expect(screen.getByRole("button", { name: /Developer & Advanced/i })).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Safety & Guardrails/i }));
+    const safetyButton = screen.getByRole("button", { name: /Safety & Guardrails/i });
+    fireEvent.click(safetyButton);
     expect(await screen.findByText("Planning and approval")).not.toBeNull();
   });
 

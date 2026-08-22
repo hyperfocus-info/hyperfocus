@@ -24,6 +24,8 @@ import { auditNavigationProject2D } from "../../../engine/src/project/runtime-na
 import { validatePlayableSaveProject2D } from "../../../engine/src/project/runtime-save-2d.ts";
 import { validatePlayableStoryProject2D } from "../../../engine/src/project/runtime-story-2d.ts";
 import { createEditorStarter, type EditorStarterId } from "./starter-projects.ts";
+import { mountEditorShellView, type EditorCenterTab, type EditorMode } from "./editor-shell-view.tsx";
+import { mountEditorSourceSurface } from "./editor-source-surface.tsx";
 
 const RECOVERY_KEY = "catalog-engine.editor.recovery.v1";
 const LAST_BUILD_KEY = "catalog-engine.editor.last-build.v1";
@@ -33,7 +35,7 @@ const MAX_ASSET_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_ASSET_CATALOG_BYTES = 1024 * 1024 * 1024;
 const FIRST_RUN_KEY = "catalog-engine.editor.first-run-complete.v1";
 
-export type EditorMode = "edit" | "play" | "profile" | "build";
+export type { EditorMode } from "./editor-shell-view.tsx";
 
 export type EditorShellBridge = {
   captureProject(base: EditorProject): EditorProject;
@@ -57,11 +59,10 @@ export type EditorShell = {
   refreshSelection(): void;
   undo(): void;
   redo(): void;
-  openCenter(tab?: CenterTab): void;
+  openCenter(tab?: EditorCenterTab): void;
   destroy(): void;
 };
 
-type CenterTab = "project" | "learn" | "settings" | "build" | "profile" | "history";
 type EditorScriptFile = { path: string; language: "typescript"; source: string };
 type EditorScripts = { activePath: string; files: EditorScriptFile[] };
 type Editor3DEntity = {
@@ -80,69 +81,32 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
   const recovered = readRecovery();
   const history = new ProjectHistory(recovered ?? createDefaultProject());
   let mode: EditorMode = "edit";
-  let selectedCenterTab: CenterTab = "project";
+  let selectedCenterTab: EditorCenterTab = "project";
   let activeScriptPath = "";
   let active3DEntityId = "";
   let remoteSocket: WebSocket | undefined;
   let releaseFocusTrap: (() => void) | undefined;
 
   const app = required<HTMLElement>(".app-shell");
-  const topbar = required<HTMLElement>(".topbar");
   const workspaceHost = required<HTMLElement>(".workspace-host");
   const resourceNav = required<HTMLElement>(".workspace-tabs");
-  resourceNav.classList.add("resource-nav");
-  resourceNav.setAttribute("aria-label", "Project resource editors");
-  resourceNav.setAttribute("role", "tablist");
+  const shellView = mountEditorShellView({ app, workspaceHost, resourceNav });
+  let viewportFullscreen = false;
 
-  const modeNav = document.createElement("nav");
-  modeNav.className = "editor-mode-tabs";
-  modeNav.setAttribute("aria-label", "Editor modes");
-  modeNav.innerHTML = [
-    modeButton("edit", "Edit", "F1"),
-    modeButton("play", "Play", "F6"),
-    modeButton("profile", "Profile", "F7"),
-    modeButton("build", "Build", "F8"),
-  ].join("");
-  resourceNav.replaceWith(modeNav);
-
-  const editorBody = document.createElement("div");
-  editorBody.className = "editor-body";
-  const sidebar = document.createElement("aside");
-  sidebar.className = "project-sidebar";
-  sidebar.setAttribute("aria-label", "Project browser");
-  sidebar.innerHTML = sidebarMarkup();
-  workspaceHost.before(editorBody);
-  editorBody.append(sidebar, workspaceHost);
-  required("#resource-nav-slot", sidebar).append(resourceNav);
-
-  const stageInspectorPanel = required<HTMLElement>(".tile-panel", workspaceHost);
-  const sidebarInspectorSection = required<HTMLElement>(".inspector-section", sidebar);
-  const selectionInspector = required<HTMLElement>("#project-selection-inspector", sidebarInspectorSection);
-  for (const child of [...stageInspectorPanel.children]) child.classList.add("stage-legacy-tool");
-  const inspectorTitle = document.createElement("div");
-  inspectorTitle.className = "panel-title";
-  inspectorTitle.innerHTML = "<span>Inspector</span><span class=\"panel-count\">EDITABLE</span>";
-  stageInspectorPanel.classList.add("inspector-section", "stage-authoring-inspector");
-  stageInspectorPanel.append(inspectorTitle, selectionInspector);
-  sidebarInspectorSection.remove();
-
-  const center = document.createElement("div");
-  center.className = "editor-center";
-  center.id = "editor-center";
-  center.hidden = true;
-  center.innerHTML = centerMarkup();
-  app.append(center);
-
-  const consoleDrawer = document.createElement("section");
-  consoleDrawer.className = "editor-console";
-  consoleDrawer.id = "editor-console";
-  consoleDrawer.hidden = true;
-  consoleDrawer.innerHTML = '<header><strong>Console &amp; build output</strong><button type="button" data-editor-action="close-console" aria-label="Close console">×</button></header><div id="editor-console-output" role="log" aria-live="polite"></div>';
-  app.append(consoleDrawer);
+  const center = shellView.center;
+  const onConsoleOpen = () => setConsoleOpen(true);
+  document.addEventListener("hyperfocus:console-open", onConsoleOpen);
 
   const openInput = fileInput(".json,.hfp,application/json,application/octet-stream", true);
   const assetInput = fileInput("image/*,audio/*,.json,.csv,.txt,.glb,.gltf,.fbx,.ttf,.otf", true);
   app.append(openInput, assetInput);
+  const scriptTextarea = required<HTMLTextAreaElement>("#script-editor");
+  const sourceSurface = mountEditorSourceSurface({
+    textarea: scriptTextarea,
+    status: required("#script-editor-status"),
+    lineCount: required("#script-line-count"),
+    save: (path, source) => persistScript(path, source),
+  });
 
   const unsubscribe = history.subscribe(() => {
     localStorage.setItem(RECOVERY_KEY, stableProjectJson(history.project));
@@ -158,19 +122,33 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
   void hydrateAssetPreviews(history.project, bridge.previewAsset);
   if (!localStorage.getItem(FIRST_RUN_KEY)) queueMicrotask(() => openCenter("project"));
 
+  function onSidebarDragOver(event: DragEvent) {
+    const sidebar = (event.target as Element | null)?.closest<HTMLElement>(".project-sidebar");
+    if (!sidebar) return;
+    event.preventDefault(); sidebar.classList.add("is-drop-target");
+  }
+
+  function onSidebarDragLeave(event: DragEvent) {
+    (event.target as Element | null)?.closest<HTMLElement>(".project-sidebar")?.classList.remove("is-drop-target");
+  }
+
+  function onSidebarDrop(event: DragEvent) {
+    const sidebar = (event.target as Element | null)?.closest<HTMLElement>(".project-sidebar");
+    if (!sidebar) return;
+    event.preventDefault();
+    sidebar.classList.remove("is-drop-target");
+    void importAssets([...(event.dataTransfer?.files ?? [])]);
+  }
+
   function bindActions() {
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
     document.addEventListener("keydown", onKeyDown, true);
     openInput.addEventListener("change", () => { void openProjectFiles([...(openInput.files ?? [])]); });
     assetInput.addEventListener("change", () => { void importAssets([...(assetInput.files ?? [])]); });
-    sidebar.addEventListener("dragover", (event) => { event.preventDefault(); sidebar.classList.add("is-drop-target"); });
-    sidebar.addEventListener("dragleave", () => sidebar.classList.remove("is-drop-target"));
-    sidebar.addEventListener("drop", (event) => {
-      event.preventDefault();
-      sidebar.classList.remove("is-drop-target");
-      void importAssets([...(event.dataTransfer?.files ?? [])]);
-    });
+    document.addEventListener("dragover", onSidebarDragOver);
+    document.addEventListener("dragleave", onSidebarDragLeave);
+    document.addEventListener("drop", onSidebarDrop);
     const stageDrop = required<HTMLElement>("#stage-canvas-wrap");
     stageDrop.addEventListener("dragover", (event) => {
       if (!event.dataTransfer?.types.includes("application/x-engine-asset")) return;
@@ -185,11 +163,6 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
       event.preventDefault();
       createEntityFromAsset(assetId, bridge.viewportPoint(event.clientX, event.clientY));
     });
-    const scriptEditor = required<HTMLTextAreaElement>("#script-editor");
-    scriptEditor.addEventListener("input", () => {
-      setText("#script-editor-status", "Unsaved script changes");
-      setText("#script-line-count", `${scriptEditor.value.split("\n").length} lines`);
-    });
   }
 
   function onClick(event: MouseEvent) {
@@ -197,7 +170,7 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
     if (!target) return;
     if (target.dataset.editorMode) return setMode(target.dataset.editorMode as EditorMode);
     if (target.dataset.centerTab) {
-      selectedCenterTab = target.dataset.centerTab as CenterTab;
+      selectedCenterTab = target.dataset.centerTab as EditorCenterTab;
       renderCenter();
       return;
     }
@@ -240,7 +213,7 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
     if (action === "profile") return openCenter("profile");
     if (action === "history") return openCenter("history");
     if (action === "close-center") return closeCenter();
-    if (action === "close-console") return (consoleDrawer.hidden = true);
+    if (action === "close-console") return setConsoleOpen(false);
     if (action === "toggle-sidebar") return toggleSidebar();
     if (action === "fullscreen") return toggleFullscreen();
     if (action === "create-project") return createProjectFromForm();
@@ -277,7 +250,6 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
     const target = event.target as HTMLElement | null;
     const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable;
     if (event.key === "Escape" && !center.hidden) { closeCenter(); event.preventDefault(); return; }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s" && target?.id === "script-editor") { event.preventDefault(); saveScript(); return; }
     if (typing) return;
     if (event.code === "Space") { event.preventDefault(); event.stopPropagation(); bridge.togglePlayback(); return; }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void saveProject(); return; }
@@ -328,6 +300,12 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
     renderScriptWorkspace();
     render3DWorkspace();
     renderMode();
+    shellView.update({
+      mode,
+      centerTab: selectedCenterTab,
+      sidebarCollapsed: viewportFullscreen || history.project.layout.sidebarCollapsed,
+      sidebarSize: history.project.layout.sidebarWidth,
+    });
     if (!center.hidden) renderCenter();
   }
 
@@ -367,12 +345,8 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
     if (!activeScriptPath || !scripts.files.some((file) => file.path === activeScriptPath)) activeScriptPath = scripts.activePath || scripts.files[0]?.path || "";
     const file = scripts.files.find((candidate) => candidate.path === activeScriptPath);
     required("#script-file-list").innerHTML = scripts.files.map((candidate) => `<button type="button" class="${candidate.path === activeScriptPath ? "is-active" : ""}" data-script-path="${escapeHtml(candidate.path)}">${escapeHtml(candidate.path)}</button>`).join("") || '<p class="empty-copy">No scripts yet. Create one when you need custom behavior.</p>';
-    const editor = required<HTMLTextAreaElement>("#script-editor");
-    editor.disabled = !file;
-    editor.value = file?.source ?? "";
+    sourceSurface.load(file ? { path: file.path, source: file.source } : undefined);
     setText("#script-editor-path", file?.path ?? "No script selected");
-    setText("#script-editor-status", file ? "Saved to project" : "Create a script to begin");
-    setText("#script-line-count", `${file?.source.split("\n").length ?? 0} lines`);
   }
 
   function render3DWorkspace() {
@@ -395,43 +369,39 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
 
   function renderMode() {
     document.documentElement.dataset.editorMode = mode;
-    document.querySelectorAll<HTMLElement>("button[data-editor-mode]").forEach((button) => {
-      const active = button.dataset.editorMode === mode;
-      button.classList.toggle("is-active", active);
-      button.setAttribute("aria-pressed", String(active));
-    });
+    shellView.update({ mode });
   }
 
   function renderCenter() {
-    document.querySelectorAll<HTMLElement>("[data-center-tab]").forEach((button) => {
-      const active = button.dataset.centerTab === selectedCenterTab;
-      button.classList.toggle("is-active", active);
-      button.setAttribute("aria-selected", String(active));
-    });
-    const content = required("#editor-center-content");
-    if (selectedCenterTab === "project") content.innerHTML = projectCenterMarkup(history.project, Boolean(localStorage.getItem(RECOVERY_KEY)));
-    if (selectedCenterTab === "learn") content.innerHTML = learnMarkup(history.project);
-    if (selectedCenterTab === "settings") content.innerHTML = settingsMarkup(history.project);
-    if (selectedCenterTab === "build") content.innerHTML = buildMarkup(history.project);
-    if (selectedCenterTab === "profile") content.innerHTML = profileMarkup(bridge.captureProfile());
-    if (selectedCenterTab === "history") content.innerHTML = historyMarkup(history.changes);
+    let centerHtml = "";
+    if (selectedCenterTab === "project") centerHtml = projectCenterMarkup(history.project, Boolean(localStorage.getItem(RECOVERY_KEY)));
+    if (selectedCenterTab === "learn") centerHtml = learnMarkup(history.project);
+    if (selectedCenterTab === "settings") centerHtml = settingsMarkup(history.project);
+    if (selectedCenterTab === "build") centerHtml = buildMarkup(history.project);
+    if (selectedCenterTab === "profile") centerHtml = profileMarkup(bridge.captureProfile());
+    if (selectedCenterTab === "history") centerHtml = historyMarkup(history.changes);
+    shellView.update({ centerTab: selectedCenterTab, centerHtml });
   }
 
-  function openCenter(tab: CenterTab = "project") {
+  function openCenter(tab: EditorCenterTab = "project") {
     selectedCenterTab = tab;
-    center.hidden = false;
     renderCenter();
+    shellView.update({ centerOpen: true });
     releaseFocusTrap?.();
     releaseFocusTrap = trapFocus(center, () => closeCenter());
     required<HTMLElement>("[data-center-tab].is-active", center).focus();
   }
 
   function closeCenter() {
-    center.hidden = true;
+    shellView.update({ centerOpen: false });
     localStorage.setItem(FIRST_RUN_KEY, "1");
     releaseFocusTrap?.();
     releaseFocusTrap = undefined;
-    required<HTMLElement>("[data-editor-mode].is-active", topbar).focus();
+    required<HTMLElement>("[data-editor-mode].is-active").focus();
+  }
+
+  function setConsoleOpen(open: boolean) {
+    shellView.update({ consoleOpen: open });
   }
 
   function commitRuntime(label: string) {
@@ -612,7 +582,11 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
 
   function saveScript() {
     if (!activeScriptPath) return;
-    const source = required<HTMLTextAreaElement>("#script-editor").value;
+    void sourceSurface.save();
+  }
+
+  function persistScript(path: string, source: string) {
+    if (path !== activeScriptPath) return;
     history.transact(`Save ${activeScriptPath}`, (project) => {
       const scripts = ensureProjectScripts(project);
       const file = scripts.files.find((candidate) => candidate.path === activeScriptPath);
@@ -625,7 +599,7 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
 
   function downloadScript() {
     if (!activeScriptPath) return;
-    const source = required<HTMLTextAreaElement>("#script-editor").value;
+    const source = sourceSurface.text();
     download(activeScriptPath.split("/").at(-1) ?? "game.ts", source, "text/typescript;charset=utf-8");
   }
 
@@ -768,7 +742,7 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
       const portable = await capturePortableFiles(history.project);
       const opened = await openEditorPortableFiles(portable.projectJson, portable.assetsArchive);
       const bundle = await createEditorNeutralExport(opened.project, opened.assets);
-      consoleDrawer.hidden = false;
+      setConsoleOpen(true);
       for (const diagnostic of bundle.manifest.diagnostics) {
         appendConsole(`! [${diagnostic.code}] ${diagnostic.pointer} ${diagnostic.message}`);
       }
@@ -837,11 +811,11 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
       localStorage.setItem(LAST_BUILD_KEY, new Date().toISOString());
       appendConsole(`✓ Built offline runtime-backed HTML (${formatBytes(new Blob([html]).size)}) for ${project.settings.targetProfile}.`);
       for (const warning of preflight.diagnostics.filter((item) => item.severity === "warning")) appendConsole(`! ${warning.message}`);
-      consoleDrawer.hidden = false;
+      setConsoleOpen(true);
     } catch (error) {
       showError(error);
       appendConsole(`✕ ${error instanceof Error ? error.message : String(error)}`);
-      consoleDrawer.hidden = false;
+      setConsoleOpen(true);
     }
   }
 
@@ -882,8 +856,9 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
   }
 
   function toggleFullscreen() {
-    editorBody.classList.toggle("is-viewport-fullscreen");
-    announce(editorBody.classList.contains("is-viewport-fullscreen") ? "Viewport fullscreen enabled." : "Viewport fullscreen disabled.");
+    viewportFullscreen = !viewportFullscreen;
+    shellView.update({ sidebarCollapsed: viewportFullscreen || history.project.layout.sidebarCollapsed });
+    announce(viewportFullscreen ? "Viewport fullscreen enabled." : "Viewport fullscreen disabled.");
   }
 
   function restoreRecovery() {
@@ -905,6 +880,12 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
     document.removeEventListener("click", onClick);
     document.removeEventListener("change", onChange);
     document.removeEventListener("keydown", onKeyDown, true);
+    document.removeEventListener("dragover", onSidebarDragOver);
+    document.removeEventListener("dragleave", onSidebarDragLeave);
+    document.removeEventListener("drop", onSidebarDrop);
+    document.removeEventListener("hyperfocus:console-open", onConsoleOpen);
+    sourceSurface.dispose();
+    shellView.dispose();
   }
 
   return {
@@ -916,21 +897,6 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
     openCenter,
     destroy,
   };
-}
-
-function sidebarMarkup() {
-  return `<header class="project-header"><div><span>PROJECT</span><strong id="editor-project-name">Loading…</strong><small id="editor-project-state">Recovered locally</small></div><button type="button" data-editor-action="toggle-sidebar" aria-label="Collapse project browser">☰</button></header>
-    <div class="project-quick-actions"><button type="button" data-editor-action="new" title="Create a new game">New</button><button type="button" data-editor-action="open" title="Open a .hyperfocus project">Open</button><button type="button" data-editor-action="save" title="Save the two portable project files (Ctrl/Cmd+S)">Save</button><button type="button" data-editor-action="undo" title="Undo (Ctrl/Cmd+Z)">↶</button><button type="button" data-editor-action="redo" title="Redo (Ctrl/Cmd+Y)">↷</button></div>
-    <section class="project-section"><header><span>Scenes</span><button type="button" data-editor-action="create-scene" aria-label="Create scene">＋</button></header><div id="project-scenes"></div></section>
-    <section class="project-section"><header><span>Entities</span><button type="button" data-editor-action="create-entity" aria-label="Create entity">＋</button></header><div id="project-entities"></div></section>
-    <section class="project-section resource-section"><header><span>Editors</span><button type="button" data-editor-action="fullscreen" aria-label="Toggle viewport fullscreen">⛶</button></header><div id="resource-nav-slot"></div></section>
-    <section class="project-section assets-section"><header><span>Assets</span><button type="button" data-editor-action="import-assets" aria-label="Import assets">＋</button></header><div id="project-assets"></div><small class="drop-hint">Drop files to import · packed into assets.hfp when saved</small></section>
-    <section class="project-section inspector-section"><header><span>Components</span><button type="button" data-editor-action="settings" aria-label="Project settings">⚙</button></header><div id="project-selection-inspector"></div></section>
-    <nav class="sidebar-footer-actions" aria-label="Project tools"><button type="button" data-editor-action="learn">Learn</button><button type="button" data-editor-action="settings">Settings</button><button type="button" data-editor-action="build">Build</button><button type="button" data-editor-action="history">History</button></nav>`;
-}
-
-function centerMarkup() {
-  return `<div class="editor-center-dialog" role="dialog" aria-modal="true" aria-labelledby="editor-center-title"><header><div><span>CATALOG ENGINE</span><strong id="editor-center-title">Make a game</strong></div><button type="button" data-editor-action="close-center" aria-label="Close project center">×</button></header><nav role="tablist" aria-label="Project center"><button type="button" role="tab" data-center-tab="project">Create / Open</button><button type="button" role="tab" data-center-tab="learn">Learn</button><button type="button" role="tab" data-center-tab="settings">Settings</button><button type="button" role="tab" data-center-tab="build">Build</button><button type="button" role="tab" data-center-tab="profile">Profile</button><button type="button" role="tab" data-center-tab="history">History</button></nav><main id="editor-center-content"></main></div>`;
 }
 
 function projectCenterMarkup(project: EditorProject, hasRecovery: boolean) {
@@ -969,10 +935,6 @@ function profileMarkup(profile: Record<string, unknown>) {
 
 function historyMarkup(changes: Array<{ label: string; at: string }>) {
   return `<div class="history-layout"><section><span class="center-eyebrow">CHANGE HISTORY</span><h2>Recoverable editor operations</h2><p>Undo and redo use complete versioned project snapshots. Portable exports contain canonical, diffable project JSON plus one compressed asset pack.</p><div class="button-row"><button type="button" data-editor-action="undo">Undo</button><button type="button" data-editor-action="redo">Redo</button><button type="button" data-editor-action="download-project">Export two files</button></div></section><section class="history-list">${changes.map((change) => `<div><span>◇</span><strong>${escapeHtml(change.label)}</strong><time>${new Date(change.at).toLocaleTimeString()}</time></div>`).join("") || '<p class="empty-copy">Changes will appear here.</p>'}</section></div>`;
-}
-
-function modeButton(mode: EditorMode, label: string, shortcut: string) {
-  return `<button type="button" data-editor-mode="${mode}" aria-pressed="${mode === "edit"}"><span>${label}</span><kbd>${shortcut}</kbd></button>`;
 }
 
 function activeScene(project: EditorProject) {
@@ -1242,7 +1204,7 @@ function appendConsole(message: string) {
 function showError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   appendConsole(`✕ ${message}`);
-  required<HTMLElement>("#editor-console").hidden = false;
+  document.dispatchEvent(new CustomEvent("hyperfocus:console-open"));
   announce(message, "error");
 }
 

@@ -1,4 +1,13 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  type JSX,
+} from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import {
   ArrowDown,
   ArrowUp,
@@ -28,7 +37,7 @@ import {
   Split,
   Square,
   SquarePen,
-  Trash2
+  Trash2,
 } from "lucide-solid";
 import { formatForDisplay } from "@tanstack/solid-hotkeys";
 import {
@@ -42,17 +51,27 @@ import {
   type AssistantTodo,
   type BulkOperationAction,
   type BulkOperationTarget,
-  type ComposerReasoningStrength
+  type ComposerReasoningStrength,
 } from "../../../shared/protocol";
 import { resolveModeCatalog } from "../../../shared/modes";
 import { getAssistantQuestionDefaultChoices } from "../assistant-question-defaults";
-import { formatShortTimestamp, resolveBrowserTimezone } from "../lib/time-format";
-import { toProperCase } from "../lib/utils";
+import {
+  formatShortTimestamp,
+  resolveBrowserTimezone,
+} from "../lib/time-format";
+import { cn, toProperCase } from "../lib/utils";
 import { normalizeAppHotkeyPreferences } from "../lib/app-hotkeys";
-import { findChatFileReferenceAtPosition, type ChatFileLinkContext, type ChatFileTarget } from "../lib/chat-file-links";
+import {
+  findChatFileReferenceAtPosition,
+  type ChatFileLinkContext,
+  type ChatFileTarget,
+} from "../lib/chat-file-links";
 import { registerCurrentTabItemSelector } from "../lib/current-tab-item-hotkeys";
 import { openIdeWindow } from "../lib/ide-window";
-import { openBackgroundJobInJobsPane, openBackgroundRunInJobsPane } from "../background-run-navigation";
+import {
+  openBackgroundJobInJobsPane,
+  openBackgroundRunInJobsPane,
+} from "../background-run-navigation";
 import { openAssistantLogEntrySource } from "../source-navigation";
 import { submitOnEnter } from "../textarea-submit";
 import {
@@ -66,7 +85,7 @@ import {
   getExecutionModelOptionsForAgent,
   getSelectedAssistant,
   getVisibleAssistants,
-  harnessStore
+  harnessStore,
 } from "../harness-store";
 import { pushToast } from "../toast-store";
 import { ActionButton } from "./action-button";
@@ -77,7 +96,10 @@ import { ChatComposer } from "./primitives/chat-composer";
 import { ContextMenu, type ContextMenuAction } from "./primitives/context-menu";
 import { CopyTextButton } from "./primitives/copy-text-button";
 import { Dialog } from "./primitives/dialog";
-import { ExecutionLog, type ExecutionLogEntry } from "./primitives/execution-log";
+import {
+  ExecutionLog,
+  type ExecutionLogEntry,
+} from "./primitives/execution-log";
 import {
   DetailEmptyState,
   LeftPaneEmptyState,
@@ -87,7 +109,7 @@ import {
   LeftPaneSearchInput,
   LeftPaneSearchMenu,
   LeftPaneShell,
-  type LeftPaneSearchMenuItem
+  type LeftPaneSearchMenuItem,
 } from "./primitives/left-pane";
 import { DropdownControl } from "./primitives/dropdown";
 import { Input } from "./primitives/input";
@@ -96,24 +118,84 @@ import { ScrollArea } from "./primitives/scroll-area";
 import { Textarea } from "./primitives/textarea";
 import { VirtualList } from "./primitives/virtual-list";
 import { rightAlignedNumbersEnabled } from "../lib/visual-flags";
+import {
+  assistantPanelStyles,
+  assistantUtilityStyles,
+} from "./assistants-panel.styles";
 
 const assistantTodoStateOptions = [
-  { value: "pending", label: "pending", description: "Queued but not started yet." },
-  { value: "in-progress", label: "in-progress", description: "Actively being worked right now." },
-  { value: "blocked", label: "blocked", description: "Paused by dependency, approval, or external blocker." },
-  { value: "completed", label: "completed", description: "Finished successfully." },
-  { value: "failed", label: "failed", description: "Attempt finished with failure." },
-  { value: "cancelled", label: "cancelled", description: "Work was intentionally stopped." }
-] satisfies Array<{ value: AssistantTodo["state"]; label: string; description: string }>;
+  {
+    value: "pending",
+    label: "pending",
+    description: "Queued but not started yet.",
+  },
+  {
+    value: "in-progress",
+    label: "in-progress",
+    description: "Actively being worked right now.",
+  },
+  {
+    value: "blocked",
+    label: "blocked",
+    description: "Paused by dependency, approval, or external blocker.",
+  },
+  {
+    value: "completed",
+    label: "completed",
+    description: "Finished successfully.",
+  },
+  {
+    value: "failed",
+    label: "failed",
+    description: "Attempt finished with failure.",
+  },
+  {
+    value: "cancelled",
+    label: "cancelled",
+    description: "Work was intentionally stopped.",
+  },
+] satisfies Array<{
+  value: AssistantTodo["state"];
+  label: string;
+  description: string;
+}>;
 
 const assistantTodoWorkKindOptions = [
-  { value: "app-code", label: "app-code", description: "Product, UI, backend, API, database, or test implementation." },
-  { value: "automation-code", label: "automation-code", description: "Scripts, skills, checks, generators, or workflow automation." },
-  { value: "documentation", label: "documentation", description: "Docs-only update." },
-  { value: "research", label: "research", description: "Investigation before implementation." },
-  { value: "blocked", label: "blocked", description: "Known work that cannot start yet." },
-  { value: "unspecified", label: "unspecified", description: "No work category set." }
-] satisfies Array<{ value: AssistantTodo["workKind"]; label: string; description: string }>;
+  {
+    value: "app-code",
+    label: "app-code",
+    description: "Product, UI, backend, API, database, or test implementation.",
+  },
+  {
+    value: "automation-code",
+    label: "automation-code",
+    description: "Scripts, skills, checks, generators, or workflow automation.",
+  },
+  {
+    value: "documentation",
+    label: "documentation",
+    description: "Docs-only update.",
+  },
+  {
+    value: "research",
+    label: "research",
+    description: "Investigation before implementation.",
+  },
+  {
+    value: "blocked",
+    label: "blocked",
+    description: "Known work that cannot start yet.",
+  },
+  {
+    value: "unspecified",
+    label: "unspecified",
+    description: "No work category set.",
+  },
+] satisfies Array<{
+  value: AssistantTodo["workKind"];
+  label: string;
+  description: string;
+}>;
 
 function formatHotkeyHint(hotkey: string) {
   return formatForDisplay(hotkey)
@@ -131,7 +213,12 @@ function toggleAssistantSelectionId(ids: string[], id: string) {
   return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];
 }
 
-function mergeAssistantRangeSelection(ids: string[], visibleIds: string[], anchorId: string, targetId: string) {
+function mergeAssistantRangeSelection(
+  ids: string[],
+  visibleIds: string[],
+  anchorId: string,
+  targetId: string,
+) {
   const anchorIndex = visibleIds.indexOf(anchorId);
   const targetIndex = visibleIds.indexOf(targetId);
   if (anchorIndex === -1 || targetIndex === -1) {
@@ -146,10 +233,33 @@ function formatAssistantBulkActionLabel(action: BulkOperationAction) {
   return action === "bootstrap-retry" ? "bootstrap retry" : action;
 }
 
-function renderMessageActionRow(timestamp: string | number | Date | undefined, copyButton: JSX.Element) {
+function renderMessageActionRow(
+  timestamp: string | number | Date | undefined,
+  copyButton: JSX.Element,
+) {
   return (
-    <div class="mt-3 flex items-center justify-between gap-3">
-      <div class="min-w-0 text-[0.575rem] uppercase tracking-[0.12em] text-(--muted)">
+    <div
+      class={
+        stylex.attrs(
+          assistantUtilityStyles.mt3,
+          assistantUtilityStyles.flex,
+          assistantUtilityStyles.itemsCenter,
+          assistantUtilityStyles.justifyBetween,
+          assistantUtilityStyles.gap3,
+        ).class
+      }
+    >
+      <div
+        class={
+          stylex.attrs(
+            assistantUtilityStyles.minW0,
+            assistantUtilityStyles.text0575,
+            assistantUtilityStyles.uppercase,
+            assistantUtilityStyles.tracking012,
+            assistantUtilityStyles.textMuted,
+          ).class
+        }
+      >
         {formatShortTimestamp(timestamp)}
       </div>
       {copyButton}
@@ -157,7 +267,10 @@ function renderMessageActionRow(timestamp: string | number | Date | undefined, c
   );
 }
 
-function compareAssistantLearnings(left: AssistantLearning, right: AssistantLearning) {
+function compareAssistantLearnings(
+  left: AssistantLearning,
+  right: AssistantLearning,
+) {
   if (left.sortOrder !== undefined || right.sortOrder !== undefined) {
     if (left.sortOrder === undefined) {
       return 1;
@@ -169,7 +282,9 @@ function compareAssistantLearnings(left: AssistantLearning, right: AssistantLear
   }
   const leftSummary = (left.kind ?? "fact") === "summary" ? 1 : 0;
   const rightSummary = (right.kind ?? "fact") === "summary" ? 1 : 0;
-  return rightSummary - leftSummary || right.createdAt.localeCompare(left.createdAt);
+  return (
+    rightSummary - leftSummary || right.createdAt.localeCompare(left.createdAt)
+  );
 }
 
 function formatFailureCategory(value: string) {
@@ -178,21 +293,27 @@ function formatFailureCategory(value: string) {
 
 function formatFailureTracking(job: BackgroundJob) {
   const streak = job.consecutiveFailureCount ?? 0;
-  const lastCategory = job.lastFailureCategory ? formatFailureCategory(job.lastFailureCategory) : undefined;
-  const backoffUntil = job.backoffUntil ? formatShortTimestamp(job.backoffUntil) : undefined;
+  const lastCategory = job.lastFailureCategory
+    ? formatFailureCategory(job.lastFailureCategory)
+    : undefined;
+  const backoffUntil = job.backoffUntil
+    ? formatShortTimestamp(job.backoffUntil)
+    : undefined;
   if (streak <= 0 && !lastCategory && !backoffUntil) {
     return undefined;
   }
   return [
     streak > 0 ? `Failure streak ${streak}` : undefined,
     lastCategory ? `last ${lastCategory}` : undefined,
-    backoffUntil ? `backoff until ${backoffUntil}` : undefined
+    backoffUntil ? `backoff until ${backoffUntil}` : undefined,
   ]
     .filter(Boolean)
     .join(" | ");
 }
 
-function formatPromptStats(promptStats: BackgroundJobRun["promptStats"] | undefined) {
+function formatPromptStats(
+  promptStats: BackgroundJobRun["promptStats"] | undefined,
+) {
   if (!promptStats) {
     return undefined;
   }
@@ -252,7 +373,9 @@ function formatReasoningStrengthLabel(strength: ComposerReasoningStrength) {
 
 function formatReasoningOptionLabel(strength: ComposerReasoningStrength) {
   const label = formatReasoningStrengthLabel(strength);
-  return strength === DEFAULT_COMPOSER_REASONING_STRENGTH ? `${label} (default)` : label;
+  return strength === DEFAULT_COMPOSER_REASONING_STRENGTH
+    ? `${label} (default)`
+    : label;
 }
 
 type AssistantsPanelProps = {
@@ -260,7 +383,7 @@ type AssistantsPanelProps = {
   variant?: "full" | "roster" | "detail";
 };
 
-export function AssistantsPanel(props: AssistantsPanelProps = {}) {
+export function AssistantsPanel(props?: AssistantsPanelProps) {
   let assistantChatTextarea: HTMLTextAreaElement | undefined;
   let assistantMessageViewport: HTMLDivElement | undefined;
   let lastRequestedDetailAssistantId: string | undefined;
@@ -269,35 +392,67 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
   const activeTab = createMemo(() => state.assistants.selectedTab);
   const [chatDraft, setChatDraft] = createSignal("");
   const [assistantChatModeId, setAssistantChatModeId] = createSignal("");
-  const [assistantChatExecutionModelId, setAssistantChatExecutionModelId] = createSignal("");
-  const [assistantChatReasoningStrength, setAssistantChatReasoningStrength] = createSignal<ComposerReasoningStrength>(
-    DEFAULT_COMPOSER_REASONING_STRENGTH
-  );
+  const [assistantChatExecutionModelId, setAssistantChatExecutionModelId] =
+    createSignal("");
+  const [assistantChatReasoningStrength, setAssistantChatReasoningStrength] =
+    createSignal<ComposerReasoningStrength>(
+      DEFAULT_COMPOSER_REASONING_STRENGTH,
+    );
   const [assistantChatFastMode, setAssistantChatFastMode] = createSignal(false);
-  const [assistantStickToBottom, setAssistantStickToBottom] = createSignal(true);
-  const [assistantStreamingStartedAtByAssistantId, setAssistantStreamingStartedAtByAssistantId] = createSignal<Record<string, string>>({});
+  const [assistantStickToBottom, setAssistantStickToBottom] =
+    createSignal(true);
+  const [
+    assistantStreamingStartedAtByAssistantId,
+    setAssistantStreamingStartedAtByAssistantId,
+  ] = createSignal<Record<string, string>>({});
   const [newTodoTitle, setNewTodoTitle] = createSignal("");
-  const [selectedCircuitBreakerAssistantId, setSelectedCircuitBreakerAssistantId] = createSignal<string | undefined>(
-    props.initialCircuitBreakerAssistantId
-  );
-  const [questionAnswers, setQuestionAnswers] = createSignal<Record<string, string>>({});
+  const [
+    selectedCircuitBreakerAssistantId,
+    setSelectedCircuitBreakerAssistantId,
+  ] = createSignal<string | undefined>(props?.initialCircuitBreakerAssistantId);
+  const [questionAnswers, setQuestionAnswers] = createSignal<
+    Record<string, string>
+  >({});
   const visibleAssistants = createMemo(() =>
     getVisibleAssistants(state)
       .filter((assistant) => matchesAssistantFilters(assistant, state))
-      .filter((assistant) => fuzzyMatches(assistantSearchHaystack(assistant, state), state.assistants.rosterSearch))
-      .sort((left, right) => compareAssistants(left, right, state.assistants.rosterSort))
+      .filter((assistant) =>
+        fuzzyMatches(
+          assistantSearchHaystack(assistant, state),
+          state.assistants.rosterSearch,
+        ),
+      )
+      .sort((left, right) =>
+        compareAssistants(left, right, state.assistants.rosterSort),
+      ),
   );
-  const [selectedAssistantIds, setSelectedAssistantIds] = createSignal<string[]>([]);
-  const [assistantSelectionAnchorId, setAssistantSelectionAnchorId] = createSignal<string>();
-  const [contextMenu, setContextMenu] = createSignal<{ x: number; y: number; label: string; actions: ContextMenuAction[] }>();
+  const [selectedAssistantIds, setSelectedAssistantIds] = createSignal<
+    string[]
+  >([]);
+  const [assistantSelectionAnchorId, setAssistantSelectionAnchorId] =
+    createSignal<string>();
+  const [contextMenu, setContextMenu] = createSignal<{
+    x: number;
+    y: number;
+    label: string;
+    actions: ContextMenuAction[];
+  }>();
   let pendingAssistantSelectionTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingAssistantSelectionId: string | undefined;
   let consumedAssistantDelayedSelection = false;
-  const selectedAssistantIdSet = createMemo(() => new Set(selectedAssistantIds()));
-  const selectedAssistants = createMemo(() => visibleAssistants().filter((assistant) => selectedAssistantIdSet().has(assistant.id)));
+  const selectedAssistantIdSet = createMemo(
+    () => new Set(selectedAssistantIds()),
+  );
+  const selectedAssistants = createMemo(() =>
+    visibleAssistants().filter((assistant) =>
+      selectedAssistantIdSet().has(assistant.id),
+    ),
+  );
   const selectedAssistant = createMemo(() => getSelectedAssistant(state));
   createEffect(() => {
-    const visibleIds = new Set(visibleAssistants().map((assistant) => assistant.id));
+    const visibleIds = new Set(
+      visibleAssistants().map((assistant) => assistant.id),
+    );
     setSelectedAssistantIds((ids) => ids.filter((id) => visibleIds.has(id)));
     const anchorId = assistantSelectionAnchorId();
     if (anchorId && !visibleIds.has(anchorId)) {
@@ -311,12 +466,22 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       return;
     }
     const hasDetail =
-      state.assistants.threads.some((thread) => thread.assistantId === assistantId) ||
+      state.assistants.threads.some(
+        (thread) => thread.assistantId === assistantId,
+      ) ||
       state.assistants.todos.some((todo) => todo.assistantId === assistantId) ||
-      state.assistants.questions.some((question) => question.assistantId === assistantId) ||
-      state.assistants.learnings.some((learning) => learning.assistantId === assistantId) ||
-      state.assistants.logs.some((entry) => entry.assistantId === assistantId) ||
-      state.assistants.assetRefs.some((assetRef) => assetRef.assistantId === assistantId);
+      state.assistants.questions.some(
+        (question) => question.assistantId === assistantId,
+      ) ||
+      state.assistants.learnings.some(
+        (learning) => learning.assistantId === assistantId,
+      ) ||
+      state.assistants.logs.some(
+        (entry) => entry.assistantId === assistantId,
+      ) ||
+      state.assistants.assetRefs.some(
+        (assetRef) => assetRef.assistantId === assistantId,
+      );
     if (hasDetail) {
       return;
     }
@@ -324,21 +489,26 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     sendCommand({
       type: "assistant.detail.get",
       requestId: createRequestId(),
-      payload: { assistantId }
+      payload: { assistantId },
     });
   });
-  const assistantFileProject = createMemo(() =>
-    state.workspace.projects.find((project) => project.id === selectedAssistant()?.projectId) ??
-    state.workspace.projects.find((project) => project.id === state.workspace.activeProjectId) ??
-    state.workspace.projects[0]
+  const assistantFileProject = createMemo(
+    () =>
+      state.workspace.projects.find(
+        (project) => project.id === selectedAssistant()?.projectId,
+      ) ??
+      state.workspace.projects.find(
+        (project) => project.id === state.workspace.activeProjectId,
+      ) ??
+      state.workspace.projects[0],
   );
   const assistantChatFileLinkContext = (): ChatFileLinkContext => ({
     rootPath: assistantFileProject()?.rootPath,
-    filePaths: assistantFileProject()?.filePaths ?? []
+    filePaths: assistantFileProject()?.filePaths ?? [],
   });
   const assistantChatFileLinks = () => ({
     ...assistantChatFileLinkContext(),
-    onOpenFile: handleOpenAssistantChatFile
+    onOpenFile: handleOpenAssistantChatFile,
   });
 
   function clearAssistantSelectionTimer() {
@@ -352,11 +522,25 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
   }
 
   function isInteractiveAssistantSelectionTarget(target: EventTarget | null) {
-    return target instanceof Element && Boolean(target.closest("button,a,input,textarea,select,[role='menuitem']"));
+    return (
+      target instanceof Element &&
+      Boolean(
+        target.closest("button,a,input,textarea,select,[role='menuitem']"),
+      )
+    );
   }
 
-  function scheduleAssistantDelayedSelection(assistantId: string, event: PointerEvent) {
-    if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || isInteractiveAssistantSelectionTarget(event.target)) {
+  function scheduleAssistantDelayedSelection(
+    assistantId: string,
+    event: PointerEvent,
+  ) {
+    if (
+      event.button !== 0 ||
+      event.shiftKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      isInteractiveAssistantSelectionTarget(event.target)
+    ) {
       return;
     }
     clearAssistantSelectionTimer();
@@ -364,13 +548,18 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     pendingAssistantSelectionTimer = setTimeout(() => {
       pendingAssistantSelectionTimer = undefined;
       consumedAssistantDelayedSelection = true;
-      setSelectedAssistantIds((ids) => (ids.includes(assistantId) ? ids : [...ids, assistantId]));
+      setSelectedAssistantIds((ids) =>
+        ids.includes(assistantId) ? ids : [...ids, assistantId],
+      );
       setAssistantSelectionAnchorId(assistantId);
     }, 250);
   }
 
   function consumeAssistantDelayedSelection(assistantId: string) {
-    if (!consumedAssistantDelayedSelection || pendingAssistantSelectionId !== assistantId) {
+    if (
+      !consumedAssistantDelayedSelection ||
+      pendingAssistantSelectionId !== assistantId
+    ) {
       return false;
     }
     consumedAssistantDelayedSelection = false;
@@ -382,12 +571,16 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     const visibleIds = visibleAssistants().map((entry) => entry.id);
     if (event.shiftKey) {
       const anchorId = assistantSelectionAnchorId() ?? assistant.id;
-      setSelectedAssistantIds((ids) => mergeAssistantRangeSelection(ids, visibleIds, anchorId, assistant.id));
+      setSelectedAssistantIds((ids) =>
+        mergeAssistantRangeSelection(ids, visibleIds, anchorId, assistant.id),
+      );
       setAssistantSelectionAnchorId(anchorId);
       return;
     }
     if (event.ctrlKey || event.metaKey) {
-      setSelectedAssistantIds((ids) => toggleAssistantSelectionId(ids, assistant.id));
+      setSelectedAssistantIds((ids) =>
+        toggleAssistantSelectionId(ids, assistant.id),
+      );
       setAssistantSelectionAnchorId(assistant.id);
       return;
     }
@@ -413,11 +606,14 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
   function assistantBulkTarget(assistant: Assistant): BulkOperationTarget {
     return {
       kind: "assistant",
-      assistantId: assistant.id
+      assistantId: assistant.id,
     };
   }
 
-  function sendAssistantBulkOperation(action: BulkOperationAction, assistants: Assistant[]) {
+  function sendAssistantBulkOperation(
+    action: BulkOperationAction,
+    assistants: Assistant[],
+  ) {
     if (assistants.length === 0) {
       return;
     }
@@ -427,10 +623,14 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       payload: {
         operationId: createRequestId(),
         action,
-        targets: assistants.map(assistantBulkTarget)
-      }
+        targets: assistants.map(assistantBulkTarget),
+      },
     });
-    pushToast("Bulk action sent", `${assistants.length} assistant${assistants.length === 1 ? "" : "s"} queued for ${formatAssistantBulkActionLabel(action)}.`, "info");
+    pushToast(
+      "Bulk action sent",
+      `${assistants.length} assistant${assistants.length === 1 ? "" : "s"} queued for ${formatAssistantBulkActionLabel(action)}.`,
+      "info",
+    );
   }
 
   function assistantBulkActions(assistants: Assistant[]): ContextMenuAction[] {
@@ -438,32 +638,38 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       {
         id: "pause",
         label: `Pause (${assistants.length})`,
-        onSelect: () => sendAssistantBulkOperation("pause", assistants)
+        onSelect: () => sendAssistantBulkOperation("pause", assistants),
       },
       {
         id: "resume",
         label: `Resume (${assistants.length})`,
-        onSelect: () => sendAssistantBulkOperation("resume", assistants)
+        onSelect: () => sendAssistantBulkOperation("resume", assistants),
       },
       {
         id: "bootstrap-retry",
         label: `Retry bootstrap (${assistants.length})`,
         disabled: executionPaused(),
         disabledReason: executionPauseReason,
-        onSelect: () => sendAssistantBulkOperation("bootstrap-retry", assistants)
+        onSelect: () =>
+          sendAssistantBulkOperation("bootstrap-retry", assistants),
       },
       {
         id: "delete",
         label: `Delete (${assistants.length})`,
-        onSelect: () => sendAssistantBulkOperation("delete", assistants)
-      }
+        onSelect: () => sendAssistantBulkOperation("delete", assistants),
+      },
     ];
   }
 
-  function openAssistantBulkContextMenu(assistant: Assistant, event: MouseEvent) {
+  function openAssistantBulkContextMenu(
+    assistant: Assistant,
+    event: MouseEvent,
+  ) {
     event.preventDefault();
     event.stopPropagation();
-    const assistants = selectedAssistantIdSet().has(assistant.id) ? selectedAssistants() : [assistant];
+    const assistants = selectedAssistantIdSet().has(assistant.id)
+      ? selectedAssistants()
+      : [assistant];
     if (!selectedAssistantIdSet().has(assistant.id)) {
       setSelectedAssistantIds([assistant.id]);
       setAssistantSelectionAnchorId(assistant.id);
@@ -471,8 +677,9 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
-      label: assistants.length > 1 ? "Bulk assistant actions" : "Assistant actions",
-      actions: assistantBulkActions(assistants)
+      label:
+        assistants.length > 1 ? "Bulk assistant actions" : "Assistant actions",
+      actions: assistantBulkActions(assistants),
     });
   }
 
@@ -483,39 +690,107 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     }
     setAssistantChatModeId(assistant.modeId ?? "");
     setAssistantChatExecutionModelId(assistant.executionModelId ?? "");
-    setAssistantChatReasoningStrength(assistant.reasoningStrength ?? DEFAULT_COMPOSER_REASONING_STRENGTH);
+    setAssistantChatReasoningStrength(
+      assistant.reasoningStrength ?? DEFAULT_COMPOSER_REASONING_STRENGTH,
+    );
     setAssistantChatFastMode(Boolean(assistant.fastMode));
   });
   const assistantChatModeOptions = createMemo(() => {
     const assistant = selectedAssistant();
-    const project = state.workspace.projects.find((entry) => entry.id === assistant?.projectId);
+    const project = state.workspace.projects.find(
+      (entry) => entry.id === assistant?.projectId,
+    );
     return [
-      { value: "", label: "Default", description: "Use assistant or project default mode.", icon: <Split class="h-3 w-3" /> },
-      ...resolveModeCatalog(state.workspace.workspaceModes, project?.projectModes ?? []).map((mode) => ({
+      {
+        value: "",
+        label: "Default",
+        description: "Use assistant or project default mode.",
+        icon: (
+          <Split
+            class={
+              stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+                .class
+            }
+          />
+        ),
+      },
+      ...resolveModeCatalog(
+        state.workspace.workspaceModes,
+        project?.projectModes ?? [],
+      ).map((mode) => ({
         value: mode.id,
         label: mode.label,
         description: mode.description,
-        icon: <Split class="h-3 w-3" />
-      }))
+        icon: (
+          <Split
+            class={
+              stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+                .class
+            }
+          />
+        ),
+      })),
     ];
   });
   const assistantChatModelOptions = createMemo(() => {
     const assistant = selectedAssistant();
     const currentModel = assistantChatExecutionModelId().trim();
     const knownOptions = assistant
-      ? getExecutionModelOptionsForAgent(state, assistant.agentId, assistant.providerBrand ?? state.providerBrand).map((model) => ({
+      ? getExecutionModelOptionsForAgent(
+          state,
+          assistant.agentId,
+          assistant.providerBrand ?? state.providerBrand,
+        ).map((model) => ({
           value: model.modelId,
           label: model.label,
           description: model.modelId,
-          icon: <Cpu class="h-3 w-3" />
+          icon: (
+            <Cpu
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h3,
+                  assistantUtilityStyles.w3,
+                ).class
+              }
+            />
+          ),
         }))
       : [];
     return [
-      { value: "", label: "Default", description: "Use assistant or runtime default model.", icon: <Cpu class="h-3 w-3" /> },
-      ...(currentModel && !knownOptions.some((option) => option.value === currentModel)
-        ? [{ value: currentModel, label: currentModel, description: "Saved custom model.", icon: <Cpu class="h-3 w-3" /> }]
+      {
+        value: "",
+        label: "Default",
+        description: "Use assistant or runtime default model.",
+        icon: (
+          <Cpu
+            class={
+              stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+                .class
+            }
+          />
+        ),
+      },
+      ...(currentModel &&
+      !knownOptions.some((option) => option.value === currentModel)
+        ? [
+            {
+              value: currentModel,
+              label: currentModel,
+              description: "Saved custom model.",
+              icon: (
+                <Cpu
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h3,
+                      assistantUtilityStyles.w3,
+                    ).class
+                  }
+                />
+              ),
+            },
+          ]
         : []),
-      ...knownOptions
+      ...knownOptions,
     ];
   });
   const assistantChatControlState = createMemo(() => {
@@ -523,7 +798,7 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     return getComposerControlState(
       state,
       assistant?.agentId ?? state.selectedAgentId,
-      assistantChatExecutionModelId().trim() || assistant?.executionModelId
+      assistantChatExecutionModelId().trim() || assistant?.executionModelId,
     );
   });
   const assistantChatReasoningOptions = createMemo(() =>
@@ -531,115 +806,250 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       value: strength,
       label: formatReasoningOptionLabel(strength),
       description: getReasoningStrengthDescription(strength),
-      disabled: !assistantChatControlState().availableStrengths.includes(strength),
-      icon: <Brain class="h-3 w-3" />
-    }))
+      disabled:
+        !assistantChatControlState().availableStrengths.includes(strength),
+      icon: (
+        <Brain
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    })),
   );
   const assistantChatFastModeOptions = createMemo(() => [
-    { value: "false", label: "Off", description: "Use standard response path.", icon: <Gauge class="h-3 w-3" /> },
+    {
+      value: "false",
+      label: "Off",
+      description: "Use standard response path.",
+      icon: (
+        <Gauge
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
     {
       value: "true",
       label: "On",
       description: "Prefer lower-latency responses when supported.",
       disabled: !assistantChatControlState().supportsFastMode,
-      icon: <Gauge class="h-3 w-3" />
-    }
+      icon: (
+        <Gauge
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
   ]);
   const selectedThread = createMemo(() =>
-    state.assistants.threads.find((thread) => thread.assistantId === selectedAssistant()?.id)
+    state.assistants.threads.find(
+      (thread) => thread.assistantId === selectedAssistant()?.id,
+    ),
   );
   const visibleAssistantMessages = createMemo(() =>
-    (selectedThread()?.messages ?? []).filter((message) => fuzzyMatches([message.role, message.content].join(" "), state.assistants.detailSearch))
+    (selectedThread()?.messages ?? []).filter((message) =>
+      fuzzyMatches(
+        [message.role, message.content].join(" "),
+        state.assistants.detailSearch,
+      ),
+    ),
   );
   const selectedTodos = createMemo(() =>
     [...state.assistants.todos]
       .filter((todo) => todo.assistantId === selectedAssistant()?.id)
-      .sort((left, right) => left.sortOrder - right.sortOrder || right.updatedAt.localeCompare(left.updatedAt))
+      .sort(
+        (left, right) =>
+          left.sortOrder - right.sortOrder ||
+          right.updatedAt.localeCompare(left.updatedAt),
+      ),
   );
-  const visibleTodos = createMemo(() => selectedTodos().filter((todo) => fuzzyMatches([todo.title, todo.description, todo.state, todo.blockerReason, todo.workKind, todo.workTarget].filter(Boolean).join(" "), state.assistants.detailSearch)));
+  const visibleTodos = createMemo(() =>
+    selectedTodos().filter((todo) =>
+      fuzzyMatches(
+        [
+          todo.title,
+          todo.description,
+          todo.state,
+          todo.blockerReason,
+          todo.workKind,
+          todo.workTarget,
+        ]
+          .filter(Boolean)
+          .join(" "),
+        state.assistants.detailSearch,
+      ),
+    ),
+  );
   const selectedQuestions = createMemo(() =>
     [...state.assistants.questions]
       .filter((question) => question.assistantId === selectedAssistant()?.id)
-      .sort((left, right) => right.askedAt.localeCompare(left.askedAt))
+      .sort((left, right) => right.askedAt.localeCompare(left.askedAt)),
   );
-  const visibleQuestions = createMemo(() => selectedQuestions().filter((question) => fuzzyMatches([question.prompt, question.answerText, question.status].filter(Boolean).join(" "), state.assistants.detailSearch)));
+  const visibleQuestions = createMemo(() =>
+    selectedQuestions().filter((question) =>
+      fuzzyMatches(
+        [question.prompt, question.answerText, question.status]
+          .filter(Boolean)
+          .join(" "),
+        state.assistants.detailSearch,
+      ),
+    ),
+  );
   const selectedLearnings = createMemo(() =>
     [...state.assistants.learnings]
       .filter((learning) => learning.assistantId === selectedAssistant()?.id)
-      .sort(compareAssistantLearnings)
+      .sort(compareAssistantLearnings),
   );
-  const filteredLearnings = createMemo(() => selectedLearnings().filter((learning) => fuzzyMatches([learning.summary, learning.source, learning.confidence, learning.kind].filter(Boolean).join(" "), state.assistants.detailSearch)));
+  const filteredLearnings = createMemo(() =>
+    selectedLearnings().filter((learning) =>
+      fuzzyMatches(
+        [learning.summary, learning.source, learning.confidence, learning.kind]
+          .filter(Boolean)
+          .join(" "),
+        state.assistants.detailSearch,
+      ),
+    ),
+  );
   const selectedLogs = createMemo(() =>
     [...state.assistants.logs]
       .filter((entry) => entry.assistantId === selectedAssistant()?.id)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
   );
-  const visibleLogs = createMemo(() => selectedLogs().filter((entry) => fuzzyMatches([entry.summary, entry.detail, entry.level, entry.detailsJson].filter(Boolean).join(" "), state.assistants.detailSearch)));
+  const visibleLogs = createMemo(() =>
+    selectedLogs().filter((entry) =>
+      fuzzyMatches(
+        [entry.summary, entry.detail, entry.level, entry.detailsJson]
+          .filter(Boolean)
+          .join(" "),
+        state.assistants.detailSearch,
+      ),
+    ),
+  );
   const selectedExecutionLogs = createMemo(() =>
-    visibleLogs().slice(0, 500).map((entry) => ({
-      id: entry.id,
-      message: entry.summary,
-      rowSummary: [entry.summary, entry.detail].filter(Boolean).join(" "),
-      level: entry.level,
-      createdAt: entry.createdAt,
-      detail: entry.detail,
-      detailsJson: entry.detailsJson,
-      detailsJsonSummary: entry.detailsJsonSummary
-    }))
+    visibleLogs()
+      .slice(0, 500)
+      .map((entry) => ({
+        id: entry.id,
+        message: entry.summary,
+        rowSummary: [entry.summary, entry.detail].filter(Boolean).join(" "),
+        level: entry.level,
+        createdAt: entry.createdAt,
+        detail: entry.detail,
+        detailsJson: entry.detailsJson,
+        detailsJsonSummary: entry.detailsJsonSummary,
+      })),
   );
   const selectedAssetRefs = createMemo(() =>
-    state.assistants.assetRefs.filter((assetRef) => assetRef.assistantId === selectedAssistant()?.id)
+    state.assistants.assetRefs.filter(
+      (assetRef) => assetRef.assistantId === selectedAssistant()?.id,
+    ),
   );
   const selectedJobs = createMemo(() =>
     [...state.backgroundJobs.jobs]
       .filter((job) => job.assistantId === selectedAssistant()?.id)
-      .sort((left, right) => (right.nextRunAt ?? right.updatedAt).localeCompare(left.nextRunAt ?? left.updatedAt))
+      .sort((left, right) =>
+        (right.nextRunAt ?? right.updatedAt).localeCompare(
+          left.nextRunAt ?? left.updatedAt,
+        ),
+      ),
   );
-  const visibleJobs = createMemo(() => selectedJobs().filter((job) => fuzzyMatches([job.name, job.description, job.status, job.kind, job.scheduleInput].filter(Boolean).join(" "), state.assistants.detailSearch)));
+  const visibleJobs = createMemo(() =>
+    selectedJobs().filter((job) =>
+      fuzzyMatches(
+        [job.name, job.description, job.status, job.kind, job.scheduleInput]
+          .filter(Boolean)
+          .join(" "),
+        state.assistants.detailSearch,
+      ),
+    ),
+  );
   const selectedRuns = createMemo(() =>
     [...state.backgroundJobs.runs]
       .filter((run) => run.assistantId === selectedAssistant()?.id)
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
   );
-  const visibleRuns = createMemo(() => selectedRuns().filter((run) => fuzzyMatches([run.summary, run.status, run.failureMessage, run.failureCategory, run.triggerSource].filter(Boolean).join(" "), state.assistants.detailSearch)));
+  const visibleRuns = createMemo(() =>
+    selectedRuns().filter((run) =>
+      fuzzyMatches(
+        [
+          run.summary,
+          run.status,
+          run.failureMessage,
+          run.failureCategory,
+          run.triggerSource,
+        ]
+          .filter(Boolean)
+          .join(" "),
+        state.assistants.detailSearch,
+      ),
+    ),
+  );
   const circuitBreakerAssistant = createMemo(() =>
-    state.assistants.assistants.find((assistant) => assistant.id === selectedCircuitBreakerAssistantId())
+    state.assistants.assistants.find(
+      (assistant) => assistant.id === selectedCircuitBreakerAssistantId(),
+    ),
   );
-  const circuitBreakerFileProject = createMemo(() =>
-    state.workspace.projects.find((project) => project.id === circuitBreakerAssistant()?.projectId) ?? assistantFileProject()
+  const circuitBreakerFileProject = createMemo(
+    () =>
+      state.workspace.projects.find(
+        (project) => project.id === circuitBreakerAssistant()?.projectId,
+      ) ?? assistantFileProject(),
   );
-  const circuitBreakerFileLinks = () => getAssistantProjectFileLinks(circuitBreakerFileProject());
+  const circuitBreakerFileLinks = () =>
+    getAssistantProjectFileLinks(circuitBreakerFileProject());
   const circuitBreakerLogs = createMemo(() =>
     [...state.assistants.logs]
-      .filter((entry) => entry.assistantId === selectedCircuitBreakerAssistantId())
+      .filter(
+        (entry) => entry.assistantId === selectedCircuitBreakerAssistantId(),
+      )
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-      .slice(0, 5)
+      .slice(0, 5),
   );
   const circuitBreakerRuns = createMemo(() =>
     [...state.backgroundJobs.runs]
       .filter((run) => run.assistantId === selectedCircuitBreakerAssistantId())
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      .slice(0, 5)
+      .slice(0, 5),
   );
   const circuitBreakerQuestions = createMemo(() =>
     [...state.assistants.questions]
-      .filter((question) => question.assistantId === selectedCircuitBreakerAssistantId() && question.status === "pending")
+      .filter(
+        (question) =>
+          question.assistantId === selectedCircuitBreakerAssistantId() &&
+          question.status === "pending",
+      )
       .sort((left, right) => right.askedAt.localeCompare(left.askedAt))
-      .slice(0, 5)
+      .slice(0, 5),
   );
-  const streamingText = createMemo(() => state.assistants.streamingByAssistantId[selectedAssistant()?.id ?? ""] ?? "");
+  const streamingText = createMemo(
+    () =>
+      state.assistants.streamingByAssistantId[selectedAssistant()?.id ?? ""] ??
+      "",
+  );
   const assistantChatRows = createMemo(() => [
-    ...visibleAssistantMessages().map((message) => ({ kind: "message" as const, message })),
+    ...visibleAssistantMessages().map((message) => ({
+      kind: "message" as const,
+      message,
+    })),
     ...splitAssistantStreamingText(streamingText()).map((content, index) => ({
       kind: "streaming" as const,
       content,
-      createdAt: assistantStreamingStartedAtByAssistantId()[selectedAssistant()?.id ?? ""],
-      index
-    }))
+      createdAt:
+        assistantStreamingStartedAtByAssistantId()[
+          selectedAssistant()?.id ?? ""
+        ],
+      index,
+    })),
   ]);
   const executionPaused = createMemo(() => state.executionControl.isPaused);
   const executionPauseReason = "Global execution pause is active";
-  const variant = () => props.variant ?? "full";
+  const variant = () => (props && props.variant ? props.variant : "full");
 
   createEffect(() => {
     const assistantId = selectedAssistant()?.id;
@@ -649,7 +1059,9 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     const streaming = streamingText().trim().length > 0;
     if (streaming) {
       setAssistantStreamingStartedAtByAssistantId((current) =>
-        current[assistantId] ? current : { ...current, [assistantId]: new Date().toISOString() }
+        current[assistantId]
+          ? current
+          : { ...current, [assistantId]: new Date().toISOString() },
       );
       return;
     }
@@ -663,7 +1075,7 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     });
   });
 
-  const scrollAssistantChatToBottom = (force: boolean = false) => {
+  const scrollAssistantChatToBottom = (force?: boolean) => {
     if (!assistantMessageViewport || (!force && !assistantStickToBottom())) {
       return;
     }
@@ -673,7 +1085,8 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
         return;
       }
 
-      assistantMessageViewport.scrollTop = assistantMessageViewport.scrollHeight;
+      assistantMessageViewport.scrollTop =
+        assistantMessageViewport.scrollHeight;
     });
   };
 
@@ -684,7 +1097,9 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     }
 
     const distanceFromBottom =
-      assistantMessageViewport.scrollHeight - assistantMessageViewport.scrollTop - assistantMessageViewport.clientHeight;
+      assistantMessageViewport.scrollHeight -
+      assistantMessageViewport.scrollTop -
+      assistantMessageViewport.clientHeight;
     setAssistantStickToBottom(distanceFromBottom <= 32);
   };
 
@@ -701,8 +1116,12 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
   });
   const showRoster = () => variant() !== "detail";
   const showDetail = () => variant() !== "roster";
-  const createScope = () => (state.assistants.scopeFilter === "global" ? "global" : "project");
-  const createLabel = () => (state.assistants.scopeFilter === "global" ? "Create global assistant" : "Create project assistant");
+  const createScope = () =>
+    state.assistants.scopeFilter === "global" ? "global" : "project";
+  const createLabel = () =>
+    state.assistants.scopeFilter === "global"
+      ? "Create global assistant"
+      : "Create project assistant";
 
   createEffect(() => {
     if (!showRoster()) {
@@ -735,7 +1154,10 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       source: "create",
       name: "",
       scope,
-      projectId: scope === "project" ? state.workspace.activeProjectId ?? state.workspace.projects[0]?.id : undefined,
+      projectId:
+        scope === "project"
+          ? (state.workspace.activeProjectId ?? state.workspace.projects[0]?.id)
+          : undefined,
       description: "",
       personalityPrompt: "",
       jobPrompt: "",
@@ -747,7 +1169,7 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       fastMode: state.selectedFastMode,
       runState: "active",
       bootstrapState: "pending",
-      assetRefsText: ""
+      assetRefsText: "",
     };
     harnessStore.openAssistantEditor(draft);
   }
@@ -755,7 +1177,10 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
   function openEditAssistant(assistant: Assistant) {
     const assetRefsText = state.assistants.assetRefs
       .filter((assetRef) => assetRef.assistantId === assistant.id)
-      .map((assetRef) => `${assetRef.kind} | ${assetRef.label} | ${assetRef.value}`)
+      .map(
+        (assetRef) =>
+          `${assetRef.kind} | ${assetRef.label} | ${assetRef.value}`,
+      )
       .join("\n");
     harnessStore.openAssistantEditor({
       source: "edit",
@@ -774,7 +1199,7 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       fastMode: assistant.fastMode,
       runState: assistant.runState,
       bootstrapState: assistant.bootstrapState,
-      assetRefsText
+      assetRefsText,
     });
   }
 
@@ -796,8 +1221,8 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
         modeId: assistantChatModeId().trim() || undefined,
         executionModelId: assistantChatExecutionModelId().trim() || undefined,
         reasoningStrength: assistantChatReasoningStrength(),
-        fastMode: assistantChatFastMode()
-      }
+        fastMode: assistantChatFastMode(),
+      },
     });
     if (sent) {
       setChatDraft("");
@@ -822,9 +1247,9 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
         patch: {
           title: trimmedTitle,
           state: "pending",
-          workKind: "app-code"
-        }
-      }
+          workKind: "app-code",
+        },
+      },
     });
     setNewTodoTitle("");
   }
@@ -842,9 +1267,9 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
           state: patch.state,
           blockerReason: patch.blockerReason,
           workKind: patch.workKind,
-          workTarget: patch.workTarget
-        }
-      }
+          workTarget: patch.workTarget,
+        },
+      },
     });
   }
 
@@ -858,27 +1283,32 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       requestId: createRequestId(),
       payload: {
         assistantId: todo.assistantId,
-        todoId: todo.id
-      }
+        todoId: todo.id,
+      },
     });
   }
 
   function reorderTodo(todo: AssistantTodo, direction: -1 | 1) {
     const orderedTodos = selectedTodos();
-    const currentIndex = orderedTodos.findIndex((entry) => entry.id === todo.id);
+    const currentIndex = orderedTodos.findIndex(
+      (entry) => entry.id === todo.id,
+    );
     const nextIndex = currentIndex + direction;
     if (currentIndex < 0 || nextIndex < 0 || nextIndex >= orderedTodos.length) {
       return;
     }
     const nextTodos = [...orderedTodos];
-    [nextTodos[currentIndex], nextTodos[nextIndex]] = [nextTodos[nextIndex]!, nextTodos[currentIndex]!];
+    [nextTodos[currentIndex], nextTodos[nextIndex]] = [
+      nextTodos[nextIndex]!,
+      nextTodos[currentIndex]!,
+    ];
     sendCommand({
       type: "assistant.todo.reorder",
       requestId: createRequestId(),
       payload: {
         assistantId: todo.assistantId,
-        todoIds: nextTodos.map((entry) => entry.id)
-      }
+        todoIds: nextTodos.map((entry) => entry.id),
+      },
     });
   }
 
@@ -892,27 +1322,36 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       requestId: createRequestId(),
       payload: {
         assistantId: learning.assistantId,
-        learningId: learning.id
-      }
+        learningId: learning.id,
+      },
     });
   }
 
   function reorderLearning(learning: AssistantLearning, direction: -1 | 1) {
     const orderedLearnings = selectedLearnings();
-    const currentIndex = orderedLearnings.findIndex((entry) => entry.id === learning.id);
+    const currentIndex = orderedLearnings.findIndex(
+      (entry) => entry.id === learning.id,
+    );
     const nextIndex = currentIndex + direction;
-    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= orderedLearnings.length) {
+    if (
+      currentIndex < 0 ||
+      nextIndex < 0 ||
+      nextIndex >= orderedLearnings.length
+    ) {
       return;
     }
     const nextLearnings = [...orderedLearnings];
-    [nextLearnings[currentIndex], nextLearnings[nextIndex]] = [nextLearnings[nextIndex]!, nextLearnings[currentIndex]!];
+    [nextLearnings[currentIndex], nextLearnings[nextIndex]] = [
+      nextLearnings[nextIndex]!,
+      nextLearnings[currentIndex]!,
+    ];
     sendCommand({
       type: "assistant.learning.reorder",
       requestId: createRequestId(),
       payload: {
         assistantId: learning.assistantId,
-        learningIds: nextLearnings.map((entry) => entry.id)
-      }
+        learningIds: nextLearnings.map((entry) => entry.id),
+      },
     });
   }
 
@@ -931,17 +1370,23 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       payload: {
         assistantId: question.assistantId,
         questionId: question.id,
-        content: answer
-      }
+        content: answer,
+      },
     });
     setQuestionAnswers((current) => ({ ...current, [question.id]: "" }));
   }
 
-  function handleAssistantComposerClick(event: MouseEvent & { currentTarget: HTMLTextAreaElement }) {
+  function handleAssistantComposerClick(
+    event: MouseEvent & { currentTarget: HTMLTextAreaElement },
+  ) {
     if (!event.ctrlKey && !event.metaKey) {
       return;
     }
-    const reference = findChatFileReferenceAtPosition(event.currentTarget.value, event.currentTarget.selectionStart, assistantChatFileLinkContext());
+    const reference = findChatFileReferenceAtPosition(
+      event.currentTarget.value,
+      event.currentTarget.selectionStart,
+      assistantChatFileLinkContext(),
+    );
     if (!reference) {
       return;
     }
@@ -954,7 +1399,10 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     handleOpenAssistantProjectFile(assistantFileProject(), target);
   }
 
-  function handleOpenAssistantProjectFile(project: typeof state.workspace.projects[number] | undefined, target: ChatFileTarget) {
+  function handleOpenAssistantProjectFile(
+    project: (typeof state.workspace.projects)[number] | undefined,
+    target: ChatFileTarget,
+  ) {
     if (!project) {
       return;
     }
@@ -962,20 +1410,30 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     harnessStore.openIdeFile(target.path, target.line, target.column);
   }
 
-  function getAssistantProjectFileLinks(project: typeof state.workspace.projects[number] | undefined): FileLinkConfig {
+  function getAssistantProjectFileLinks(
+    project: (typeof state.workspace.projects)[number] | undefined,
+  ): FileLinkConfig {
     return {
       rootPath: project?.rootPath,
       filePaths: project?.filePaths ?? [],
-      onOpenFile: (target) => handleOpenAssistantProjectFile(project, target)
+      onOpenFile: (target) => handleOpenAssistantProjectFile(project, target),
     };
   }
 
-  function getAssistantFileLinks(assistant: Assistant | undefined): FileLinkConfig {
-    const project = state.workspace.projects.find((entry) => entry.id === assistant?.projectId) ?? assistantFileProject();
+  function getAssistantFileLinks(
+    assistant: Assistant | undefined,
+  ): FileLinkConfig {
+    const project =
+      state.workspace.projects.find(
+        (entry) => entry.id === assistant?.projectId,
+      ) ?? assistantFileProject();
     return getAssistantProjectFileLinks(project);
   }
 
-  function handleAssistantRosterKeyDown(event: KeyboardEvent, assistantId: string) {
+  function handleAssistantRosterKeyDown(
+    event: KeyboardEvent,
+    assistantId: string,
+  ) {
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
@@ -988,9 +1446,14 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     if (!assistant) {
       return;
     }
-    const resolvedProjectId = assistant.projectId ?? state.workspace.activeProjectId;
+    const resolvedProjectId =
+      assistant.projectId ?? state.workspace.activeProjectId;
     if (!resolvedProjectId) {
-      pushToast("Project required", "Clone global assistant to project before scheduling project work.", "error");
+      pushToast(
+        "Project required",
+        "Clone global assistant to project before scheduling project work.",
+        "error",
+      );
       return;
     }
 
@@ -1015,7 +1478,7 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       shellCwd: "",
       shellEnvRefsText: "",
       shellTimeoutSeconds: 600,
-      shellNetworkAccess: false
+      shellNetworkAccess: false,
     };
     harnessStore.openBackgroundJobEditor(draft);
   }
@@ -1027,7 +1490,11 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
     }
     const projectId = assistant.projectId ?? state.workspace.activeProjectId;
     if (!projectId) {
-      pushToast("Project required", "Open a project before bootstrapping jobs for a global assistant.", "error");
+      pushToast(
+        "Project required",
+        "Open a project before bootstrapping jobs for a global assistant.",
+        "error",
+      );
       return;
     }
     sendCommand({
@@ -1035,14 +1502,14 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       requestId: createRequestId(),
       payload: {
         assistantId: assistant.id,
-        projectId
-      }
+        projectId,
+      },
     });
   }
 
   function handleDeleteAssistant(assistant: Assistant) {
     const confirmed = window.confirm(
-      `Delete assistant "${assistant.name}"?\n\nPending or active assistant jobs will be cancelled and purged.`
+      `Delete assistant "${assistant.name}"?\n\nPending or active assistant jobs will be cancelled and purged.`,
     );
     if (!confirmed) {
       return;
@@ -1051,8 +1518,8 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       type: "assistant.delete",
       requestId: createRequestId(),
       payload: {
-        assistantId: assistant.id
-      }
+        assistantId: assistant.id,
+      },
     });
   }
 
@@ -1064,8 +1531,8 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       type: "assistant.circuit-breaker.retry",
       requestId: createRequestId(),
       payload: {
-        assistantId: assistant.id
-      }
+        assistantId: assistant.id,
+      },
     });
     setSelectedCircuitBreakerAssistantId(undefined);
   }
@@ -1099,7 +1566,11 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
   }
 
   return (
-    <LeftPaneShell data-test-assistants-panel="" kind="assistants" padding="comfortable">
+    <LeftPaneShell
+      data-test-assistants-panel=""
+      kind="assistants"
+      padding="comfortable"
+    >
       <Show when={selectedCircuitBreakerAssistantId()}>
         <Dialog
           open
@@ -1114,11 +1585,17 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
                   <ActionButton
                     tooltip="Keep assistant paused and close this dialog"
                     variant="secondary"
-                    onClick={() => setSelectedCircuitBreakerAssistantId(undefined)}
+                    onClick={() =>
+                      setSelectedCircuitBreakerAssistantId(undefined)
+                    }
                   >
                     Keep paused
                   </ActionButton>
-                  <ActionButton tooltip="Open assistant-owned background jobs" variant="secondary" onClick={openCircuitBreakerJobs}>
+                  <ActionButton
+                    tooltip="Open assistant-owned background jobs"
+                    variant="secondary"
+                    onClick={openCircuitBreakerJobs}
+                  >
                     Open jobs
                   </ActionButton>
                   <ActionButton
@@ -1132,10 +1609,23 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
                     Open assistant
                   </ActionButton>
                   <ActionButton
-                    tooltip={executionPaused() ? executionPauseReason : "Clear circuit breaker, resume assistant, and retry recovery"}
+                    tooltip={
+                      executionPaused()
+                        ? executionPauseReason
+                        : "Clear circuit breaker, resume assistant, and retry recovery"
+                    }
                     disabled={executionPaused()}
                     disabledReason={executionPauseReason}
-                    icon={<RefreshCcw class="h-4 w-4" />}
+                    icon={
+                      <RefreshCcw
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.h4,
+                            assistantUtilityStyles.w4,
+                          ).class
+                        }
+                      />
+                    }
                     ariaLabel="Retry"
                     onClick={() => retryCircuitBreaker(assistant())}
                   >
@@ -1148,76 +1638,431 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
         >
           <Show when={circuitBreakerAssistant()}>
             {(assistant) => (
-              <div class="flex flex-col gap-4">
-              <div class="grid gap-2 text-[0.675rem] text-(--muted) md:grid-cols-2">
-                <div><span class="font-semibold text-(--foreground)">Assistant:</span> {assistant().name}</div>
-                <div><span class="font-semibold text-(--foreground)">Scope:</span> {assistant().scope}</div>
-                <div><span class="font-semibold text-(--foreground)">Run state:</span> {assistant().runState}</div>
-                <div><span class="font-semibold text-(--foreground)">Bootstrap:</span> {assistant().bootstrapState}</div>
-                <div><span class="font-semibold text-(--foreground)">Failure streak:</span> {assistant().failureStreakCount}</div>
-                <div><span class="font-semibold text-(--foreground)">Breaker:</span> {assistant().circuitBreakerState}</div>
-              </div>
-              <section class="rounded-2xl border border-(--border) bg-white/70 p-3">
-                <div class="mb-2 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Reason</div>
-                <div class="text-[0.75rem] leading-5 text-(--foreground)">
-                  <FileLinkedText text={assistant().circuitBreakerReason ?? "No failure reason recorded."} fileLinks={circuitBreakerFileLinks()} />
+              <div
+                class={
+                  stylex.attrs(
+                    assistantUtilityStyles.flex,
+                    assistantUtilityStyles.flexCol,
+                    assistantUtilityStyles.gap4,
+                  ).class
+                }
+              >
+                <div
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.grid,
+                      assistantUtilityStyles.gap2,
+                      assistantUtilityStyles.text0675,
+                      assistantUtilityStyles.textMuted,
+                      assistantUtilityStyles.mdGridCols2,
+                    ).class
+                  }
+                >
+                  <div>
+                    <span
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.fontSemibold,
+                          assistantUtilityStyles.textForeground,
+                        ).class
+                      }
+                    >
+                      Assistant:
+                    </span>{" "}
+                    {assistant().name}
+                  </div>
+                  <div>
+                    <span
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.fontSemibold,
+                          assistantUtilityStyles.textForeground,
+                        ).class
+                      }
+                    >
+                      Scope:
+                    </span>{" "}
+                    {assistant().scope}
+                  </div>
+                  <div>
+                    <span
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.fontSemibold,
+                          assistantUtilityStyles.textForeground,
+                        ).class
+                      }
+                    >
+                      Run state:
+                    </span>{" "}
+                    {assistant().runState}
+                  </div>
+                  <div>
+                    <span
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.fontSemibold,
+                          assistantUtilityStyles.textForeground,
+                        ).class
+                      }
+                    >
+                      Bootstrap:
+                    </span>{" "}
+                    {assistant().bootstrapState}
+                  </div>
+                  <div>
+                    <span
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.fontSemibold,
+                          assistantUtilityStyles.textForeground,
+                        ).class
+                      }
+                    >
+                      Failure streak:
+                    </span>{" "}
+                    {assistant().failureStreakCount}
+                  </div>
+                  <div>
+                    <span
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.fontSemibold,
+                          assistantUtilityStyles.textForeground,
+                        ).class
+                      }
+                    >
+                      Breaker:
+                    </span>{" "}
+                    {assistant().circuitBreakerState}
+                  </div>
                 </div>
-              </section>
-              <section class="rounded-2xl border border-(--border) bg-white/70 p-3">
-                <div class="mb-2 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Latest logs</div>
-                <Show when={circuitBreakerLogs().length > 0} fallback={<div class="text-[0.675rem] text-(--muted)">No recent logs.</div>}>
-                  <div class="space-y-2">
-                    <For each={circuitBreakerLogs()}>
-                      {(entry) => (
-                        <div class="rounded-xl border border-(--border) bg-white/70 p-2 text-[0.675rem] leading-5">
-                          <div class="font-semibold text-(--foreground)">
-                            <FileLinkedText text={`${entry.level} | ${entry.summary}`} fileLinks={circuitBreakerFileLinks()} />
-                          </div>
-                          <div class="text-(--muted)">
-                            <FileLinkedText text={entry.detail ?? "No detail."} fileLinks={circuitBreakerFileLinks()} />
-                          </div>
-                          <div class="mt-1 text-[0.575rem] uppercase tracking-[0.12em] text-(--muted)">{formatShortTimestamp(entry.createdAt)}</div>
-                        </div>
-                      )}
-                    </For>
+                <section
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.rounded2xl,
+                      assistantUtilityStyles.border,
+                      assistantUtilityStyles.borderBorder,
+                      assistantUtilityStyles.bgWhite70,
+                      assistantUtilityStyles.p3,
+                    ).class
+                  }
+                >
+                  <div
+                    class={
+                      stylex.attrs(
+                        assistantUtilityStyles.mb2,
+                        assistantUtilityStyles.text0585,
+                        assistantUtilityStyles.fontSemibold,
+                        assistantUtilityStyles.uppercase,
+                        assistantUtilityStyles.tracking018,
+                        assistantUtilityStyles.textMuted,
+                      ).class
+                    }
+                  >
+                    Reason
                   </div>
-                </Show>
-              </section>
-              <section class="rounded-2xl border border-(--border) bg-white/70 p-3">
-                <div class="mb-2 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Latest runs</div>
-                <Show when={circuitBreakerRuns().length > 0} fallback={<div class="text-[0.675rem] text-(--muted)">No assistant-owned job runs.</div>}>
-                  <div class="space-y-2">
-                    <For each={circuitBreakerRuns()}>
-                      {(run) => (
-                        <div class="rounded-xl border border-(--border) bg-white/70 p-2 text-[0.675rem] leading-5">
-                          <div class="font-semibold text-(--foreground)">{run.status}</div>
-                          <div class="text-(--muted)">
-                            <FileLinkedText text={run.failureMessage ?? run.summary ?? run.id} fileLinks={circuitBreakerFileLinks()} />
+                  <div
+                    class={
+                      stylex.attrs(
+                        assistantUtilityStyles.text075,
+                        assistantUtilityStyles.leading5,
+                        assistantUtilityStyles.textForeground,
+                      ).class
+                    }
+                  >
+                    <FileLinkedText
+                      text={
+                        assistant().circuitBreakerReason ??
+                        "No failure reason recorded."
+                      }
+                      fileLinks={circuitBreakerFileLinks()}
+                    />
+                  </div>
+                </section>
+                <section
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.rounded2xl,
+                      assistantUtilityStyles.border,
+                      assistantUtilityStyles.borderBorder,
+                      assistantUtilityStyles.bgWhite70,
+                      assistantUtilityStyles.p3,
+                    ).class
+                  }
+                >
+                  <div
+                    class={
+                      stylex.attrs(
+                        assistantUtilityStyles.mb2,
+                        assistantUtilityStyles.text0585,
+                        assistantUtilityStyles.fontSemibold,
+                        assistantUtilityStyles.uppercase,
+                        assistantUtilityStyles.tracking018,
+                        assistantUtilityStyles.textMuted,
+                      ).class
+                    }
+                  >
+                    Latest logs
+                  </div>
+                  <Show
+                    when={circuitBreakerLogs().length > 0}
+                    fallback={
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.text0675,
+                            assistantUtilityStyles.textMuted,
+                          ).class
+                        }
+                      >
+                        No recent logs.
+                      </div>
+                    }
+                  >
+                    <div
+                      class={stylex.attrs(assistantUtilityStyles.spaceY2).class}
+                    >
+                      <For each={circuitBreakerLogs()}>
+                        {(entry) => (
+                          <div
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.roundedXl,
+                                assistantUtilityStyles.border,
+                                assistantUtilityStyles.borderBorder,
+                                assistantUtilityStyles.bgWhite70,
+                                assistantUtilityStyles.p2,
+                                assistantUtilityStyles.text0675,
+                                assistantUtilityStyles.leading5,
+                              ).class
+                            }
+                          >
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.fontSemibold,
+                                  assistantUtilityStyles.textForeground,
+                                ).class
+                              }
+                            >
+                              <FileLinkedText
+                                text={`${entry.level} | ${entry.summary}`}
+                                fileLinks={circuitBreakerFileLinks()}
+                              />
+                            </div>
+                            <div
+                              class={
+                                stylex.attrs(assistantUtilityStyles.textMuted)
+                                  .class
+                              }
+                            >
+                              <FileLinkedText
+                                text={entry.detail ?? "No detail."}
+                                fileLinks={circuitBreakerFileLinks()}
+                              />
+                            </div>
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.mt1,
+                                  assistantUtilityStyles.text0575,
+                                  assistantUtilityStyles.uppercase,
+                                  assistantUtilityStyles.tracking012,
+                                  assistantUtilityStyles.textMuted,
+                                ).class
+                              }
+                            >
+                              {formatShortTimestamp(entry.createdAt)}
+                            </div>
                           </div>
-                          <Show when={run.failureCategory}>
-                            {(category) => <div class="text-(--muted)">Category: {formatFailureCategory(category())}</div>}
-                          </Show>
-                          <div class="mt-1 text-[0.575rem] uppercase tracking-[0.12em] text-(--muted)">{formatShortTimestamp(run.updatedAt)}</div>
-                        </div>
-                      )}
-                    </For>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </section>
+                <section
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.rounded2xl,
+                      assistantUtilityStyles.border,
+                      assistantUtilityStyles.borderBorder,
+                      assistantUtilityStyles.bgWhite70,
+                      assistantUtilityStyles.p3,
+                    ).class
+                  }
+                >
+                  <div
+                    class={
+                      stylex.attrs(
+                        assistantUtilityStyles.mb2,
+                        assistantUtilityStyles.text0585,
+                        assistantUtilityStyles.fontSemibold,
+                        assistantUtilityStyles.uppercase,
+                        assistantUtilityStyles.tracking018,
+                        assistantUtilityStyles.textMuted,
+                      ).class
+                    }
+                  >
+                    Latest runs
                   </div>
-                </Show>
-              </section>
-              <section class="rounded-2xl border border-(--border) bg-white/70 p-3">
-                <div class="mb-2 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Pending questions</div>
-                <Show when={circuitBreakerQuestions().length > 0} fallback={<div class="text-[0.675rem] text-(--muted)">No pending questions.</div>}>
-                  <div class="space-y-2">
-                    <For each={circuitBreakerQuestions()}>
-                      {(question) => (
-                        <div class="rounded-xl border border-(--border) bg-white/70 p-2 text-[0.675rem] leading-5 text-(--foreground)">
-                          <FileLinkedText text={question.prompt} fileLinks={circuitBreakerFileLinks()} />
-                        </div>
-                      )}
-                    </For>
+                  <Show
+                    when={circuitBreakerRuns().length > 0}
+                    fallback={
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.text0675,
+                            assistantUtilityStyles.textMuted,
+                          ).class
+                        }
+                      >
+                        No assistant-owned job runs.
+                      </div>
+                    }
+                  >
+                    <div
+                      class={stylex.attrs(assistantUtilityStyles.spaceY2).class}
+                    >
+                      <For each={circuitBreakerRuns()}>
+                        {(run) => (
+                          <div
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.roundedXl,
+                                assistantUtilityStyles.border,
+                                assistantUtilityStyles.borderBorder,
+                                assistantUtilityStyles.bgWhite70,
+                                assistantUtilityStyles.p2,
+                                assistantUtilityStyles.text0675,
+                                assistantUtilityStyles.leading5,
+                              ).class
+                            }
+                          >
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.fontSemibold,
+                                  assistantUtilityStyles.textForeground,
+                                ).class
+                              }
+                            >
+                              {run.status}
+                            </div>
+                            <div
+                              class={
+                                stylex.attrs(assistantUtilityStyles.textMuted)
+                                  .class
+                              }
+                            >
+                              <FileLinkedText
+                                text={
+                                  run.failureMessage ?? run.summary ?? run.id
+                                }
+                                fileLinks={circuitBreakerFileLinks()}
+                              />
+                            </div>
+                            <Show when={run.failureCategory}>
+                              {(category) => (
+                                <div
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.textMuted,
+                                    ).class
+                                  }
+                                >
+                                  Category: {formatFailureCategory(category())}
+                                </div>
+                              )}
+                            </Show>
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.mt1,
+                                  assistantUtilityStyles.text0575,
+                                  assistantUtilityStyles.uppercase,
+                                  assistantUtilityStyles.tracking012,
+                                  assistantUtilityStyles.textMuted,
+                                ).class
+                              }
+                            >
+                              {formatShortTimestamp(run.updatedAt)}
+                            </div>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </section>
+                <section
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.rounded2xl,
+                      assistantUtilityStyles.border,
+                      assistantUtilityStyles.borderBorder,
+                      assistantUtilityStyles.bgWhite70,
+                      assistantUtilityStyles.p3,
+                    ).class
+                  }
+                >
+                  <div
+                    class={
+                      stylex.attrs(
+                        assistantUtilityStyles.mb2,
+                        assistantUtilityStyles.text0585,
+                        assistantUtilityStyles.fontSemibold,
+                        assistantUtilityStyles.uppercase,
+                        assistantUtilityStyles.tracking018,
+                        assistantUtilityStyles.textMuted,
+                      ).class
+                    }
+                  >
+                    Pending questions
                   </div>
-                </Show>
-              </section>
+                  <Show
+                    when={circuitBreakerQuestions().length > 0}
+                    fallback={
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.text0675,
+                            assistantUtilityStyles.textMuted,
+                          ).class
+                        }
+                      >
+                        No pending questions.
+                      </div>
+                    }
+                  >
+                    <div
+                      class={stylex.attrs(assistantUtilityStyles.spaceY2).class}
+                    >
+                      <For each={circuitBreakerQuestions()}>
+                        {(question) => (
+                          <div
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.roundedXl,
+                                assistantUtilityStyles.border,
+                                assistantUtilityStyles.borderBorder,
+                                assistantUtilityStyles.bgWhite70,
+                                assistantUtilityStyles.p2,
+                                assistantUtilityStyles.text0675,
+                                assistantUtilityStyles.leading5,
+                                assistantUtilityStyles.textForeground,
+                              ).class
+                            }
+                          >
+                            <FileLinkedText
+                              text={question.prompt}
+                              fileLinks={circuitBreakerFileLinks()}
+                            />
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </section>
               </div>
             )}
           </Show>
@@ -1231,9 +2076,19 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
             <ActionButton
               tooltip={tooltipWithPrimaryHotkey(
                 createLabel(),
-                normalizeAppHotkeyPreferences(state.appHotkeyPreferences).createAssistant[0]
+                normalizeAppHotkeyPreferences(state.appHotkeyPreferences)
+                  .createAssistant[0],
               )}
-              icon={<Plus class="h-4 w-4" />}
+              icon={
+                <Plus
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h4,
+                      assistantUtilityStyles.w4,
+                    ).class
+                  }
+                />
+              }
               size="icon"
               variant="ghost"
               ariaLabel={createLabel()}
@@ -1244,690 +2099,2751 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
       </Show>
 
       <div
-        class="grid min-h-0 min-w-0 max-w-full flex-1 gap-4"
-        classList={{ "xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]": showRoster() && showDetail() }}
+        class={cn(
+          stylex.attrs(
+            assistantUtilityStyles.grid,
+            assistantUtilityStyles.minH0,
+            assistantUtilityStyles.minW0,
+            assistantUtilityStyles.maxWFull,
+            assistantUtilityStyles.flex1,
+            assistantUtilityStyles.gap4,
+          ).class,
+          showRoster() && showDetail()
+            ? stylex.attrs(assistantUtilityStyles.xlGridColsRoster).class
+            : undefined,
+        )}
       >
         <Show when={showRoster()}>
-        <div class="flex min-h-0 min-w-0 max-w-full flex-col gap-1">
-          <LeftPaneFilterBlock>
-            <LeftPaneSearchInput
-              value={state.assistants.rosterSearch}
-              aria-label="Search assistants"
-              placeholder="Search assistants..."
-              menu={
-                <LeftPaneSearchMenu
-                  ariaLabel="Filter and sort assistants"
-                  tooltip="Filter and sort assistants"
-                  activeFilterCount={activeAssistantRosterFilterCount(state)}
-                  items={assistantRosterMenuItems(state)}
-                />
-              }
-              onInput={(event) => harnessStore.setAssistantPaneFilters({ rosterSearch: (event.target as HTMLInputElement).value })}
-            />
-          </LeftPaneFilterBlock>
-          <LeftPaneListSection title="Roster" count={`${visibleAssistants().length} total`} class="border-0 bg-transparent p-0">
-          <Show when={selectedAssistants().length > 0}>
-            <div class="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-(--border) bg-(--panel-strong) p-2 text-[0.675rem] text-(--foreground)">
-              <span class="font-semibold">{selectedAssistants().length} selected</span>
-              <ActionButton tooltip="Pause selected assistants" size="sm" icon={<CirclePause class="h-3.5 w-3.5" />} onClick={() => sendAssistantBulkOperation("pause", selectedAssistants())}>
-                Pause
-              </ActionButton>
-              <ActionButton tooltip="Resume selected assistants" size="sm" variant="secondary" icon={<CirclePlay class="h-3.5 w-3.5" />} onClick={() => sendAssistantBulkOperation("resume", selectedAssistants())}>
-                Resume
-              </ActionButton>
-              <ActionButton tooltip="Retry selected assistant bootstraps" disabled={executionPaused()} disabledReason={executionPauseReason} size="sm" variant="secondary" icon={<RefreshCcw class="h-3.5 w-3.5" />} onClick={() => sendAssistantBulkOperation("bootstrap-retry", selectedAssistants())}>
-                Bootstrap
-              </ActionButton>
-              <ActionButton tooltip="Delete selected assistants" size="sm" variant="secondary" icon={<Trash2 class="h-3.5 w-3.5" />} onClick={() => sendAssistantBulkOperation("delete", selectedAssistants())}>
-                Delete
-              </ActionButton>
-              <ActionButton tooltip="Clear selection" size="sm" variant="ghost" icon={<Square class="h-3.5 w-3.5" />} onClick={() => setSelectedAssistantIds([])}>
-                Clear
-              </ActionButton>
-            </div>
-          </Show>
-          <VirtualList
-            class="min-h-0 flex-1 pr-2"
-            contentClass="w-full"
-            itemClass="pb-3"
-            items={visibleAssistants()}
-            getKey={(assistant) => assistant.id}
-            estimateSize={140}
-            pagination={{ kind: "forward", initialCount: 60, batchSize: 60 }}
-            empty={
-              <LeftPaneEmptyState>
-                <div class="grid gap-3">
-                  <div>No assistants match current search or filters.</div>
-                  <div class="flex flex-wrap gap-2">
-                    <ActionButton
-                      tooltip={tooltipWithPrimaryHotkey("Create assistant", normalizeAppHotkeyPreferences(state.appHotkeyPreferences).createAssistant[0])}
-                      ariaLabel="New assistant"
-                      size="sm"
-                      icon={<Plus class="h-3.5 w-3.5" />}
-                      onClick={() => openCreateAssistant(createScope())}
-                    >
-                      New assistant
-                    </ActionButton>
-                    <ActionButton
-                      tooltip={state.workspace.activeProjectId ? "Create from current thread" : "Open a project first"}
-                      ariaLabel="Create from current thread"
-                      size="sm"
-                      variant="secondary"
-                      disabled={!state.workspace.activeProjectId}
-                      disabledReason={!state.workspace.activeProjectId ? "Open a project first" : undefined}
-                      icon={<MessageSquare class="h-3.5 w-3.5" />}
-                      onClick={() => openCreateAssistant("project")}
-                    >
-                      Create from current thread
-                    </ActionButton>
-                  </div>
-                </div>
-              </LeftPaneEmptyState>
+          <div
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.flex,
+                assistantUtilityStyles.minH0,
+                assistantUtilityStyles.minW0,
+                assistantUtilityStyles.maxWFull,
+                assistantUtilityStyles.flexCol,
+                assistantUtilityStyles.gap1,
+              ).class
             }
           >
-            {(assistant) => (
-              <div
-                class="dense-action-parent dense-card w-full cursor-pointer border-l-4 p-3 text-left transition hover:border-(--accent-strong)"
-                classList={{
-                  "dense-card-selected": selectedAssistant()?.id === assistant.id || selectedAssistantIdSet().has(assistant.id),
-                  [assistantRunStateBorderClass(assistant.runState)]: selectedAssistant()?.id !== assistant.id && !selectedAssistantIdSet().has(assistant.id),
+            <LeftPaneFilterBlock>
+              <LeftPaneSearchInput
+                value={state.assistants.rosterSearch}
+                aria-label="Search assistants"
+                placeholder="Search assistants..."
+                menu={
+                  <LeftPaneSearchMenu
+                    ariaLabel="Filter and sort assistants"
+                    tooltip="Filter and sort assistants"
+                    activeFilterCount={activeAssistantRosterFilterCount(state)}
+                    items={assistantRosterMenuItems(state)}
+                  />
+                }
+                onInput={(event) =>
+                  harnessStore.setAssistantPaneFilters({
+                    rosterSearch: (event.target as HTMLInputElement).value,
+                  })
+                }
+              />
+            </LeftPaneFilterBlock>
+            <LeftPaneListSection
+              title="Roster"
+              count={`${visibleAssistants().length} total`}
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.border0,
+                  assistantUtilityStyles.bgTransparent,
+                  assistantUtilityStyles.p0,
+                ).class
+              }
+            >
+              <Show when={selectedAssistants().length > 0}>
+                <div
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.mb3,
+                      assistantUtilityStyles.flex,
+                      assistantUtilityStyles.flexWrap,
+                      assistantUtilityStyles.itemsCenter,
+                      assistantUtilityStyles.gap2,
+                      assistantUtilityStyles.roundedLg,
+                      assistantUtilityStyles.border,
+                      assistantUtilityStyles.borderBorder,
+                      assistantUtilityStyles.bgPanelStrong,
+                      assistantUtilityStyles.p2,
+                      assistantUtilityStyles.text0675,
+                      assistantUtilityStyles.textForeground,
+                    ).class
+                  }
+                >
+                  <span
+                    class={
+                      stylex.attrs(assistantUtilityStyles.fontSemibold).class
+                    }
+                  >
+                    {selectedAssistants().length} selected
+                  </span>
+                  <ActionButton
+                    tooltip="Pause selected assistants"
+                    size="sm"
+                    icon={
+                      <CirclePause
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.h35,
+                            assistantUtilityStyles.w35,
+                          ).class
+                        }
+                      />
+                    }
+                    onClick={() =>
+                      sendAssistantBulkOperation("pause", selectedAssistants())
+                    }
+                  >
+                    Pause
+                  </ActionButton>
+                  <ActionButton
+                    tooltip="Resume selected assistants"
+                    size="sm"
+                    variant="secondary"
+                    icon={
+                      <CirclePlay
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.h35,
+                            assistantUtilityStyles.w35,
+                          ).class
+                        }
+                      />
+                    }
+                    onClick={() =>
+                      sendAssistantBulkOperation("resume", selectedAssistants())
+                    }
+                  >
+                    Resume
+                  </ActionButton>
+                  <ActionButton
+                    tooltip="Retry selected assistant bootstraps"
+                    disabled={executionPaused()}
+                    disabledReason={executionPauseReason}
+                    size="sm"
+                    variant="secondary"
+                    icon={
+                      <RefreshCcw
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.h35,
+                            assistantUtilityStyles.w35,
+                          ).class
+                        }
+                      />
+                    }
+                    onClick={() =>
+                      sendAssistantBulkOperation(
+                        "bootstrap-retry",
+                        selectedAssistants(),
+                      )
+                    }
+                  >
+                    Bootstrap
+                  </ActionButton>
+                  <ActionButton
+                    tooltip="Delete selected assistants"
+                    size="sm"
+                    variant="secondary"
+                    icon={
+                      <Trash2
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.h35,
+                            assistantUtilityStyles.w35,
+                          ).class
+                        }
+                      />
+                    }
+                    onClick={() =>
+                      sendAssistantBulkOperation("delete", selectedAssistants())
+                    }
+                  >
+                    Delete
+                  </ActionButton>
+                  <ActionButton
+                    tooltip="Clear selection"
+                    size="sm"
+                    variant="ghost"
+                    icon={
+                      <Square
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.h35,
+                            assistantUtilityStyles.w35,
+                          ).class
+                        }
+                      />
+                    }
+                    onClick={() => setSelectedAssistantIds([])}
+                  >
+                    Clear
+                  </ActionButton>
+                </div>
+              </Show>
+              <VirtualList
+                class={
+                  stylex.attrs(
+                    assistantUtilityStyles.minH0,
+                    assistantUtilityStyles.flex1,
+                    assistantUtilityStyles.pr2,
+                  ).class
+                }
+                contentClass={stylex.attrs(assistantUtilityStyles.wFull).class}
+                itemClass={stylex.attrs(assistantUtilityStyles.pb3).class}
+                items={visibleAssistants()}
+                getKey={(assistant) => assistant.id}
+                estimateSize={140}
+                pagination={{
+                  kind: "forward",
+                  initialCount: 60,
+                  batchSize: 60,
                 }}
-                role="button"
-                tabIndex={0}
-                onPointerDown={(event) => scheduleAssistantDelayedSelection(assistant.id, event)}
-                onPointerUp={clearAssistantSelectionTimer}
-                onPointerCancel={clearAssistantSelectionTimer}
-                onPointerLeave={clearAssistantSelectionTimer}
-                onClick={(event) => handleAssistantCardClick(assistant, event)}
-                onContextMenu={(event) => openAssistantBulkContextMenu(assistant, event)}
-                onKeyDown={(event) => handleAssistantRosterKeyDown(event, assistant.id)}
+                empty={
+                  <LeftPaneEmptyState>
+                    <div
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.grid,
+                          assistantUtilityStyles.gap3,
+                        ).class
+                      }
+                    >
+                      <div>No assistants match current search or filters.</div>
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.flex,
+                            assistantUtilityStyles.flexWrap,
+                            assistantUtilityStyles.gap2,
+                          ).class
+                        }
+                      >
+                        <ActionButton
+                          tooltip={tooltipWithPrimaryHotkey(
+                            "Create assistant",
+                            normalizeAppHotkeyPreferences(
+                              state.appHotkeyPreferences,
+                            ).createAssistant[0],
+                          )}
+                          ariaLabel="New assistant"
+                          size="sm"
+                          icon={
+                            <Plus
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.h35,
+                                  assistantUtilityStyles.w35,
+                                ).class
+                              }
+                            />
+                          }
+                          onClick={() => openCreateAssistant(createScope())}
+                        >
+                          New assistant
+                        </ActionButton>
+                        <ActionButton
+                          tooltip={
+                            state.workspace.activeProjectId
+                              ? "Create from current thread"
+                              : "Open a project first"
+                          }
+                          ariaLabel="Create from current thread"
+                          size="sm"
+                          variant="secondary"
+                          disabled={!state.workspace.activeProjectId}
+                          disabledReason={
+                            !state.workspace.activeProjectId
+                              ? "Open a project first"
+                              : undefined
+                          }
+                          icon={
+                            <MessageSquare
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.h35,
+                                  assistantUtilityStyles.w35,
+                                ).class
+                              }
+                            />
+                          }
+                          onClick={() => openCreateAssistant("project")}
+                        >
+                          Create from current thread
+                        </ActionButton>
+                      </div>
+                    </div>
+                  </LeftPaneEmptyState>
+                }
               >
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 flex-1">
-                    <div class="text-[0.775rem] font-semibold text-(--foreground)">{assistant.name}</div>
-                    <div class="mt-1 flex flex-wrap gap-1">
-                      <StatusChip tone={assistant.scope === "global" ? "info" : "accent"}>{assistant.scope}</StatusChip>
-                      <StatusChip tone={assistantBootstrapTone(assistant.bootstrapState)}>{assistant.bootstrapState}</StatusChip>
+                {(assistant) => (
+                  <div
+                    class={cn(
+                      stylex.attrs(
+                        assistantPanelStyles.denseCard,
+                        assistantUtilityStyles.wFull,
+                        assistantUtilityStyles.cursorPointer,
+                        assistantUtilityStyles.borderL4,
+                        assistantUtilityStyles.p3,
+                        assistantUtilityStyles.textLeft,
+                        assistantUtilityStyles.transition,
+                        assistantUtilityStyles.hoverBorderAccentStrong,
+                      ).class,
+                      state.assistants.selectedAssistantId === assistant.id ||
+                        selectedAssistantIds().includes(assistant.id)
+                        ? stylex.attrs(assistantPanelStyles.denseCardSelected).class
+                        : assistant.runState === "active"
+                          ? stylex.attrs(assistantPanelStyles.borderEmerald).class
+                          : stylex.attrs(assistantPanelStyles.borderAmber).class,
+                    )}
+                    role="button"
+                    tabIndex={0}
+                    onPointerDown={(event) =>
+                      scheduleAssistantDelayedSelection(assistant.id, event)
+                    }
+                    onPointerUp={clearAssistantSelectionTimer}
+                    onPointerCancel={clearAssistantSelectionTimer}
+                    onPointerLeave={clearAssistantSelectionTimer}
+                    onClick={(event) =>
+                      handleAssistantCardClick(assistant, event)
+                    }
+                    onContextMenu={(event) =>
+                      openAssistantBulkContextMenu(assistant, event)
+                    }
+                    onKeyDown={(event) =>
+                      handleAssistantRosterKeyDown(event, assistant.id)
+                    }
+                  >
+                    <div
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.flex,
+                          assistantUtilityStyles.itemsStart,
+                          assistantUtilityStyles.justifyBetween,
+                          assistantUtilityStyles.gap3,
+                        ).class
+                      }
+                    >
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.minW0,
+                            assistantUtilityStyles.flex1,
+                          ).class
+                        }
+                      >
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.text0775,
+                              assistantUtilityStyles.fontSemibold,
+                              assistantUtilityStyles.textForeground,
+                            ).class
+                          }
+                        >
+                          {assistant.name}
+                        </div>
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.mt1,
+                              assistantUtilityStyles.flex,
+                              assistantUtilityStyles.flexWrap,
+                              assistantUtilityStyles.gap1,
+                            ).class
+                          }
+                        >
+                          <StatusChip
+                            tone={
+                              assistant.scope === "global" ? "info" : "accent"
+                            }
+                          >
+                            {assistant.scope}
+                          </StatusChip>
+                          <StatusChip
+                            tone={assistantBootstrapTone(
+                              assistant.bootstrapState,
+                            )}
+                          >
+                            {assistant.bootstrapState}
+                          </StatusChip>
+                        </div>
+                      </div>
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.flex,
+                            assistantUtilityStyles.shrink0,
+                            assistantUtilityStyles.flexWrap,
+                            assistantUtilityStyles.justifyEnd,
+                            assistantUtilityStyles.gap1,
+                          ).class
+                        }
+                      >
+                        <ActionButton
+                          tooltip={
+                            selectedAssistantIdSet().has(assistant.id)
+                              ? "Remove from bulk selection"
+                              : "Add to bulk selection"
+                          }
+                          icon={
+                            selectedAssistantIdSet().has(assistant.id) ? (
+                              <CheckSquare2
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.h3,
+                                    assistantUtilityStyles.w3,
+                                  ).class
+                                }
+                              />
+                            ) : (
+                              <Square
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.h3,
+                                    assistantUtilityStyles.w3,
+                                  ).class
+                                }
+                              />
+                            )
+                          }
+                          size="icon"
+                          variant="ghost"
+                          ariaLabel={
+                            selectedAssistantIdSet().has(assistant.id)
+                              ? `Remove ${assistant.name} from bulk selection`
+                              : `Add ${assistant.name} to bulk selection`
+                          }
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedAssistantIds((ids) =>
+                              toggleAssistantSelectionId(ids, assistant.id),
+                            );
+                            setAssistantSelectionAnchorId(assistant.id);
+                          }}
+                        />
+                        <StatusChip
+                          tone={assistantRunStateTone(assistant.runState)}
+                        >
+                          {assistant.runState}
+                        </StatusChip>
+                        <Show when={assistant.unreadQuestionCount > 0}>
+                          <StatusChip
+                            tone="warning"
+                            class={
+                              stylex.attrs(
+                                rightAlignedNumbersEnabled() &&
+                                  assistantPanelStyles.numericFlagged,
+                              ).class
+                            }
+                          >
+                            {assistant.unreadQuestionCount} q
+                          </StatusChip>
+                        </Show>
+                      </div>
+                    </div>
+                    <div
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.mt3,
+                          assistantUtilityStyles.text0675,
+                          assistantUtilityStyles.leading5,
+                          assistantUtilityStyles.textMuted,
+                        ).class
+                      }
+                    >
+                      <div>
+                        <FileLinkedText
+                          text={
+                            assistant.description ??
+                            summarizePrompt(assistant.jobPrompt)
+                          }
+                          fileLinks={getAssistantFileLinks(assistant)}
+                        />
+                      </div>
+                      <div
+                        class={stylex.attrs(assistantUtilityStyles.mt1).class}
+                      >
+                        {assistant.circuitBreakerState === "tripped"
+                          ? "Circuit breaker tripped"
+                          : `Updated ${formatShortTimestamp(assistant.updatedAt)}`}
+                      </div>
                     </div>
                   </div>
-                  <div class="flex shrink-0 flex-wrap justify-end gap-1">
-                    <ActionButton
-                      tooltip={selectedAssistantIdSet().has(assistant.id) ? "Remove from bulk selection" : "Add to bulk selection"}
-                      icon={selectedAssistantIdSet().has(assistant.id) ? <CheckSquare2 class="h-3 w-3" /> : <Square class="h-3 w-3" />}
-                      size="icon"
-                      variant="ghost"
-                      ariaLabel={selectedAssistantIdSet().has(assistant.id) ? `Remove ${assistant.name} from bulk selection` : `Add ${assistant.name} to bulk selection`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setSelectedAssistantIds((ids) => toggleAssistantSelectionId(ids, assistant.id));
-                        setAssistantSelectionAnchorId(assistant.id);
-                      }}
-                    />
-                    <StatusChip tone={assistantRunStateTone(assistant.runState)}>
-                      {assistant.runState}
-                    </StatusChip>
-                    <Show when={assistant.unreadQuestionCount > 0}>
-                      <StatusChip tone="warning" classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() }}>
-                        {assistant.unreadQuestionCount} q
-                      </StatusChip>
-                    </Show>
-                  </div>
-                </div>
-                <div class="mt-3 text-[0.675rem] leading-5 text-(--muted)">
-                  <div>
-                    <FileLinkedText text={assistant.description ?? summarizePrompt(assistant.jobPrompt)} fileLinks={getAssistantFileLinks(assistant)} />
-                  </div>
-                  <div class="mt-1">{assistant.circuitBreakerState === "tripped" ? "Circuit breaker tripped" : `Updated ${formatShortTimestamp(assistant.updatedAt)}`}</div>
-                </div>
-              </div>
-            )}
-          </VirtualList>
-          </LeftPaneListSection>
-        </div>
+                )}
+              </VirtualList>
+            </LeftPaneListSection>
+          </div>
         </Show>
 
         <Show when={showDetail()}>
-        <section class="flex min-h-0 min-w-0 max-w-full flex-1 flex-col p-4">
-          <Show
-            when={selectedAssistant()}
-            fallback={
-              <DetailEmptyState>
-                Select assistant to inspect config, chat, todos, and logs.
-              </DetailEmptyState>
+          <section
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.flex,
+                assistantUtilityStyles.minH0,
+                assistantUtilityStyles.minW0,
+                assistantUtilityStyles.maxWFull,
+                assistantUtilityStyles.flex1,
+                assistantUtilityStyles.flexCol,
+                assistantUtilityStyles.p4,
+              ).class
             }
           >
-            {(assistant) => (
-              <div class="flex h-full min-h-0 flex-col gap-4">
-                <div class="border-b border-(--border) pb-4">
-                  <div class="flex flex-wrap items-start justify-between gap-4">
-                    <div class="min-w-0 flex-1">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Inspector</div>
-                        <StatusChip tone={assistantRunStateTone(assistant().runState)}>
-                          {assistant().runState}
-                        </StatusChip>
-                        <Show when={assistant().circuitBreakerState === "tripped"}>
-                          <StatusChip tone="danger">circuit breaker</StatusChip>
-                        </Show>
-                      </div>
-                      <h2 class="mt-1 break-words text-[1.2rem] font-semibold text-(--foreground) [overflow-wrap:anywhere]">{assistant().name}</h2>
-                      <div class="mt-3 grid gap-x-5 gap-y-1 border-l-2 border-(--border) pl-4 text-[0.675rem] leading-5 text-(--muted) sm:grid-cols-2 xl:grid-cols-3">
-                        <AssistantFact label="Scope">{assistant().scope}</AssistantFact>
-                        <AssistantFact label="Bootstrap">{assistant().bootstrapState}</AssistantFact>
-                        <AssistantFact label="Questions">
-                          <span classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() }}>{String(assistant().unreadQuestionCount)}</span>
-                        </AssistantFact>
-                      </div>
-                      <Show when={assistant().description}>
-                        {(description) => (
-                          <div class="mt-3 max-w-3xl border-l-2 border-(--border) pl-4 text-[0.675rem] leading-5 text-(--muted)">
-                            <FileLinkedText text={description()} fileLinks={assistantChatFileLinks()} />
-                          </div>
-                        )}
-                      </Show>
-                    </div>
-
-                    <div class="flex w-full max-w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-                      <Show when={assistant().circuitBreakerState === "tripped"}>
-                        <ActionButton
-                          tooltip="Inspect circuit breaker failure and retry"
-                          ariaLabel="Inspect failure"
-                          icon={<CircleAlert class="h-4 w-4" />}
-                          variant="secondary"
-                          class="border-amber-300 text-amber-900 hover:bg-amber-50"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedCircuitBreakerAssistantId(assistant().id);
-                          }}
-                        >
-                          Inspect failure
-                        </ActionButton>
-                      </Show>
-                      <ActionButton tooltip="Edit assistant config" icon={<SquarePen class="h-4 w-4" />} variant="secondary" onClick={() => openEditAssistant(assistant())}>Edit</ActionButton>
-                      <ActionButton
-                        tooltip={assistant().runState === "paused" ? "Resume assistant background work" : "Pause assistant background work"}
-                        icon={assistant().runState === "paused" ? <CirclePlay class="h-4 w-4" /> : <CirclePause class="h-4 w-4" />}
-                        variant="secondary"
-                        class={assistant().runState === "paused" ? "border-(--accent) text-(--accent-strong) hover:bg-(--panel)" : "border-amber-300 text-amber-900 hover:bg-amber-50"}
-                        onClick={() =>
-                          sendCommand({
-                            type: assistant().runState === "paused" ? "assistant.resume" : "assistant.pause",
-                            requestId: createRequestId(),
-                            payload: { assistantId: assistant().id }
-                          })
+            <Show
+              when={selectedAssistant()}
+              fallback={
+                <DetailEmptyState>
+                  Select assistant to inspect config, chat, todos, and logs.
+                </DetailEmptyState>
+              }
+            >
+              {(assistant) => (
+                <div
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.flex,
+                      assistantUtilityStyles.hFull,
+                      assistantUtilityStyles.minH0,
+                      assistantUtilityStyles.flexCol,
+                      assistantUtilityStyles.gap4,
+                    ).class
+                  }
+                >
+                  <div
+                    class={
+                      stylex.attrs(
+                        assistantUtilityStyles.borderB,
+                        assistantUtilityStyles.borderBorder,
+                        assistantUtilityStyles.pb4,
+                      ).class
+                    }
+                  >
+                    <div
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.flex,
+                          assistantUtilityStyles.flexWrap,
+                          assistantUtilityStyles.itemsStart,
+                          assistantUtilityStyles.justifyBetween,
+                          assistantUtilityStyles.gap4,
+                        ).class
+                      }
+                    >
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.minW0,
+                            assistantUtilityStyles.flex1,
+                          ).class
                         }
                       >
-                        {assistant().runState === "paused" ? "Resume" : "Pause"}
-                      </ActionButton>
-                      <ActionButton
-                        tooltip="Retry assistant bootstrap research"
-                        disabled={executionPaused()}
-                        disabledReason={executionPauseReason}
-                        icon={<RefreshCcw class="h-4 w-4" />}
-                        variant="secondary"
-                        onClick={() => sendCommand({ type: "assistant.bootstrap.retry", requestId: createRequestId(), payload: { assistantId: assistant().id } })}
-                      >
-                        Retry bootstrap
-                      </ActionButton>
-                      <Show when={assistant().scope === "global"}>
-                        <ActionButton
-                          tooltip={state.workspace.activeProjectId ? "Clone global assistant into current project" : "Open a project before cloning"}
-                          disabled={!state.workspace.activeProjectId}
-                          disabledReason="Open project first"
-                          icon={<CopyPlus class="h-4 w-4" />}
-                          variant="secondary"
-                          onClick={() =>
-                            state.workspace.activeProjectId &&
-                            sendCommand({
-                              type: "assistant.clone-to-project",
-                              requestId: createRequestId(),
-                              payload: {
-                                assistantId: assistant().id,
-                                projectId: state.workspace.activeProjectId
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.flex,
+                              assistantUtilityStyles.flexWrap,
+                              assistantUtilityStyles.itemsCenter,
+                              assistantUtilityStyles.gap2,
+                            ).class
+                          }
+                        >
+                          <div
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.text0585,
+                                assistantUtilityStyles.fontSemibold,
+                                assistantUtilityStyles.uppercase,
+                                assistantUtilityStyles.tracking018,
+                                assistantUtilityStyles.textMuted,
+                              ).class
+                            }
+                          >
+                            Inspector
+                          </div>
+                          <StatusChip
+                            tone={assistantRunStateTone(assistant().runState)}
+                          >
+                            {assistant().runState}
+                          </StatusChip>
+                          <Show
+                            when={assistant().circuitBreakerState === "tripped"}
+                          >
+                            <StatusChip tone="danger">
+                              circuit breaker
+                            </StatusChip>
+                          </Show>
+                        </div>
+                        <h2
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.mt1,
+                              assistantUtilityStyles.breakWords,
+                              assistantUtilityStyles.text12,
+                              assistantUtilityStyles.fontSemibold,
+                              assistantUtilityStyles.textForeground,
+                              assistantUtilityStyles.wrapAnywhere,
+                            ).class
+                          }
+                        >
+                          {assistant().name}
+                        </h2>
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.mt3,
+                              assistantUtilityStyles.grid,
+                              assistantUtilityStyles.gapX5,
+                              assistantUtilityStyles.gapY1,
+                              assistantUtilityStyles.borderL2,
+                              assistantUtilityStyles.borderBorder,
+                              assistantUtilityStyles.pl4,
+                              assistantUtilityStyles.text0675,
+                              assistantUtilityStyles.leading5,
+                              assistantUtilityStyles.textMuted,
+                              assistantUtilityStyles.smGridCols2,
+                              assistantUtilityStyles.xlGridCols3,
+                            ).class
+                          }
+                        >
+                          <AssistantFact label="Scope">
+                            {assistant().scope}
+                          </AssistantFact>
+                          <AssistantFact label="Bootstrap">
+                            {assistant().bootstrapState}
+                          </AssistantFact>
+                          <AssistantFact label="Questions">
+                            <span
+                              class={
+                                stylex.attrs(
+                                  rightAlignedNumbersEnabled() &&
+                                    assistantPanelStyles.numericFlagged,
+                                ).class
                               }
+                            >
+                              {String(assistant().unreadQuestionCount)}
+                            </span>
+                          </AssistantFact>
+                        </div>
+                        <Show when={assistant().description}>
+                          {(description) => (
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.mt3,
+                                  assistantUtilityStyles.maxW3xl,
+                                  assistantUtilityStyles.borderL2,
+                                  assistantUtilityStyles.borderBorder,
+                                  assistantUtilityStyles.pl4,
+                                  assistantUtilityStyles.text0675,
+                                  assistantUtilityStyles.leading5,
+                                  assistantUtilityStyles.textMuted,
+                                ).class
+                              }
+                            >
+                              <FileLinkedText
+                                text={description()}
+                                fileLinks={assistantChatFileLinks()}
+                              />
+                            </div>
+                          )}
+                        </Show>
+                      </div>
+
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.flex,
+                            assistantUtilityStyles.wFull,
+                            assistantUtilityStyles.maxWFull,
+                            assistantUtilityStyles.flexWrap,
+                            assistantUtilityStyles.gap2,
+                            assistantUtilityStyles.smWAuto,
+                            assistantUtilityStyles.smJustifyEnd,
+                          ).class
+                        }
+                      >
+                        <Show
+                          when={assistant().circuitBreakerState === "tripped"}
+                        >
+                          <ActionButton
+                            tooltip="Inspect circuit breaker failure and retry"
+                            ariaLabel="Inspect failure"
+                            icon={
+                              <CircleAlert
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.h4,
+                                    assistantUtilityStyles.w4,
+                                  ).class
+                                }
+                              />
+                            }
+                            variant="secondary"
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.borderAmber300,
+                                assistantUtilityStyles.textAmber900,
+                                assistantUtilityStyles.hoverBgAmber50,
+                              ).class
+                            }
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedCircuitBreakerAssistantId(
+                                assistant().id,
+                              );
+                            }}
+                          >
+                            Inspect failure
+                          </ActionButton>
+                        </Show>
+                        <ActionButton
+                          tooltip="Edit assistant config"
+                          icon={
+                            <SquarePen
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.h4,
+                                  assistantUtilityStyles.w4,
+                                ).class
+                              }
+                            />
+                          }
+                          variant="secondary"
+                          onClick={() => openEditAssistant(assistant())}
+                        >
+                          Edit
+                        </ActionButton>
+                        <ActionButton
+                          tooltip={
+                            assistant().runState === "paused"
+                              ? "Resume assistant background work"
+                              : "Pause assistant background work"
+                          }
+                          icon={
+                            assistant().runState === "paused" ? (
+                              <CirclePlay
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.h4,
+                                    assistantUtilityStyles.w4,
+                                  ).class
+                                }
+                              />
+                            ) : (
+                              <CirclePause
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.h4,
+                                    assistantUtilityStyles.w4,
+                                  ).class
+                                }
+                              />
+                            )
+                          }
+                          variant="secondary"
+                          class={
+                            assistant().runState === "paused"
+                              ? "border-(--accent) text-(--accent-strong) hover:bg-(--panel)"
+                              : "border-amber-300 text-amber-900 hover:bg-amber-50"
+                          }
+                          onClick={() =>
+                            sendCommand({
+                              type:
+                                assistant().runState === "paused"
+                                  ? "assistant.resume"
+                                  : "assistant.pause",
+                              requestId: createRequestId(),
+                              payload: { assistantId: assistant().id },
                             })
                           }
                         >
-                          Clone to project
+                          {assistant().runState === "paused"
+                            ? "Resume"
+                            : "Pause"}
                         </ActionButton>
-                      </Show>
-                      <ActionButton tooltip="Delete assistant" icon={<Trash2 class="h-4 w-4" />} variant="secondary" class="border-(--danger) text-(--danger) hover:bg-(--panel)" onClick={() => handleDeleteAssistant(assistant())}>Delete</ActionButton>
+                        <ActionButton
+                          tooltip="Retry assistant bootstrap research"
+                          disabled={executionPaused()}
+                          disabledReason={executionPauseReason}
+                          icon={
+                            <RefreshCcw
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.h4,
+                                  assistantUtilityStyles.w4,
+                                ).class
+                              }
+                            />
+                          }
+                          variant="secondary"
+                          onClick={() =>
+                            sendCommand({
+                              type: "assistant.bootstrap.retry",
+                              requestId: createRequestId(),
+                              payload: { assistantId: assistant().id },
+                            })
+                          }
+                        >
+                          Retry bootstrap
+                        </ActionButton>
+                        <Show when={assistant().scope === "global"}>
+                          <ActionButton
+                            tooltip={
+                              state.workspace.activeProjectId
+                                ? "Clone global assistant into current project"
+                                : "Open a project before cloning"
+                            }
+                            disabled={!state.workspace.activeProjectId}
+                            disabledReason="Open project first"
+                            icon={
+                              <CopyPlus
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.h4,
+                                    assistantUtilityStyles.w4,
+                                  ).class
+                                }
+                              />
+                            }
+                            variant="secondary"
+                            onClick={() =>
+                              state.workspace.activeProjectId &&
+                              sendCommand({
+                                type: "assistant.clone-to-project",
+                                requestId: createRequestId(),
+                                payload: {
+                                  assistantId: assistant().id,
+                                  projectId: state.workspace.activeProjectId,
+                                },
+                              })
+                            }
+                          >
+                            Clone to project
+                          </ActionButton>
+                        </Show>
+                        <ActionButton
+                          tooltip="Delete assistant"
+                          icon={
+                            <Trash2
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.h4,
+                                  assistantUtilityStyles.w4,
+                                ).class
+                              }
+                            />
+                          }
+                          variant="secondary"
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.borderDanger,
+                              assistantUtilityStyles.textDanger,
+                              assistantUtilityStyles.hoverBgPanel,
+                            ).class
+                          }
+                          onClick={() => handleDeleteAssistant(assistant())}
+                        >
+                          Delete
+                        </ActionButton>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div role="tablist" aria-label="Assistant detail sections" class="flex gap-1 overflow-x-auto border-b border-(--border)">
-                  <TabButton icon={<MessageSquare class="h-4 w-4" />} label="Chat" active={activeTab() === "chat"} onClick={() => harnessStore.setAssistantDetailTab("chat")} />
-                  <TabButton icon={<ListChecks class="h-4 w-4" />} label="Todos" active={activeTab() === "todos"} onClick={() => harnessStore.setAssistantDetailTab("todos")} />
-                  <TabButton icon={<ClipboardList class="h-4 w-4" />} label="Questions" active={activeTab() === "questions"} onClick={() => harnessStore.setAssistantDetailTab("questions")} />
-                  <TabButton icon={<Bot class="h-4 w-4" />} label="Jobs" active={activeTab() === "jobs"} onClick={() => harnessStore.setAssistantDetailTab("jobs")} />
-                  <TabButton icon={<Logs class="h-4 w-4" />} label="Log" active={activeTab() === "log"} onClick={() => harnessStore.setAssistantDetailTab("log")} />
-                  <TabButton icon={<SquarePen class="h-4 w-4" />} label="Config" active={activeTab() === "config"} onClick={() => harnessStore.setAssistantDetailTab("config")} />
-                  <TabButton icon={<FlaskConical class="h-4 w-4" />} label="Learnings" active={activeTab() === "learnings"} onClick={() => harnessStore.setAssistantDetailTab("learnings")} />
-                </div>
-                <Show when={activeTab() !== "config"}>
-                  <div class="flex flex-col gap-2">
-                    <Input
-                      value={state.assistants.detailSearch}
-                      placeholder={`Search assistant ${activeTab()}`}
-                      onInput={(event) => harnessStore.setAssistantPaneFilters({ detailSearch: (event.target as HTMLInputElement).value })}
+                  <div
+                    role="tablist"
+                    aria-label="Assistant detail sections"
+                    class={
+                      stylex.attrs(
+                        assistantUtilityStyles.flex,
+                        assistantUtilityStyles.gap1,
+                        assistantUtilityStyles.overflowXAuto,
+                        assistantUtilityStyles.borderB,
+                        assistantUtilityStyles.borderBorder,
+                      ).class
+                    }
+                  >
+                    <TabButton
+                      icon={
+                        <MessageSquare
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.h4,
+                              assistantUtilityStyles.w4,
+                            ).class
+                          }
+                        />
+                      }
+                      label="Chat"
+                      active={activeTab() === "chat"}
+                      onClick={() => harnessStore.setAssistantDetailTab("chat")}
                     />
-                    <Show when={state.assistants.detailSearch}>
-                      <ActionButton tooltip="Clear assistant detail search" size="sm" variant="ghost" onClick={() => harnessStore.setAssistantPaneFilters({ detailSearch: "" })}>Clear search</ActionButton>
-                    </Show>
+                    <TabButton
+                      icon={
+                        <ListChecks
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.h4,
+                              assistantUtilityStyles.w4,
+                            ).class
+                          }
+                        />
+                      }
+                      label="Todos"
+                      active={activeTab() === "todos"}
+                      onClick={() =>
+                        harnessStore.setAssistantDetailTab("todos")
+                      }
+                    />
+                    <TabButton
+                      icon={
+                        <ClipboardList
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.h4,
+                              assistantUtilityStyles.w4,
+                            ).class
+                          }
+                        />
+                      }
+                      label="Questions"
+                      active={activeTab() === "questions"}
+                      onClick={() =>
+                        harnessStore.setAssistantDetailTab("questions")
+                      }
+                    />
+                    <TabButton
+                      icon={
+                        <Bot
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.h4,
+                              assistantUtilityStyles.w4,
+                            ).class
+                          }
+                        />
+                      }
+                      label="Jobs"
+                      active={activeTab() === "jobs"}
+                      onClick={() => harnessStore.setAssistantDetailTab("jobs")}
+                    />
+                    <TabButton
+                      icon={
+                        <Logs
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.h4,
+                              assistantUtilityStyles.w4,
+                            ).class
+                          }
+                        />
+                      }
+                      label="Log"
+                      active={activeTab() === "log"}
+                      onClick={() => harnessStore.setAssistantDetailTab("log")}
+                    />
+                    <TabButton
+                      icon={
+                        <SquarePen
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.h4,
+                              assistantUtilityStyles.w4,
+                            ).class
+                          }
+                        />
+                      }
+                      label="Config"
+                      active={activeTab() === "config"}
+                      onClick={() =>
+                        harnessStore.setAssistantDetailTab("config")
+                      }
+                    />
+                    <TabButton
+                      icon={
+                        <FlaskConical
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.h4,
+                              assistantUtilityStyles.w4,
+                            ).class
+                          }
+                        />
+                      }
+                      label="Learnings"
+                      active={activeTab() === "learnings"}
+                      onClick={() =>
+                        harnessStore.setAssistantDetailTab("learnings")
+                      }
+                    />
                   </div>
-                </Show>
-
-                <Show when={activeTab() === "chat"}>
-                  <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto pr-1">
-                    <section class="flex min-h-0 flex-1 flex-col">
-                      <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Assistant chat</div>
-                      <div class="relative flex min-h-72 flex-1 flex-col">
-                        <VirtualList
-                          viewportRef={(element) => {
-                            assistantMessageViewport = element;
-                            scrollAssistantChatToBottom(true);
-                          }}
-                          class="min-h-0 flex-1 pr-2"
-                          contentClass="w-full"
-                          itemClass="pb-3"
-                          data-test-assistant-chat-scroll=""
-                          dataTest="assistant-chat-transcript"
-                          items={assistantChatRows()}
-                          getKey={(row, index) => row.kind === "message" ? row.message.id : `streaming-${row.index ?? index}`}
-                          estimateSize={150}
-                          pagination={{ kind: "reverse", initialCount: 80, batchSize: 80 }}
-                          overscan={6}
-                          stickToEnd
-                          onScroll={updateAssistantScrollLock}
+                  <Show when={activeTab() !== "config"}>
+                    <div
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.flex,
+                          assistantUtilityStyles.flexCol,
+                          assistantUtilityStyles.gap2,
+                        ).class
+                      }
+                    >
+                      <Input
+                        value={state.assistants.detailSearch}
+                        placeholder={`Search assistant ${activeTab()}`}
+                        onInput={(event) =>
+                          harnessStore.setAssistantPaneFilters({
+                            detailSearch: (event.target as HTMLInputElement)
+                              .value,
+                          })
+                        }
+                      />
+                      <Show when={state.assistants.detailSearch}>
+                        <ActionButton
+                          tooltip="Clear assistant detail search"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            harnessStore.setAssistantPaneFilters({
+                              detailSearch: "",
+                            })
+                          }
                         >
-                          {(row) => row.kind === "message" ? (
-                            <article
-                              class="rounded-2xl border p-3"
-                              classList={{
-                                "border-(--border)": row.message.role === "user",
-                                "bg-white/75": row.message.role === "user",
-                                "border-(--accent)": row.message.role !== "user",
-                                "bg-(--panel)": row.message.role !== "user"
-                              }}
+                          Clear search
+                        </ActionButton>
+                      </Show>
+                    </div>
+                  </Show>
+
+                  <Show when={activeTab() === "chat"}>
+                    <div
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.flex,
+                          assistantUtilityStyles.minH0,
+                          assistantUtilityStyles.flex1,
+                          assistantUtilityStyles.flexCol,
+                          assistantUtilityStyles.gap4,
+                          assistantUtilityStyles.overflowAuto,
+                          assistantUtilityStyles.pr1,
+                        ).class
+                      }
+                    >
+                      <section
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.flex,
+                            assistantUtilityStyles.minH0,
+                            assistantUtilityStyles.flex1,
+                            assistantUtilityStyles.flexCol,
+                          ).class
+                        }
+                      >
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.mb3,
+                              assistantUtilityStyles.text0585,
+                              assistantUtilityStyles.fontSemibold,
+                              assistantUtilityStyles.uppercase,
+                              assistantUtilityStyles.tracking018,
+                              assistantUtilityStyles.textMuted,
+                            ).class
+                          }
+                        >
+                          Assistant chat
+                        </div>
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.relative,
+                              assistantUtilityStyles.flex,
+                              assistantUtilityStyles.minH72,
+                              assistantUtilityStyles.flex1,
+                              assistantUtilityStyles.flexCol,
+                            ).class
+                          }
+                        >
+                          <VirtualList
+                            viewportRef={(element) => {
+                              assistantMessageViewport = element;
+                              scrollAssistantChatToBottom(true);
+                            }}
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.minH0,
+                                assistantUtilityStyles.flex1,
+                                assistantUtilityStyles.pr2,
+                              ).class
+                            }
+                            contentClass={
+                              stylex.attrs(assistantUtilityStyles.wFull).class
+                            }
+                            itemClass={
+                              stylex.attrs(assistantUtilityStyles.pb3).class
+                            }
+                            data-test-assistant-chat-scroll=""
+                            dataTest="assistant-chat-transcript"
+                            items={assistantChatRows()}
+                            getKey={(row, index) =>
+                              row.kind === "message"
+                                ? row.message.id
+                                : `streaming-${row.index ?? index}`
+                            }
+                            estimateSize={150}
+                            pagination={{
+                              kind: "reverse",
+                              initialCount: 80,
+                              batchSize: 80,
+                            }}
+                            overscan={6}
+                            stickToEnd
+                            onScroll={updateAssistantScrollLock}
+                          >
+                            {(row) =>
+                              row.kind === "message" ? (
+                                <article
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.rounded2xl,
+                                      assistantUtilityStyles.border,
+                                      assistantUtilityStyles.p3,
+                                      row.message.role === "user"
+                                        ? assistantUtilityStyles.borderBorder
+                                        : assistantUtilityStyles.borderAccent,
+                                      row.message.role === "user"
+                                        ? assistantUtilityStyles.bgWhite75
+                                        : assistantUtilityStyles.bgPanel,
+                                    ).class
+                                  }
+                                >
+                                  <div
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.mb2,
+                                        assistantUtilityStyles.text0575,
+                                        assistantUtilityStyles.fontSemibold,
+                                        assistantUtilityStyles.uppercase,
+                                        assistantUtilityStyles.tracking016,
+                                        assistantUtilityStyles.textMuted,
+                                      ).class
+                                    }
+                                  >
+                                    {row.message.role}
+                                  </div>
+                                  <MarkdownContent
+                                    content={row.message.content}
+                                    fileLinks={assistantChatFileLinks()}
+                                  />
+                                  {renderMessageActionRow(
+                                    row.message.createdAt,
+                                    <CopyTextButton
+                                      value={row.message.content}
+                                      tooltip="Copy message"
+                                      copiedTitle="Message copied"
+                                      copiedDescription="Message copied to clipboard."
+                                      size="sm"
+                                      variant="ghost"
+                                      ariaLabel={`Copy ${row.message.role} message`}
+                                    >
+                                      Copy
+                                    </CopyTextButton>,
+                                  )}
+                                </article>
+                              ) : (
+                                <article
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.rounded2xl,
+                                      assistantUtilityStyles.border,
+                                      assistantUtilityStyles.borderAccent,
+                                      assistantUtilityStyles.bgPanel,
+                                      assistantUtilityStyles.p3,
+                                    ).class
+                                  }
+                                >
+                                  <div
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.mb2,
+                                        assistantUtilityStyles.text0575,
+                                        assistantUtilityStyles.fontSemibold,
+                                        assistantUtilityStyles.uppercase,
+                                        assistantUtilityStyles.tracking016,
+                                        assistantUtilityStyles.textMuted,
+                                      ).class
+                                    }
+                                  >
+                                    assistant
+                                  </div>
+                                  <MarkdownContent
+                                    content={row.content}
+                                    fileLinks={assistantChatFileLinks()}
+                                  />
+                                  {renderMessageActionRow(
+                                    row.createdAt,
+                                    <CopyTextButton
+                                      value={row.content}
+                                      tooltip="Copy streaming assistant message"
+                                      copiedTitle="Message copied"
+                                      copiedDescription="Message copied to clipboard."
+                                      size="sm"
+                                      variant="ghost"
+                                      ariaLabel="Copy streaming assistant message"
+                                    >
+                                      Copy
+                                    </CopyTextButton>,
+                                  )}
+                                </article>
+                              )
+                            }
+                          </VirtualList>
+                          <Show when={!assistantStickToBottom()}>
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.pointerEventsNone,
+                                  assistantUtilityStyles.absolute,
+                                  assistantUtilityStyles.insetX0,
+                                  assistantUtilityStyles.bottom3,
+                                  assistantUtilityStyles.flex,
+                                  assistantUtilityStyles.justifyCenter,
+                                ).class
+                              }
                             >
-                              <div class="mb-2 text-[0.575rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">{row.message.role}</div>
-                              <MarkdownContent content={row.message.content} fileLinks={assistantChatFileLinks()} />
-                              {renderMessageActionRow(
-                                row.message.createdAt,
-                                <CopyTextButton value={row.message.content} tooltip="Copy message" copiedTitle="Message copied" copiedDescription="Message copied to clipboard." size="sm" variant="ghost" ariaLabel={`Copy ${row.message.role} message`}>
-                                  Copy
-                                </CopyTextButton>
-                              )}
-                            </article>
-                          ) : (
-                            <article class="rounded-2xl border border-(--accent) bg-(--panel) p-3">
-                              <div class="mb-2 text-[0.575rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">assistant</div>
-                              <MarkdownContent content={row.content} fileLinks={assistantChatFileLinks()} />
-                              {renderMessageActionRow(
-                                row.createdAt,
-                                <CopyTextButton value={row.content} tooltip="Copy streaming assistant message" copiedTitle="Message copied" copiedDescription="Message copied to clipboard." size="sm" variant="ghost" ariaLabel="Copy streaming assistant message">
-                                  Copy
-                                </CopyTextButton>
-                              )}
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.pointerEventsAuto,
+                                  ).class
+                                }
+                              >
+                                <ActionButton
+                                  tooltip="Scroll to latest message"
+                                  icon={
+                                    <ArrowDown
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.h4,
+                                          assistantUtilityStyles.w4,
+                                        ).class
+                                      }
+                                    />
+                                  }
+                                  variant="secondary"
+                                  onClick={() =>
+                                    scrollAssistantChatToBottom(true)
+                                  }
+                                >
+                                  Scroll to latest
+                                </ActionButton>
+                              </div>
+                            </div>
+                          </Show>
+                        </div>
+                        <ChatComposer
+                          class={stylex.attrs(assistantUtilityStyles.mt4).class}
+                          textareaRef={(element) => {
+                            assistantChatTextarea = element;
+                          }}
+                          rows="3"
+                          value={chatDraft()}
+                          placeholder={`Ask ${assistant().name} something.`}
+                          textareaClass={
+                            stylex.attrs(
+                              assistantUtilityStyles.assistantComposerTextarea,
+                            ).class
+                          }
+                          disabled={executionPaused()}
+                          disabledReason={executionPauseReason}
+                          onInput={setChatDraft}
+                          onSubmit={handleSendChat}
+                          onClick={handleAssistantComposerClick}
+                          leftControls={
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.pointerEventsAuto,
+                                  assistantUtilityStyles.flex,
+                                  assistantUtilityStyles.flexWrap,
+                                  assistantUtilityStyles.itemsCenter,
+                                  assistantUtilityStyles.gap1,
+                                ).class
+                              }
+                            >
+                              <DropdownControl
+                                kind="select"
+                                ariaLabel="Select assistant chat mode"
+                                icon={
+                                  <Split
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.h35,
+                                        assistantUtilityStyles.w35,
+                                      ).class
+                                    }
+                                  />
+                                }
+                                value={assistantChatModeId()}
+                                options={assistantChatModeOptions()}
+                                onChange={setAssistantChatModeId}
+                              />
+                              <DropdownControl
+                                kind="select"
+                                ariaLabel="Select assistant chat model"
+                                icon={
+                                  <Cpu
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.h35,
+                                        assistantUtilityStyles.w35,
+                                      ).class
+                                    }
+                                  />
+                                }
+                                value={assistantChatExecutionModelId()}
+                                options={assistantChatModelOptions()}
+                                onChange={setAssistantChatExecutionModelId}
+                              />
+                              <DropdownControl
+                                kind="select"
+                                ariaLabel="Select assistant chat reasoning effort"
+                                icon={
+                                  <Brain
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.h35,
+                                        assistantUtilityStyles.w35,
+                                      ).class
+                                    }
+                                  />
+                                }
+                                value={assistantChatReasoningStrength()}
+                                options={assistantChatReasoningOptions()}
+                                onChange={(value) =>
+                                  setAssistantChatReasoningStrength(
+                                    value as ComposerReasoningStrength,
+                                  )
+                                }
+                              />
+                              <DropdownControl
+                                kind="select"
+                                ariaLabel="Select assistant chat fast mode"
+                                icon={
+                                  <Gauge
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.h35,
+                                        assistantUtilityStyles.w35,
+                                      ).class
+                                    }
+                                  />
+                                }
+                                value={
+                                  assistantChatFastMode() ? "true" : "false"
+                                }
+                                options={assistantChatFastModeOptions()}
+                                onChange={(value) =>
+                                  setAssistantChatFastMode(value === "true")
+                                }
+                              />
+                            </div>
+                          }
+                          rightActions={
+                            <ActionButton
+                              tooltip="Send message to assistant"
+                              disabled={executionPaused()}
+                              disabledReason={executionPauseReason}
+                              icon={
+                                <MessageSquare
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.h4,
+                                      assistantUtilityStyles.w4,
+                                    ).class
+                                  }
+                                />
+                              }
+                              variant="ghost"
+                              size="icon"
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.pointerEventsAuto,
+                                  assistantUtilityStyles.h8,
+                                  assistantUtilityStyles.w8,
+                                  assistantUtilityStyles.roundedLg,
+                                ).class
+                              }
+                              ariaLabel="Send message to assistant"
+                              onClick={handleSendChat}
+                            />
+                          }
+                        />
+                      </section>
+
+                      <section
+                        class={
+                          stylex.attrs(assistantUtilityStyles.shrink0).class
+                        }
+                      >
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.text0585,
+                              assistantUtilityStyles.fontSemibold,
+                              assistantUtilityStyles.uppercase,
+                              assistantUtilityStyles.tracking018,
+                              assistantUtilityStyles.textMuted,
+                            ).class
+                          }
+                        >
+                          Working memory
+                        </div>
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.mt3,
+                              assistantUtilityStyles.grid,
+                              assistantUtilityStyles.maxH32,
+                              assistantUtilityStyles.gap4,
+                              assistantUtilityStyles.overflowAuto,
+                              assistantUtilityStyles.borderL2,
+                              assistantUtilityStyles.borderBorder,
+                              assistantUtilityStyles.py2,
+                              assistantUtilityStyles.pl4,
+                              assistantUtilityStyles.text0675,
+                              assistantUtilityStyles.leading5,
+                              assistantUtilityStyles.textMuted,
+                              assistantUtilityStyles.lgGridColsMemory,
+                            ).class
+                          }
+                        >
+                          <div
+                            class={
+                              stylex.attrs(assistantUtilityStyles.minW0).class
+                            }
+                          >
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.fontSemibold,
+                                  assistantUtilityStyles.textForeground,
+                                ).class
+                              }
+                            >
+                              Summary
+                            </div>
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.mt1,
+                                  assistantUtilityStyles.whitespacePreWrap,
+                                ).class
+                              }
+                            >
+                              <FileLinkedText
+                                text={
+                                  selectedThread()?.memorySummary?.content ??
+                                  "No rolled summary yet."
+                                }
+                                fileLinks={assistantChatFileLinks()}
+                              />
+                            </div>
+                          </div>
+                          <div
+                            class={
+                              stylex.attrs(assistantUtilityStyles.minW0).class
+                            }
+                          >
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.fontSemibold,
+                                  assistantUtilityStyles.textForeground,
+                                ).class
+                              }
+                            >
+                              Active todos
+                            </div>
+                            <ul
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.mt1,
+                                  assistantUtilityStyles.spaceY1,
+                                ).class
+                              }
+                            >
+                              <For
+                                each={visibleTodos()
+                                  .filter((todo) => isActiveTodo(todo.state))
+                                  .slice(0, 8)}
+                              >
+                                {(todo) => (
+                                  <li>
+                                    <FileLinkedText
+                                      text={`${todo.state} | ${todo.title}`}
+                                      fileLinks={assistantChatFileLinks()}
+                                    />
+                                  </li>
+                                )}
+                              </For>
+                            </ul>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </Show>
+
+                  <Show when={activeTab() === "todos"}>
+                    <section
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.flex,
+                          assistantUtilityStyles.minH0,
+                          assistantUtilityStyles.flex1,
+                          assistantUtilityStyles.flexCol,
+                        ).class
+                      }
+                    >
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.mb4,
+                            assistantUtilityStyles.flex,
+                            assistantUtilityStyles.gap2,
+                          ).class
+                        }
+                      >
+                        <Textarea
+                          rows="2"
+                          value={newTodoTitle()}
+                          onInput={(event) =>
+                            setNewTodoTitle(event.currentTarget.value)
+                          }
+                          placeholder="Add manual todo."
+                        />
+                        <ActionButton
+                          tooltip="Add todo to assistant list"
+                          icon={
+                            <Plus
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.h4,
+                                  assistantUtilityStyles.w4,
+                                ).class
+                              }
+                            />
+                          }
+                          onClick={handleAddTodo}
+                        >
+                          Add
+                        </ActionButton>
+                      </div>
+                      <VirtualList
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.minH0,
+                            assistantUtilityStyles.flex1,
+                            assistantUtilityStyles.pr2,
+                          ).class
+                        }
+                        contentClass={
+                          stylex.attrs(assistantUtilityStyles.wFull).class
+                        }
+                        itemClass={
+                          stylex.attrs(assistantUtilityStyles.pb3).class
+                        }
+                        items={visibleTodos()}
+                        getKey={(todo) => todo.id}
+                        estimateSize={128}
+                        pagination={{
+                          kind: "forward",
+                          initialCount: 60,
+                          batchSize: 60,
+                        }}
+                      >
+                        {(todo) => (
+                          <article
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.borderL2,
+                                assistantUtilityStyles.py3,
+                                assistantUtilityStyles.pl4,
+                                assistantUtilityStyles.pr2,
+                                todo.state === "completed"
+                                  ? assistantPanelStyles.borderEmerald
+                                  : todo.state === "failed" ||
+                                      todo.state === "cancelled"
+                                    ? assistantPanelStyles.borderRose
+                                    : todo.state === "blocked"
+                                      ? assistantPanelStyles.borderAmber
+                                      : todo.state === "in-progress"
+                                        ? assistantPanelStyles.borderSky
+                                        : assistantUtilityStyles.borderBorder,
+                              ).class
+                            }
+                          >
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.flex,
+                                  assistantUtilityStyles.flexWrap,
+                                  assistantUtilityStyles.itemsStart,
+                                  assistantUtilityStyles.justifyBetween,
+                                  assistantUtilityStyles.gap3,
+                                ).class
+                              }
+                            >
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.minW0,
+                                    assistantUtilityStyles.flex1,
+                                  ).class
+                                }
+                              >
+                                <div
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.text075,
+                                      assistantUtilityStyles.fontSemibold,
+                                      assistantUtilityStyles.textForeground,
+                                    ).class
+                                  }
+                                >
+                                  <FileLinkedText
+                                    text={todo.title}
+                                    fileLinks={assistantChatFileLinks()}
+                                  />
+                                </div>
+                                <Show when={todo.description}>
+                                  {(description) => (
+                                    <div
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.mt1,
+                                          assistantUtilityStyles.text0675,
+                                          assistantUtilityStyles.leading5,
+                                          assistantUtilityStyles.textMuted,
+                                        ).class
+                                      }
+                                    >
+                                      <FileLinkedText
+                                        text={description()}
+                                        fileLinks={assistantChatFileLinks()}
+                                      />
+                                    </div>
+                                  )}
+                                </Show>
+                                <Show when={todo.blockerReason}>
+                                  {(reason) => (
+                                    <div
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.mt1,
+                                          assistantUtilityStyles.text0625,
+                                          assistantUtilityStyles.textAmber900,
+                                        ).class
+                                      }
+                                    >
+                                      <FileLinkedText
+                                        text={`Blocker: ${reason()}`}
+                                        fileLinks={assistantChatFileLinks()}
+                                      />
+                                    </div>
+                                  )}
+                                </Show>
+                                <Show when={todo.workTarget}>
+                                  {(target) => (
+                                    <div
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.mt1,
+                                          assistantUtilityStyles.text0625,
+                                          assistantUtilityStyles.textMuted,
+                                        ).class
+                                      }
+                                    >
+                                      <FileLinkedText
+                                        text={`Target: ${target()}`}
+                                        fileLinks={assistantChatFileLinks()}
+                                      />
+                                    </div>
+                                  )}
+                                </Show>
+                              </div>
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantPanelStyles.secondaryAction,
+                                    assistantUtilityStyles.flex,
+                                    assistantUtilityStyles.shrink0,
+                                    assistantUtilityStyles.itemsCenter,
+                                    assistantUtilityStyles.gap2,
+                                  ).class
+                                }
+                              >
+                                <ActionButton
+                                  tooltip="Move assistant todo up"
+                                  ariaLabel={`Move ${todo.title} up`}
+                                  icon={
+                                    <ArrowUp
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.h4,
+                                          assistantUtilityStyles.w4,
+                                        ).class
+                                      }
+                                    />
+                                  }
+                                  size="icon"
+                                  variant="ghost"
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.h8,
+                                      assistantUtilityStyles.w8,
+                                    ).class
+                                  }
+                                  disabled={selectedTodos()[0]?.id === todo.id}
+                                  disabledReason="Todo is already first"
+                                  onClick={() => reorderTodo(todo, -1)}
+                                />
+                                <ActionButton
+                                  tooltip="Move assistant todo down"
+                                  ariaLabel={`Move ${todo.title} down`}
+                                  icon={
+                                    <ArrowDown
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.h4,
+                                          assistantUtilityStyles.w4,
+                                        ).class
+                                      }
+                                    />
+                                  }
+                                  size="icon"
+                                  variant="ghost"
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.h8,
+                                      assistantUtilityStyles.w8,
+                                    ).class
+                                  }
+                                  disabled={
+                                    selectedTodos()[selectedTodos().length - 1]
+                                      ?.id === todo.id
+                                  }
+                                  disabledReason="Todo is already last"
+                                  onClick={() => reorderTodo(todo, 1)}
+                                />
+                                <DropdownControl
+                                  kind="select"
+                                  ariaLabel={`Select ${todo.title} state`}
+                                  icon={
+                                    <ClipboardList
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.h35,
+                                          assistantUtilityStyles.w35,
+                                        ).class
+                                      }
+                                    />
+                                  }
+                                  size="md"
+                                  class={
+                                    stylex.attrs(assistantUtilityStyles.w40)
+                                      .class
+                                  }
+                                  value={todo.state}
+                                  options={assistantTodoStateOptions}
+                                  onChange={(value) =>
+                                    updateTodo(todo, {
+                                      state: value as AssistantTodo["state"],
+                                    })
+                                  }
+                                />
+                                <ActionButton
+                                  tooltip="Delete assistant todo"
+                                  ariaLabel={`Delete ${todo.title}`}
+                                  icon={
+                                    <Trash2
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.h4,
+                                          assistantUtilityStyles.w4,
+                                        ).class
+                                      }
+                                    />
+                                  }
+                                  size="icon"
+                                  variant="ghost"
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.h8,
+                                      assistantUtilityStyles.w8,
+                                      assistantUtilityStyles.textDanger,
+                                      assistantUtilityStyles.hoverBgPanel,
+                                    ).class
+                                  }
+                                  onClick={() => deleteTodo(todo)}
+                                />
+                              </div>
+                            </div>
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.mt2,
+                                  assistantUtilityStyles.grid,
+                                  assistantUtilityStyles.gap2,
+                                  assistantUtilityStyles.mdGridColsTodo,
+                                ).class
+                              }
+                            >
+                              <DropdownControl
+                                kind="select"
+                                ariaLabel={`Select ${todo.title} work kind`}
+                                icon={
+                                  <ClipboardList
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.h35,
+                                        assistantUtilityStyles.w35,
+                                      ).class
+                                    }
+                                  />
+                                }
+                                size="md"
+                                value={todo.workKind}
+                                options={assistantTodoWorkKindOptions}
+                                onChange={(value) =>
+                                  updateTodo(todo, {
+                                    workKind:
+                                      value as AssistantTodo["workKind"],
+                                  })
+                                }
+                              />
+                              <Input
+                                value={todo.workTarget ?? ""}
+                                placeholder="Work target"
+                                onChange={(event) =>
+                                  updateTodo(todo, {
+                                    workTarget:
+                                      event.currentTarget.value.trim() ||
+                                      undefined,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.mt2,
+                                  assistantUtilityStyles.flex,
+                                  assistantUtilityStyles.flexWrap,
+                                  assistantUtilityStyles.itemsCenter,
+                                  assistantUtilityStyles.gap2,
+                                  assistantUtilityStyles.text0575,
+                                  assistantUtilityStyles.uppercase,
+                                  assistantUtilityStyles.tracking014,
+                                  assistantUtilityStyles.textMuted,
+                                ).class
+                              }
+                            >
+                              <StatusChip tone={todoStateTone(todo.state)}>
+                                {todo.state}
+                              </StatusChip>
+                              <StatusChip
+                                tone={todoWorkKindTone(todo.workKind)}
+                              >
+                                {todo.workKind}
+                              </StatusChip>
+                              <span>
+                                {todo.source ?? "assistant"} | sort{" "}
+                                <span
+                                  class={
+                                    stylex.attrs(
+                                      rightAlignedNumbersEnabled() &&
+                                        assistantPanelStyles.numericFlagged,
+                                    ).class
+                                  }
+                                >
+                                  {todo.sortOrder}
+                                </span>
+                              </span>
+                            </div>
+                          </article>
+                        )}
+                      </VirtualList>
+                    </section>
+                  </Show>
+
+                  <Show when={activeTab() === "questions"}>
+                    <section
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.grid,
+                          assistantUtilityStyles.minH0,
+                          assistantUtilityStyles.flex1,
+                          assistantUtilityStyles.gap4,
+                          assistantUtilityStyles.lgGridCols2,
+                        ).class
+                      }
+                    >
+                      <QuestionColumn
+                        title="Pending questions"
+                        emptyMessage="No pending questions. This assistant continues autonomously unless its policy requires your input."
+                        questions={visibleQuestions().filter(
+                          (question) => question.status === "pending",
+                        )}
+                        disabled={executionPaused()}
+                        disabledReason={executionPauseReason}
+                        questionAnswers={questionAnswers()}
+                        onAnswerInput={(questionId, value) =>
+                          setQuestionAnswers((current) => ({
+                            ...current,
+                            [questionId]: value,
+                          }))
+                        }
+                        onAnswer={answerQuestion}
+                        fileLinks={assistantChatFileLinks()}
+                      />
+                      <QuestionColumn
+                        title="Resolved questions"
+                        emptyMessage="No resolved questions yet."
+                        questions={visibleQuestions().filter(
+                          (question) => question.status === "answered",
+                        )}
+                        disabled={false}
+                        disabledReason={undefined}
+                        questionAnswers={questionAnswers()}
+                        onAnswerInput={() => undefined}
+                        onAnswer={() => undefined}
+                        fileLinks={assistantChatFileLinks()}
+                      />
+                    </section>
+                  </Show>
+
+                  <Show when={activeTab() === "jobs"}>
+                    <section
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.grid,
+                          assistantUtilityStyles.minH0,
+                          assistantUtilityStyles.flex1,
+                          assistantUtilityStyles.gap4,
+                          assistantUtilityStyles.lgGridColsSplit,
+                        ).class
+                      }
+                    >
+                      <div
+                        class={stylex.attrs(assistantUtilityStyles.minW0).class}
+                      >
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.mb3,
+                              assistantUtilityStyles.flex,
+                              assistantUtilityStyles.itemsCenter,
+                              assistantUtilityStyles.justifyBetween,
+                              assistantUtilityStyles.gap3,
+                            ).class
+                          }
+                        >
+                          <div
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.text0585,
+                                assistantUtilityStyles.fontSemibold,
+                                assistantUtilityStyles.uppercase,
+                                assistantUtilityStyles.tracking018,
+                                assistantUtilityStyles.textMuted,
+                              ).class
+                            }
+                          >
+                            Assistant jobs
+                          </div>
+                          <ActionButton
+                            tooltip="Create background job for this assistant"
+                            icon={
+                              <Plus
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.h4,
+                                    assistantUtilityStyles.w4,
+                                  ).class
+                                }
+                              />
+                            }
+                            onClick={openAssistantJobEditor}
+                          >
+                            New job
+                          </ActionButton>
+                        </div>
+                        <VirtualList
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.h120,
+                              assistantUtilityStyles.pr2,
+                              assistantUtilityStyles.lgHFull,
+                            ).class
+                          }
+                          contentClass={
+                            stylex.attrs(assistantUtilityStyles.wFull).class
+                          }
+                          itemClass={
+                            stylex.attrs(assistantUtilityStyles.pb3).class
+                          }
+                          items={visibleJobs()}
+                          getKey={(job) => job.id}
+                          estimateSize={120}
+                          pagination={{
+                            kind: "forward",
+                            initialCount: 60,
+                            batchSize: 60,
+                          }}
+                          empty={
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.borderL2,
+                                  assistantUtilityStyles.borderDashed,
+                                  assistantUtilityStyles.borderBorder,
+                                  assistantUtilityStyles.py3,
+                                  assistantUtilityStyles.pl4,
+                                ).class
+                              }
+                            >
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.text0675,
+                                    assistantUtilityStyles.textMuted,
+                                  ).class
+                                }
+                              >
+                                No assistant-owned background jobs.
+                              </div>
+                              <ActionButton
+                                tooltip="Create default research, todo maintenance, and implementation jobs"
+                                icon={
+                                  <Plus
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.h35,
+                                        assistantUtilityStyles.w35,
+                                      ).class
+                                    }
+                                  />
+                                }
+                                size="sm"
+                                variant="secondary"
+                                class={
+                                  stylex.attrs(assistantUtilityStyles.mt3).class
+                                }
+                                onClick={bootstrapAssistantJobs}
+                              >
+                                Bootstrap jobs
+                              </ActionButton>
+                            </div>
+                          }
+                        >
+                          {(job) => (
+                            <article
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.cursorPointer,
+                                  assistantUtilityStyles.overflowHidden,
+                                  assistantUtilityStyles.borderL2,
+                                  assistantUtilityStyles.py3,
+                                  assistantUtilityStyles.pl4,
+                                  assistantUtilityStyles.pr2,
+                                  assistantUtilityStyles.transition,
+                                  assistantUtilityStyles.hoverBorderAccentStrong,
+                                  assistantPanelStyles.sourceCard,
+                                  job.status === "enabled"
+                                    ? assistantPanelStyles.borderEmerald
+                                    : assistantPanelStyles.borderSlate,
+                                ).class
+                              }
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openAssistantBackgroundJob(job.id)}
+                              onKeyDown={(event) =>
+                                handleSourceCardKeyDown(event, () =>
+                                  openAssistantBackgroundJob(job.id),
+                                )
+                              }
+                            >
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.flex,
+                                    assistantUtilityStyles.itemsStart,
+                                    assistantUtilityStyles.justifyBetween,
+                                    assistantUtilityStyles.gap3,
+                                  ).class
+                                }
+                              >
+                                <div
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.breakWords,
+                                      assistantUtilityStyles.text075,
+                                      assistantUtilityStyles.fontSemibold,
+                                      assistantUtilityStyles.textForeground,
+                                    ).class
+                                  }
+                                >
+                                  {job.name}
+                                </div>
+                                <StatusChip
+                                  tone={backgroundJobStatusTone(job.status)}
+                                  class={
+                                    stylex.attrs(assistantUtilityStyles.shrink0)
+                                      .class
+                                  }
+                                >
+                                  {job.status}
+                                </StatusChip>
+                              </div>
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.mt1,
+                                    assistantUtilityStyles.text0575,
+                                    assistantUtilityStyles.uppercase,
+                                    assistantUtilityStyles.tracking014,
+                                    assistantUtilityStyles.textMuted,
+                                  ).class
+                                }
+                              >
+                                {job.kind}
+                              </div>
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.mt2,
+                                    assistantUtilityStyles.breakWords,
+                                    assistantUtilityStyles.text0675,
+                                    assistantUtilityStyles.leading5,
+                                    assistantUtilityStyles.textMuted,
+                                    assistantUtilityStyles.wrapAnywhere,
+                                  ).class
+                                }
+                              >
+                                <div>
+                                  <FileLinkedText
+                                    text={job.description ?? job.scheduleInput}
+                                    fileLinks={assistantChatFileLinks()}
+                                  />
+                                </div>
+                                <Show when={formatFailureTracking(job)}>
+                                  {(line) => (
+                                    <div
+                                      class={
+                                        stylex.attrs(assistantUtilityStyles.mt1)
+                                          .class
+                                      }
+                                    >
+                                      <FileLinkedText
+                                        text={line()}
+                                        fileLinks={assistantChatFileLinks()}
+                                      />
+                                    </div>
+                                  )}
+                                </Show>
+                              </div>
                             </article>
                           )}
                         </VirtualList>
-                        <Show when={!assistantStickToBottom()}>
-                          <div class="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-                            <div class="pointer-events-auto">
-                              <ActionButton tooltip="Scroll to latest message" icon={<ArrowDown class="h-4 w-4" />} variant="secondary" onClick={() => scrollAssistantChatToBottom(true)}>
-                                Scroll to latest
-                              </ActionButton>
-                            </div>
-                          </div>
-                        </Show>
                       </div>
-                      <ChatComposer
-                        class="mt-4"
-                        textareaRef={(element) => {
-                          assistantChatTextarea = element;
-                        }}
-                        rows="3"
-                        value={chatDraft()}
-                        placeholder={`Ask ${assistant().name} something.`}
-                        textareaClass="pb-20 lg:pb-12"
-                        disabled={executionPaused()}
-                        disabledReason={executionPauseReason}
-                        onInput={setChatDraft}
-                        onSubmit={handleSendChat}
-                        onClick={handleAssistantComposerClick}
-                        leftControls={
-                          <div class="pointer-events-auto flex flex-wrap items-center gap-1">
-                            <DropdownControl
-                              kind="select"
-                              ariaLabel="Select assistant chat mode"
-                              icon={<Split class="h-3.5 w-3.5" />}
-                              value={assistantChatModeId()}
-                              options={assistantChatModeOptions()}
-                              onChange={setAssistantChatModeId}
-                            />
-                            <DropdownControl
-                              kind="select"
-                              ariaLabel="Select assistant chat model"
-                              icon={<Cpu class="h-3.5 w-3.5" />}
-                              value={assistantChatExecutionModelId()}
-                              options={assistantChatModelOptions()}
-                              onChange={setAssistantChatExecutionModelId}
-                            />
-                            <DropdownControl
-                              kind="select"
-                              ariaLabel="Select assistant chat reasoning effort"
-                              icon={<Brain class="h-3.5 w-3.5" />}
-                              value={assistantChatReasoningStrength()}
-                              options={assistantChatReasoningOptions()}
-                              onChange={(value) => setAssistantChatReasoningStrength(value as ComposerReasoningStrength)}
-                            />
-                            <DropdownControl
-                              kind="select"
-                              ariaLabel="Select assistant chat fast mode"
-                              icon={<Gauge class="h-3.5 w-3.5" />}
-                              value={assistantChatFastMode() ? "true" : "false"}
-                              options={assistantChatFastModeOptions()}
-                              onChange={(value) => setAssistantChatFastMode(value === "true")}
-                            />
-                          </div>
+                      <div
+                        class={stylex.attrs(assistantUtilityStyles.minW0).class}
+                      >
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.mb3,
+                              assistantUtilityStyles.text0585,
+                              assistantUtilityStyles.fontSemibold,
+                              assistantUtilityStyles.uppercase,
+                              assistantUtilityStyles.tracking018,
+                              assistantUtilityStyles.textMuted,
+                            ).class
+                          }
+                        >
+                          Recent runs
+                        </div>
+                        <VirtualList
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.h120,
+                              assistantUtilityStyles.pr2,
+                              assistantUtilityStyles.lgHFull,
+                            ).class
+                          }
+                          contentClass={
+                            stylex.attrs(assistantUtilityStyles.wFull).class
+                          }
+                          itemClass={
+                            stylex.attrs(assistantUtilityStyles.pb3).class
+                          }
+                          items={visibleRuns()}
+                          getKey={(run) => run.id}
+                          estimateSize={145}
+                          pagination={{
+                            kind: "forward",
+                            initialCount: 60,
+                            batchSize: 60,
+                          }}
+                        >
+                          {(run) => (
+                            <article
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.cursorPointer,
+                                  assistantUtilityStyles.overflowHidden,
+                                  assistantUtilityStyles.borderL2,
+                                  assistantUtilityStyles.py3,
+                                  assistantUtilityStyles.pl4,
+                                  assistantUtilityStyles.pr2,
+                                  assistantUtilityStyles.transition,
+                                  assistantUtilityStyles.hoverBorderAccentStrong,
+                                  assistantPanelStyles.sourceCard,
+                                  run.status === "succeeded"
+                                    ? assistantPanelStyles.borderEmerald
+                                    : run.status === "failed" ||
+                                        run.status === "cancelled"
+                                      ? assistantPanelStyles.borderRose
+                                      : run.status === "awaiting-approval" ||
+                                          run.status ===
+                                            "awaiting-user-input" ||
+                                          run.status === "partial-complete"
+                                        ? assistantPanelStyles.borderAmber
+                                        : run.status === "running"
+                                          ? assistantPanelStyles.borderSky
+                                          : run.status === "queued"
+                                            ? assistantPanelStyles.borderSlate
+                                            : assistantPanelStyles.borderStone,
+                                ).class
+                              }
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => openAssistantBackgroundRun(run)}
+                              onKeyDown={(event) =>
+                                handleSourceCardKeyDown(event, () =>
+                                  openAssistantBackgroundRun(run),
+                                )
+                              }
+                            >
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.flex,
+                                    assistantUtilityStyles.itemsCenter,
+                                    assistantUtilityStyles.justifyBetween,
+                                    assistantUtilityStyles.gap3,
+                                  ).class
+                                }
+                              >
+                                <div
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.minW0,
+                                      assistantUtilityStyles.breakWords,
+                                      assistantUtilityStyles.text075,
+                                      assistantUtilityStyles.fontSemibold,
+                                      assistantUtilityStyles.textForeground,
+                                      assistantUtilityStyles.wrapAnywhere,
+                                    ).class
+                                  }
+                                >
+                                  <FileLinkedText
+                                    text={run.summary ?? run.id}
+                                    fileLinks={assistantChatFileLinks()}
+                                  />
+                                </div>
+                                <StatusChip
+                                  tone={backgroundRunStatusTone(run.status)}
+                                  class={
+                                    stylex.attrs(assistantUtilityStyles.shrink0)
+                                      .class
+                                  }
+                                >
+                                  {run.status}
+                                </StatusChip>
+                              </div>
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantUtilityStyles.mt2,
+                                    assistantUtilityStyles.breakWords,
+                                    assistantUtilityStyles.text0675,
+                                    assistantUtilityStyles.leading5,
+                                    assistantUtilityStyles.textMuted,
+                                    assistantUtilityStyles.wrapAnywhere,
+                                  ).class
+                                }
+                              >
+                                <div>
+                                  <FileLinkedText
+                                    text={
+                                      run.failureMessage ??
+                                      `Triggered by ${run.triggerSource}`
+                                    }
+                                    fileLinks={assistantChatFileLinks()}
+                                  />
+                                </div>
+                                <Show when={run.failureCategory}>
+                                  {(category) => (
+                                    <div
+                                      class={
+                                        stylex.attrs(assistantUtilityStyles.mt1)
+                                          .class
+                                      }
+                                    >
+                                      Failure category:{" "}
+                                      {formatFailureCategory(category())}
+                                    </div>
+                                  )}
+                                </Show>
+                                <Show when={formatPromptStats(run.promptStats)}>
+                                  {(stats) => (
+                                    <div
+                                      class={
+                                        stylex.attrs(assistantUtilityStyles.mt1)
+                                          .class
+                                      }
+                                    >
+                                      Prompt: {stats()}
+                                    </div>
+                                  )}
+                                </Show>
+                                <div
+                                  class={
+                                    stylex.attrs(assistantUtilityStyles.mt1)
+                                      .class
+                                  }
+                                >
+                                  Updated {formatShortTimestamp(run.updatedAt)}
+                                </div>
+                              </div>
+                            </article>
+                          )}
+                        </VirtualList>
+                      </div>
+                    </section>
+                  </Show>
+
+                  <Show when={activeTab() === "log"}>
+                    <section
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.flex,
+                          assistantUtilityStyles.minH0,
+                          assistantUtilityStyles.flex1,
+                          assistantUtilityStyles.flexCol,
+                        ).class
+                      }
+                    >
+                      <div
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.mb3,
+                            assistantUtilityStyles.text0585,
+                            assistantUtilityStyles.fontSemibold,
+                            assistantUtilityStyles.uppercase,
+                            assistantUtilityStyles.tracking018,
+                            assistantUtilityStyles.textMuted,
+                          ).class
                         }
-                        rightActions={
-                          <ActionButton tooltip="Send message to assistant" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<MessageSquare class="h-4 w-4" />} variant="ghost" size="icon" class="pointer-events-auto h-8 w-8 rounded-lg" ariaLabel="Send message to assistant" onClick={handleSendChat} />
+                      >
+                        Execution log
+                      </div>
+                      <ExecutionLog
+                        entries={selectedExecutionLogs()}
+                        emptyMessage="No execution log yet."
+                        detailEyebrow="Assistant log details"
+                        selectedEntryId={state.assistants.selectedLogDetailsId}
+                        onSelectedEntryIdChange={
+                          harnessStore.setAssistantLogDetailsId
                         }
+                        rowVariant="flat"
+                        fileLinks={assistantChatFileLinks()}
+                        onEntrySourceClick={openAssistantLogSource}
                       />
                     </section>
+                  </Show>
 
-                    <section class="shrink-0">
-                      <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Working memory</div>
-                      <div class="mt-3 grid max-h-32 gap-4 overflow-auto border-l-2 border-(--border) py-2 pl-4 text-[0.675rem] leading-5 text-(--muted) lg:grid-cols-[minmax(0,1fr)_minmax(16rem,24rem)]">
-                        <div class="min-w-0">
-                          <div class="font-semibold text-(--foreground)">Summary</div>
-                          <div class="mt-1 whitespace-pre-wrap">
-                            <FileLinkedText text={selectedThread()?.memorySummary?.content ?? "No rolled summary yet."} fileLinks={assistantChatFileLinks()} />
-                          </div>
+                  <Show when={activeTab() === "config"}>
+                    <section
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.grid,
+                          assistantUtilityStyles.minH0,
+                          assistantUtilityStyles.flex1,
+                          assistantUtilityStyles.gap4,
+                          assistantUtilityStyles.lgGridCols2,
+                        ).class
+                      }
+                    >
+                      <ConfigCard title="Role">
+                        <FileLinkedText
+                          text={assistant().description ?? "No description."}
+                          fileLinks={assistantChatFileLinks()}
+                        />
+                      </ConfigCard>
+                      <ConfigCard title="Routing">
+                        <div>Agent: {assistant().agentId}</div>
+                        <div>
+                          Provider: {assistant().providerBrand ?? "current"}
                         </div>
-                        <div class="min-w-0">
-                          <div class="font-semibold text-(--foreground)">Active todos</div>
-                          <ul class="mt-1 space-y-1">
-                            <For each={visibleTodos().filter((todo) => isActiveTodo(todo.state)).slice(0, 8)}>
-                              {(todo) => <li><FileLinkedText text={`${todo.state} | ${todo.title}`} fileLinks={assistantChatFileLinks()} /></li>}
+                        <div>Mode: {assistant().modeId ?? "default"}</div>
+                        <div>
+                          Execution model:{" "}
+                          {assistant().executionModelId ?? "default"}
+                        </div>
+                        <div>
+                          Effort:{" "}
+                          {formatReasoningStrengthLabel(
+                            assistant().reasoningStrength ??
+                              DEFAULT_COMPOSER_REASONING_STRENGTH,
+                          )}
+                        </div>
+                        <div>
+                          Fast mode: {assistant().fastMode ? "on" : "off"}
+                        </div>
+                        <div>Scope: {assistant().scope}</div>
+                      </ConfigCard>
+                      <ConfigCard title="Personality prompt">
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.whitespacePreWrap,
+                            ).class
+                          }
+                        >
+                          <FileLinkedText
+                            text={assistant().personalityPrompt}
+                            fileLinks={assistantChatFileLinks()}
+                          />
+                        </div>
+                      </ConfigCard>
+                      <ConfigCard title="Job prompt">
+                        <div
+                          class={
+                            stylex.attrs(
+                              assistantUtilityStyles.whitespacePreWrap,
+                            ).class
+                          }
+                        >
+                          <FileLinkedText
+                            text={assistant().jobPrompt}
+                            fileLinks={assistantChatFileLinks()}
+                          />
+                        </div>
+                      </ConfigCard>
+                      <ConfigCard title="Linked assets">
+                        <Show
+                          when={selectedAssetRefs().length > 0}
+                          fallback={<div>No asset refs.</div>}
+                        >
+                          <div
+                            class={
+                              stylex.attrs(assistantUtilityStyles.spaceY2).class
+                            }
+                          >
+                            <For each={selectedAssetRefs()}>
+                              {(assetRef) => (
+                                <div
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.borderL2,
+                                      assistantUtilityStyles.borderBorder,
+                                      assistantUtilityStyles.py2,
+                                      assistantUtilityStyles.pl3,
+                                    ).class
+                                  }
+                                >
+                                  <div
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.text0625,
+                                        assistantUtilityStyles.uppercase,
+                                        assistantUtilityStyles.tracking014,
+                                        assistantUtilityStyles.textMuted,
+                                      ).class
+                                    }
+                                  >
+                                    {assetRef.kind}
+                                  </div>
+                                  <div
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.fontSemibold,
+                                        assistantUtilityStyles.textForeground,
+                                      ).class
+                                    }
+                                  >
+                                    {assetRef.label}
+                                  </div>
+                                  <div
+                                    class={
+                                      stylex.attrs(
+                                        assistantUtilityStyles.breakAll,
+                                        assistantUtilityStyles.text0675,
+                                        assistantUtilityStyles.textMuted,
+                                      ).class
+                                    }
+                                  >
+                                    <FileLinkedText
+                                      text={assetRef.value}
+                                      fileLinks={assistantChatFileLinks()}
+                                    />
+                                  </div>
+                                </div>
+                              )}
                             </For>
-                          </ul>
-                        </div>
-                      </div>
+                          </div>
+                        </Show>
+                      </ConfigCard>
                     </section>
-                  </div>
-                </Show>
+                  </Show>
 
-                <Show when={activeTab() === "todos"}>
-                  <section class="flex min-h-0 flex-1 flex-col">
-                    <div class="mb-4 flex gap-2">
-                      <Textarea rows="2" value={newTodoTitle()} onInput={(event) => setNewTodoTitle(event.currentTarget.value)} placeholder="Add manual todo." />
-                      <ActionButton tooltip="Add todo to assistant list" icon={<Plus class="h-4 w-4" />} onClick={handleAddTodo}>Add</ActionButton>
-                    </div>
-                    <VirtualList class="min-h-0 flex-1 pr-2" contentClass="w-full" itemClass="pb-3" items={visibleTodos()} getKey={(todo) => todo.id} estimateSize={128} pagination={{ kind: "forward", initialCount: 60, batchSize: 60 }}>
-                      {(todo) => (
-                        <article class={`dense-action-parent border-l-2 py-3 pl-4 pr-2 ${todoStateBorderClass(todo.state)}`}>
-                          <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div class="min-w-0 flex-1">
-                              <div class="text-[0.75rem] font-semibold text-(--foreground)">
-                                <FileLinkedText text={todo.title} fileLinks={assistantChatFileLinks()} />
-                              </div>
-                              <Show when={todo.description}>
-                                {(description) => (
-                                  <div class="mt-1 text-[0.675rem] leading-5 text-(--muted)">
-                                    <FileLinkedText text={description()} fileLinks={assistantChatFileLinks()} />
-                                  </div>
-                                )}
-                              </Show>
-                              <Show when={todo.blockerReason}>
-                                {(reason) => (
-                                  <div class="mt-1 text-[0.625rem] text-amber-900">
-                                    <FileLinkedText text={`Blocker: ${reason()}`} fileLinks={assistantChatFileLinks()} />
-                                  </div>
-                                )}
-                              </Show>
-                              <Show when={todo.workTarget}>
-                                {(target) => (
-                                  <div class="mt-1 text-[0.625rem] text-(--muted)">
-                                    <FileLinkedText text={`Target: ${target()}`} fileLinks={assistantChatFileLinks()} />
-                                  </div>
-                                )}
-                              </Show>
-                            </div>
-                            <div class="dense-secondary-actions flex shrink-0 items-center gap-2">
-                              <ActionButton tooltip="Move assistant todo up" ariaLabel={`Move ${todo.title} up`} icon={<ArrowUp class="h-4 w-4" />} size="icon" variant="ghost" class="h-8 w-8" disabled={selectedTodos()[0]?.id === todo.id} disabledReason="Todo is already first" onClick={() => reorderTodo(todo, -1)} />
-                              <ActionButton tooltip="Move assistant todo down" ariaLabel={`Move ${todo.title} down`} icon={<ArrowDown class="h-4 w-4" />} size="icon" variant="ghost" class="h-8 w-8" disabled={selectedTodos()[selectedTodos().length - 1]?.id === todo.id} disabledReason="Todo is already last" onClick={() => reorderTodo(todo, 1)} />
-                              <DropdownControl kind="select" ariaLabel={`Select ${todo.title} state`} icon={<ClipboardList class="h-3.5 w-3.5" />} size="md" class="w-40" value={todo.state} options={assistantTodoStateOptions} onChange={(value) => updateTodo(todo, { state: value as AssistantTodo["state"] })} />
-                              <ActionButton tooltip="Delete assistant todo" ariaLabel={`Delete ${todo.title}`} icon={<Trash2 class="h-4 w-4" />} size="icon" variant="ghost" class="h-8 w-8 text-(--danger) hover:bg-(--panel)" onClick={() => deleteTodo(todo)} />
-                            </div>
-                          </div>
-                          <div class="mt-2 grid gap-2 md:grid-cols-[12rem_1fr]">
-                            <DropdownControl kind="select" ariaLabel={`Select ${todo.title} work kind`} icon={<ClipboardList class="h-3.5 w-3.5" />} size="md" value={todo.workKind} options={assistantTodoWorkKindOptions} onChange={(value) => updateTodo(todo, { workKind: value as AssistantTodo["workKind"] })} />
-                            <Input value={todo.workTarget ?? ""} placeholder="Work target" onChange={(event) => updateTodo(todo, { workTarget: event.currentTarget.value.trim() || undefined })} />
-                          </div>
-                          <div class="mt-2 flex flex-wrap items-center gap-2 text-[0.575rem] uppercase tracking-[0.14em] text-(--muted)">
-                            <StatusChip tone={todoStateTone(todo.state)}>{todo.state}</StatusChip>
-                            <StatusChip tone={todoWorkKindTone(todo.workKind)}>{todo.workKind}</StatusChip>
-                            <span>
-                              {todo.source ?? "assistant"} | sort{" "}
-                              <span classList={{ "dense-numeric-flagged": rightAlignedNumbersEnabled() }}>{todo.sortOrder}</span>
-                            </span>
-                          </div>
-                        </article>
-                      )}
-                    </VirtualList>
-                  </section>
-                </Show>
-
-                <Show when={activeTab() === "questions"}>
-                  <section class="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
-                    <QuestionColumn
-                      title="Pending questions"
-                      emptyMessage="No pending questions. This assistant continues autonomously unless its policy requires your input."
-                      questions={visibleQuestions().filter((question) => question.status === "pending")}
-                      disabled={executionPaused()}
-                      disabledReason={executionPauseReason}
-                      questionAnswers={questionAnswers()}
-                      onAnswerInput={(questionId, value) => setQuestionAnswers((current) => ({ ...current, [questionId]: value }))}
-                      onAnswer={answerQuestion}
-                      fileLinks={assistantChatFileLinks()}
-                    />
-                    <QuestionColumn
-                      title="Resolved questions"
-                      emptyMessage="No resolved questions yet."
-                      questions={visibleQuestions().filter((question) => question.status === "answered")}
-                      disabled={false}
-                      disabledReason={undefined}
-                      questionAnswers={questionAnswers()}
-                      onAnswerInput={() => undefined}
-                      onAnswer={() => undefined}
-                      fileLinks={assistantChatFileLinks()}
-                    />
-                  </section>
-                </Show>
-
-                <Show when={activeTab() === "jobs"}>
-                  <section class="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
-                    <div class="min-w-0">
-                      <div class="mb-3 flex items-center justify-between gap-3">
-                        <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Assistant jobs</div>
-                        <ActionButton tooltip="Create background job for this assistant" icon={<Plus class="h-4 w-4" />} onClick={openAssistantJobEditor}>New job</ActionButton>
-                      </div>
+                  <Show when={activeTab() === "learnings"}>
+                    <section
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.flex,
+                          assistantUtilityStyles.minH0,
+                          assistantUtilityStyles.flex1,
+                          assistantUtilityStyles.flexCol,
+                        ).class
+                      }
+                    >
                       <VirtualList
-                        class="h-120 pr-2 lg:h-full"
-                        contentClass="w-full"
-                        itemClass="pb-3"
-                        items={visibleJobs()}
-                        getKey={(job) => job.id}
-                        estimateSize={120}
-                        pagination={{ kind: "forward", initialCount: 60, batchSize: 60 }}
+                        class={
+                          stylex.attrs(
+                            assistantUtilityStyles.minH0,
+                            assistantUtilityStyles.flex1,
+                            assistantUtilityStyles.pr2,
+                          ).class
+                        }
+                        contentClass={
+                          stylex.attrs(assistantUtilityStyles.wFull).class
+                        }
+                        itemClass={
+                          stylex.attrs(assistantUtilityStyles.pb3).class
+                        }
+                        items={filteredLearnings()}
+                        getKey={(learning) => learning.id}
+                        estimateSize={115}
+                        pagination={{
+                          kind: "forward",
+                          initialCount: 50,
+                          batchSize: 50,
+                        }}
                         empty={
-                          <div class="border-l-2 border-dashed border-(--border) py-3 pl-4">
-                            <div class="text-[0.675rem] text-(--muted)">No assistant-owned background jobs.</div>
-                            <ActionButton tooltip="Create default research, todo maintenance, and implementation jobs" icon={<Plus class="h-3.5 w-3.5" />} size="sm" variant="secondary" class="mt-3" onClick={bootstrapAssistantJobs}>Bootstrap jobs</ActionButton>
+                          <div
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.borderL2,
+                                assistantUtilityStyles.borderDashed,
+                                assistantUtilityStyles.borderBorder,
+                                assistantUtilityStyles.py3,
+                                assistantUtilityStyles.pl4,
+                                assistantUtilityStyles.text075,
+                                assistantUtilityStyles.textMuted,
+                              ).class
+                            }
+                          >
+                            No learnings yet.
                           </div>
                         }
                       >
-                        {(job) => (
+                        {(learning) => (
                           <article
-                            class={`cursor-pointer overflow-hidden border-l-2 py-3 pl-4 pr-2 transition hover:border-(--accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) ${backgroundJobStatusBorderClass(job.status)}`}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => openAssistantBackgroundJob(job.id)}
-                            onKeyDown={(event) => handleSourceCardKeyDown(event, () => openAssistantBackgroundJob(job.id))}
+                            class={
+                              stylex.attrs(
+                                assistantUtilityStyles.borderL2,
+                                assistantUtilityStyles.borderBorder,
+                                assistantUtilityStyles.py3,
+                                assistantUtilityStyles.pl4,
+                                assistantUtilityStyles.pr2,
+                              ).class
+                            }
                           >
-                            <div class="flex items-start justify-between gap-3">
-                              <div class="break-words text-[0.75rem] font-semibold text-(--foreground)">{job.name}</div>
-                              <StatusChip tone={backgroundJobStatusTone(job.status)} class="shrink-0">{job.status}</StatusChip>
-                            </div>
-                            <div class="mt-1 text-[0.575rem] uppercase tracking-[0.14em] text-(--muted)">{job.kind}</div>
-                            <div class="mt-2 break-words text-[0.675rem] leading-5 text-(--muted) [overflow-wrap:anywhere]">
-                              <div>
-                                <FileLinkedText text={job.description ?? job.scheduleInput} fileLinks={assistantChatFileLinks()} />
-                              </div>
-                              <Show when={formatFailureTracking(job)}>
-                                {(line) => <div class="mt-1"><FileLinkedText text={line()} fileLinks={assistantChatFileLinks()} /></div>}
-                              </Show>
-                            </div>
-                          </article>
-                        )}
-                      </VirtualList>
-                    </div>
-                    <div class="min-w-0">
-                      <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Recent runs</div>
-                      <VirtualList class="h-120 pr-2 lg:h-full" contentClass="w-full" itemClass="pb-3" items={visibleRuns()} getKey={(run) => run.id} estimateSize={145} pagination={{ kind: "forward", initialCount: 60, batchSize: 60 }}>
-                        {(run) => (
-                          <article
-                            class={`cursor-pointer overflow-hidden border-l-2 py-3 pl-4 pr-2 transition hover:border-(--accent-strong) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) ${backgroundRunStatusBorderClass(run.status)}`}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => openAssistantBackgroundRun(run)}
-                            onKeyDown={(event) => handleSourceCardKeyDown(event, () => openAssistantBackgroundRun(run))}
-                          >
-                            <div class="flex items-center justify-between gap-3">
-                              <div class="min-w-0 break-words text-[0.75rem] font-semibold text-(--foreground) [overflow-wrap:anywhere]">
-                                <FileLinkedText text={run.summary ?? run.id} fileLinks={assistantChatFileLinks()} />
-                              </div>
-                              <StatusChip tone={backgroundRunStatusTone(run.status)} class="shrink-0">{run.status}</StatusChip>
-                            </div>
-                            <div class="mt-2 break-words text-[0.675rem] leading-5 text-(--muted) [overflow-wrap:anywhere]">
-                              <div>
-                                <FileLinkedText text={run.failureMessage ?? `Triggered by ${run.triggerSource}`} fileLinks={assistantChatFileLinks()} />
-                              </div>
-                              <Show when={run.failureCategory}>{(category) => <div class="mt-1">Failure category: {formatFailureCategory(category())}</div>}</Show>
-                              <Show when={formatPromptStats(run.promptStats)}>{(stats) => <div class="mt-1">Prompt: {stats()}</div>}</Show>
-                              <div class="mt-1">Updated {formatShortTimestamp(run.updatedAt)}</div>
-                            </div>
-                          </article>
-                        )}
-                      </VirtualList>
-                    </div>
-                  </section>
-                </Show>
-
-                <Show when={activeTab() === "log"}>
-                  <section class="flex min-h-0 flex-1 flex-col">
-                    <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Execution log</div>
-                    <ExecutionLog
-                      entries={selectedExecutionLogs()}
-                      emptyMessage="No execution log yet."
-                      detailEyebrow="Assistant log details"
-                      selectedEntryId={state.assistants.selectedLogDetailsId}
-                      onSelectedEntryIdChange={harnessStore.setAssistantLogDetailsId}
-                      rowVariant="flat"
-                      fileLinks={assistantChatFileLinks()}
-                      onEntrySourceClick={openAssistantLogSource}
-                    />
-                  </section>
-                </Show>
-
-                <Show when={activeTab() === "config"}>
-                  <section class="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
-                    <ConfigCard title="Role"><FileLinkedText text={assistant().description ?? "No description."} fileLinks={assistantChatFileLinks()} /></ConfigCard>
-                    <ConfigCard title="Routing">
-                      <div>Agent: {assistant().agentId}</div>
-                      <div>Provider: {assistant().providerBrand ?? "current"}</div>
-                      <div>Mode: {assistant().modeId ?? "default"}</div>
-                      <div>Execution model: {assistant().executionModelId ?? "default"}</div>
-                      <div>Effort: {formatReasoningStrengthLabel(assistant().reasoningStrength ?? DEFAULT_COMPOSER_REASONING_STRENGTH)}</div>
-                      <div>Fast mode: {assistant().fastMode ? "on" : "off"}</div>
-                      <div>Scope: {assistant().scope}</div>
-                    </ConfigCard>
-                    <ConfigCard title="Personality prompt">
-                      <div class="whitespace-pre-wrap">
-                        <FileLinkedText text={assistant().personalityPrompt} fileLinks={assistantChatFileLinks()} />
-                      </div>
-                    </ConfigCard>
-                    <ConfigCard title="Job prompt">
-                      <div class="whitespace-pre-wrap">
-                        <FileLinkedText text={assistant().jobPrompt} fileLinks={assistantChatFileLinks()} />
-                      </div>
-                    </ConfigCard>
-                    <ConfigCard title="Linked assets">
-                      <Show when={selectedAssetRefs().length > 0} fallback={<div>No asset refs.</div>}>
-                        <div class="space-y-2">
-                          <For each={selectedAssetRefs()}>
-                            {(assetRef) => (
-                              <div class="border-l-2 border-(--border) py-2 pl-3">
-                                <div class="text-[0.625rem] uppercase tracking-[0.14em] text-(--muted)">{assetRef.kind}</div>
-                                <div class="font-semibold text-(--foreground)">{assetRef.label}</div>
-                                <div class="break-all text-[0.675rem] text-(--muted)">
-                                  <FileLinkedText text={assetRef.value} fileLinks={assistantChatFileLinks()} />
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.flex,
+                                  assistantUtilityStyles.itemsStart,
+                                  assistantUtilityStyles.justifyBetween,
+                                  assistantUtilityStyles.gap3,
+                                ).class
+                              }
+                            >
+                              <div
+                                class={
+                                  stylex.attrs(assistantUtilityStyles.minW0)
+                                    .class
+                                }
+                              >
+                                <div
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.text075,
+                                      assistantUtilityStyles.fontSemibold,
+                                      assistantUtilityStyles.leading5,
+                                      assistantUtilityStyles.textForeground,
+                                    ).class
+                                  }
+                                >
+                                  <FileLinkedText
+                                    text={learning.summary}
+                                    fileLinks={assistantChatFileLinks()}
+                                  />
                                 </div>
                               </div>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                    </ConfigCard>
-                  </section>
-                </Show>
-
-                <Show when={activeTab() === "learnings"}>
-                  <section class="flex min-h-0 flex-1 flex-col">
-                    <VirtualList
-                      class="min-h-0 flex-1 pr-2"
-                      contentClass="w-full"
-                      itemClass="pb-3"
-                      items={filteredLearnings()}
-                      getKey={(learning) => learning.id}
-                      estimateSize={115}
-                      pagination={{ kind: "forward", initialCount: 50, batchSize: 50 }}
-                      empty={<div class="border-l-2 border-dashed border-(--border) py-3 pl-4 text-[0.75rem] text-(--muted)">No learnings yet.</div>}
-                    >
-                      {(learning) => (
-                        <article class="dense-action-parent border-l-2 border-(--border) py-3 pl-4 pr-2">
-                          <div class="flex items-start justify-between gap-3">
-                            <div class="min-w-0">
-                              <div class="text-[0.75rem] font-semibold leading-5 text-(--foreground)">
-                                <FileLinkedText text={learning.summary} fileLinks={assistantChatFileLinks()} />
+                              <div
+                                class={
+                                  stylex.attrs(
+                                    assistantPanelStyles.secondaryAction,
+                                    assistantUtilityStyles.flex,
+                                    assistantUtilityStyles.shrink0,
+                                    assistantUtilityStyles.itemsCenter,
+                                    assistantUtilityStyles.gap2,
+                                  ).class
+                                }
+                              >
+                                <StatusChip
+                                  tone={
+                                    learning.confidence === "high"
+                                      ? "success"
+                                      : learning.confidence === "low"
+                                        ? "neutral"
+                                        : "info"
+                                  }
+                                >
+                                  {learning.confidence}
+                                </StatusChip>
+                                <ActionButton
+                                  tooltip="Move assistant learning up"
+                                  ariaLabel={`Move learning ${learning.summary} up`}
+                                  icon={
+                                    <ArrowUp
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.h4,
+                                          assistantUtilityStyles.w4,
+                                        ).class
+                                      }
+                                    />
+                                  }
+                                  size="icon"
+                                  variant="ghost"
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.h8,
+                                      assistantUtilityStyles.w8,
+                                    ).class
+                                  }
+                                  disabled={
+                                    selectedLearnings()[0]?.id === learning.id
+                                  }
+                                  disabledReason="Learning is already first"
+                                  onClick={() => reorderLearning(learning, -1)}
+                                />
+                                <ActionButton
+                                  tooltip="Move assistant learning down"
+                                  ariaLabel={`Move learning ${learning.summary} down`}
+                                  icon={
+                                    <ArrowDown
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.h4,
+                                          assistantUtilityStyles.w4,
+                                        ).class
+                                      }
+                                    />
+                                  }
+                                  size="icon"
+                                  variant="ghost"
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.h8,
+                                      assistantUtilityStyles.w8,
+                                    ).class
+                                  }
+                                  disabled={
+                                    selectedLearnings()[
+                                      selectedLearnings().length - 1
+                                    ]?.id === learning.id
+                                  }
+                                  disabledReason="Learning is already last"
+                                  onClick={() => reorderLearning(learning, 1)}
+                                />
+                                <ActionButton
+                                  tooltip="Delete assistant learning"
+                                  ariaLabel={`Delete learning ${learning.summary}`}
+                                  icon={
+                                    <Trash2
+                                      class={
+                                        stylex.attrs(
+                                          assistantUtilityStyles.h4,
+                                          assistantUtilityStyles.w4,
+                                        ).class
+                                      }
+                                    />
+                                  }
+                                  size="icon"
+                                  variant="ghost"
+                                  class={
+                                    stylex.attrs(
+                                      assistantUtilityStyles.h8,
+                                      assistantUtilityStyles.w8,
+                                      assistantUtilityStyles.textDanger,
+                                      assistantUtilityStyles.hoverBgPanel,
+                                    ).class
+                                  }
+                                  onClick={() => deleteLearning(learning)}
+                                />
                               </div>
                             </div>
-                            <div class="dense-secondary-actions flex shrink-0 items-center gap-2">
-                              <StatusChip tone={learning.confidence === "high" ? "success" : learning.confidence === "low" ? "neutral" : "info"}>{learning.confidence}</StatusChip>
-                              <ActionButton tooltip="Move assistant learning up" ariaLabel={`Move learning ${learning.summary} up`} icon={<ArrowUp class="h-4 w-4" />} size="icon" variant="ghost" class="h-8 w-8" disabled={selectedLearnings()[0]?.id === learning.id} disabledReason="Learning is already first" onClick={() => reorderLearning(learning, -1)} />
-                              <ActionButton tooltip="Move assistant learning down" ariaLabel={`Move learning ${learning.summary} down`} icon={<ArrowDown class="h-4 w-4" />} size="icon" variant="ghost" class="h-8 w-8" disabled={selectedLearnings()[selectedLearnings().length - 1]?.id === learning.id} disabledReason="Learning is already last" onClick={() => reorderLearning(learning, 1)} />
-                              <ActionButton tooltip="Delete assistant learning" ariaLabel={`Delete learning ${learning.summary}`} icon={<Trash2 class="h-4 w-4" />} size="icon" variant="ghost" class="h-8 w-8 text-(--danger) hover:bg-(--panel)" onClick={() => deleteLearning(learning)} />
+                            <div
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.mt2,
+                                  assistantUtilityStyles.text0675,
+                                  assistantUtilityStyles.leading5,
+                                  assistantUtilityStyles.textMuted,
+                                ).class
+                              }
+                            >
+                              <div>
+                                <FileLinkedText
+                                  text={`Source: ${learning.source}`}
+                                  fileLinks={assistantChatFileLinks()}
+                                />
+                              </div>
+                              <div>
+                                {formatShortTimestamp(learning.createdAt)}
+                              </div>
                             </div>
-                          </div>
-                          <div class="mt-2 text-[0.675rem] leading-5 text-(--muted)">
-                            <div>
-                              <FileLinkedText text={`Source: ${learning.source}`} fileLinks={assistantChatFileLinks()} />
-                            </div>
-                            <div>{formatShortTimestamp(learning.createdAt)}</div>
-                          </div>
-                        </article>
-                      )}
-                    </VirtualList>
-                  </section>
-                </Show>
-              </div>
-            )}
-          </Show>
-        </section>
+                          </article>
+                        )}
+                      </VirtualList>
+                    </section>
+                  </Show>
+                </div>
+              )}
+            </Show>
+          </section>
         </Show>
       </div>
       <Show when={contextMenu()}>
@@ -1946,7 +4862,12 @@ export function AssistantsPanel(props: AssistantsPanelProps = {}) {
   );
 }
 
-function TabButton(props: { icon: JSX.Element; label: Capitalize<AssistantDetailTab>; active: boolean; onClick: () => void }) {
+function TabButton(props: {
+  icon: JSX.Element;
+  label: Capitalize<AssistantDetailTab>;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
     <Button
       tooltip={`Open ${props.label.toLowerCase()} tab`}
@@ -1955,11 +4876,14 @@ function TabButton(props: { icon: JSX.Element; label: Capitalize<AssistantDetail
       tabIndex={props.active ? 0 : -1}
       variant="ghost"
       size="sm"
-      class={`h-9 shrink-0 rounded-none border-b-2 px-2.5 hover:text-(--foreground) ${
-        props.active
-          ? "border-(--accent) bg-transparent text-(--accent-strong) hover:bg-transparent hover:text-(--accent-strong)"
-          : "border-transparent text-(--muted) hover:bg-(--panel-strong)"
-      }`}
+      class={
+        stylex.attrs(
+          assistantPanelStyles.tab,
+          props.active
+            ? assistantPanelStyles.tabActive
+            : assistantPanelStyles.tabIdle,
+        ).class
+      }
       onClick={props.onClick}
     >
       {props.icon}
@@ -1970,18 +4894,39 @@ function TabButton(props: { icon: JSX.Element; label: Capitalize<AssistantDetail
 
 function AssistantFact(props: { label: string; children: JSX.Element }) {
   return (
-    <div class="min-w-0 break-words [overflow-wrap:anywhere]">
-      <span class="font-semibold text-(--foreground)">{props.label}: </span>
+    <div
+      class={
+        stylex.attrs(
+          assistantUtilityStyles.minW0,
+          assistantUtilityStyles.breakWords,
+          assistantUtilityStyles.wrapAnywhere,
+        ).class
+      }
+    >
+      <span
+        class={
+          stylex.attrs(
+            assistantUtilityStyles.fontSemibold,
+            assistantUtilityStyles.textForeground,
+          ).class
+        }
+      >
+        {props.label}:{" "}
+      </span>
       <span>{props.children}</span>
     </div>
   );
 }
 
-function assistantRunStateTone(runState: Assistant["runState"]): StatusChipTone {
+function assistantRunStateTone(
+  runState: Assistant["runState"],
+): StatusChipTone {
   return runState === "active" ? "success" : "warning";
 }
 
-function assistantBootstrapTone(state: Assistant["bootstrapState"]): StatusChipTone {
+function assistantBootstrapTone(
+  state: Assistant["bootstrapState"],
+): StatusChipTone {
   if (state === "completed") {
     return "success";
   }
@@ -1992,10 +4937,6 @@ function assistantBootstrapTone(state: Assistant["bootstrapState"]): StatusChipT
     return "info";
   }
   return "warning";
-}
-
-function assistantRunStateBorderClass(runState: Assistant["runState"]) {
-  return runState === "active" ? "border-l-emerald-500" : "border-l-amber-400";
 }
 
 function todoStateTone(state: AssistantTodo["state"]): StatusChipTone {
@@ -2011,22 +4952,6 @@ function todoStateTone(state: AssistantTodo["state"]): StatusChipTone {
       return "info";
     case "pending":
       return "neutral";
-  }
-}
-
-function todoStateBorderClass(state: AssistantTodo["state"]) {
-  switch (state) {
-    case "completed":
-      return "border-emerald-500";
-    case "failed":
-    case "cancelled":
-      return "border-rose-400";
-    case "blocked":
-      return "border-amber-400";
-    case "in-progress":
-      return "border-sky-400";
-    case "pending":
-      return "border-(--border)";
   }
 }
 
@@ -2047,7 +4972,9 @@ function todoWorkKindTone(workKind: AssistantTodo["workKind"]): StatusChipTone {
   }
 }
 
-function questionStatusTone(status: AssistantQuestion["status"]): StatusChipTone {
+function questionStatusTone(
+  status: AssistantQuestion["status"],
+): StatusChipTone {
   switch (status) {
     case "answered":
       return "success";
@@ -2060,28 +4987,15 @@ function questionStatusTone(status: AssistantQuestion["status"]): StatusChipTone
   }
 }
 
-function questionStatusBorderClass(status: AssistantQuestion["status"]) {
-  switch (status) {
-    case "answered":
-      return "border-emerald-500";
-    case "pending":
-      return "border-amber-400";
-    case "deferred":
-      return "border-sky-400";
-    case "dismissed":
-      return "border-slate-300";
-  }
-}
-
-function backgroundJobStatusTone(status: BackgroundJob["status"]): StatusChipTone {
+function backgroundJobStatusTone(
+  status: BackgroundJob["status"],
+): StatusChipTone {
   return status === "enabled" ? "success" : "neutral";
 }
 
-function backgroundJobStatusBorderClass(status: BackgroundJob["status"]) {
-  return status === "enabled" ? "border-emerald-500" : "border-slate-300";
-}
-
-function backgroundRunStatusTone(status: BackgroundJobRun["status"]): StatusChipTone {
+function backgroundRunStatusTone(
+  status: BackgroundJobRun["status"],
+): StatusChipTone {
   switch (status) {
     case "succeeded":
       return "success";
@@ -2102,25 +5016,6 @@ function backgroundRunStatusTone(status: BackgroundJobRun["status"]): StatusChip
   }
 }
 
-function backgroundRunStatusBorderClass(status: BackgroundJobRun["status"]) {
-  switch (status) {
-    case "succeeded":
-      return "border-emerald-500";
-    case "failed":
-    case "cancelled":
-      return "border-rose-400";
-    case "awaiting-approval":
-    case "awaiting-user-input":
-      return "border-amber-400";
-    case "running":
-      return "border-sky-400";
-    case "queued":
-      return "border-slate-300";
-    case "skipped":
-      return "border-stone-300";
-  }
-}
-
 function QuestionColumn(props: {
   title: string;
   emptyMessage: string;
@@ -2133,45 +5028,207 @@ function QuestionColumn(props: {
   fileLinks?: FileLinkConfig;
 }) {
   return (
-    <section class="flex min-h-0 flex-col">
-      <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">{props.title}</div>
+    <section
+      class={
+        stylex.attrs(
+          assistantUtilityStyles.flex,
+          assistantUtilityStyles.minH0,
+          assistantUtilityStyles.flexCol,
+        ).class
+      }
+    >
+      <div
+        class={
+          stylex.attrs(
+            assistantUtilityStyles.mb3,
+            assistantUtilityStyles.text0585,
+            assistantUtilityStyles.fontSemibold,
+            assistantUtilityStyles.uppercase,
+            assistantUtilityStyles.tracking018,
+            assistantUtilityStyles.textMuted,
+          ).class
+        }
+      >
+        {props.title}
+      </div>
       <VirtualList
-        class="min-h-0 flex-1 pr-2"
-        contentClass="w-full"
-        itemClass="pb-3"
+        class={
+          stylex.attrs(
+            assistantUtilityStyles.minH0,
+            assistantUtilityStyles.flex1,
+            assistantUtilityStyles.pr2,
+          ).class
+        }
+        contentClass={stylex.attrs(assistantUtilityStyles.wFull).class}
+        itemClass={stylex.attrs(assistantUtilityStyles.pb3).class}
         items={props.questions}
         getKey={(question) => question.id}
         estimateSize={220}
         pagination={{ kind: "forward", initialCount: 60, batchSize: 60 }}
-        empty={<div class="border-l-2 border-dashed border-(--border) py-3 pl-4 text-[0.675rem] leading-5 text-(--muted)">{props.emptyMessage}</div>}
+        empty={
+          <div
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.borderL2,
+                assistantUtilityStyles.borderDashed,
+                assistantUtilityStyles.borderBorder,
+                assistantUtilityStyles.py3,
+                assistantUtilityStyles.pl4,
+                assistantUtilityStyles.text0675,
+                assistantUtilityStyles.leading5,
+                assistantUtilityStyles.textMuted,
+              ).class
+            }
+          >
+            {props.emptyMessage}
+          </div>
+        }
       >
         {(question) => (
-          <article class={`border-l-2 py-3 pl-4 pr-2 ${questionStatusBorderClass(question.status)}`}>
-            <div class="text-[0.75rem] font-semibold text-(--foreground)">
-              <FileLinkedText text={question.prompt} fileLinks={props.fileLinks} />
+          <article
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.borderL2,
+                assistantUtilityStyles.py3,
+                assistantUtilityStyles.pl4,
+                assistantUtilityStyles.pr2,
+                question.status === "answered"
+                  ? assistantPanelStyles.borderEmerald
+                  : question.status === "pending"
+                    ? assistantPanelStyles.borderAmber
+                    : question.status === "deferred"
+                      ? assistantPanelStyles.borderSky
+                      : assistantPanelStyles.borderSlate,
+              ).class
+            }
+          >
+            <div
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.text075,
+                  assistantUtilityStyles.fontSemibold,
+                  assistantUtilityStyles.textForeground,
+                ).class
+              }
+            >
+              <FileLinkedText
+                text={question.prompt}
+                fileLinks={props.fileLinks}
+              />
             </div>
-            <div class="mt-1 flex flex-wrap items-center gap-2 text-[0.575rem] uppercase tracking-[0.14em] text-(--muted)">
-              <StatusChip tone={questionStatusTone(question.status)}>{question.status}</StatusChip>
+            <div
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.mt1,
+                  assistantUtilityStyles.flex,
+                  assistantUtilityStyles.flexWrap,
+                  assistantUtilityStyles.itemsCenter,
+                  assistantUtilityStyles.gap2,
+                  assistantUtilityStyles.text0575,
+                  assistantUtilityStyles.uppercase,
+                  assistantUtilityStyles.tracking014,
+                  assistantUtilityStyles.textMuted,
+                ).class
+              }
+            >
+              <StatusChip tone={questionStatusTone(question.status)}>
+                {question.status}
+              </StatusChip>
               <span>{formatShortTimestamp(question.askedAt)}</span>
             </div>
             <Show when={question.status === "pending"}>
-              <div class="mt-3 flex flex-col gap-2">
-                <div class="grid gap-2">
+              <div
+                class={
+                  stylex.attrs(
+                    assistantUtilityStyles.mt3,
+                    assistantUtilityStyles.flex,
+                    assistantUtilityStyles.flexCol,
+                    assistantUtilityStyles.gap2,
+                  ).class
+                }
+              >
+                <div
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.grid,
+                      assistantUtilityStyles.gap2,
+                    ).class
+                  }
+                >
                   <For each={getAssistantQuestionDefaultChoices()}>
                     {(choice) => (
-                      <ActionButton tooltip={choice.description} disabled={props.disabled} disabledReason={props.disabledReason} icon={choice.recommended ? <Check class="h-4 w-4" /> : undefined} variant={choice.recommended ? "default" : "secondary"} class="justify-start" onClick={() => props.onAnswer(question, choice.answerText)}>
+                      <ActionButton
+                        tooltip={choice.description}
+                        disabled={props.disabled}
+                        disabledReason={props.disabledReason}
+                        icon={
+                          choice.recommended ? (
+                            <Check
+                              class={
+                                stylex.attrs(
+                                  assistantUtilityStyles.h4,
+                                  assistantUtilityStyles.w4,
+                                ).class
+                              }
+                            />
+                          ) : undefined
+                        }
+                        variant={choice.recommended ? "default" : "secondary"}
+                        class={
+                          stylex.attrs(assistantUtilityStyles.justifyStart)
+                            .class
+                        }
+                        onClick={() =>
+                          props.onAnswer(question, choice.answerText)
+                        }
+                      >
                         {choice.label}
                       </ActionButton>
                     )}
                   </For>
                 </div>
-                <Textarea rows="3" disabled={props.disabled} value={props.questionAnswers[question.id] ?? ""} onKeyDown={submitOnEnter(() => props.onAnswer(question))} onInput={(event) => props.onAnswerInput(question.id, event.currentTarget.value)} placeholder="Answer this question." />
-                <ActionButton tooltip="Send answer to assistant" disabled={props.disabled} disabledReason={props.disabledReason} icon={<Save class="h-4 w-4" />} onClick={() => props.onAnswer(question)}>Answer</ActionButton>
+                <Textarea
+                  rows="3"
+                  disabled={props.disabled}
+                  value={props.questionAnswers[question.id] ?? ""}
+                  onKeyDown={submitOnEnter(() => props.onAnswer(question))}
+                  onInput={(event) =>
+                    props.onAnswerInput(question.id, event.currentTarget.value)
+                  }
+                  placeholder="Answer this question."
+                />
+                <ActionButton
+                  tooltip="Send answer to assistant"
+                  disabled={props.disabled}
+                  disabledReason={props.disabledReason}
+                  icon={
+                    <Save
+                      class={
+                        stylex.attrs(
+                          assistantUtilityStyles.h4,
+                          assistantUtilityStyles.w4,
+                        ).class
+                      }
+                    />
+                  }
+                  onClick={() => props.onAnswer(question)}
+                >
+                  Answer
+                </ActionButton>
               </div>
             </Show>
             <Show when={question.answerText}>
               {(answer) => (
-                <div class="mt-3 text-[0.675rem] leading-5 text-(--muted)">
+                <div
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.mt3,
+                      assistantUtilityStyles.text0675,
+                      assistantUtilityStyles.leading5,
+                      assistantUtilityStyles.textMuted,
+                    ).class
+                  }
+                >
                   <FileLinkedText text={answer()} fileLinks={props.fileLinks} />
                 </div>
               )}
@@ -2184,58 +5241,113 @@ function QuestionColumn(props: {
 }
 function ConfigCard(props: { title: string; children: JSX.Element }) {
   return (
-    <section class="text-[0.675rem] leading-6 text-(--muted)">
-      <div class="mb-3 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">{props.title}</div>
+    <section
+      class={
+        stylex.attrs(
+          assistantUtilityStyles.text0675,
+          assistantUtilityStyles.leading6,
+          assistantUtilityStyles.textMuted,
+        ).class
+      }
+    >
+      <div
+        class={
+          stylex.attrs(
+            assistantUtilityStyles.mb3,
+            assistantUtilityStyles.text0585,
+            assistantUtilityStyles.fontSemibold,
+            assistantUtilityStyles.uppercase,
+            assistantUtilityStyles.tracking018,
+            assistantUtilityStyles.textMuted,
+          ).class
+        }
+      >
+        {props.title}
+      </div>
       {props.children}
     </section>
   );
 }
 
-function summarizePrompt(prompt: string, maxLength: number = 120) {
-  return prompt.replace(/\s+/g, " ").trim().slice(0, maxLength);
+function summarizePrompt(prompt: string, maxLength?: number) {
+  return prompt
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength ?? 120);
 }
 
-function matchesAssistantFilters(assistant: Assistant, state: typeof harnessStore.state) {
+function matchesAssistantFilters(
+  assistant: Assistant,
+  state: typeof harnessStore.state,
+) {
   const filters = state.assistants;
   if (filters.runStateFilter && assistant.runState !== filters.runStateFilter) {
     return false;
   }
-  if (filters.bootstrapStateFilter && assistant.bootstrapState !== filters.bootstrapStateFilter) {
+  if (
+    filters.bootstrapStateFilter &&
+    assistant.bootstrapState !== filters.bootstrapStateFilter
+  ) {
     return false;
   }
-  if (filters.providerBrandFilter && assistant.providerBrand !== filters.providerBrandFilter) {
+  if (
+    filters.providerBrandFilter &&
+    assistant.providerBrand !== filters.providerBrandFilter
+  ) {
     return false;
   }
-  if (filters.projectIdFilter && assistant.projectId !== filters.projectIdFilter) {
+  if (
+    filters.projectIdFilter &&
+    assistant.projectId !== filters.projectIdFilter
+  ) {
     return false;
   }
   return true;
 }
 
-function compareAssistants(left: Assistant, right: Assistant, sort: AssistantRosterSort) {
+function compareAssistants(
+  left: Assistant,
+  right: Assistant,
+  sort: AssistantRosterSort,
+) {
   if (sort === "name") {
-    return left.name.localeCompare(right.name) || right.updatedAt.localeCompare(left.updatedAt);
+    return (
+      left.name.localeCompare(right.name) ||
+      right.updatedAt.localeCompare(left.updatedAt)
+    );
   }
   if (sort === "created") {
     return right.createdAt.localeCompare(left.createdAt);
   }
   if (sort === "run-state") {
-    return left.runState.localeCompare(right.runState) || right.updatedAt.localeCompare(left.updatedAt);
+    return (
+      left.runState.localeCompare(right.runState) ||
+      right.updatedAt.localeCompare(left.updatedAt)
+    );
   }
   if (sort === "bootstrap-state") {
-    return left.bootstrapState.localeCompare(right.bootstrapState) || right.updatedAt.localeCompare(left.updatedAt);
+    return (
+      left.bootstrapState.localeCompare(right.bootstrapState) ||
+      right.updatedAt.localeCompare(left.updatedAt)
+    );
   }
   return right.updatedAt.localeCompare(left.updatedAt);
 }
 
-function assistantRosterMenuItems(state: typeof harnessStore.state): LeftPaneSearchMenuItem[] {
+function assistantRosterMenuItems(
+  state: typeof harnessStore.state,
+): LeftPaneSearchMenuItem[] {
   const setFilters = harnessStore.setAssistantPaneFilters;
-  const sortOption = (label: string, value: AssistantRosterSort, icon: JSX.Element): LeftPaneSearchMenuItem => ({
+  const sortOption = (
+    label: string,
+    value: AssistantRosterSort,
+    icon: JSX.Element,
+  ): LeftPaneSearchMenuItem => ({
     kind: "option",
     label,
     icon,
     selected: state.assistants.rosterSort === value,
-    onSelect: () => setFilters({ rosterSort: value })
+    onSelect: () => setFilters({ rosterSort: value }),
   });
 
   return [
@@ -2243,162 +5355,395 @@ function assistantRosterMenuItems(state: typeof harnessStore.state): LeftPaneSea
       kind: "submenu",
       label: "Scope",
       value: formatAssistantScopeFilterLabel(state.assistants.scopeFilter),
-      icon: state.assistants.scopeFilter === "global" ? <Globe class="h-3.5 w-3.5" /> : <Folder class="h-3.5 w-3.5" />,
+      icon:
+        state.assistants.scopeFilter === "global" ? (
+          <Globe
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.h35,
+                assistantUtilityStyles.w35,
+              ).class
+            }
+          />
+        ) : (
+          <Folder
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.h35,
+                assistantUtilityStyles.w35,
+              ).class
+            }
+          />
+        ),
       items: [
         {
           kind: "option",
           label: "All",
-          icon: <ListFilter class="h-3.5 w-3.5" />,
+          icon: (
+            <ListFilter
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: state.assistants.scopeFilter === "all",
-          onSelect: () => harnessStore.setAssistantScopeFilter("all")
+          onSelect: () => harnessStore.setAssistantScopeFilter("all"),
         },
         {
           kind: "option",
           label: "Current project",
-          icon: <Folder class="h-3.5 w-3.5" />,
+          icon: (
+            <Folder
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: state.assistants.scopeFilter === "project",
-          onSelect: () => harnessStore.setAssistantScopeFilter("project")
+          onSelect: () => harnessStore.setAssistantScopeFilter("project"),
         },
         {
           kind: "option",
           label: "Global",
-          icon: <Globe class="h-3.5 w-3.5" />,
+          icon: (
+            <Globe
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: state.assistants.scopeFilter === "global",
-          onSelect: () => harnessStore.setAssistantScopeFilter("global")
-        }
-      ]
+          onSelect: () => harnessStore.setAssistantScopeFilter("global"),
+        },
+      ],
     },
     {
       kind: "submenu",
       label: "Sort assistants",
       value: formatAssistantRosterSortLabel(state.assistants.rosterSort),
-      icon: <ListFilter class="h-3.5 w-3.5" />,
+      icon: (
+        <ListFilter
+          class={
+            stylex.attrs(assistantUtilityStyles.h35, assistantUtilityStyles.w35)
+              .class
+          }
+        />
+      ),
       items: [
-        sortOption("Updated", "updated", <ArrowDown class="h-3.5 w-3.5" />),
-        sortOption("Created", "created", <Calendar class="h-3.5 w-3.5" />),
-        sortOption("Name", "name", <ListFilter class="h-3.5 w-3.5" />),
-        sortOption("Run state", "run-state", <CirclePlay class="h-3.5 w-3.5" />),
-        sortOption("Bootstrap state", "bootstrap-state", <ListChecks class="h-3.5 w-3.5" />)
-      ] as Array<Extract<LeftPaneSearchMenuItem, { kind: "option" }>>
+        sortOption(
+          "Updated",
+          "updated",
+          <ArrowDown
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.h35,
+                assistantUtilityStyles.w35,
+              ).class
+            }
+          />,
+        ),
+        sortOption(
+          "Created",
+          "created",
+          <Calendar
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.h35,
+                assistantUtilityStyles.w35,
+              ).class
+            }
+          />,
+        ),
+        sortOption(
+          "Name",
+          "name",
+          <ListFilter
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.h35,
+                assistantUtilityStyles.w35,
+              ).class
+            }
+          />,
+        ),
+        sortOption(
+          "Run state",
+          "run-state",
+          <CirclePlay
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.h35,
+                assistantUtilityStyles.w35,
+              ).class
+            }
+          />,
+        ),
+        sortOption(
+          "Bootstrap state",
+          "bootstrap-state",
+          <ListChecks
+            class={
+              stylex.attrs(
+                assistantUtilityStyles.h35,
+                assistantUtilityStyles.w35,
+              ).class
+            }
+          />,
+        ),
+      ] as Array<Extract<LeftPaneSearchMenuItem, { kind: "option" }>>,
     },
     {
       kind: "submenu",
       label: "Run state",
       value: state.assistants.runStateFilter ?? "All",
-      icon: <CirclePlay class="h-3.5 w-3.5" />,
+      icon: (
+        <CirclePlay
+          class={
+            stylex.attrs(assistantUtilityStyles.h35, assistantUtilityStyles.w35)
+              .class
+          }
+        />
+      ),
       active: Boolean(state.assistants.runStateFilter),
       items: [
         {
           kind: "option",
           label: "All run states",
-          icon: <ListFilter class="h-3.5 w-3.5" />,
+          icon: (
+            <ListFilter
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: !state.assistants.runStateFilter,
-          onSelect: () => setFilters({ runStateFilter: undefined })
+          onSelect: () => setFilters({ runStateFilter: undefined }),
         },
         {
           kind: "option",
           label: "Active",
-          icon: <CirclePlay class="h-3.5 w-3.5" />,
+          icon: (
+            <CirclePlay
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: state.assistants.runStateFilter === "active",
           active: state.assistants.runStateFilter === "active",
-          onSelect: () => setFilters({ runStateFilter: "active" })
+          onSelect: () => setFilters({ runStateFilter: "active" }),
         },
         {
           kind: "option",
           label: "Paused",
-          icon: <CirclePause class="h-3.5 w-3.5" />,
+          icon: (
+            <CirclePause
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: state.assistants.runStateFilter === "paused",
           active: state.assistants.runStateFilter === "paused",
-          onSelect: () => setFilters({ runStateFilter: "paused" })
-        }
-      ]
+          onSelect: () => setFilters({ runStateFilter: "paused" }),
+        },
+      ],
     },
     {
       kind: "submenu",
       label: "Bootstrap",
-      value: state.assistants.bootstrapStateFilter ? toProperCase(state.assistants.bootstrapStateFilter) : "All",
-      icon: <ListChecks class="h-3.5 w-3.5" />,
+      value: state.assistants.bootstrapStateFilter
+        ? toProperCase(state.assistants.bootstrapStateFilter)
+        : "All",
+      icon: (
+        <ListChecks
+          class={
+            stylex.attrs(assistantUtilityStyles.h35, assistantUtilityStyles.w35)
+              .class
+          }
+        />
+      ),
       active: Boolean(state.assistants.bootstrapStateFilter),
       items: [
         {
           kind: "option",
           label: "All bootstrap",
-          icon: <ListFilter class="h-3.5 w-3.5" />,
+          icon: (
+            <ListFilter
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: !state.assistants.bootstrapStateFilter,
-          onSelect: () => setFilters({ bootstrapStateFilter: undefined })
+          onSelect: () => setFilters({ bootstrapStateFilter: undefined }),
         },
-        ...(["pending", "running", "completed", "failed"] as const).map((value) => ({
-          kind: "option" as const,
-          label: toProperCase(value),
-          icon: <ListChecks class="h-3.5 w-3.5" />,
-          selected: state.assistants.bootstrapStateFilter === value,
-          active: state.assistants.bootstrapStateFilter === value,
-          onSelect: () => setFilters({ bootstrapStateFilter: value })
-        }))
-      ]
+        ...(["pending", "running", "completed", "failed"] as const).map(
+          (value) => ({
+            kind: "option" as const,
+            label: toProperCase(value),
+            icon: (
+              <ListChecks
+                class={
+                  stylex.attrs(
+                    assistantUtilityStyles.h35,
+                    assistantUtilityStyles.w35,
+                  ).class
+                }
+              />
+            ),
+            selected: state.assistants.bootstrapStateFilter === value,
+            active: state.assistants.bootstrapStateFilter === value,
+            onSelect: () => setFilters({ bootstrapStateFilter: value }),
+          }),
+        ),
+      ],
     },
     {
       kind: "submenu",
       label: "Provider",
-      value: state.assistants.providerBrandFilter ? toProperCase(state.assistants.providerBrandFilter) : "All",
-      icon: <Bot class="h-3.5 w-3.5" />,
+      value: state.assistants.providerBrandFilter
+        ? toProperCase(state.assistants.providerBrandFilter)
+        : "All",
+      icon: (
+        <Bot
+          class={
+            stylex.attrs(assistantUtilityStyles.h35, assistantUtilityStyles.w35)
+              .class
+          }
+        />
+      ),
       active: Boolean(state.assistants.providerBrandFilter),
       items: [
         {
           kind: "option",
           label: "All providers",
-          icon: <Bot class="h-3.5 w-3.5" />,
+          icon: (
+            <Bot
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: !state.assistants.providerBrandFilter,
-          onSelect: () => setFilters({ providerBrandFilter: undefined })
+          onSelect: () => setFilters({ providerBrandFilter: undefined }),
         },
         ...(["gpt", "gemini", "claude"] as const).map((value) => ({
           kind: "option" as const,
           label: toProperCase(value),
-          icon: <Bot class="h-3.5 w-3.5" />,
+          icon: (
+            <Bot
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: state.assistants.providerBrandFilter === value,
           active: state.assistants.providerBrandFilter === value,
-          onSelect: () => setFilters({ providerBrandFilter: value })
-        }))
-      ]
+          onSelect: () => setFilters({ providerBrandFilter: value }),
+        })),
+      ],
     },
     {
       kind: "submenu",
       label: "Project",
-      value: state.workspace.projects.find((project) => project.id === state.assistants.projectIdFilter)?.name ?? "All",
-      icon: <Folder class="h-3.5 w-3.5" />,
+      value:
+        state.workspace.projects.find(
+          (project) => project.id === state.assistants.projectIdFilter,
+        )?.name ?? "All",
+      icon: (
+        <Folder
+          class={
+            stylex.attrs(assistantUtilityStyles.h35, assistantUtilityStyles.w35)
+              .class
+          }
+        />
+      ),
       active: Boolean(state.assistants.projectIdFilter),
       items: [
         {
           kind: "option",
           label: "All projects",
-          icon: <Folder class="h-3.5 w-3.5" />,
+          icon: (
+            <Folder
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: !state.assistants.projectIdFilter,
-          onSelect: () => setFilters({ projectIdFilter: undefined })
+          onSelect: () => setFilters({ projectIdFilter: undefined }),
         },
         ...state.workspace.projects.map((project) => ({
           kind: "option" as const,
           label: project.name,
-          icon: <Folder class="h-3.5 w-3.5" />,
+          icon: (
+            <Folder
+              class={
+                stylex.attrs(
+                  assistantUtilityStyles.h35,
+                  assistantUtilityStyles.w35,
+                ).class
+              }
+            />
+          ),
           selected: state.assistants.projectIdFilter === project.id,
           active: state.assistants.projectIdFilter === project.id,
-          onSelect: () => setFilters({ projectIdFilter: project.id })
-        }))
-      ]
+          onSelect: () => setFilters({ projectIdFilter: project.id }),
+        })),
+      ],
     },
     { kind: "separator" },
     {
       kind: "option",
       label: "Clear search and filters",
-      icon: <Trash2 class="h-3.5 w-3.5" />,
+      icon: (
+        <Trash2
+          class={
+            stylex.attrs(assistantUtilityStyles.h35, assistantUtilityStyles.w35)
+              .class
+          }
+        />
+      ),
       onSelect: () =>
         setFilters({
           rosterSearch: "",
           runStateFilter: undefined,
           bootstrapStateFilter: undefined,
           providerBrandFilter: undefined,
-          projectIdFilter: undefined
-        })
-    }
+          projectIdFilter: undefined,
+        }),
+    },
   ];
 }
 
@@ -2407,11 +5752,13 @@ function activeAssistantRosterFilterCount(state: typeof harnessStore.state) {
     state.assistants.runStateFilter,
     state.assistants.bootstrapStateFilter,
     state.assistants.providerBrandFilter,
-    state.assistants.projectIdFilter
+    state.assistants.projectIdFilter,
   ].filter(Boolean).length;
 }
 
-function formatAssistantScopeFilterLabel(scopeFilter: typeof harnessStore.state.assistants.scopeFilter) {
+function formatAssistantScopeFilterLabel(
+  scopeFilter: typeof harnessStore.state.assistants.scopeFilter,
+) {
   if (scopeFilter === "all") {
     return "All";
   }
@@ -2437,8 +5784,13 @@ function formatAssistantRosterSortLabel(sort: AssistantRosterSort) {
   return "Updated";
 }
 
-function assistantSearchHaystack(assistant: Assistant, state: typeof harnessStore.state) {
-  const project = state.workspace.projects.find((entry) => entry.id === assistant.projectId);
+function assistantSearchHaystack(
+  assistant: Assistant,
+  state: typeof harnessStore.state,
+) {
+  const project = state.workspace.projects.find(
+    (entry) => entry.id === assistant.projectId,
+  );
   return [
     assistant.name,
     assistant.description,
@@ -2449,7 +5801,7 @@ function assistantSearchHaystack(assistant: Assistant, state: typeof harnessStor
     assistant.bootstrapState,
     assistant.providerBrand,
     project?.name,
-    project?.rootPath
+    project?.rootPath,
   ]
     .filter(Boolean)
     .join(" ");
@@ -2471,4 +5823,3 @@ function fuzzyMatches(haystack: string, query: string) {
 function isActiveTodo(state: AssistantTodo["state"]) {
   return state === "pending" || state === "in-progress" || state === "blocked";
 }
-

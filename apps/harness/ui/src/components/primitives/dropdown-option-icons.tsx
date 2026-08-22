@@ -1,33 +1,38 @@
 import { Bot, Brain, Clipboard, ClipboardList, Cpu, Radar, Play, RefreshCcw, Split, MessageSquareMore } from "lucide-solid";
+import * as stylex from "@stylexjs/stylex";
+
+const iconProps = () => stylex.attrs(styles.icon);
 
 export function getModeDropdownIcon(modeId: string) {
   switch (modeId) {
     case "auto":
-      return <Radar class="h-3 w-3" />;
+      return <Radar {...iconProps()} />;
     case "ask":
-      return <MessageSquareMore class="h-3 w-3" />;
+      return <MessageSquareMore {...iconProps()} />;
     case "plan":
-      return <ClipboardList class="h-3 w-3" />;
+      return <ClipboardList {...iconProps()} />;
     case "implement":
-      return <Play class="h-3 w-3" />;
+      return <Play {...iconProps()} />;
     case "debug":
-      return <RefreshCcw class="h-3 w-3" />;
+      return <RefreshCcw {...iconProps()} />;
     case "review":
-      return <Clipboard class="h-3 w-3" />;
+      return <Clipboard {...iconProps()} />;
     default:
-      return <Split class="h-3 w-3" />;
+      return <Split {...iconProps()} />;
   }
 }
 
 export function getAgentDropdownIcon(agentId: string) {
   switch (agentId) {
     case "pi":
-      return <Brain class="h-3 w-3" />;
+      return <Brain {...iconProps()} />;
     case "copilot-cli":
-      return <Bot class="h-3 w-3" />;
+      return <Bot {...iconProps()} />;
     case "codex-cli":
-      return <Cpu class="h-3 w-3" />;
+      return <Cpu {...iconProps()} />;
     default:
-      return <Bot class="h-3 w-3" />;
+      return <Bot {...iconProps()} />;
   }
 }
+
+const styles = stylex.create({ icon: { height: "0.75rem", width: "0.75rem" } });

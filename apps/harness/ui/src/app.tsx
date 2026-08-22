@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type Component } from "solid-js";
 import { createHotkeys, formatForDisplay } from "@tanstack/solid-hotkeys";
 import type { CreateHotkeyDefinition } from "@tanstack/solid-hotkeys";
+import * as stylex from "@stylexjs/stylex";
 import { Bot, BriefcaseBusiness, Clock3, Cog, ExternalLink, FolderKanban, Maximize2, Menu, Minimize2, Pause, Play, PanelsTopLeft, Workflow, CircleQuestionMark, X } from "lucide-solid";
 import { createRequestId } from "../../shared/protocol";
 import { AssistantEditorDialog } from "./components/assistant-editor-dialog";
@@ -22,7 +23,7 @@ import { TutorialOverlay } from "./components/tutorial-overlay";
 import { ActionButton } from "./components/action-button";
 import { LeftPaneShell } from "./components/primitives/left-pane";
 import { SheetContent, SheetRoot, SheetTrigger } from "./components/primitives/sheet";
-import { Tooltip } from "./components/primitives/tooltip";
+import { Button } from "./components/primitives/button";
 import { connectHarnessWebSocket } from "./harness-websocket";
 import { harnessStore, type AssistantEditorDraft, type BackgroundJobEditorDraft, type HarnessLeftTab, type MainPanelSizes } from "./harness-store";
 import { IdeWorkbench } from "./ide/ide-workbench";
@@ -294,7 +295,7 @@ export function App() {
       window.location.href = "/";
     };
     return (
-      <main data-test-ide-page="" class="h-screen min-h-0 overflow-hidden bg-(--background)">
+      <main data-test-ide-page="" {...stylex.attrs(styles.idePage)}>
         <IdeWorkbench windowMode="popped-out" onToggleWindowMode={popInIdeWindow} />
         <Toaster />
       </main>
@@ -302,55 +303,51 @@ export function App() {
   }
 
   return (
-    <main data-test-app-shell="" class="app-zoom-shell relative overflow-auto px-2 py-2 md:px-3 md:py-3 lg:overflow-hidden">
-      <div class="app-background" />
-      <div class="mx-auto flex h-full min-h-0 flex-col gap-3">
-        <header data-test-app-header="" class="panel-shell app-command-bar flex flex-col gap-2 rounded-xl px-3 py-2 md:flex-row md:items-center md:justify-between">
-          <div class="flex min-w-0 items-center gap-3">
+    <main data-test-app-shell="" {...stylex.attrs(styles.appShell)}>
+      <div {...stylex.attrs(styles.appBackground)} />
+      <div {...stylex.attrs(styles.appContent)}>
+        <header data-test-app-header="" {...stylex.attrs(styles.commandBar)}>
+          <div {...stylex.attrs(styles.headerIdentity)}>
             <SheetRoot open={sidebarOpen()} onOpenChange={setSidebarOpen}>
-              <div class="lg:hidden">
+              <div {...stylex.attrs(styles.mobileOnly)}>
                 <SheetTrigger
-                  class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-(--border) bg-white/75 text-(--foreground)"
+                  class={stylex.attrs(styles.mobileMenuButton).class}
                   aria-label="Open projects"
                   data-tour-id="project-sidebar"
                   onClick={() => setSidebarOpen(true)}
                 >
-                  <Menu class="h-4 w-4" />
+                  <Menu {...stylex.attrs(styles.icon16)} />
                 </SheetTrigger>
-                <SheetContent open={sidebarOpen()} onClose={() => setSidebarOpen(false)} title="Workspace" class="h-[100dvh]">
+                <SheetContent open={sidebarOpen()} onClose={() => setSidebarOpen(false)} title="Workspace" class={stylex.attrs(styles.fullViewportHeight).class}>
                   <TabbedLeftPane compact onNavigate={() => setSidebarOpen(false)} />
                 </SheetContent>
               </div>
             </SheetRoot>
 
-            <div class="min-w-0">
-              <div class="flex min-w-0 items-center gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">
-                <Workflow class="h-3.5 w-3.5" />
-                <span class="truncate">AI harness workspace</span>
+            <div {...stylex.attrs(styles.minWidthZero)}>
+              <div {...stylex.attrs(styles.workspaceLabel)}>
+                <Workflow {...stylex.attrs(styles.icon14)} />
+                <span {...stylex.attrs(styles.truncate)}>AI harness workspace</span>
               </div>
-              <div data-test-mobile-surface-label="" class="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-md border border-(--border) bg-white/75 px-2 py-1 text-[0.625rem] font-semibold text-(--foreground) lg:hidden">
+              <div data-test-mobile-surface-label="" {...stylex.attrs(styles.mobileSurfaceLabel)}>
                 {(() => {
                   const Icon = activeLeftTabDefinition().icon;
-                  return <Icon class="h-3.5 w-3.5" />;
+                  return <Icon class={stylex.attrs(styles.icon14).class} />;
                 })()}
                 {activeLeftTabDefinition().label}
               </div>
             </div>
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
+          <div {...stylex.attrs(styles.headerActions)}>
             <ConnectionBanner />
             <NotificationInbox />
             <ActionButton
               tooltip={executionControlTooltip()}
-              icon={state.executionControl.isPaused ? <Play class="h-4 w-4" /> : <Pause class="h-4 w-4" />}
+              icon={state.executionControl.isPaused ? <Play {...stylex.attrs(styles.icon16)} /> : <Pause {...stylex.attrs(styles.icon16)} />}
               variant="ghost"
               size="sm"
-              class="execution-control-pill"
-              classList={{
-                "execution-control-pill-paused": state.executionControl.isPaused,
-                "execution-control-pill-running": !state.executionControl.isPaused
-              }}
+              class={stylex.attrs(styles.executionControl, state.executionControl.isPaused ? styles.executionPaused : styles.executionRunning).class}
               onClick={() =>
                 harnessStore.actions.sendCommand({
                   type: state.executionControl.isPaused ? "execution.resume-all" : "execution.pause-all",
@@ -362,7 +359,7 @@ export function App() {
             </ActionButton>
             <ActionButton
               tooltip="Open guided help and tutorials"
-              icon={<CircleQuestionMark class="h-4 w-4" />}
+              icon={<CircleQuestionMark {...stylex.attrs(styles.icon16)} />}
               variant="secondary"
               dataTourId="help-button"
               onClick={() => harnessStore.openHelpDialog()}
@@ -370,33 +367,34 @@ export function App() {
             </ActionButton>
             <ActionButton
               tooltip={withPrimaryHotkey(`Trace panel: ${state.tracePanelMode}. Click to cycle closed, peek, open.`, "toggleTracePanel")}
-              icon={<PanelsTopLeft class="h-4 w-4" />}
+              icon={<PanelsTopLeft {...stylex.attrs(styles.icon16)} />}
               variant="secondary"
               dataTourId="trace-panel-toggle"
               onClick={() => harnessStore.toggleTracePanel()}
             >
-              <span class="hidden sm:inline">{state.tracePanelMode === "closed" ? "Trace" : state.tracePanelMode}</span>
+              <span {...stylex.attrs(styles.traceButtonLabel)}>{state.tracePanelMode === "closed" ? "Trace" : state.tracePanelMode}</span>
             </ActionButton>
           </div>
         </header>
 
         <div
           data-test-main-panel-grid=""
-          class="grid min-h-0 flex-1 auto-rows-min gap-4 lg:auto-rows-fr lg:gap-x-2"
-          classList={{
-            "lg:grid-cols-[minmax(0,var(--left-panel-size))_0.35rem_minmax(0,var(--center-panel-size))_0.35rem_minmax(0,var(--right-panel-size))]": state.tracePanelMode === "open",
-            "lg:grid-cols-[minmax(0,var(--left-panel-size))_0.35rem_minmax(0,var(--center-panel-size))_0.35rem_12rem]": state.tracePanelMode === "peek",
-            "lg:grid-cols-[minmax(0,var(--left-panel-size))_0.35rem_minmax(0,var(--center-panel-size))]": state.tracePanelMode === "closed"
-          }}
+          data-main-panel-mode={state.tracePanelMode}
+          {...stylex.attrs(
+            styles.mainPanelGrid,
+            state.tracePanelMode === "open" && styles.mainPanelOpen,
+            state.tracePanelMode === "peek" && styles.mainPanelPeek,
+            state.tracePanelMode === "closed" && styles.mainPanelClosed
+          )}
           style={mainPanelGridStyle()}
         >
-          <div class="hidden min-h-0 min-w-0 lg:block">
-            <div data-tour-id="project-sidebar" class="h-full">
+          <div {...stylex.attrs(styles.desktopSidebar)}>
+            <div data-tour-id="project-sidebar" {...stylex.attrs(styles.fullHeight)}>
               <TabbedLeftPane />
             </div>
           </div>
           <PanelResizeHandle label="Resize left and center panels" onPointerDown={(event) => startPanelResize("left", event)} />
-          <div class="min-h-0 min-w-0 overflow-visible lg:overflow-hidden">
+          <div {...stylex.attrs(styles.mainPanelSurface)}>
             <Show
               when={activeLeftTab() === "jobs" || activeLeftTab() === "runs"}
               fallback={
@@ -417,10 +415,10 @@ export function App() {
           </div>
           <Show when={state.tracePanelMode !== "closed"}>
             <>
-              <Show when={state.tracePanelMode === "open"} fallback={<div class="hidden lg:block" />}>
+              <Show when={state.tracePanelMode === "open"} fallback={<div {...stylex.attrs(styles.desktopOnly)} />}>
                 <PanelResizeHandle label="Resize center and trace panels" onPointerDown={(event) => startPanelResize("right", event)} />
               </Show>
-              <div class="min-h-0 min-w-0">
+              <div {...stylex.attrs(styles.shrinkablePanel)}>
                 <Show when={state.tracePanelMode === "open"} fallback={<TracePeekRail />}>
                   <TracePanel />
                 </Show>
@@ -626,13 +624,13 @@ function IdeVirtualWindow(props: {
   return (
     <section
       data-test-ide-virtual-window=""
-      class="ide-virtual-window fixed z-[80] flex min-h-0 flex-col overflow-hidden border border-(--border) bg-(--panel-strong) shadow-2xl"
-      classList={{ "ide-virtual-window-maximized": props.maximized }}
+      data-maximized={props.maximized ? "true" : "false"}
+      {...stylex.attrs(styles.ideWindow, !props.maximized && styles.ideWindowRestored)}
       style={windowStyle()}
     >
       <div
         data-test-ide-titlebar=""
-        class="ide-titlebar flex h-8 shrink-0 cursor-default items-center justify-between gap-3 px-3 text-left select-none"
+        {...stylex.attrs(styles.ideTitlebar)}
         role="button"
         tabIndex={0}
         aria-label={props.maximized ? "Restore IDE window" : "Maximize IDE window"}
@@ -645,44 +643,53 @@ function IdeVirtualWindow(props: {
           }
         }}
       >
-        <span class="truncate text-[0.68rem] font-semibold text-(--ide-text)">Pi Harness IDE</span>
-        <div class="flex items-center gap-1">
-          <button
-            type="button"
-            class="ide-window-control"
+        <span {...stylex.attrs(styles.ideTitle)}>Pi Harness IDE</span>
+        <div {...stylex.attrs(styles.ideWindowControls)}>
+          <Button
+            tooltip="Pop out IDE to a new window"
+            variant="ghost"
+            size="icon"
+            class={stylex.attrs(styles.ideWindowControl).class}
             aria-label="Pop out IDE to new window"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={props.onPopOut}
           >
-            <ExternalLink class="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            class="ide-window-control"
+            <ExternalLink {...stylex.attrs(styles.icon14)} />
+          </Button>
+          <Button
+            tooltip={props.maximized ? "Restore IDE window" : "Maximize IDE window"}
+            variant="ghost"
+            size="icon"
+            class={stylex.attrs(styles.ideWindowControl).class}
             aria-label={props.maximized ? "Restore IDE window" : "Maximize IDE window"}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={props.onToggleMaximized}
           >
-            {props.maximized ? <Minimize2 class="h-3.5 w-3.5" /> : <Maximize2 class="h-3.5 w-3.5" />}
-          </button>
-          <button
-            type="button"
-            class="ide-window-control"
+            {props.maximized ? <Minimize2 {...stylex.attrs(styles.icon14)} /> : <Maximize2 {...stylex.attrs(styles.icon14)} />}
+          </Button>
+          <Button
+            tooltip="Close IDE window"
+            variant="ghost"
+            size="icon"
+            class={stylex.attrs(styles.ideWindowControl).class}
             aria-label="Close IDE window"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={props.onClose}
           >
-            <X class="h-3.5 w-3.5" />
-          </button>
+            <X {...stylex.attrs(styles.icon14)} />
+          </Button>
         </div>
       </div>
-      <div class="min-h-0 flex-1">
+      <div {...stylex.attrs(styles.ideWindowBody)}>
         <IdeWorkbench windowMode="docked" onToggleWindowMode={props.onPopOut} onRequestClose={props.onClose} />
       </div>
-      <button
-        type="button"
+      <Button
+        tooltip="Resize IDE window"
+        variant="ghost"
+        size="icon"
+        class={stylex.attrs(styles.ideResizeHandle).class}
+        tooltipTriggerClass={stylex.attrs(styles.ideResizeTrigger).class}
         data-test-ide-window-resize=""
-        class="ide-window-resize-handle"
         aria-label="Resize IDE window"
         onPointerDown={startResize}
       />
@@ -865,15 +872,16 @@ function focusCurrentTabSearch() {
 
 function PanelResizeHandle(props: { label: string; onPointerDown: (event: PointerEvent) => void }) {
   return (
-    <Tooltip content={props.label} triggerClass="hidden h-full min-h-0 lg:block">
-      <button
-        type="button"
-        data-test-panel-resize-handle=""
-        class="h-full w-full cursor-col-resize rounded-full bg-transparent transition hover:bg-(--border) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring)"
-        aria-label={props.label}
-        onPointerDown={props.onPointerDown}
-      />
-    </Tooltip>
+    <Button
+      tooltip={props.label}
+      tooltipTriggerClass={stylex.attrs(styles.panelResizeTrigger).class}
+      variant="ghost"
+      size="icon"
+      class={stylex.attrs(styles.panelResizeHandle).class}
+      data-test-panel-resize-handle=""
+      aria-label={props.label}
+      onPointerDown={props.onPointerDown}
+    />
   );
 }
 
@@ -943,18 +951,17 @@ function TabbedLeftPane(props: { compact?: boolean; onNavigate?: () => void } = 
   const state = harnessStore.state;
   const [iconsOnly, setIconsOnly] = createSignal(false);
   let navRef: HTMLElement | undefined;
+  let expandedTabStripWidth = 0;
 
   onMount(() => {
     const measure = () => {
       if (!navRef) {
         return;
       }
-      navRef.classList.remove("surface-tab-strip-icons-only");
-      const shouldCollapse = shouldCollapseTabStrip(navRef);
-      setIconsOnly(shouldCollapse);
-      if (shouldCollapse) {
-        navRef.classList.add("surface-tab-strip-icons-only");
+      if (!iconsOnly()) {
+        expandedTabStripWidth = Math.max(expandedTabStripWidth, measureTabStripMinimumWidth(navRef));
       }
+      setIconsOnly(shouldCollapseTabStrip(navRef) || expandedTabStripWidth > navRef.clientWidth + 1);
     };
     const resizeObserver = new ResizeObserver(measure);
     if (navRef) {
@@ -969,42 +976,43 @@ function TabbedLeftPane(props: { compact?: boolean; onNavigate?: () => void } = 
   });
 
   return (
-    <div data-test-left-tabbed-pane="" class="left-tabbed-pane flex h-full min-h-0 flex-col gap-0">
+    <div data-test-left-tabbed-pane="" {...stylex.attrs(styles.leftTabbedPane)}>
       <nav
           ref={navRef}
           data-test-left-tab-nav=""
+          data-icons-only={iconsOnly() ? "true" : "false"}
           role="tablist"
           aria-label="Workspace panels"
-          class="surface-tab-strip px-4 lg:px-5"
-          classList={{ "surface-tab-strip-icons-only": iconsOnly() }}
+          {...stylex.attrs(styles.surfaceTabStrip, iconsOnly() && styles.surfaceTabStripCollapsed)}
       >
         <For each={leftPaneTabs}>
           {(tab) => {
             const Icon = tab.icon;
             const tooltip = () => withPrimaryHotkey(tab.tooltip, tab.hotkeyId);
             return (
-              <Tooltip content={tooltip()}>
-                <button
-                  type="button"
-                  role="tab"
-                  class="surface-tab"
-                  aria-label={tab.label}
-                  attr:aria-selected={state.activeLeftTab === tab.id ? "true" : "false"}
-                  tabIndex={state.activeLeftTab === tab.id ? 0 : -1}
-                  onClick={() => {
-                    harnessStore.setActiveLeftTab(tab.id);
-                    props.onNavigate?.();
-                  }}
-                >
-                  <Icon class="h-4 w-4" />
-                  <span class="surface-tab-label">{tab.label}</span>
-                </button>
-              </Tooltip>
+              <Button
+                tooltip={tooltip()}
+                type="button"
+                role="tab"
+                variant="ghost"
+                size="sm"
+                class={stylex.attrs(styles.surfaceTab, iconsOnly() && styles.surfaceTabCollapsed).class}
+                aria-label={tab.label}
+                attr:aria-selected={state.activeLeftTab === tab.id ? "true" : "false"}
+                tabIndex={state.activeLeftTab === tab.id ? 0 : -1}
+                onClick={() => {
+                  harnessStore.setActiveLeftTab(tab.id);
+                  props.onNavigate?.();
+                }}
+              >
+                <Icon class={stylex.attrs(styles.icon16).class} />
+                <span {...stylex.attrs(styles.surfaceTabLabel, iconsOnly() && styles.hidden)}>{tab.label}</span>
+              </Button>
             );
           }}
         </For>
       </nav>
-      <div class="min-h-0 flex-1 overflow-hidden rounded-b-xl">
+      <div {...stylex.attrs(styles.leftPaneBody)}>
         <Show
           when={state.activeLeftTab === "jobs" || state.activeLeftTab === "runs"}
           fallback={
@@ -1012,7 +1020,7 @@ function TabbedLeftPane(props: { compact?: boolean; onNavigate?: () => void } = 
               when={state.activeLeftTab === "assistants"}
               fallback={
                 <Show when={state.activeLeftTab === "preferences"} fallback={<ProjectSidebar compact={props.compact} onNavigate={props.onNavigate} />}>
-                  <LeftPaneShell kind="preferences" class="rounded-b-2xl">
+                  <LeftPaneShell kind="preferences">
                     <PreferenceSectionNav onNavigate={props.onNavigate} />
                   </LeftPaneShell>
                 </Show>
@@ -1037,6 +1045,15 @@ export function shouldCollapseTabStrip(navElement: HTMLElement) {
   return hasWrappedTabs || navElement.scrollWidth > navElement.clientWidth + 1;
 }
 
+/** Measures the expanded tab strip without depending on legacy descendant classes. */
+function measureTabStripMinimumWidth(navElement: HTMLElement) {
+  const tabWidths = Array.from(navElement.children).reduce((total, tabItem) => total + tabItem.getBoundingClientRect().width, 0);
+  const computedStyle = window.getComputedStyle(navElement);
+  const gap = Number.parseFloat(computedStyle.columnGap || computedStyle.gap) || 0;
+  const padding = (Number.parseFloat(computedStyle.paddingLeft) || 0) + (Number.parseFloat(computedStyle.paddingRight) || 0);
+  return tabWidths + Math.max(0, navElement.children.length - 1) * gap + padding;
+}
+
 function isProjectSwitcherInputFocused() {
   const activeElement = document.activeElement;
   return activeElement instanceof HTMLElement && activeElement.dataset.projectSwitcherInput === "true";
@@ -1045,3 +1062,298 @@ function isProjectSwitcherInputFocused() {
 function isResizeObserverLoopError(message: string) {
   return message === "ResizeObserver loop completed with undelivered notifications." || message === "ResizeObserver loop limit exceeded";
 }
+
+const styles = stylex.create({
+  idePage: {
+    backgroundColor: "var(--background)",
+    height: "100vh",
+    minHeight: 0,
+    overflow: "hidden"
+  },
+  appShell: {
+    height: "100vh",
+    overflow: { default: "auto", "@media (min-width: 1024px)": "hidden" },
+    padding: { default: "0.5rem", "@media (min-width: 768px)": "0.75rem" },
+    position: "relative",
+    width: "100vw"
+  },
+  appBackground: {
+    backgroundImage: "var(--app-background-grid)",
+    backgroundSize: "56px 56px",
+    inset: 0,
+    maskImage: "linear-gradient(#0000008c, #0000 70%)",
+    pointerEvents: "none",
+    position: "absolute"
+  },
+  appContent: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.75rem",
+    height: "100%",
+    marginInline: "auto",
+    minHeight: 0
+  },
+  commandBar: {
+    alignItems: { default: null, "@media (min-width: 768px)": "center" },
+    backdropFilter: "blur(12px)",
+    backgroundColor: "var(--panel)",
+    borderColor: "#0f766e85 var(--border) var(--border)",
+    borderRadius: "0.75rem",
+    borderStyle: "solid",
+    borderWidth: "3px 1px 1px",
+    boxShadow: "0 8px 24px #0f172a0f",
+    display: "flex",
+    flexDirection: { default: "column", "@media (min-width: 768px)": "row" },
+    gap: "0.5rem",
+    justifyContent: { default: null, "@media (min-width: 768px)": "space-between" },
+    overflow: "visible",
+    padding: "0.5rem 0.75rem",
+    position: "relative"
+  },
+  headerIdentity: { alignItems: "center", display: "flex", gap: "0.75rem", minWidth: 0 },
+  mobileOnly: { display: { default: "block", "@media (min-width: 1024px)": "none" } },
+  mobileMenuButton: {
+    alignItems: "center",
+    backgroundColor: "var(--row)",
+    borderColor: "var(--border)",
+    borderRadius: "0.5rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    color: "var(--foreground)",
+    display: "inline-flex",
+    height: "2.25rem",
+    justifyContent: "center",
+    width: "2.25rem"
+  },
+  fullViewportHeight: { height: "100dvh" },
+  minWidthZero: { minWidth: 0 },
+  workspaceLabel: {
+    alignItems: "center",
+    color: "var(--muted)",
+    display: "flex",
+    fontSize: "0.585rem",
+    fontWeight: 600,
+    gap: "0.5rem",
+    letterSpacing: "0.16em",
+    minWidth: 0,
+    textTransform: "uppercase"
+  },
+  truncate: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  mobileSurfaceLabel: {
+    alignItems: "center",
+    backgroundColor: "var(--row)",
+    borderColor: "var(--border)",
+    borderRadius: "0.375rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    color: "var(--foreground)",
+    display: { default: "inline-flex", "@media (min-width: 1024px)": "none" },
+    fontSize: "0.625rem",
+    fontWeight: 600,
+    gap: "0.375rem",
+    marginTop: "0.25rem",
+    maxWidth: "100%",
+    padding: "0.25rem 0.5rem"
+  },
+  headerActions: { alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" },
+  icon14: { height: "0.875rem", width: "0.875rem" },
+  icon16: { height: "1rem", width: "1rem" },
+  executionControl: {
+    borderColor: "var(--border)",
+    borderRadius: "0.5rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    boxShadow: "none"
+  },
+  executionRunning: {
+    backgroundImage: {
+      default: "linear-gradient(180deg, color-mix(in srgb, var(--warning) 13%, var(--panel) 87%), color-mix(in srgb, var(--warning) 20%, var(--panel) 80%))",
+      ":hover": "linear-gradient(180deg, color-mix(in srgb, var(--warning) 24%, var(--panel) 76%), color-mix(in srgb, var(--warning) 30%, var(--panel) 70%))"
+    },
+    borderColor: "var(--warning)",
+    color: "var(--warning-strong)"
+  },
+  executionPaused: {
+    backgroundImage: {
+      default: "linear-gradient(180deg, color-mix(in srgb, var(--success) 13%, var(--panel) 87%), color-mix(in srgb, var(--success) 20%, var(--panel) 80%))",
+      ":hover": "linear-gradient(180deg, color-mix(in srgb, var(--success) 20%, var(--panel) 80%), color-mix(in srgb, var(--success) 28%, var(--panel) 72%))"
+    },
+    borderColor: "var(--success)",
+    color: "var(--success-strong)"
+  },
+  traceButtonLabel: { display: { default: "none", "@media (min-width: 640px)": "inline" } },
+  mainPanelGrid: {
+    display: "grid",
+    flex: "1",
+    gap: { default: "1rem", "@media (min-width: 1024px)": "0.5rem" },
+    gridAutoRows: { default: "min-content", "@media (min-width: 1024px)": "minmax(0, 1fr)" },
+    minHeight: 0
+  },
+  mainPanelOpen: {
+    gridTemplateColumns: { default: null, "@media (min-width: 1024px)": "minmax(0,var(--left-panel-size)) 0.35rem minmax(0,var(--center-panel-size)) 0.35rem minmax(0,var(--right-panel-size))" }
+  },
+  mainPanelPeek: {
+    gridTemplateColumns: { default: null, "@media (min-width: 1024px)": "minmax(0,var(--left-panel-size)) 0.35rem minmax(0,var(--center-panel-size)) 0.35rem 12rem" }
+  },
+  mainPanelClosed: {
+    gridTemplateColumns: { default: null, "@media (min-width: 1024px)": "minmax(0,var(--left-panel-size)) 0.35rem minmax(0,var(--center-panel-size))" }
+  },
+  desktopSidebar: {
+    display: { default: "none", "@media (min-width: 1024px)": "block" },
+    minHeight: 0,
+    minWidth: 0
+  },
+  desktopOnly: { display: { default: "none", "@media (min-width: 1024px)": "block" } },
+  fullHeight: { height: "100%" },
+  mainPanelSurface: {
+    minHeight: 0,
+    minWidth: 0,
+    overflow: { default: "visible", "@media (min-width: 1024px)": "hidden" }
+  },
+  shrinkablePanel: { minHeight: 0, minWidth: 0 },
+  ideWindow: {
+    backgroundColor: "var(--panel-strong)",
+    borderColor: "var(--border)",
+    borderRadius: "0.5rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 0,
+    overflow: "hidden",
+    position: "fixed",
+    zIndex: 80
+  },
+  ideWindowRestored: {
+    bottom: { default: null, "@media (max-width: 639px)": "0.5rem !important" },
+    height: { default: null, "@media (max-width: 639px)": "auto !important" },
+    left: { default: null, "@media (max-width: 639px)": "0.5rem !important" },
+    right: { default: null, "@media (max-width: 639px)": "0.5rem !important" },
+    top: { default: null, "@media (max-width: 639px)": "0.5rem !important" },
+    width: { default: null, "@media (max-width: 639px)": "auto !important" }
+  },
+  ideTitlebar: {
+    alignItems: "center",
+    backgroundColor: { default: "var(--ide-surface)", ":hover": "var(--ide-row)" },
+    borderBottomColor: "var(--ide-border)",
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+    cursor: "default",
+    display: "flex",
+    flexShrink: 0,
+    gap: "0.75rem",
+    height: "2rem",
+    justifyContent: "space-between",
+    paddingInline: "0.75rem",
+    textAlign: "left",
+    userSelect: "none"
+  },
+  ideTitle: {
+    color: "var(--ide-text)",
+    fontSize: "0.68rem",
+    fontWeight: 600,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap"
+  },
+  ideWindowControls: { alignItems: "center", display: "flex", gap: "0.25rem" },
+  ideWindowControl: {
+    borderRadius: "0.35rem",
+    color: { default: "var(--ide-muted)", ":hover": "var(--ide-text)" },
+    height: "1.35rem !important",
+    width: "1.35rem !important"
+  },
+  ideWindowBody: { flex: "1", minHeight: 0 },
+  ideResizeTrigger: {
+    bottom: 0,
+    display: { default: "inline-flex", "@media (max-width: 639px)": "none" },
+    height: "1rem",
+    position: "absolute",
+    right: 0,
+    width: "1rem"
+  },
+  ideResizeHandle: {
+    cursor: "nwse-resize",
+    height: "1rem !important",
+    minHeight: 0,
+    padding: 0,
+    width: "1rem !important"
+  },
+  panelResizeTrigger: {
+    display: { default: "none", "@media (min-width: 1024px)": "block" },
+    height: "100%",
+    minHeight: 0
+  },
+  panelResizeHandle: {
+    backgroundColor: { default: "transparent", ":hover": "var(--border)" },
+    borderRadius: "9999px",
+    boxShadow: { default: "none", ":focus-visible": "0 0 0 2px var(--ring)" },
+    cursor: "col-resize",
+    height: "100% !important",
+    outline: { default: null, ":focus-visible": "none" },
+    padding: 0,
+    transitionDuration: "150ms",
+    transitionProperty: "background-color, box-shadow",
+    width: "100% !important"
+  },
+  leftTabbedPane: {
+    containerType: "inline-size",
+    display: "flex",
+    flexDirection: "column",
+    gap: 0,
+    height: "100%",
+    minHeight: 0
+  },
+  surfaceTabStrip: {
+    alignItems: "flex-end",
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "0.25rem",
+    marginBottom: 0,
+    paddingInline: { default: "1rem", "@media (min-width: 1024px)": "1.25rem" },
+    position: "relative",
+    zIndex: 2
+  },
+  surfaceTabStripCollapsed: { paddingInline: "0.75rem" },
+  surfaceTab: {
+    backgroundColor: {
+      default: "transparent",
+      ':is([aria-selected="true"]):hover': "transparent",
+      ':is([aria-selected="false"]):hover': "var(--panel-strong)"
+    },
+    borderBottomColor: {
+      default: "transparent",
+      ':is([aria-selected="true"])': "var(--accent)"
+    },
+    borderBottomStyle: "solid",
+    borderBottomWidth: "2px",
+    borderRadius: "0 !important",
+    boxShadow: "none !important",
+    color: {
+      default: "var(--muted)",
+      ':is([aria-selected="true"])': "var(--accent-strong)",
+      ':is([aria-selected="false"]):hover': "var(--foreground)"
+    },
+    fontSize: "0.66rem",
+    gap: "0.35rem",
+    height: "2.25rem !important",
+    minHeight: "2.25rem !important",
+    paddingInline: "0.625rem !important",
+    position: "relative"
+  },
+  surfaceTabCollapsed: {
+    justifyContent: "center",
+    paddingInline: "0 !important",
+    width: "2.25rem !important"
+  },
+  surfaceTabLabel: { minWidth: 0 },
+  hidden: { display: "none" },
+  leftPaneBody: {
+    borderBottomLeftRadius: "0.75rem",
+    borderBottomRightRadius: "0.75rem",
+    flex: "1",
+    minHeight: 0,
+    overflow: "hidden"
+  }
+});

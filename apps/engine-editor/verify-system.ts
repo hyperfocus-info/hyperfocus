@@ -195,6 +195,7 @@ async function verifyFiveMinutePongJourney(page: Page): Promise<Check> {
   await page.click('[data-editor-action="save-script"]');
   const codeScreenshot = join(outputRoot, "ux-code-editor.png");
   await page.screenshot({ path: codeScreenshot, fullPage: false });
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem("catalog-engine.editor.recovery.v1") ?? "null")?.extensions?.hyperfocusScripts?.files?.[0]?.source?.includes("UX journey saved"));
   const sourceSaved = await page.evaluate(() => JSON.parse(localStorage.getItem("catalog-engine.editor.recovery.v1") ?? "null")?.extensions?.hyperfocusScripts?.files?.[0]?.source?.includes("UX journey saved"));
   assert(sourceSaved, "The embedded TypeScript editor did not persist source into project recovery data");
   await page.click('[data-editor-mode="build"]');
@@ -333,14 +334,27 @@ async function verifyDpiResizeDebounce(page: Page, cdp: CDPSession): Promise<Che
 async function verifyLayoutAndPlayback(page: Page, cdp: CDPSession): Promise<Check> {
   const tabs = await page.$$eval("[data-workspace-tab]", (nodes) => nodes.length);
   assert(tabs === 8, `Expected eight workspace tabs, found ${tabs}`);
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>('[data-editor-action="toggle-sidebar"]')?.click());
+  const collapsed = await page.evaluate(() => ({
+    hidden: document.querySelector<HTMLElement>('[data-solid-state="project-browser"]')?.hidden,
+    columns: document.querySelector<HTMLElement>('[data-test-workbench-shell]')?.style.gridTemplateColumns,
+  }));
+  assert(collapsed.hidden === true && collapsed.columns?.startsWith("minmax"), `Solid workbench did not collapse the project browser: ${JSON.stringify(collapsed)}`);
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>('[data-editor-action="toggle-sidebar"]')?.click());
+  const expanded = await page.evaluate(() => ({
+    hidden: document.querySelector<HTMLElement>('[data-solid-state="project-browser"]')?.hidden,
+    tabs: document.querySelectorAll("[data-workspace-tab]").length,
+    columns: document.querySelector<HTMLElement>('[data-test-workbench-shell]')?.style.gridTemplateColumns,
+  }));
+  assert(expanded.hidden === false && expanded.tabs === 8 && expanded.columns?.includes("px"), `Solid workbench did not restore its sized sidebar: ${JSON.stringify(expanded)}`);
   await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", code: "Digit7", key: "7", modifiers: 2 });
   await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", code: "Digit7", key: "7", modifiers: 2 });
-  const evidence = await page.evaluate(() => {
+  const playback = await page.evaluate(() => {
     const studio = (globalThis as unknown as { __engineStudio: { activeWorkspace: string } }).__engineStudio;
     return { tabs: document.querySelectorAll("[data-workspace-tab]").length, activeWorkspace: studio.activeWorkspace, motionVisible: !document.querySelector<HTMLElement>("#workspace-motion")!.hidden };
   });
-  assert(evidence.activeWorkspace === "motion" && evidence.motionVisible, "Ctrl+7 did not reveal the persistent Motion workspace");
-  return { name: "Workspace layout and global hotkeys", evidence };
+  assert(playback.activeWorkspace === "motion" && playback.motionVisible, "Ctrl+7 did not reveal the persistent Motion workspace");
+  return { name: "Workspace layout and global hotkeys", evidence: { ...playback, collapsed, expanded } };
 }
 
 function chromeExecutable() {

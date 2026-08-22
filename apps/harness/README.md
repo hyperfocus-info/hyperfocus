@@ -93,7 +93,7 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 - Shared project switcher dialog replaces duplicated add-path inputs across sidebar and first-run onboarding
 - Header inbox popover keeps recent background prompts and status notices reachable without leaving current surface
 - Bun runtime serves explicit built UI assets; the Solid transform runs through one shared build path
-- Tailwind v4 styling processed through Bun's Tailwind plugin path
+- Build-time StyleX styling extracted through the shared Solid/StyleX Bun compiler, with no Tailwind or browser StyleX runtime
 - Shared Solid primitives for buttons, inputs, dialogs, tooltips, sheets, and toast presentation
 - Shared popovers render through a portal-backed primitive so compact overlays like the inbox do not get clipped by parent overflow or expand parent layout
 - Disabled actions explain their blocking reason in tooltips, and reusable compact overlays route through shared primitives instead of ad hoc markup
@@ -123,7 +123,7 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 - `bun run dev:cli` starts the websocket server without the UI route through the same Bun hot-reload path
 - When `HARNESS_PORT` is unset, dev and bootstrap retry on a random open port if `8787` is already occupied
 - Development startup now prints a temp startup log path immediately, then streams current boot phase, weighted progress, ETA updates, and slow-phase hints to stdout
-- `bun run build:ui` builds the browser bundle through `Bun.build(...)` with Solid and Tailwind plugin support
+- `bun run build:ui` builds the browser bundle through `Bun.build(...)` with the shared Solid/StyleX compiler and extracted atomic CSS
 - `bun run doctor` prints the shared activation and runtime health report, trims oversized `.local` artifacts, supports machine-readable JSON output, and exits non-zero when required first-task checks fail
 - `bun run package:launcher` builds a portable Bun launcher folder for the current OS target
 - Portable launcher startup failures now write a timestamped crash log under `logs/` next to the executable and print that path before exit
@@ -198,7 +198,7 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 - Bundled ripgrep is added to the agent toolchain path, and subagents receive repo-root, nested-project, skill-path, Windows search, and browser-native asset guidance so they do not depend on guessed paths or global shell tools
 - Caught UI and command errors surface through toast notifications
 - Development builds re-surface swallowed UI and command errors after toast display so local debugging keeps mapped stacks visible
-- Tailwind class canonicalization is enforced through editor diagnostics and focused linting so shared UI utilities stay in one preferred form
+- StyleX boundaries, compiler extraction, and focused linting prevent utility-class regressions and browser runtime transforms
 
 ## Direction
 

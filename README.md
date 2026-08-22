@@ -48,4 +48,4 @@ The editor is fully usable without AI. Its AI panel connects on demand to a loca
 
 ## License
 
-The imported [Hyperfocus Source-Available Game License 2.0](LICENSE) is the repository's current root license and is not an OSI-approved open-source license. Its definition of “Software” names only the engine, so it does not yet unambiguously cover every first-party app and package. Resolve that scope, the Licensor identity, and royalty contact details before publication; see [Licensing](docs/licensing.md).
+The [Hyperfocus Source-Available Game License 2.0](LICENSE) applies to all first-party material in this repository, including the engine, editor, harness, shared packages, and all other first-party code. Materials expressly identified as third-party or governed by separate terms remain subject to their respective licenses. This is a source-available license, not an OSI-approved open-source license. The Licensor identity and royalty contact details still need to be supplied before publication; see [Licensing](docs/licensing.md).

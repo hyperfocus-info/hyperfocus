@@ -1,4 +1,5 @@
 import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import {
   Bell,
   Bot,
@@ -20,6 +21,7 @@ import { submitOnEnter } from "../textarea-submit";
 import { ActionButton } from "./action-button";
 import { Popover } from "./primitives/popover";
 import { Textarea } from "./primitives/textarea";
+import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 
 const ASSISTANT_JOB_BOOTSTRAP_QUESTION_PREFIX = "assistant-job-bootstrap:";
 
@@ -283,14 +285,14 @@ export function NotificationInbox() {
         setOpen(false);
         setExpandedId(undefined);
       }}
-      contentClass="w-[min(32rem,calc(100vw-2rem))] p-0"
+      contentClass={stylex.attrs(styles.popoverContent).class}
       content={
-        <div class="flex max-h-[28rem] flex-col">
-          <div class="flex items-center justify-between gap-2 border-b border-(--border) px-3 py-3">
-            <div class="text-[0.675rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">Notifications</div>
+        <div {...stylex.attrs(styles.inboxShell)}>
+          <div {...stylex.attrs(styles.inboxHeader)}>
+            <div {...stylex.attrs(styles.notificationEyebrow)}>Notifications</div>
             <ActionButton
               tooltip="Mark all passive notifications as read"
-              icon={<CheckCheck class="h-4 w-4" />}
+              icon={<CheckCheck {...stylex.attrs(styles.iconMd)} />}
               size="icon"
               variant="ghost"
               ariaLabel="Mark all passive notifications as read"
@@ -302,15 +304,15 @@ export function NotificationInbox() {
               }
             />
           </div>
-          <div class="flex min-h-0 flex-col gap-2 overflow-y-auto px-3 py-3">
+          <div {...stylex.attrs(styles.inboxList)}>
             <Show
               when={items().length > 0}
-              fallback={<div class="rounded-2xl border border-dashed border-(--border) px-4 py-6 text-[0.675rem] text-(--muted)">Inbox empty.</div>}
+              fallback={<div {...stylex.attrs(styles.inboxEmpty)}>Inbox empty.</div>}
             >
               <For each={items()}>
                 {(notification) => (
                   <div
-                    class="rounded-[1.1rem] border border-(--border) bg-white/70 p-3"
+                    {...stylex.attrs(styles.notificationCard)}
                     onClick={(event) => {
                       if (notification.kind === "background-run-status" && event.target === event.currentTarget) {
                         openItem(notification);
@@ -319,35 +321,35 @@ export function NotificationInbox() {
                   >
                     <button
                       type="button"
-                      class="flex w-full cursor-pointer items-start justify-between gap-3 text-left"
+                      {...stylex.attrs(styles.notificationButton)}
                       onClick={() => openItem(notification)}
                     >
-                      <div class="flex min-w-0 flex-1 flex-col gap-1">
-                        <div class="flex items-center gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">
+                      <div {...stylex.attrs(styles.notificationCopy)}>
+                        <div {...stylex.attrs(styles.notificationMeta)}>
                           <NotificationKindIcon notification={notification} />
                           <span>{notification.kind.replaceAll("-", " ")}</span>
                           <Show when={!notification.readAt}>
-                            <span class="rounded-full bg-rose-600 px-2 py-0.5 text-[0.52rem] text-white">Unread</span>
+                            <span {...stylex.attrs(styles.unreadPill)}>Unread</span>
                           </Show>
                         </div>
-                        <div class="text-[0.75rem] text-(--foreground)">{notificationTitle(notification)}</div>
+                        <div {...stylex.attrs(styles.notificationTitle)}>{notificationTitle(notification)}</div>
                         <Show when={notificationSummary(notification)}>
-                          {(summary) => <div class="text-[0.675rem] leading-5 text-(--muted)">{summary()}</div>}
+                          {(summary) => <div {...stylex.attrs(styles.notificationSummary)}>{summary()}</div>}
                         </Show>
                       </div>
                     </button>
                     <Show when={expandedId() === notification.id && notification.interactive}>
-                      <div class="mt-3 flex flex-col gap-3 border-t border-(--border) pt-3">
+                      <div {...stylex.attrs(styles.notificationExpansion)}>
                         <Switch>
                           <Match when={notification.kind === "planning-question"}>
-                            <div class="grid gap-2">
+                            <div {...stylex.attrs(styles.gridCompact)}>
                               <For each={(notification as Extract<NotificationInboxItem, { kind: "planning-question" }>).choices}>
                                 {(choice) => (
                                   <ActionButton
                                     tooltip={choice.description}
-                                    icon={choice.recommended ? <Check class="h-3.5 w-3.5" /> : undefined}
+                                    icon={choice.recommended ? <Check {...stylex.attrs(styles.iconSm)} /> : undefined}
                                     variant={choice.recommended ? "default" : "secondary"}
-                                    class="justify-start"
+                                    class={stylex.attrs(styles.alignStart).class}
                                     onClick={() =>
                                       handlePlanningChoice(
                                         notification as Extract<NotificationInboxItem, { kind: "planning-question" }>,
@@ -375,7 +377,7 @@ export function NotificationInbox() {
                               />
                               <ActionButton
                                 tooltip="Send custom planning answer"
-                                icon={<SendHorizontal class="h-4 w-4" />}
+                                icon={<SendHorizontal {...stylex.attrs(styles.iconMd)} />}
                                 onClick={() =>
                                   handlePlanningChoice(
                                     notification as Extract<NotificationInboxItem, { kind: "planning-question" }>,
@@ -388,11 +390,11 @@ export function NotificationInbox() {
                             </div>
                           </Match>
                           <Match when={notification.kind === "planning-question-batch"}>
-                            <div class="grid gap-3">
+                            <div {...stylex.attrs(styles.gridRelaxed)}>
                               <For each={(notification as Extract<NotificationInboxItem, { kind: "planning-question-batch" }>).questions}>
                                 {(question) => (
-                                  <div class="rounded-xl border border-(--border) bg-white/70 p-3">
-                                    <div class="mb-2 text-[0.75rem] font-semibold text-(--foreground)">{question.prompt}</div>
+                                  <div {...stylex.attrs(styles.questionCard)}>
+                                    <div {...stylex.attrs(styles.questionPrompt)}>{question.prompt}</div>
                                     <Textarea
                                       rows="3"
                                       value={draftById()[batchDraftKey(notification.id, question.questionId)] ?? ""}
@@ -409,7 +411,7 @@ export function NotificationInbox() {
                               </For>
                               <ActionButton
                                 tooltip="Send all planning answers"
-                                icon={<SendHorizontal class="h-4 w-4" />}
+                                icon={<SendHorizontal {...stylex.attrs(styles.iconMd)} />}
                                 onClick={() =>
                                   handlePlanningBatch(notification as Extract<NotificationInboxItem, { kind: "planning-question-batch" }>)
                                 }
@@ -419,18 +421,18 @@ export function NotificationInbox() {
                             </div>
                           </Match>
                           <Match when={notification.kind === "assistant-question"}>
-                            <div class="flex flex-col gap-3">
+                            <div {...stylex.attrs(styles.columnRelaxed)}>
                               <Show
                                 when={(notification as Extract<NotificationInboxItem, { kind: "assistant-question" }>).questionId.startsWith(ASSISTANT_JOB_BOOTSTRAP_QUESTION_PREFIX)}
                                 fallback={
-                                  <div class="grid gap-2">
+                                  <div {...stylex.attrs(styles.gridCompact)}>
                                     <For each={getAssistantQuestionDefaultChoices()}>
                                       {(choice) => (
                                         <ActionButton
                                           tooltip={choice.description}
-                                          icon={choice.recommended ? <Check class="h-3.5 w-3.5" /> : undefined}
+                                          icon={choice.recommended ? <Check {...stylex.attrs(styles.iconSm)} /> : undefined}
                                           variant={choice.recommended ? "default" : "secondary"}
-                                          class="justify-start"
+                                          class={stylex.attrs(styles.alignStart).class}
                                           onClick={() =>
                                             handleAssistantAnswer(
                                               notification as Extract<NotificationInboxItem, { kind: "assistant-question" }>,
@@ -445,11 +447,11 @@ export function NotificationInbox() {
                                   </div>
                                 }
                               >
-                                <div class="grid gap-2">
+                                <div {...stylex.attrs(styles.gridCompact)}>
                                   <ActionButton
                                     tooltip="Create research, todo maintenance, and implementation jobs"
-                                    icon={<Check class="h-3.5 w-3.5" />}
-                                    class="justify-start"
+                                    icon={<Check {...stylex.attrs(styles.iconSm)} />}
+                                    class={stylex.attrs(styles.alignStart).class}
                                     disabled={!harnessStore.state.assistants.assistants.find((entry) => entry.id === (notification as Extract<NotificationInboxItem, { kind: "assistant-question" }>).assistantId)?.projectId && !harnessStore.state.workspace.activeProjectId}
                                     disabledReason="Open a project first"
                                     onClick={() => handleAssistantJobBootstrap(notification as Extract<NotificationInboxItem, { kind: "assistant-question" }>, true)}
@@ -458,9 +460,9 @@ export function NotificationInbox() {
                                   </ActionButton>
                                   <ActionButton
                                     tooltip="Do not create default assistant jobs now"
-                                    icon={<CircleX class="h-3.5 w-3.5" />}
+                                    icon={<CircleX {...stylex.attrs(styles.iconSm)} />}
                                     variant="secondary"
-                                    class="justify-start"
+                                    class={stylex.attrs(styles.alignStart).class}
                                     onClick={() => handleAssistantJobBootstrap(notification as Extract<NotificationInboxItem, { kind: "assistant-question" }>, false)}
                                   >
                                     Not now
@@ -482,7 +484,7 @@ export function NotificationInbox() {
                               />
                               <ActionButton
                                 tooltip="Send answer to assistant"
-                                icon={<SendHorizontal class="h-4 w-4" />}
+                                icon={<SendHorizontal {...stylex.attrs(styles.iconMd)} />}
                                 onClick={() =>
                                   handleAssistantAnswer(
                                     notification as Extract<NotificationInboxItem, { kind: "assistant-question" }>
@@ -494,11 +496,11 @@ export function NotificationInbox() {
                             </div>
                           </Match>
                           <Match when={notification.kind === "assistant-question-batch"}>
-                            <div class="grid gap-3">
+                            <div {...stylex.attrs(styles.gridRelaxed)}>
                               <For each={(notification as Extract<NotificationInboxItem, { kind: "assistant-question-batch" }>).questions}>
                                 {(question) => (
-                                  <div class="rounded-xl border border-(--border) bg-white/70 p-3">
-                                    <div class="mb-2 text-[0.75rem] font-semibold text-(--foreground)">{question.prompt}</div>
+                                  <div {...stylex.attrs(styles.questionCard)}>
+                                    <div {...stylex.attrs(styles.questionPrompt)}>{question.prompt}</div>
                                     <Textarea
                                       rows="3"
                                       value={draftById()[batchDraftKey(notification.id, question.questionId)] ?? ""}
@@ -515,7 +517,7 @@ export function NotificationInbox() {
                               </For>
                               <ActionButton
                                 tooltip="Send all assistant answers"
-                                icon={<SendHorizontal class="h-4 w-4" />}
+                                icon={<SendHorizontal {...stylex.attrs(styles.iconMd)} />}
                                 onClick={() =>
                                   handleAssistantBatch(notification as Extract<NotificationInboxItem, { kind: "assistant-question-batch" }>)
                                 }
@@ -525,10 +527,10 @@ export function NotificationInbox() {
                             </div>
                           </Match>
                           <Match when={notification.kind === "browser-approval"}>
-                            <div class="flex flex-wrap gap-2">
+                            <div {...stylex.attrs(styles.wrapActions)}>
                               <ActionButton
                                 tooltip="Approve this browser action"
-                                icon={<Check class="h-4 w-4" />}
+                                icon={<Check {...stylex.attrs(styles.iconMd)} />}
                                 onClick={() =>
                                   handleBrowserApproval(
                                     notification as Extract<NotificationInboxItem, { kind: "browser-approval" }>,
@@ -540,7 +542,7 @@ export function NotificationInbox() {
                               </ActionButton>
                               <ActionButton
                                 tooltip="Reject this browser action"
-                                icon={<CircleX class="h-4 w-4" />}
+                                icon={<CircleX {...stylex.attrs(styles.iconMd)} />}
                                 variant="secondary"
                                 onClick={() =>
                                   handleBrowserApproval(
@@ -566,14 +568,14 @@ export function NotificationInbox() {
     >
       <ActionButton
         tooltip="Open notification inbox"
-        icon={<Bell class="h-4 w-4" />}
+        icon={<Bell {...stylex.attrs(styles.iconMd)} />}
         variant="secondary"
         size="icon"
         ariaLabel="Open notification inbox"
         onClick={() => setOpen((value) => !value)}
       />
       <Show when={unreadCount() > 0}>
-        <div class="pointer-events-none absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[0.6rem] font-semibold text-white">
+        <div {...stylex.attrs(styles.unreadCount)}>
           {unreadCount() > 99 ? "99+" : unreadCount()}
         </div>
       </Show>
@@ -627,19 +629,19 @@ function NotificationKindIcon(props: { notification: NotificationInboxItem }) {
   return (
     <Switch>
       <Match when={props.notification.kind === "assistant-question" || props.notification.kind === "assistant-question-batch"}>
-        <Bot class="h-3.5 w-3.5" />
+        <Bot {...stylex.attrs(styles.iconSm)} />
       </Match>
       <Match when={props.notification.kind === "background-run-status"}>
-        <LoaderCircle class="h-3.5 w-3.5" />
+        <LoaderCircle {...stylex.attrs(styles.iconSm)} />
       </Match>
       <Match when={props.notification.kind === "cli-update"}>
-        <Download class="h-3.5 w-3.5" />
+        <Download {...stylex.attrs(styles.iconSm)} />
       </Match>
       <Match when={props.notification.kind === "browser-approval"}>
-        <CircleAlert class="h-3.5 w-3.5" />
+        <CircleAlert {...stylex.attrs(styles.iconSm)} />
       </Match>
       <Match when={props.notification.kind === "planning-question" || props.notification.kind === "planning-question-batch"}>
-        <SendHorizontal class="h-3.5 w-3.5" />
+        <SendHorizontal {...stylex.attrs(styles.iconSm)} />
       </Match>
     </Switch>
   );

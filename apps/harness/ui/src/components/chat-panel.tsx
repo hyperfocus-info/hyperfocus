@@ -1,4 +1,5 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type JSX } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import {
   createRequestId,
   type AssistantActionMessageMetadata,
@@ -62,7 +63,7 @@ import { ScrollArea } from "./primitives/scroll-area";
 import { Textarea } from "./primitives/textarea";
 import { Tooltip } from "./primitives/tooltip";
 import { VirtualList } from "./primitives/virtual-list";
-import { Button, buttonVariants } from "./primitives/button";
+import { Button } from "./primitives/button";
 import {
   Activity,
   AlertTriangle,
@@ -100,7 +101,8 @@ import {
   X,
   Split
 } from "lucide-solid";
-import { cn } from "../lib/utils";
+import { chatPanelStyles as styles } from "./chat-panel.styles";
+import { chatUtilityStyles } from "./chat-panel.utilities";
 
 function getReasoningStrengthDescription(strength: (typeof COMPOSER_REASONING_STRENGTHS)[number]) {
   switch (strength) {
@@ -159,8 +161,8 @@ function getProviderBrandDescription(providerBrand: ProviderBrand) {
 
 function renderMessageActionRow(timestamp: string | number | Date | undefined, copyButton: JSX.Element) {
   return (
-    <div class="mt-3 flex items-center justify-between gap-3">
-      <div class="min-w-0 text-[0.575rem] uppercase tracking-[0.12em] text-(--muted)">
+    <div {...stylex.attrs(styles.messageActionRow)}>
+      <div {...stylex.attrs(styles.messageTimestamp)}>
         {formatShortTimestamp(timestamp)}
       </div>
       {copyButton}
@@ -181,8 +183,6 @@ function reactiveArraySnapshot<T>(items: readonly T[] | undefined) {
   }
   return snapshot;
 }
-
-const COMPOSER_LOOKUP_SELECTED_CLASSES = ["bg-white/70", "ring-1", "ring-(--ring)"] as const;
 
 type ComposerReferenceBadge = {
   key: string;
@@ -378,11 +378,11 @@ export function ChatPanel() {
   const blockingSetupCheck = () => getBlockingSetupCheck(state);
   const visibleTabs = () =>
     [
-      { id: "chat", label: "Chat", icon: <MessageSquareMore class="h-3.5 w-3.5" />, tooltip: "Open transcript and plan cards" },
-      { id: "plan", label: "Plan", icon: <ClipboardList class="h-3.5 w-3.5" />, tooltip: "Open planning context and saved plan tools" },
-      { id: "run", label: "Run", icon: <Play class="h-3.5 w-3.5" />, tooltip: "Open run status, subtasks, and experiment actions" },
-      { id: "memory", label: "Memory", icon: <Brain class="h-3.5 w-3.5" />, tooltip: "Open shared memory entries" },
-      { id: "events", label: "Model events", icon: <Activity class="h-3.5 w-3.5" />, tooltip: "Open model trace events; tool activity remains in Run" }
+      { id: "chat", label: "Chat", icon: <MessageSquareMore class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open transcript and plan cards" },
+      { id: "plan", label: "Plan", icon: <ClipboardList class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open planning context and saved plan tools" },
+      { id: "run", label: "Run", icon: <Play class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open run status, subtasks, and experiment actions" },
+      { id: "memory", label: "Memory", icon: <Brain class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open shared memory entries" },
+      { id: "events", label: "Model events", icon: <Activity class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open model trace events; tool activity remains in Run" }
     ] satisfies Array<{ id: ChatPaneTab; label: string; icon: JSX.Element; tooltip: string }>;
   const experimentRun = () => activeProject()?.activeRun?.experiment ?? activeProject()?.lastRun?.experiment;
   const liveHarnessMessages = () => {
@@ -593,7 +593,7 @@ export function ChatPanel() {
     <DropdownControl
       kind="select"
       ariaLabel="Select mode"
-      icon={<Split class="h-3.5 w-3.5" />}
+      icon={<Split class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
       size={size}
       class={className}
       value={selectedModeValue()}
@@ -607,7 +607,7 @@ export function ChatPanel() {
     <DropdownControl
       kind="select"
       ariaLabel="Select agent"
-      icon={<Bot class="h-3.5 w-3.5" />}
+      icon={<Bot class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
       size={size}
       class={className}
       value={selectedAgentId()}
@@ -621,7 +621,7 @@ export function ChatPanel() {
     <DropdownControl
       kind="select"
       ariaLabel="Select provider"
-      icon={<Orbit class="h-3.5 w-3.5" />}
+      icon={<Orbit class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
       size={size}
       class={className}
       value={selectedProviderBrand() ?? "gpt"}
@@ -636,7 +636,7 @@ export function ChatPanel() {
     <DropdownControl
       kind="select"
       ariaLabel="Select model"
-      icon={<Cpu class="h-3.5 w-3.5" />}
+      icon={<Cpu class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
       size={size}
       class={className}
       value={getEffectiveExecutionModelId()}
@@ -654,7 +654,7 @@ export function ChatPanel() {
       <DropdownControl
         kind="trigger"
         ariaLabel="Open effort options"
-        icon={<Gauge class="h-3.5 w-3.5" />}
+        icon={<Gauge class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
         class={className}
         label={composerSettingsLabel()}
         onClick={onToggle}
@@ -1149,9 +1149,6 @@ export function ChatPanel() {
     composerLookupMenu?.querySelectorAll<HTMLElement>("[data-composer-lookup-option]").forEach((element) => {
       const selected = element.dataset.composerLookupIndex === String(activeIndex);
       element.setAttribute("aria-selected", selected ? "true" : "false");
-      for (const className of COMPOSER_LOOKUP_SELECTED_CLASSES) {
-        element.classList.toggle(className, selected);
-      }
     });
   }
 
@@ -1721,7 +1718,7 @@ export function ChatPanel() {
         tooltip={action().tooltip}
         disabledReason={action().disabledReason}
         disabled={action().disabled}
-        icon={action().kind === "completed" ? <Check class="h-3.5 w-3.5" /> : action().kind === "retry" ? <RefreshCcw class="h-3.5 w-3.5" /> : <Play class="h-3.5 w-3.5" />}
+        icon={action().kind === "completed" ? <Check class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} /> : action().kind === "retry" ? <RefreshCcw class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} /> : <Play class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
         size="sm"
         dataTourId={action().kind === "execute" ? "plan-start" : undefined}
         onClick={() => handlePlanRunAction(runId)}
@@ -1739,10 +1736,13 @@ export function ChatPanel() {
     if (row.kind === "live") {
       return (
         <article
-          class="flex flex-col gap-2 rounded-3xl border border-(--border) p-3 shadow-sm"
-          classList={{ "bg-white/70": row.message.kind === "status", "bg-teal-950/5": row.message.kind !== "status" }}
+          {...stylex.attrs(
+            styles.transcriptCard,
+            styles.transcriptCardLive,
+            row.message.kind === "status" ? styles.transcriptStatus : styles.transcriptAssistant
+          )}
         >
-          <div class="text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--accent-strong)">harness</div>
+          <div {...stylex.attrs(styles.transcriptRole, styles.transcriptRoleHarness)}>harness</div>
           <MarkdownContent content={() => row.message.content} size="compact" live={!row.message.locked && row.liveIndex === liveHarnessMessages().length - 1} fileLinks={chatFileLinks()} />
           {renderMessageActionRow(
             liveHarnessMessageTimestamp(),
@@ -1772,25 +1772,27 @@ export function ChatPanel() {
         when={message.kind === "plan-summary" && message.metadata?.type === "plan-summary"}
         fallback={
           <article
-            class="rounded-3xl border border-(--border) p-3 shadow-sm"
-            classList={{
-              "bg-teal-950/10": isHarnessTranscriptMessage(message) && message.kind === "run-milestones" && message.metadata?.type === "run-milestones" && message.metadata.status === "open",
-              "ring-1": isHarnessTranscriptMessage(message) && message.kind === "run-milestones" && message.metadata?.type === "run-milestones" && message.metadata.status === "open",
-              "ring-teal-700/20": isHarnessTranscriptMessage(message) && message.kind === "run-milestones" && message.metadata?.type === "run-milestones" && message.metadata.status === "open",
-              "bg-teal-950/5": isHarnessTranscriptMessage(message) && !(message.kind === "run-milestones" && message.metadata?.type === "run-milestones" && message.metadata.status === "open"),
-              "bg-white/60": !isHarnessTranscriptMessage(message)
-            }}
+            {...stylex.attrs(
+              styles.transcriptCard,
+              isHarnessTranscriptMessage(message)
+                ? message.kind === "run-milestones" && message.metadata?.type === "run-milestones" && message.metadata.status === "open"
+                  ? styles.transcriptMilestones
+                  : styles.transcriptAssistant
+                : styles.transcriptUser
+            )}
           >
-            <div class="flex flex-col gap-3">
-              <div class="flex items-center gap-2">
+            <div {...stylex.attrs(styles.transcriptContents)}>
+              <div {...stylex.attrs(styles.inlineRow)}>
                 <div
-                  class="text-[0.585rem] font-semibold uppercase tracking-[0.2em]"
-                  classList={{ "text-(--accent-strong)": isHarnessTranscriptMessage(message), "text-(--muted)": !isHarnessTranscriptMessage(message) }}
+                  {...stylex.attrs(
+                    styles.transcriptRole,
+                    isHarnessTranscriptMessage(message) ? styles.transcriptRoleHarness : styles.transcriptRoleUser
+                  )}
                 >
                   {getTranscriptRoleLabel(message.role)}
                 </div>
                 <Show when={message.kind === "run-milestones" && message.metadata?.type === "run-milestones" && message.metadata.status === "open"}>
-                  <span class="rounded-full border border-teal-700/25 bg-white/70 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.12em] text-(--accent-strong)">
+                  <span {...stylex.attrs(styles.progressChip)}>
                     In progress
                   </span>
                 </Show>
@@ -1800,11 +1802,11 @@ export function ChatPanel() {
                 {renderAssistantActionCard(message.metadata as AssistantActionMessageMetadata)}
               </Show>
               <Show when={message.attachments?.length}>
-                <div class="flex flex-wrap gap-2">
+                <div {...stylex.attrs(styles.attachmentList)}>
                   <For each={message.attachments}>
                     {(attachment) => (
                       <a
-                        class="rounded-full border border-(--border) bg-white/75 px-2.5 py-1 text-[0.55rem] font-semibold uppercase tracking-[0.12em] text-(--muted) hover:text-(--foreground)"
+                        {...stylex.attrs(styles.attachmentLink)}
                         href={attachment.url}
                         rel="noreferrer"
                         target="_blank"
@@ -1833,13 +1835,13 @@ export function ChatPanel() {
           </article>
         }
       >
-        <article class="theme-selected-surface flex flex-col gap-3 rounded-3xl border border-(--border) p-4 shadow-sm">
-          <div class="flex items-center gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--accent-strong)">
-            <Clipboard class="h-3.5 w-3.5" />
+        <article class={stylex.attrs(chatUtilityStyles.themeSelectedSurface, chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded3xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.p4, chatUtilityStyles.shadowSm).class}>
+          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking02em, chatUtilityStyles.textVariableAccentStrong).class}>
+            <Clipboard class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
             Plan summary
           </div>
           <MarkdownContent content={() => getPlanFromMessage(message)?.summary ?? ""} fileLinks={chatFileLinks()} />
-          <div class="grid gap-2 text-[0.675rem] text-(--muted) md:grid-cols-2">
+          <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted, chatUtilityStyles.mdGridCols2).class}>
             <div>Route: {getPlanFromMessage(message)?.route}</div>
             <div>Difficulty: {getPlanFromMessage(message)?.difficultyScore}%</div>
             <div>Parallel slots: {getPlanFromMessage(message)?.actualSubagentCount}</div>
@@ -1849,19 +1851,19 @@ export function ChatPanel() {
             <div>Correctness: {getPlanFromMessage(message)?.correctnessPolicy}</div>
           </div>
           <Show when={hasBranchfsSizeWarning()}>
-            <div class="inline-flex w-fit items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[0.625rem] font-medium text-amber-800">
-              <AlertTriangle class="h-3 w-3" />
+            <div class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.wFit, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap1, chatUtilityStyles.rounded, chatUtilityStyles.border, chatUtilityStyles.borderAmber300, chatUtilityStyles.bgAmber50, chatUtilityStyles.px2, chatUtilityStyles.py1, chatUtilityStyles.text0625rem, chatUtilityStyles.fontMedium, chatUtilityStyles.textAmber800).class}>
+              <AlertTriangle class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />
               BranchFS large
             </div>
           </Show>
-          <div class="mt-3 flex items-center justify-between gap-3">
-            <div class="min-w-0 text-[0.575rem] uppercase tracking-[0.12em] text-(--muted)">
+          <div class={stylex.attrs(chatUtilityStyles.mt3, chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
+            <div class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.text0575rem, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textVariableMuted).class}>
               {formatShortTimestamp(message.createdAt)}
             </div>
-            <div class="flex flex-wrap justify-end gap-2">
+            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.justifyEnd, chatUtilityStyles.gap2).class}>
               <ActionButton
                 tooltip="Open full execution plan"
-                icon={<Clipboard class="h-3.5 w-3.5" />}
+                icon={<Clipboard class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                 size="sm"
                 variant="secondary"
                 onClick={() => {
@@ -1875,7 +1877,7 @@ export function ChatPanel() {
               </ActionButton>
               <ActionButton
                 tooltip="Promote this run into scheduled task"
-                icon={<CalendarClock class="h-3.5 w-3.5" />}
+                icon={<CalendarClock class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                 size="sm"
                 variant="secondary"
                 onClick={() => handlePromoteScheduledRun((message.metadata as { runId: string }).runId)}
@@ -1910,7 +1912,7 @@ export function ChatPanel() {
                   }
                   disabled={executionPaused()}
                   disabledReason={executionPauseReason()}
-                  icon={countdownPaused() ? <Play class="h-3.5 w-3.5" /> : <Pause class="h-3.5 w-3.5" />}
+                  icon={countdownPaused() ? <Play class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} /> : <Pause class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                   size="sm"
                   variant="secondary"
                   onClick={() => (countdownPaused() ? handleResumeAutoRun() : handlePauseAutoRun())}
@@ -2347,19 +2349,19 @@ export function ChatPanel() {
         : undefined;
 
     return (
-      <div class="flex flex-col gap-2">
-        <div class="flex flex-col gap-0.5">
-          <span class="px-1 text-[0.375rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">Effort</span>
+      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
+        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap05).class}>
+          <span class={stylex.attrs(chatUtilityStyles.px1, chatUtilityStyles.text0375rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Effort</span>
           <For each={COMPOSER_REASONING_STRENGTHS}>
             {(strength) => {
               const enabled = composerControlState().availableStrengths.includes(strength);
               const selected = selectedReasoningStrength() === strength;
               return (
-                <Tooltip content={getReasoningStrengthDescription(strength)} triggerClass="block" side="right">
+            <Tooltip content={getReasoningStrengthDescription(strength)} triggerClass={stylex.attrs(styles.tooltipBlock).class} side="right">
                   <button
                     type="button"
                     disabled={!enabled}
-                    class="flex w-full items-center justify-between rounded-lg px-1.5 py-1 text-left text-[0.525rem] text-(--foreground) transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
+                    class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.wFull, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.roundedLg, chatUtilityStyles.px15, chatUtilityStyles.py1, chatUtilityStyles.textLeft, chatUtilityStyles.text0525rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.transition, chatUtilityStyles.hoverBgBlack5, chatUtilityStyles.disabledCursorNotAllowed, chatUtilityStyles.disabledOpacity50).class}
                     onClick={() => {
                       if (!enabled) {
                         return;
@@ -2369,7 +2371,7 @@ export function ChatPanel() {
                   >
                     <span>{formatReasoningOptionLabel(strength)}</span>
                     <Show when={selected}>
-                      <Check class="h-3 w-3" />
+                      <Check class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />
                     </Show>
                   </button>
                 </Tooltip>
@@ -2377,19 +2379,19 @@ export function ChatPanel() {
             }}
           </For>
         </div>
-        <div class="h-px bg-black/10" />
-        <div class="flex flex-col gap-0.5">
-          <span class="px-1 text-[0.375rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">Fast mode</span>
+        <div class={stylex.attrs(chatUtilityStyles.hPx, chatUtilityStyles.bgBlack10).class} />
+        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap05).class}>
+          <span class={stylex.attrs(chatUtilityStyles.px1, chatUtilityStyles.text0375rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Fast mode</span>
           <For each={[false, true] as const}>
             {(enabled) => {
               const supported = !enabled || composerControlState().supportsFastMode;
               const selected = selectedFastMode() === enabled;
               return (
-                <Tooltip content={getFastModeDescription(enabled)} triggerClass="block" side="right">
+            <Tooltip content={getFastModeDescription(enabled)} triggerClass={stylex.attrs(styles.tooltipBlock).class} side="right">
                   <button
                     type="button"
                     disabled={!supported}
-                    class="flex w-full items-center justify-between rounded-lg px-1.5 py-1 text-left text-[0.525rem] text-(--foreground) transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50"
+                    class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.wFull, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.roundedLg, chatUtilityStyles.px15, chatUtilityStyles.py1, chatUtilityStyles.textLeft, chatUtilityStyles.text0525rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.transition, chatUtilityStyles.hoverBgBlack5, chatUtilityStyles.disabledCursorNotAllowed, chatUtilityStyles.disabledOpacity50).class}
                     onClick={() => {
                       if (!supported) {
                         return;
@@ -2399,7 +2401,7 @@ export function ChatPanel() {
                   >
                     <span>{enabled ? "On" : "Off"}</span>
                     <Show when={selected}>
-                      <Check class="h-3 w-3" />
+                      <Check class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />
                     </Show>
                   </button>
                 </Tooltip>
@@ -2408,7 +2410,7 @@ export function ChatPanel() {
           </For>
         </div>
         <Show when={disabledHint}>
-          <div class="px-1 text-[0.45rem] text-(--muted)">{disabledHint}</div>
+          <div class={stylex.attrs(chatUtilityStyles.px1, chatUtilityStyles.text045rem, chatUtilityStyles.textVariableMuted).class}>{disabledHint}</div>
         </Show>
       </div>
     );
@@ -2602,22 +2604,22 @@ export function ChatPanel() {
 
   function renderAssistantActionCard(metadata: AssistantActionMessageMetadata) {
     return (
-      <div data-test-assistant-action-card="" class="flex flex-col gap-3 rounded-2xl border border-teal-700/20 bg-white/75 p-3">
-        <div class="flex items-center gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--accent-strong)">
-          <Bot class="h-3.5 w-3.5" />
+      <div data-test-assistant-action-card="" class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderTeal70020, chatUtilityStyles.bgWhite75, chatUtilityStyles.p3).class}>
+        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking02em, chatUtilityStyles.textVariableAccentStrong).class}>
+          <Bot class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
           Assistant action
         </div>
-        <div class="grid gap-2 text-[0.675rem] text-(--muted) md:grid-cols-2">
+        <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted, chatUtilityStyles.mdGridCols2).class}>
           <For each={metadata.summaryRows}>
             {(row) => (
-              <div class="min-w-0">
-                <span class="font-semibold text-(--foreground)">{row.label}: </span>
-                <span class="wrap-break-words">{row.value}</span>
+              <div class={stylex.attrs(chatUtilityStyles.minW0).class}>
+                <span class={stylex.attrs(chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>{row.label}: </span>
+                <span class={stylex.attrs(chatUtilityStyles.wrapBreakWords).class}>{row.value}</span>
               </div>
             )}
           </For>
         </div>
-        <div class="flex flex-wrap gap-2">
+        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
           <For each={metadata.actions}>
             {(action) => (
               <ActionButton
@@ -2626,17 +2628,17 @@ export function ChatPanel() {
                 disabledReason={action.disabledReason}
                 icon={
                   action.kind === "open-jobs" || action.kind === "run-job" ? (
-                    <Briefcase class="h-3.5 w-3.5" />
+                    <Briefcase class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
                   ) : action.kind === "schedule-job" ? (
-                    <CalendarClock class="h-3.5 w-3.5" />
+                    <CalendarClock class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
                   ) : action.kind === "pause" ? (
-                    <Pause class="h-3.5 w-3.5" />
+                    <Pause class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
                   ) : action.kind === "resume" ? (
-                    <Play class="h-3.5 w-3.5" />
+                    <Play class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
                   ) : action.kind === "recover" || action.kind === "retry-bootstrap" ? (
-                    <RefreshCcw class="h-3.5 w-3.5" />
+                    <RefreshCcw class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
                   ) : (
-                    <Bot class="h-3.5 w-3.5" />
+                    <Bot class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
                   )
                 }
                 size="sm"
@@ -2654,7 +2656,7 @@ export function ChatPanel() {
 
   return (
     <>
-    <section data-test-chat-panel="" class="panel-shell flex h-full min-h-0 flex-col gap-3 rounded-2xl border-t-0 p-[0.8rem]">
+    <section data-test-chat-panel="" class={stylex.attrs(chatUtilityStyles.panelShell, chatUtilityStyles.flex, chatUtilityStyles.hFull, chatUtilityStyles.minH0, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded2xl, chatUtilityStyles.borderT0, chatUtilityStyles.p08rem).class}>
       <Dialog
         open={Boolean(state.blockingNonGitPreflight)}
         title="Git setup required"
@@ -2675,7 +2677,7 @@ export function ChatPanel() {
           </>
         }
       >
-        <div class="space-y-2 text-xs leading-6 text-(--muted)">
+        <div class={stylex.attrs(chatUtilityStyles.spaceY2, chatUtilityStyles.textXs, chatUtilityStyles.leading6, chatUtilityStyles.textVariableMuted).class}>
           <p>{state.blockingNonGitPreflight?.preflight.repairSummary}</p>
           <p>{state.blockingNonGitPreflight?.preflight.repairDetail}</p>
         </div>
@@ -2693,22 +2695,22 @@ export function ChatPanel() {
       <Show
         when={activeProject()}
         fallback={
-          <div class="flex flex-1 items-center justify-center">
-            <div class="flex w-full max-w-2xl flex-col gap-4 rounded-[1.75rem] border border-dashed border-(--border) bg-white/45 p-6 shadow-sm md:p-8">
-              <div class="inline-flex items-center gap-2 rounded-full bg-white/65 px-3 py-1 text-[0.585rem] font-semibold uppercase tracking-[0.2em] text-(--muted)">
+          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flex1, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter).class}>
+            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.wFull, chatUtilityStyles.maxW2xl, chatUtilityStyles.flexCol, chatUtilityStyles.gap4, chatUtilityStyles.rounded175rem, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite45, chatUtilityStyles.p6, chatUtilityStyles.shadowSm, chatUtilityStyles.mdP8).class}>
+              <div class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.roundedFull, chatUtilityStyles.bgWhite65, chatUtilityStyles.px3, chatUtilityStyles.py1, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking02em, chatUtilityStyles.textVariableMuted).class}>
                 First run
               </div>
-              <h1 class="font-display text-[1.75rem] tracking-[-0.06em] text-(--foreground) md:text-[2.1rem]">
+              <h1 class={stylex.attrs(chatUtilityStyles.fontDisplay, chatUtilityStyles.text175rem, chatUtilityStyles.tracking006em, chatUtilityStyles.textVariableForeground, chatUtilityStyles.mdText21rem).class}>
                 Start with repo, import, or pasted spec
               </h1>
-              <p class="max-w-2xl text-[0.75rem] leading-6 text-(--muted)">
+              <p class={stylex.attrs(chatUtilityStyles.maxW2xl, chatUtilityStyles.text075rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableMuted).class}>
                 Task-first flow: open codebase, optionally import local defaults, then ask for plan or implementation. No API-key wall.
               </p>
-              <div class="flex flex-col gap-3 rounded-[1.35rem] border border-(--border) bg-white/60 p-4">
-                <div class="flex flex-wrap gap-2">
+              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p4).class}>
+                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
                   <ActionButton
                     tooltip="Open project switcher"
-                    icon={<Folder class="h-4 w-4" />}
+                    icon={<Folder class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                     dataTourId="open-project"
                     onClick={() => harnessStore.openProjectSwitcher()}
                   >
@@ -2716,7 +2718,7 @@ export function ChatPanel() {
                   </ActionButton>
                   <ActionButton
                     tooltip="Browse for project folder"
-                    icon={<FolderOpen class="h-4 w-4" />}
+                    icon={<FolderOpen class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                     variant="secondary"
                     onClick={handleBrowseProject}
                   >
@@ -2724,7 +2726,7 @@ export function ChatPanel() {
                   </ActionButton>
                   <ActionButton
                     tooltip="Open import and workspace setup"
-                    icon={<Edit3 class="h-4 w-4" />}
+                    icon={<Edit3 class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                     variant="secondary"
                     dataTourId="help-preferences"
                     onClick={() => harnessStore.openPreferencesModal()}
@@ -2732,10 +2734,10 @@ export function ChatPanel() {
                     Import config
                   </ActionButton>
                 </div>
-                <div class="rounded-2xl border border-(--border) bg-white/70 p-3 text-[0.675rem] leading-6 text-(--muted)">
+                <div class={stylex.attrs(chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableMuted).class}>
                   Sample task: “Inspect recent auth changes, plan fix for flaky login, then implement with tests.”
                 </div>
-                <div class="rounded-2xl border border-(--border) bg-white/70 p-3 text-[0.675rem] leading-6 text-(--muted)">
+                <div class={stylex.attrs(chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableMuted).class}>
                   Open repo, attach screenshots, PDFs, or office docs, then ask for a plan. Images route to vision-capable models; text and document files get folded into prompt context.
                 </div>
               </div>
@@ -2744,28 +2746,28 @@ export function ChatPanel() {
         }
       >
           <>
-          <div class="flex min-w-0 flex-col gap-3 border-b border-(--border) pb-3 lg:flex-row lg:items-start lg:justify-between">
-              <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-                <div class="flex min-w-0 items-center gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">
-                  <Folder class="h-3.5 w-3.5 shrink-0 text-(--accent)" />
-                  <Tooltip content={project().rootPath} triggerClass="min-w-0">
-                    <span class="block min-w-0 truncate">{project().name}</span>
+          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.borderB, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.pb3, chatUtilityStyles.lgFlexRow, chatUtilityStyles.lgItemsStart, chatUtilityStyles.lgJustifyBetween).class}>
+              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flex1, chatUtilityStyles.flexCol, chatUtilityStyles.gap15).class}>
+                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>
+                  <Folder class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35, chatUtilityStyles.shrink0, chatUtilityStyles.textVariableAccent).class} />
+                <Tooltip content={project().rootPath} triggerClass={stylex.attrs(styles.tooltipMinWidth).class}>
+                    <span class={stylex.attrs(chatUtilityStyles.block, chatUtilityStyles.minW0, chatUtilityStyles.truncate).class}>{project().name}</span>
                   </Tooltip>
                 </div>
-                <div class="min-w-0">
-                  <div class="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                <div class={stylex.attrs(chatUtilityStyles.minW0).class}>
+                  <div class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.minW0, chatUtilityStyles.maxWFull, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap15).class}>
                     <Show
                       when={editingThreadTitle()}
                       fallback={
-                        <Tooltip content={activeThread()?.title ?? "Thread"} triggerClass="block min-w-0 max-w-full">
-                          <h3 class="max-w-full truncate font-display text-[1.35rem] text-(--foreground) md:text-[1.65rem]">
+                    <Tooltip content={activeThread()?.title ?? "Thread"} triggerClass={stylex.attrs(styles.tooltipThreadTitle).class}>
+                          <h3 class={stylex.attrs(chatUtilityStyles.maxWFull, chatUtilityStyles.truncate, chatUtilityStyles.fontDisplay, chatUtilityStyles.text135rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.mdText165rem).class}>
                             {activeThread()?.title ?? "Thread"}
                           </h3>
                         </Tooltip>
                       }
                     >
                       <Input
-                        class="max-w-2xl"
+                        class={stylex.attrs(chatUtilityStyles.maxW2xl).class}
                         value={threadTitleDraft()}
                         onInput={(event: InputEvent & { currentTarget: HTMLInputElement; target: Element }) =>
                           setThreadTitleDraft(event.currentTarget.value)
@@ -2784,18 +2786,18 @@ export function ChatPanel() {
                     </Show>
                     <ActionButton
                       tooltip="Rename this thread"
-                      icon={<Edit3 class="h-3.5 w-3.5" />}
+                      icon={<Edit3 class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                       size="icon"
                       variant="ghost"
                       ariaLabel="Rename this thread"
                       onClick={handleStartRenameThread}
                     />
                   </div>
-                  <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.625rem] text-(--muted)">
+                  <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.text0625rem, chatUtilityStyles.textVariableMuted).class}>
                     <span>{activeThread()?.messageCount ?? 0} msgs</span>
-                    <span class="h-1 w-1 rounded-full bg-(--border)" />
+                    <span class={stylex.attrs(chatUtilityStyles.h1, chatUtilityStyles.w1, chatUtilityStyles.roundedFull, chatUtilityStyles.bgVariableBorder).class} />
                     <span>thread</span>
-                    <span class="min-w-0 max-w-full break-all font-mono text-[0.6rem]">{activeThread()?.id}</span>
+                    <span class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.maxWFull, chatUtilityStyles.breakAll, chatUtilityStyles.fontMono, chatUtilityStyles.text06rem).class}>{activeThread()?.id}</span>
                     <CopyTextButton
                       value={activeThread()?.id ?? ""}
                       tooltip="Copy thread id"
@@ -2809,26 +2811,26 @@ export function ChatPanel() {
                 </div>
               </div>
 
-              <div class="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.shrink0, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2, chatUtilityStyles.lgJustifyEnd).class}>
                 <ActionButton
                   tooltip={tooltipWithPrimaryHotkey(
                     "Create a new thread in this project",
                     normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences).createProjectChat[0]
                   )}
-                  icon={<Plus class="h-4 w-4" />}
+                  icon={<Plus class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                   variant="secondary"
                   onClick={handleReset}
                 />
                 <ActionButton
                   tooltip="Fork current thread into a new thread"
-                  icon={<Split class="h-4 w-4" />}
+                  icon={<Split class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                   variant="secondary"
                   onClick={handleForkThread}
                 />
                 <ActionButton
                   tooltip="Open terminal history for this thread"
                   ariaLabel="Open thread terminal history"
-                  icon={<Terminal class="h-4 w-4" />}
+                  icon={<Terminal class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                   variant="secondary"
                   onClick={handleOpenThreadTerminalHistory}
                 />
@@ -2836,7 +2838,7 @@ export function ChatPanel() {
                   tooltip="Stop active run"
                   disabledReason="No running task"
                   disabled={!activeThreadIsStreaming()}
-                  icon={<Pause class="h-4 w-4" />}
+                  icon={<Pause class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                   variant="secondary"
                   onClick={handleStop}
                 >
@@ -2847,7 +2849,7 @@ export function ChatPanel() {
                         tooltip="Retry last run"
                         disabledReason="Project is streaming"
                         disabled={activeThreadIsStreaming()}
-                        icon={<RefreshCcw class="h-4 w-4" />}
+                        icon={<RefreshCcw class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                         variant="secondary"
                         onClick={handleRetry}
                   />
@@ -2855,32 +2857,32 @@ export function ChatPanel() {
               </div>
             </div>
 
-            <div class="min-h-0 flex-1 overflow-hidden">
+            <div {...stylex.attrs(styles.paneBody)}>
             <Show when={currentTab()} keyed>
               {(selectedTab) => (
-                <div class="flex h-full min-h-0 flex-col">
-                  <div data-test-chat-pane-nav="" role="tablist" aria-label="Project panes" class="surface-tab-strip px-0">
-                    <div class="flex flex-wrap items-center gap-1">
+                <div {...stylex.attrs(styles.paneColumn)}>
+                  <div data-test-chat-pane-nav="" role="tablist" aria-label="Project panes" {...stylex.attrs(styles.paneTabs)}>
+                    <div {...stylex.attrs(styles.paneTabList)}>
                       <For each={visibleTabs()}>
                         {(tab) => {
                           const pressed = selectedTab === tab.id;
 
                           return (
-                            <Tooltip content={tab.tooltip}>
-                              <button
-                                type="button"
-                                role="tab"
-                                class={cn(buttonVariants({ variant: "ghost" }), "surface-tab")}
-                                aria-label={tab.label}
-                                attr:aria-selected={pressed ? "true" : "false"}
-                                tabIndex={pressed ? 0 : -1}
-                                data-test-chat-pane-tab={tab.id}
-                                onClick={() => handleSelectPaneTab(tab.id)}
-                              >
-                                {tab.icon}
-                                <span>{tab.label}</span>
-                              </button>
-                            </Tooltip>
+                            <Button
+                              tooltip={tab.tooltip}
+                              type="button"
+                              role="tab"
+                              variant="ghost"
+                              class={stylex.attrs(styles.paneTab, pressed ? styles.paneTabSelected : styles.paneTabIdle).class}
+                              aria-label={tab.label}
+                              attr:aria-selected={pressed ? "true" : "false"}
+                              tabIndex={pressed ? 0 : -1}
+                              data-test-chat-pane-tab={tab.id}
+                              onClick={() => handleSelectPaneTab(tab.id)}
+                            >
+                              {tab.icon}
+                              <span>{tab.label}</span>
+                            </Button>
                           );
                         }}
                       </For>
@@ -2888,16 +2890,16 @@ export function ChatPanel() {
                   </div>
                   <Show when={resumableRun()}>
                     {(run) => (
-                      <div class="my-3 flex flex-col gap-3 rounded-lg border border-rose-300/70 bg-rose-50/80 p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-                        <div class="min-w-0">
-                          <div class="flex items-center gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-rose-800">
-                            <AlertTriangle class="h-3.5 w-3.5" />
+                      <div {...stylex.attrs(styles.resumableBanner)}>
+                        <div {...stylex.attrs(styles.minWidthZero)}>
+                          <div {...stylex.attrs(styles.resumableHeading)}>
+                            <AlertTriangle {...stylex.attrs(styles.iconSmall)} />
                             Resumable run
                           </div>
-                          <div class="mt-1 text-[0.75rem] leading-5 text-rose-950">
+                          <div {...stylex.attrs(styles.resumableStatus)}>
                             Status: {run().status}. Failed subtasks: {failedSubtaskCount()}.
                           </div>
-                          <div class="mt-1 text-[0.65rem] leading-5 text-rose-900/75">
+                          <div {...stylex.attrs(styles.resumableDetail)}>
                             Resume reruns failed or pending subtasks only. Composer text becomes extra guidance.
                           </div>
                         </div>
@@ -2911,7 +2913,7 @@ export function ChatPanel() {
                                 : "No resumable run"
                           }
                           disabled={executionPaused() || !resumableRun() || activeThreadIsStreaming()}
-                          icon={<RefreshCcw class="h-4 w-4" />}
+                          icon={<RefreshCcw class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                           type="button"
                           onClick={handleResume}
                         >
@@ -2923,14 +2925,14 @@ export function ChatPanel() {
 
                   <Switch>
                     <Match when={selectedTab === "chat"}>
-                      <div class="relative flex min-h-0 flex-1 flex-col">
+                      <div class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.flex, chatUtilityStyles.minH0, chatUtilityStyles.flex1, chatUtilityStyles.flexCol).class}>
                         <VirtualList
                           viewportRef={(element) => {
                             messageViewport = element;
                           }}
-                          class="flex-1 min-h-0 pr-2"
-                          contentClass="w-full"
-                          itemClass="pb-3"
+                          class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}
+                    contentClass={stylex.attrs(styles.virtualContent).class}
+                    itemClass={stylex.attrs(styles.virtualItem).class}
                           dataTest="project-chat-transcript"
                           items={transcriptRows()}
                           getKey={(row, index) => row.kind === "persisted" ? row.message.id : row.kind === "tool-block" ? row.block.id : `live-${row.message.id}-${index}`}
@@ -2940,7 +2942,7 @@ export function ChatPanel() {
                           stickToEnd
                           onScroll={updateScrollLock}
                           empty={
-                            <div class="flex min-h-44 items-center justify-center rounded-lg border border-dashed border-(--border) bg-white/38 p-6 text-center text-[0.675rem] text-(--muted)">
+                            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH44, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite38, chatUtilityStyles.p6, chatUtilityStyles.textCenter, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
                               No messages in this thread yet. Send a task from the composer.
                             </div>
                           }
@@ -2948,11 +2950,11 @@ export function ChatPanel() {
                           {(row, index) => renderTranscriptRow(row, index, project())}
                         </VirtualList>
                         <Show when={!stickToBottom()}>
-                          <div class="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-                            <div class="pointer-events-auto">
+                          <div class={stylex.attrs(chatUtilityStyles.pointerEventsNone, chatUtilityStyles.absolute, chatUtilityStyles.insetX0, chatUtilityStyles.bottom3, chatUtilityStyles.flex, chatUtilityStyles.justifyCenter).class}>
+                            <div class={stylex.attrs(chatUtilityStyles.pointerEventsAuto).class}>
                               <ActionButton
                                 tooltip="Scroll to latest message"
-                                icon={<ArrowDown class="h-4 w-4" />}
+                                icon={<ArrowDown class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                                 variant="secondary"
                                 onClick={() => scrollToBottom(true)}
                               >
@@ -2964,24 +2966,24 @@ export function ChatPanel() {
                       </div>
                     </Match>
                     <Match when={selectedTab === "plan"}>
-                <ScrollArea class="flex-1 min-h-0 pr-2">
-                  <div class="flex flex-col gap-4">
+                <ScrollArea class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}>
+                  <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap4).class}>
                     <Show
                       when={currentExecutionPlan()}
                       fallback={
-                        <div class="rounded-lg border border-dashed border-(--border) bg-white/45 p-5 text-[0.675rem] leading-5 text-(--muted)">
+                        <div class={stylex.attrs(chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite45, chatUtilityStyles.p5, chatUtilityStyles.text0675rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
                           No saved execution plan yet. Ask for a plan from Chat, then review it here before files change.
                         </div>
                       }
                     >
                       {(plan) => (
-                        <div class="flex flex-col gap-3 rounded-lg border border-(--accent)/35 bg-white/70 p-4 text-[0.675rem] leading-6 text-(--foreground)">
-                          <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderVariableAccent35, chatUtilityStyles.bgWhite70, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
+                          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
                             <div>
-                              <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--accent-strong)">Plan ready for review</div>
-                              <div class="mt-1 text-(--muted)">Confirm scope and verification before execution.</div>
+                              <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableAccentStrong).class}>Plan ready for review</div>
+                              <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.textVariableMuted).class}>Confirm scope and verification before execution.</div>
                             </div>
-                            <div class="flex flex-wrap gap-2">
+                            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
                               <ActionButton tooltip="Open full execution plan" size="sm" variant="secondary" onClick={() => harnessStore.openExecutionPlanDialog(plan())}>
                                 Review full plan
                               </ActionButton>
@@ -2993,22 +2995,22 @@ export function ChatPanel() {
                       )}
                     </Show>
 
-                    <div class="rounded-[1.35rem] border border-(--border) bg-white/55 p-4">
-                      <div class="grid gap-3 md:grid-cols-2">
-                        <label class="flex flex-col gap-2">
-                          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Active mode</span>
+                    <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
+                      <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap3, chatUtilityStyles.mdGridCols2).class}>
+                        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
+                          <span class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Active mode</span>
                           <DropdownControl
                             kind="select"
                             ariaLabel="Select active mode"
-                            icon={<Split class="h-3.5 w-3.5" />}
+                            icon={<Split class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                             size="md"
-                            class="w-full"
+                            class={stylex.attrs(chatUtilityStyles.wFull).class}
                             value={selectedModeValue()}
                             options={modeDropdownOptions()}
                             onChange={handleModeSelect}
                           />
                         </label>
-                        <div class="rounded-2xl border border-(--border) bg-white/70 p-3 text-[0.675rem] leading-5 text-(--muted)">
+                        <div class={stylex.attrs(chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
                           {isAutoModeSelected()
                             ? "Interpret each prompt and choose the best implementation mode."
                             : activeMode()?.description ?? "Default implementation mode."}
@@ -3016,11 +3018,11 @@ export function ChatPanel() {
                       </div>
                     </div>
 
-                    <div class="rounded-[1.35rem] border border-(--border) bg-white/55 p-4">
-                      <div class="flex items-center justify-between gap-3">
-                        <div class="flex flex-col gap-1">
-                          <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Project context</div>
-                          <div class="text-[0.675rem] leading-5 text-(--muted)">
+                    <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
+                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
+                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap1).class}>
+                          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Project context</div>
+                          <div class={stylex.attrs(chatUtilityStyles.text0675rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
                             Rules and working memory flow into planner and execution prompts.
                           </div>
                         </div>
@@ -3028,13 +3030,13 @@ export function ChatPanel() {
                           Save context
                         </ActionButton>
                       </div>
-                      <div class="grid gap-3 pt-4 md:grid-cols-2">
-                        <label class="flex flex-col gap-2">
-                          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Project rules</span>
+                      <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap3, chatUtilityStyles.pt4, chatUtilityStyles.mdGridCols2).class}>
+                        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
+                          <span class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Project rules</span>
                           <Textarea rows="8" value={projectRulesDraft()} onInput={(event) => setProjectRulesDraft(event.currentTarget.value)} />
                         </label>
-                        <label class="flex flex-col gap-2">
-                          <span class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Thread memory</span>
+                        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
+                          <span class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Thread memory</span>
                           <Textarea rows="8" value={threadMemoryDraft()} onInput={(event) => setThreadMemoryDraft(event.currentTarget.value)} />
                         </label>
                       </div>
@@ -3072,17 +3074,17 @@ export function ChatPanel() {
                 </ScrollArea>
                     </Match>
                     <Match when={selectedTab === "run"}>
-                <ScrollArea class="flex-1 min-h-0 pr-2">
-                  <div class="flex flex-col gap-4">
+                <ScrollArea class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}>
+                  <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap4).class}>
                     <CliSessionPanel />
-                    <div class="rounded-[1.35rem] border border-(--border) bg-white/55 p-4 text-[0.675rem] leading-6 text-(--foreground)">
-                      <div class="flex items-center justify-between gap-3">
-                        <div class="text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Run summary</div>
-                        <div class="flex flex-wrap items-center gap-2">
+                    <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
+                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
+                        <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Run summary</div>
+                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
                           <Show when={currentBackgroundRun()}>
                             <ActionButton
                               tooltip="Open background job for this run"
-                              icon={<Briefcase class="h-3.5 w-3.5" />}
+                              icon={<Briefcase class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                               size="sm"
                               variant="secondary"
                               onClick={handleOpenCurrentRunJob}
@@ -3092,7 +3094,7 @@ export function ChatPanel() {
                           </Show>
                           <ActionButton
                             tooltip="Promote latest run into scheduled task"
-                            icon={<CalendarClock class="h-3.5 w-3.5" />}
+                            icon={<CalendarClock class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                             size="sm"
                             variant="secondary"
                             onClick={() => handlePromoteScheduledRun()}
@@ -3115,20 +3117,20 @@ export function ChatPanel() {
                           </Show>
                         </div>
                       </div>
-                      <div class="flex min-w-0 flex-col gap-1 pt-2">
+                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, chatUtilityStyles.pt2).class}>
                         <div>Status: {currentRun()?.status ?? "idle"}</div>
                         <div>Retryable: {currentRun()?.retryable ? "yes" : "no"}</div>
                         <div>Resumable: {currentRun()?.resumable ? "yes" : "no"}</div>
                         <Show when={currentRun()?.failureMessage}>
-                          {(failure) => <div class="mt-2 rounded-lg border border-rose-300 bg-rose-50 p-3 font-medium text-rose-800">Failure: {failure()}</div>}
+                          {(failure) => <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderRose300, chatUtilityStyles.bgRose50, chatUtilityStyles.p3, chatUtilityStyles.fontMedium, chatUtilityStyles.textRose800).class}>Failure: {failure()}</div>}
                         </Show>
                         <Show when={currentRun()?.status === "completed" || currentRun()?.status === "failed"}>
-                          <div class="mt-2 rounded-lg border border-(--border) bg-white/65 p-3">
-                            <div class="font-semibold">Outcome</div>
+                          <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite65, chatUtilityStyles.p3).class}>
+                            <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>Outcome</div>
                             <Show when={currentRun()?.summary ?? currentRun()?.finalExecutionBrief}>
-                              {(summary) => <div class="text-(--muted)">{summary()}</div>}
+                              {(summary) => <div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>{summary()}</div>}
                             </Show>
-                            <div class="text-(--muted)">
+                            <div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>
                               Evidence: {currentRun()?.toolActivities?.filter((activity) => activity.status === "completed").length ?? 0} completed tool steps; {currentRun()?.subtasks.filter((task) => task.status === "completed").length ?? 0} completed subtasks.
                             </div>
                           </div>
@@ -3137,17 +3139,17 @@ export function ChatPanel() {
                         <RunProofBundleCompact run={currentRun()} />
                         <Tooltip
                           content={currentRun()?.latestUserPrompt}
-                          triggerClass="block min-w-0"
+                              triggerClass={stylex.attrs(styles.tooltipThreadTitle).class}
                         >
-                          <div class="truncate">
+                          <div class={stylex.attrs(chatUtilityStyles.truncate).class}>
                             Prompt: {currentRun()?.latestUserPrompt ?? "n/a"}
                           </div>
                         </Tooltip>
                       </div>
                       <Show when={experimentRun()}>
-                        <div class="flex min-w-0 flex-col gap-1 pt-2">
+                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, chatUtilityStyles.pt2).class}>
                           <div>Virtual branch: {experimentRun()!.virtualBranchName}</div>
-                          <div class="min-w-0 break-all">Mount: {experimentRun()!.projectMountPath}</div>
+                          <div class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.breakAll).class}>Mount: {experimentRun()!.projectMountPath}</div>
                           <div>
                             Diff: {experimentRun()!.filesChanged} files, +{experimentRun()!.insertions} / -{experimentRun()!.deletions}
                           </div>
@@ -3155,26 +3157,26 @@ export function ChatPanel() {
                       </Show>
                     </div>
                     <VirtualList
-                      class="min-h-80 pr-2"
-                      contentClass="w-full"
-                      itemClass="pb-3"
+                      class={stylex.attrs(chatUtilityStyles.minH80, chatUtilityStyles.pr2).class}
+                      contentClass={stylex.attrs(styles.virtualContent).class}
+                      itemClass={stylex.attrs(styles.virtualItem).class}
                       items={runSubtasks()}
                       getKey={(task, index) => `${task.id ?? task.title}-${index}`}
                       estimateSize={150}
                       pagination={{ kind: "reverse", initialCount: CHAT_RUN_SUBTASK_LIMIT, batchSize: CHAT_RUN_SUBTASK_LIMIT }}
-                      empty={<div class="rounded-[1.2rem] border border-dashed border-(--border) bg-white/55 p-4 text-[0.675rem] text-(--muted)">No subtasks yet.</div>}
+                      empty={<div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>No subtasks yet.</div>}
                     >
                       {(task) => (
-                        <div class="rounded-[1.2rem] border border-(--border) bg-white/60 p-4 text-[0.675rem] leading-6 text-(--foreground)">
-                          <div class="font-semibold">{task.title}</div>
-                          <div class="text-(--muted)">Status: {task.status} | Attempts: {task.attemptCount}</div>
+                        <div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
+                          <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>{task.title}</div>
+                          <div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>Status: {task.status} | Attempts: {task.attemptCount}</div>
                           <Show when={task.output}>
-                            <div class="pt-2">
+                            <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
                               <MarkdownContent content={() => task.output ?? ""} size="compact" fileLinks={chatFileLinks()} />
                             </div>
                           </Show>
                           <Show when={task.errorMessage}>
-                            <div class="pt-2">
+                            <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
                               <MarkdownContent content={() => task.errorMessage ?? ""} size="compact" tone="danger" fileLinks={chatFileLinks()} />
                             </div>
                           </Show>
@@ -3186,28 +3188,28 @@ export function ChatPanel() {
                     </Match>
                     <Match when={selectedTab === "events"}>
                 <VirtualList
-                  class="flex-1 min-h-0 pr-2"
-                  contentClass="w-full"
-                  itemClass="pb-3"
+                  class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}
+                  contentClass={stylex.attrs(styles.virtualContent).class}
+                  itemClass={stylex.attrs(styles.virtualItem).class}
                   items={projectTraces()}
                   getKey={(trace, index) => `${trace.stage}-${index}`}
                   estimateSize={145}
                   pagination={{ kind: "reverse", initialCount: CHAT_EVENT_LIMIT, batchSize: CHAT_EVENT_LIMIT }}
                   empty={
-                    <div class="flex min-h-56 items-center justify-center rounded-3xl border border-dashed border-(--border) bg-white/40 p-8 text-center text-[0.675rem] text-(--muted)">
+                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH56, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.rounded3xl, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite40, chatUtilityStyles.p8, chatUtilityStyles.textCenter, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
                       No model trace events yet. Tool commands and subtask activity appear in Run and Developer trace.
                     </div>
                   }
                 >
                   {(trace) => (
-                    <article class="rounded-[1.35rem] border border-(--border) bg-white/55 p-4">
-                      <div class="flex items-center justify-between gap-3 text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--accent-strong)">
+                    <article class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
+                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>
                         <span>{trace.stage}</span>
                         <span>{trace.modelId ?? "n/a"}</span>
                       </div>
                       <MarkdownContent content={() => trace.message} size="compact" fileLinks={chatFileLinks()} />
                       <Show when={trace.detail}>
-                        <div class="pt-2">
+                        <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
                           <MarkdownContent content={() => trace.detail ?? ""} size="compact" tone="muted" fileLinks={chatFileLinks()} />
                         </div>
                       </Show>
@@ -3219,33 +3221,33 @@ export function ChatPanel() {
                 <Show
                   when={projectMemoryEntries().length > 0}
                   fallback={
-                    <div class="flex min-h-56 flex-1 items-center justify-center rounded-lg border border-dashed border-(--border) bg-white/40 p-8 text-center text-[0.675rem] text-(--muted)">
+                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH56, chatUtilityStyles.flex1, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite40, chatUtilityStyles.p8, chatUtilityStyles.textCenter, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
                       No shared memory yet. Memories appear here after they are recorded for this project.
                     </div>
                   }
                 >
                 <VirtualList
-                  class="flex-1 min-h-0 pr-2"
-                  contentClass="w-full"
-                  itemClass="pb-3"
+                  class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}
+                  contentClass={stylex.attrs(styles.virtualContent).class}
+                  itemClass={stylex.attrs(styles.virtualItem).class}
                   items={projectMemoryEntries()}
                   getKey={(entry) => entry.id}
                   estimateSize={190}
                   pagination={{ kind: "reverse", initialCount: CHAT_MEMORY_LIMIT, batchSize: CHAT_MEMORY_LIMIT }}
                 >
                   {(entry, index) => (
-                    <article class="rounded-[1.35rem] border border-(--border) bg-white/55 p-4">
-                      <div class="flex items-center justify-between gap-3">
+                    <article class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
+                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
                         <div>
-                          <div class="text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--accent-strong)">{entry.kind}</div>
-                          <div class="font-semibold">{entry.title}</div>
+                          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>{entry.kind}</div>
+                          <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>{entry.title}</div>
                         </div>
-                        <div class="flex flex-wrap items-center gap-2">
+                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
                           <ActionButton
                             tooltip="Move memory earlier in retrieval priority"
                             disabled={index === 0}
                             disabledReason="Already highest priority memory"
-                            icon={<ArrowUp class="h-3.5 w-3.5" />}
+                            icon={<ArrowUp class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                             size="icon"
                             variant="secondary"
                             ariaLabel="Move memory up"
@@ -3255,7 +3257,7 @@ export function ChatPanel() {
                             tooltip="Move memory later in retrieval priority"
                             disabled={index === projectMemoryEntries().length - 1}
                             disabledReason="Already lowest priority memory"
-                            icon={<ArrowDown class="h-3.5 w-3.5" />}
+                            icon={<ArrowDown class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                             size="icon"
                             variant="secondary"
                             ariaLabel="Move memory down"
@@ -3277,12 +3279,12 @@ export function ChatPanel() {
                           </ActionButton>
                         </div>
                       </div>
-                      <div class="pt-2 text-(--muted)">priority {entry.priority} | {entry.confidence} | {entry.freshness} | hits {entry.hitCount}</div>
-                      <div class="pt-2">
+                      <div class={stylex.attrs(chatUtilityStyles.pt2, chatUtilityStyles.textVariableMuted).class}>priority {entry.priority} | {entry.confidence} | {entry.freshness} | hits {entry.hitCount}</div>
+                      <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
                         <MarkdownContent content={() => entry.summary} size="compact" fileLinks={chatFileLinks()} />
                       </div>
                       <Show when={entry.evidence}>
-                        <div class="pt-2">
+                        <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
                           <MarkdownContent content={() => entry.evidence ?? ""} size="compact" tone="muted" fileLinks={chatFileLinks()} />
                         </div>
                       </Show>
@@ -3298,8 +3300,8 @@ export function ChatPanel() {
             </div>
 
             <Show when={readyRun() && currentExecutionPlan()?.gating.mode === "countdown" && countdownRunId() === readyRun()!.id}>
-              <div class="flex flex-col gap-3 rounded-[1.25rem] border border-(--border) bg-white/65 p-3">
-                <div class="flex flex-wrap items-center justify-between gap-3 text-[0.675rem] text-(--muted)">
+              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded125rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite65, chatUtilityStyles.p3).class}>
+                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
                   <span>
                     Auto-run {countdownPaused() ? "paused" : "in progress"} for {currentExecutionPlan()?.gating.delaySeconds}s gate.
                   </span>
@@ -3313,7 +3315,7 @@ export function ChatPanel() {
                     }
                     disabled={executionPaused()}
                     disabledReason={executionPauseReason()}
-                    icon={countdownPaused() ? <Play class="h-3.5 w-3.5" /> : <Pause class="h-3.5 w-3.5" />}
+                    icon={countdownPaused() ? <Play class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} /> : <Pause class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                     size="sm"
                     variant="secondary"
                     onClick={() => (countdownPaused() ? handleResumeAutoRun() : handlePauseAutoRun())}
@@ -3321,9 +3323,9 @@ export function ChatPanel() {
                     {countdownPaused() ? "Resume auto-run" : "Pause auto-run"}
                   </ActionButton>
                 </div>
-                <div class="h-2 overflow-hidden rounded-full bg-(--border)">
+                <div class={stylex.attrs(chatUtilityStyles.h2, chatUtilityStyles.overflowHidden, chatUtilityStyles.roundedFull, chatUtilityStyles.bgVariableBorder).class}>
                   <div
-                    class="h-full rounded-full bg-(--accent) transition-[width]"
+                    class={stylex.attrs(chatUtilityStyles.hFull, chatUtilityStyles.roundedFull, chatUtilityStyles.bgVariableAccent, chatUtilityStyles.transitionWidth).class}
                     style={{
                       width: `${Math.max(
                         0,
@@ -3343,36 +3345,36 @@ export function ChatPanel() {
 
             <form
               data-test-chat-composer=""
-              class="relative shrink-0 space-y-3"
+              class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.shrink0, chatUtilityStyles.spaceY3).class}
               onSubmit={handleSubmit}
               onDragOver={handleAttachmentDragOver}
               onDragLeave={handleAttachmentDragLeave}
               onDrop={handleAttachmentDrop}
             >
               <Show when={draggingAttachments()}>
-                <div class="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-2xl border border-dashed border-(--accent) bg-white/85 p-4 text-center shadow-lg">
+                <div class={stylex.attrs(chatUtilityStyles.pointerEventsNone, chatUtilityStyles.absolute, chatUtilityStyles.inset0, chatUtilityStyles.z10, chatUtilityStyles.grid, chatUtilityStyles.placeItemsCenter, chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableAccent, chatUtilityStyles.bgWhite85, chatUtilityStyles.p4, chatUtilityStyles.textCenter, chatUtilityStyles.shadowLg).class}>
                   <div>
-                    <div class="text-[0.75rem] font-semibold text-(--foreground)">{dropState().label}</div>
-                    <div class="mt-1 text-[0.675rem] text-(--muted)">{dropState().detail}</div>
+                    <div class={stylex.attrs(chatUtilityStyles.text075rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>{dropState().label}</div>
+                    <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>{dropState().detail}</div>
                   </div>
                 </div>
               </Show>
               <Show when={pendingQuestion()}>
                 {(question) => (
-                  <div class="relative flex flex-col gap-3 overflow-hidden rounded-xl border border-(--border) bg-(--panel-strong) p-3 shadow-sm">
-                    <div class="absolute inset-y-0 left-0 w-1 bg-(--warning)" />
-                    <div class="flex min-w-0 items-center gap-2 pl-2 text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-(--warning-strong)">
-                      <MessageSquareMore class="h-3.5 w-3.5 shrink-0" />
-                      <span class="truncate">
+                  <div class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.overflowHidden, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgVariablePanelStrong, chatUtilityStyles.p3, chatUtilityStyles.shadowSm).class}>
+                    <div class={stylex.attrs(chatUtilityStyles.absolute, chatUtilityStyles.insetY0, chatUtilityStyles.left0, chatUtilityStyles.w1, chatUtilityStyles.bgVariableWarning).class} />
+                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.pl2, chatUtilityStyles.text0625rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking014em, chatUtilityStyles.textVariableWarningStrong).class}>
+                      <MessageSquareMore class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35, chatUtilityStyles.shrink0).class} />
+                      <span class={stylex.attrs(chatUtilityStyles.truncate).class}>
                         {question().intent?.type === "assistant-create-intent" && question().responseKind === "freeform" ? "Assistant setup" : "Planner question"}
                       </span>
                     </div>
-                    <div class="pl-2 text-sm font-medium leading-6 text-(--foreground)">{question().prompt}</div>
+                    <div class={stylex.attrs(chatUtilityStyles.pl2, chatUtilityStyles.textSm, chatUtilityStyles.fontMedium, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>{question().prompt}</div>
                     <Show when={question().placeholder}>
-                      <div class="pl-2 text-[0.7rem] leading-5 text-(--muted)">Example: {question().placeholder}</div>
+                      <div class={stylex.attrs(chatUtilityStyles.pl2, chatUtilityStyles.text07rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>Example: {question().placeholder}</div>
                     </Show>
                     <Show when={question().responseKind !== "freeform"}>
-                      <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap2, chatUtilityStyles.smGridCols2, chatUtilityStyles.lgGridCols3).class}>
                         <For each={question().choices ?? []}>
                           {(choice) => (
                             <Button
@@ -3380,37 +3382,53 @@ export function ChatPanel() {
                               type="button"
                               variant="secondary"
                               disabled={executionPaused()}
-                              tooltipTriggerClass="flex min-w-0"
-                              class="h-auto min-h-18 w-full items-start justify-start whitespace-normal rounded-lg px-3 py-2 text-left transition hover:border-(--accent)"
-                              classList={{
-                                "border-(--warning) bg-[color-mix(in_srgb,var(--warning)_10%,var(--panel-strong)_90%)] text-(--foreground)":
-                                  choice.recommended,
-                                "border-(--border) bg-(--panel) text-(--foreground)": !choice.recommended
-                              }}
+                              tooltipTriggerClass={stylex.attrs(styles.plannerChoiceTooltip).class}
+                              class={stylex.attrs(
+                                chatUtilityStyles.hAuto,
+                                chatUtilityStyles.minH18,
+                                chatUtilityStyles.wFull,
+                                chatUtilityStyles.itemsStart,
+                                chatUtilityStyles.justifyStart,
+                                chatUtilityStyles.whitespaceNormal,
+                                chatUtilityStyles.roundedLg,
+                                chatUtilityStyles.px3,
+                                chatUtilityStyles.py2,
+                                chatUtilityStyles.textLeft,
+                                chatUtilityStyles.transition,
+                                chatUtilityStyles.hoverBorderVariableAccent,
+                                choice.recommended ? styles.plannerChoiceRecommended : styles.plannerChoiceDefault
+                              ).class}
                               aria-label={`Choose planner answer: ${choice.label}`}
                               onClick={() => handleQuestionChoice(choice.answerText)}
                             >
                               <span
-                                class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[0.6rem]"
-                                classList={{
-                                  "border-(--warning) bg-(--warning) text-(--accent-foreground)": choice.recommended,
-                                  "border-(--border) text-(--muted)": !choice.recommended
-                                }}
+                                class={stylex.attrs(
+                                  chatUtilityStyles.flex,
+                                  chatUtilityStyles.h5,
+                                  chatUtilityStyles.w5,
+                                  chatUtilityStyles.shrink0,
+                                  chatUtilityStyles.itemsCenter,
+                                  chatUtilityStyles.justifyCenter,
+                                  chatUtilityStyles.roundedMd,
+                                  chatUtilityStyles.border,
+                                  chatUtilityStyles.text06rem,
+                                  choice.recommended ? styles.plannerChoiceMarkerRecommended : styles.plannerChoiceMarkerDefault
+                                ).class}
                               >
                                 <Show when={choice.recommended} fallback={String((question().choices ?? []).findIndex((entry) => entry.id === choice.id) + 1)}>
-                                  <Check class="h-3.5 w-3.5" />
+                                  <Check class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
                                 </Show>
                               </span>
-                              <span class="flex min-w-0 flex-1 flex-col gap-1">
-                                <span class="flex min-w-0 items-center gap-2">
-                                  <span class="truncate text-xs font-semibold">{choice.label}</span>
+                              <span class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flex1, chatUtilityStyles.flexCol, chatUtilityStyles.gap1).class}>
+                                <span class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
+                                  <span class={stylex.attrs(chatUtilityStyles.truncate, chatUtilityStyles.textXs, chatUtilityStyles.fontSemibold).class}>{choice.label}</span>
                                   <Show when={choice.recommended}>
-                                    <span class="rounded border border-(--warning) px-1.5 py-0.5 text-[0.52rem] font-semibold uppercase tracking-[0.1em] text-(--warning-strong)">
+                                    <span class={stylex.attrs(chatUtilityStyles.rounded, chatUtilityStyles.border, chatUtilityStyles.borderVariableWarning, chatUtilityStyles.px15, chatUtilityStyles.py05, chatUtilityStyles.text052rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking01em, chatUtilityStyles.textVariableWarningStrong).class}>
                                       Rec
                                     </span>
                                   </Show>
                                 </span>
-                                <span class="line-clamp-3 text-[0.675rem] font-normal leading-5 text-(--muted)">{choice.description}</span>
+                                <span class={stylex.attrs(chatUtilityStyles.lineClamp3, chatUtilityStyles.text0675rem, chatUtilityStyles.fontNormal, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>{choice.description}</span>
                               </span>
                             </Button>
                           )}
@@ -3418,7 +3436,7 @@ export function ChatPanel() {
                       </div>
                     </Show>
                     <Show when={executionPaused()}>
-                      <div class="pl-2 text-[0.675rem] text-(--warning-strong)">
+                      <div class={stylex.attrs(chatUtilityStyles.pl2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableWarningStrong).class}>
                         Global pause active. Send answer after resume.
                       </div>
                     </Show>
@@ -3428,7 +3446,7 @@ export function ChatPanel() {
 
               <Show when={selectedAgentHealthMessage()}>
                 {(message) => (
-                  <div class="rounded-[1.2rem] border border-sky-200 bg-sky-50/80 p-3 text-[0.675rem] leading-6 text-sky-950">
+                  <div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderSky200, chatUtilityStyles.bgSky5080, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textSky950).class}>
                     {message()}
                   </div>
                 )}
@@ -3440,13 +3458,13 @@ export function ChatPanel() {
                     aria-live="polite"
                     data-test-waiting-timer=""
                     role="status"
-                    class="flex items-center gap-2 px-1 text-[0.675rem] font-medium text-(--muted)"
+                    class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.px1, chatUtilityStyles.text0675rem, chatUtilityStyles.fontMedium, chatUtilityStyles.textVariableMuted).class}
                   >
                     <Show when={timer().kind === "working"}>
-                      <span aria-hidden="true" class="agent-waiting-dots">
-                        <span class="agent-waiting-dot" />
-                        <span class="agent-waiting-dot agent-waiting-dot-2" />
-                        <span class="agent-waiting-dot agent-waiting-dot-3" />
+                      <span aria-hidden="true" class={stylex.attrs(chatUtilityStyles.agentWaitingDots).class}>
+                        <span data-test-agent-waiting-dot="" data-delay-index="0" class={stylex.attrs(chatUtilityStyles.agentWaitingDot).class} />
+                        <span data-test-agent-waiting-dot="" data-delay-index="1" class={stylex.attrs(chatUtilityStyles.agentWaitingDot, chatUtilityStyles.agentWaitingDot2).class} />
+                        <span data-test-agent-waiting-dot="" data-delay-index="2" class={stylex.attrs(chatUtilityStyles.agentWaitingDot, chatUtilityStyles.agentWaitingDot3).class} />
                       </span>
                     </Show>
                     <span>{timer().label}</span>
@@ -3488,29 +3506,29 @@ export function ChatPanel() {
                       tooltip="Attach screenshots, PDFs, or office docs"
                       disabledReason={executionPaused() ? executionPauseReason() : attachmentButtonReason()}
                       disabled={executionPaused() || attachmentButtonDisabled()}
-                      icon={<Paperclip class="h-4 w-4" />}
+                      icon={<Paperclip class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                       type="button"
                       variant="ghost"
                       size="icon"
-                      class="pointer-events-auto h-8 w-8 rounded-lg"
+                      class={stylex.attrs(chatUtilityStyles.pointerEventsAuto, chatUtilityStyles.h8, chatUtilityStyles.w8, chatUtilityStyles.roundedLg).class}
                       onClick={() => attachmentInput?.click()}
                     />
                     <ActionButton
                       tooltip={composerSubmitState().tooltip}
                       disabledReason={composerSubmitState().disabledReason}
                       disabled={composerSubmitState().disabled}
-                      icon={<SendHorizontal class="h-4 w-4" />}
+                      icon={<SendHorizontal class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                       type="submit"
                       variant="ghost"
                       size="icon"
-                      class="pointer-events-auto h-8 w-8 rounded-lg"
+                      class={stylex.attrs(chatUtilityStyles.pointerEventsAuto, chatUtilityStyles.h8, chatUtilityStyles.w8, chatUtilityStyles.roundedLg).class}
                       dataTourId="chat-send"
                     />
                   </>
                 }
                 leftControls={
                   <>
-                    <div data-test-composer-control-row="" class="hidden flex-wrap items-center gap-1 lg:flex">
+                    <div data-test-composer-control-row="" class={stylex.attrs(chatUtilityStyles.hidden, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap1, chatUtilityStyles.lgFlex).class}>
                       {renderModeControl()}
                       {renderAgentControl()}
                       {renderProviderControl()}
@@ -3520,32 +3538,32 @@ export function ChatPanel() {
                         onClose={() => setDesktopReasoningMenuOpen(false)}
                         align="start"
                         side="top"
-                        contentClass="p-1.5"
+                            contentClass={stylex.attrs(styles.compactPopover).class}
                         content={renderComposerControlMenu()}
                       >
                         {renderEffortControl(() => setDesktopReasoningMenuOpen((current) => !current))}
                       </Popover>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
                       <Popover
                         open={mobileReasoningMenuOpen()}
                         onClose={() => setMobileReasoningMenuOpen(false)}
                         align="start"
                         side="top"
-                        contentClass="p-1.5"
+                            contentClass={stylex.attrs(styles.compactPopover).class}
                         content={renderComposerControlMenu()}
                       >
                         {renderEffortControl(() => setMobileReasoningMenuOpen((current) => !current), "lg:hidden")}
                       </Popover>
-                      <div class="lg:hidden">
+                      <div class={stylex.attrs(chatUtilityStyles.lgHidden).class}>
                         <Popover
                           open={composerSettingsOpen()}
                           onClose={() => setComposerSettingsOpen(false)}
                           align="start"
                           side="top"
-                          contentClass="w-[min(18rem,calc(100vw-1.5rem))] p-2"
+                            contentClass={stylex.attrs(styles.mobileSettingsPopover).class}
                           content={
-                            <div class="flex flex-col gap-2">
+                            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
                               {renderModeControl("md", "w-full")}
                               {renderAgentControl("md", "w-full")}
                               {renderProviderControl("md", "w-full")}
@@ -3555,11 +3573,11 @@ export function ChatPanel() {
                         >
                           <ActionButton
                             tooltip="Open composer settings"
-                            icon={<Settings class="h-4 w-4" />}
+                            icon={<Settings class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                             type="button"
                             variant="ghost"
                             size="icon"
-                            class="h-7 w-7 rounded-lg"
+                            class={stylex.attrs(chatUtilityStyles.h7, chatUtilityStyles.w7, chatUtilityStyles.roundedLg).class}
                             onClick={() => setComposerSettingsOpen((current) => !current)}
                           />
                         </Popover>
@@ -3586,7 +3604,7 @@ export function ChatPanel() {
                 aria-label={composerLookupOpen() ? "Composer lookup" : undefined}
                 aria-hidden={composerLookupOpen() ? "false" : "true"}
                 tabIndex={-1}
-                class="absolute bottom-[7.75rem] left-8 right-8 z-20 max-h-64 overflow-auto rounded-xl border border-(--border) bg-(--panel) p-1 shadow-xl"
+                class={stylex.attrs(chatUtilityStyles.absolute, chatUtilityStyles.bottom775rem, chatUtilityStyles.left8, chatUtilityStyles.right8, chatUtilityStyles.z20, chatUtilityStyles.maxH64, chatUtilityStyles.overflowAuto, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgVariablePanel, chatUtilityStyles.p1, chatUtilityStyles.shadowXl).class}
                 onKeyDown={(event) => runWithChatPanelOwner(() => handleComposerLookupKeyDown(event))}
               >
                 <For each={composerLookupRenderedOptions()}>
@@ -3598,10 +3616,7 @@ export function ChatPanel() {
                       type="button"
                       role={composerLookupOpen() ? "option" : undefined}
                       aria-selected={option.selected}
-                      class={cn(
-                        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.65625rem]",
-                        option.selected ? "bg-white/70 ring-1 ring-(--ring)" : ""
-                      )}
+                      class={stylex.attrs(styles.composerLookupOption, option.selected && styles.composerLookupOptionSelected).class}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => {
                         setComposerLookupActiveIndex(option.index);
@@ -3611,12 +3626,12 @@ export function ChatPanel() {
                         setComposerLookupActiveIndex(option.index);
                       }}
                     >
-                      <Show when={composerLookup()?.kind === "skill"} fallback={getFileTypeIcon(option.insertText.slice(1).trim(), "h-3.5 w-3.5")}>
-                        <WandSparkles class="h-3.5 w-3.5 text-(--muted)" />
+                      <Show when={composerLookup()?.kind === "skill"} fallback={getFileTypeIcon(option.insertText.slice(1).trim(), "sm")}>
+                        <WandSparkles class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35, chatUtilityStyles.textVariableMuted).class} />
                       </Show>
-                      <span class="min-w-0 flex-1">
-                        <span class="block truncate font-semibold text-(--foreground)">{option.label}</span>
-                        <span class="block truncate text-[0.5625rem] text-(--muted)">{option.detail}</span>
+                      <span class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.flex1).class}>
+                        <span class={stylex.attrs(chatUtilityStyles.block, chatUtilityStyles.truncate, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>{option.label}</span>
+                        <span class={stylex.attrs(chatUtilityStyles.block, chatUtilityStyles.truncate, chatUtilityStyles.text05625rem, chatUtilityStyles.textVariableMuted).class}>{option.detail}</span>
                       </span>
                     </button>
                   )}
@@ -3624,7 +3639,7 @@ export function ChatPanel() {
               </div>
               <input
                 ref={attachmentInput}
-                class="hidden"
+                class={stylex.attrs(chatUtilityStyles.hidden).class}
                 type="file"
                 multiple
                 accept="image/*,.pdf,.docx,.xlsx,.pptx,.odt,.txt,.md,.markdown,.json,.yml,.yaml,.xml,.html,.css,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.rb,.go,.rs,.java,.kt,.swift,.sql,.sh,.bash,.zsh,.ini,.toml,.env,.csv,.log"
@@ -3632,15 +3647,15 @@ export function ChatPanel() {
               />
 
               <Show when={draftAttachments().length > 0 || uploadingAttachments()}>
-                <div class="flex flex-wrap gap-2">
+                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
                   <For each={draftAttachments()}>
                     {(attachment) => (
-                      <span class="inline-flex items-center gap-2 rounded-full border border-(--border) bg-white/75 px-3 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-(--muted)">
+                      <span class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite75, chatUtilityStyles.px3, chatUtilityStyles.py1, chatUtilityStyles.text06rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textVariableMuted).class}>
                         <span>{attachment.kind}</span>
-                        <span class="max-w-56 truncate normal-case tracking-normal">{attachment.name}</span>
+                        <span class={stylex.attrs(chatUtilityStyles.maxW56, chatUtilityStyles.truncate, chatUtilityStyles.normalCase, chatUtilityStyles.trackingNormal).class}>{attachment.name}</span>
                         <ActionButton
                           tooltip="Remove attachment"
-                          icon={<X class="h-3 w-3" />}
+                          icon={<X class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />}
                           size="icon"
                           variant="ghost"
                           ariaLabel={`Remove ${attachment.name}`}
@@ -3650,15 +3665,15 @@ export function ChatPanel() {
                     )}
                   </For>
                   <Show when={uploadingAttachments()}>
-                    <span class="inline-flex items-center gap-2 rounded-full border border-(--border) bg-white/75 px-3 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-(--muted)">
-                      <LoaderCircle class="h-3 w-3 animate-spin" />
+                    <span class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite75, chatUtilityStyles.px3, chatUtilityStyles.py1, chatUtilityStyles.text06rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textVariableMuted).class}>
+                      <LoaderCircle class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3, chatUtilityStyles.animateSpin).class} />
                       Uploading attachments
                     </span>
                   </Show>
                 </div>
               </Show>
               <Show when={composerReferenceBadges().length > 0}>
-                <div class="flex flex-wrap gap-2">
+                <div {...stylex.attrs(styles.attachmentList)}>
                   <For each={composerReferenceBadges()}>
                     {(badge) => (
                       <Button
@@ -3667,25 +3682,25 @@ export function ChatPanel() {
                         aria-label={`Open ${badge.label} in IDE`}
                         variant="secondary"
                         size="sm"
-                        class="h-7 max-w-full rounded-full px-2.5 py-1 text-[0.5625rem] font-semibold"
+                        class={stylex.attrs(chatUtilityStyles.h7, chatUtilityStyles.maxWFull, chatUtilityStyles.roundedFull, chatUtilityStyles.px25, chatUtilityStyles.py1, chatUtilityStyles.text05625rem, chatUtilityStyles.fontSemibold).class}
                         onClick={(event) => handleComposerBadgeClick(event, badge)}
                       >
-                        <Show when={badge.kind === "skill"} fallback={getFileTypeIcon(badge.target.path, "h-3 w-3")}>
-                          <WandSparkles class="h-3 w-3 text-(--muted)" />
+                        <Show when={badge.kind === "skill"} fallback={getFileTypeIcon(badge.target.path, "xs")}>
+                          <WandSparkles class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3, chatUtilityStyles.textVariableMuted).class} />
                         </Show>
-                        <span class="min-w-0 truncate">{badge.label}</span>
+                        <span class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.truncate).class}>{badge.label}</span>
                       </Button>
                     )}
                   </For>
                 </div>
               </Show>
 
-              <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div class="flex flex-col gap-2 text-[0.675rem] text-(--muted)">
-                  <div class="flex flex-wrap gap-2">
+              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.lgFlexRow, chatUtilityStyles.lgItemsCenter, chatUtilityStyles.lgJustifyBetween).class}>
+                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
+                  <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
                     <For each={capabilityTags()}>
                       {(tag) => (
-                        <span class="rounded-full border border-(--border) bg-white/70 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.12em] text-(--muted)">
+                        <span class={stylex.attrs(chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.px2, chatUtilityStyles.py05, chatUtilityStyles.text055rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textVariableMuted).class}>
                           {tag}
                         </span>
                       )}
@@ -3694,9 +3709,9 @@ export function ChatPanel() {
                   <Show when={contextUsage()}>
                     {(usage) => (
                       <Tooltip content={getContextUsageTooltip()}>
-                        <span class="inline-flex items-center gap-3 rounded-full border border-(--border) bg-white/75 px-2.5 py-1.5 text-[0.675rem] text-(--foreground)">
+                        <span class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap3, chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite75, chatUtilityStyles.px25, chatUtilityStyles.py15, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableForeground).class}>
                           <span
-                            class="relative flex h-9 w-9 items-center justify-center rounded-full"
+                            class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.flex, chatUtilityStyles.h9, chatUtilityStyles.w9, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedFull).class}
                             style={{
                               background: `conic-gradient(var(--accent) ${Math.max(
                                 0,
@@ -3704,7 +3719,7 @@ export function ChatPanel() {
                               )}%, rgba(38, 22, 15, 0.12) 0%)`
                             }}
                           >
-                            <span class="flex h-7 w-7 items-center justify-center rounded-full bg-(--panel) text-[0.5rem] font-semibold text-(--foreground)">
+                            <span class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.h7, chatUtilityStyles.w7, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedFull, chatUtilityStyles.bgVariablePanel, chatUtilityStyles.text05rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>
                               {Math.round(usage().usagePercent ?? 0)}%
                             </span>
                           </span>
@@ -3713,7 +3728,7 @@ export function ChatPanel() {
                           )} context used`}</span>
                           <Show when={getCacheHitPercent(usage())}>
                             {(cacheHitPercent) => (
-                              <span class="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-50 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                              <span class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderEmerald50030, chatUtilityStyles.bgEmerald50, chatUtilityStyles.px2, chatUtilityStyles.py05, chatUtilityStyles.text055rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textEmerald700).class}>
                                 ⚡ Cache Hit {cacheHitPercent()}%
                               </span>
                             )}
@@ -3723,7 +3738,7 @@ export function ChatPanel() {
                     )}
                   </Show>
                 </div>
-                <div class="flex flex-wrap gap-2">
+                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
                   {/*
                     Open live session is intentionally hidden for MVP.
                     This is unneeded at the moment, but can be reintroduced post-MVP.
@@ -3759,54 +3774,58 @@ export function ChatPanel() {
               </div>
             </form>
             <Dialog open={experimentDialogOpen()} onClose={() => setExperimentDialogOpen(false)} title="Experiment review">
-              <div class="flex flex-col gap-3 text-[0.7rem] leading-6 text-(--foreground)">
+              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.text07rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
                 <Show when={experimentRun()}>
                   <div>
-                    <div class="font-semibold">{experimentRun()!.virtualBranchName}</div>
-                    <div class="text-(--muted)">
+                    <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>{experimentRun()!.virtualBranchName}</div>
+                    <div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>
                       {experimentRun()!.filesChanged} files | +{experimentRun()!.insertions} / -{experimentRun()!.deletions}
                     </div>
                   </div>
                 </Show>
                 <Show
                   when={activeProject()?.experimentInspection}
-                  fallback={<div class="text-(--muted)">Loading experiment diff...</div>}
+                  fallback={<div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>Loading experiment diff...</div>}
                 >
                   {(inspection) => {
                     const files = () => inspection().files ?? [];
                     const selectedFile = () => files().find((file) => file.path === selectedExperimentFilePath()) ?? files()[0];
                     return (
                       <Show when={files().length > 0} fallback={<MarkdownContent content={() => `\`\`\`diff\n${inspection().diffText}\n\`\`\``} size="compact" />}>
-                        <div class="grid min-h-0 gap-3 lg:grid-cols-[minmax(12rem,18rem)_minmax(0,1fr)]">
-                          <div class="min-h-0 rounded-2xl border border-(--border) bg-white/65 p-2">
-                            <div class="px-2 pb-2 text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">
+                        <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.minH0, chatUtilityStyles.gap3, chatUtilityStyles.lgGridColsMinmax12rem18remMinmax01fr).class}>
+                          <div class={stylex.attrs(chatUtilityStyles.minH0, chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite65, chatUtilityStyles.p2).class}>
+                            <div class={stylex.attrs(chatUtilityStyles.px2, chatUtilityStyles.pb2, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>
                               {files().length} changed paths
                             </div>
-                            <div class="grid max-h-72 gap-1 overflow-auto">
+                            <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.maxH72, chatUtilityStyles.gap1, chatUtilityStyles.overflowAuto).class}>
                               <For each={files()}>
                                 {(file) => (
                                   <button
                                     type="button"
-                                    class="min-w-0 rounded-xl px-2 py-2 text-left transition"
-                                    classList={{
-                                      "bg-(--accent) text-(--accent-foreground)": selectedFile()?.path === file.path,
-                                      "bg-white/70 text-(--foreground) hover:bg-(--panel-strong)": selectedFile()?.path !== file.path
-                                    }}
+                                    class={stylex.attrs(
+                                      chatUtilityStyles.minW0,
+                                      chatUtilityStyles.roundedXl,
+                                      chatUtilityStyles.px2,
+                                      chatUtilityStyles.py2,
+                                      chatUtilityStyles.textLeft,
+                                      chatUtilityStyles.transition,
+                                      selectedFile()?.path === file.path ? styles.experimentFileSelected : styles.experimentFileDefault
+                                    ).class}
                                     onClick={() => setSelectedExperimentFilePath(file.path)}
                                   >
-                                    <div class="truncate text-[0.7rem] font-semibold">{file.path}</div>
-                                    <div class="text-[0.6rem] opacity-75">+{file.additions} / -{file.deletions}</div>
+                                    <div class={stylex.attrs(chatUtilityStyles.truncate, chatUtilityStyles.text07rem, chatUtilityStyles.fontSemibold).class}>{file.path}</div>
+                                    <div class={stylex.attrs(chatUtilityStyles.text06rem, chatUtilityStyles.opacity75).class}>+{file.additions} / -{file.deletions}</div>
                                   </button>
                                 )}
                               </For>
                             </div>
                           </div>
-                          <div class="min-w-0 rounded-2xl border border-(--border) bg-white/65 p-3">
+                          <div class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite65, chatUtilityStyles.p3).class}>
                             <Show when={inspection().staleReason}>
-                              {(reason) => <div class="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[0.675rem] text-amber-900">{reason()}</div>}
+                              {(reason) => <div class={stylex.attrs(chatUtilityStyles.mb3, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderAmber300, chatUtilityStyles.bgAmber50, chatUtilityStyles.px3, chatUtilityStyles.py2, chatUtilityStyles.text0675rem, chatUtilityStyles.textAmber900).class}>{reason()}</div>}
                             </Show>
-                            <div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-[0.675rem] text-(--muted)">
-                              <span class="font-semibold text-(--foreground)">{selectedFile()?.path}</span>
+                            <div class={stylex.attrs(chatUtilityStyles.mb2, chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
+                              <span class={stylex.attrs(chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>{selectedFile()?.path}</span>
                               <span>+{selectedFile()?.additions ?? 0} / -{selectedFile()?.deletions ?? 0}</span>
                             </div>
                             <MarkdownContent content={() => `\`\`\`diff\n${selectedFile()?.hunksPreview || inspection().diffText}\n\`\`\``} size="compact" />
@@ -3873,9 +3892,9 @@ function RunLedgerCompact(props: { run?: AgentRunState }) {
   return (
     <Show when={ledger()}>
       {(entry) => (
-        <div class="mt-2 rounded-xl border border-(--border) bg-white/60 p-3">
-          <div class="text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">Run ledger</div>
-          <div class="mt-1 grid gap-1">
+        <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p3).class}>
+          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Run ledger</div>
+          <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.grid, chatUtilityStyles.gap1).class}>
             <Show when={entry().currentPhase}>{(value) => <div>Phase: {value()}</div>}</Show>
             <Show when={entry().nextStep}>{(value) => <div>Next: {value()}</div>}</Show>
             <Show when={entry().waitingOn}>{(value) => <div>Waiting: {value()}</div>}</Show>
@@ -3894,9 +3913,9 @@ function RunProofBundleCompact(props: { run?: AgentRunState }) {
   return (
     <Show when={bundle()}>
       {(proof) => (
-        <div class="mt-2 rounded-xl border border-(--border) bg-white/60 p-3">
-          <div class="text-[0.585rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">Proof bundle</div>
-          <div class="mt-1 grid gap-1">
+        <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p3).class}>
+          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Proof bundle</div>
+          <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.grid, chatUtilityStyles.gap1).class}>
             <Show when={proof().diffSummary}>{(value) => <div>Diff: {value()}</div>}</Show>
             <div>Evidence refs: {evidenceCount()}</div>
             <Show when={proof().finalReviewNotes}>{(value) => <div>Review: {value()}</div>}</Show>
@@ -4179,19 +4198,20 @@ function formatChatFileTarget(target: ChatFileTarget) {
   return `${target.path}${line}${column}`;
 }
 
-function getFileTypeIcon(filePath: string, className: string) {
+function getFileTypeIcon(filePath: string, size: "xs" | "sm") {
+  const iconStyles = () => stylex.attrs(size === "sm" ? styles.iconSmall : styles.iconTiny, styles.iconMuted);
   const extension = filePath.split(".").at(-1)?.toLowerCase();
   if (!extension || extension === filePath.toLowerCase()) {
-    return <File class={`${className} text-(--muted)`} />;
+    return <File {...iconStyles()} />;
   }
   if (["png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "ico"].includes(extension)) {
-    return <Image class={`${className} text-(--muted)`} />;
+    return <Image {...iconStyles()} />;
   }
   if (["json", "jsonc"].includes(extension)) {
-    return <FileJson class={`${className} text-(--muted)`} />;
+    return <FileJson {...iconStyles()} />;
   }
   if (["md", "markdown", "txt", "log", "csv"].includes(extension)) {
-    return <FileText class={`${className} text-(--muted)`} />;
+    return <FileText {...iconStyles()} />;
   }
   if (
     [
@@ -4216,9 +4236,9 @@ function getFileTypeIcon(filePath: string, className: string) {
       "zsh"
     ].includes(extension)
   ) {
-    return <FileCode class={`${className} text-(--muted)`} />;
+    return <FileCode {...iconStyles()} />;
   }
-  return <File class={`${className} text-(--muted)`} />;
+  return <File {...iconStyles()} />;
 }
 
 function formatTokenCount(value: number | undefined) {

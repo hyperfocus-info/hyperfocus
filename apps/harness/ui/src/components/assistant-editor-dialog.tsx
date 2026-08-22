@@ -1,5 +1,15 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
-import { Bot, Brain, Cpu, Folder, FolderOpen, Gauge, Globe, Split } from "lucide-solid";
+import * as stylex from "@stylexjs/stylex";
+import {
+  Bot,
+  Brain,
+  Cpu,
+  Folder,
+  FolderOpen,
+  Gauge,
+  Globe,
+  Split,
+} from "lucide-solid";
 import { resolveModeCatalog } from "../../../shared/modes";
 import {
   createAssistantAssetRefId,
@@ -8,7 +18,7 @@ import {
   type Assistant,
   type AssistantAssetRef,
   type ComposerReasoningStrength,
-  type ProviderBrand
+  type ProviderBrand,
 } from "../../../shared/protocol";
 import {
   COMPOSER_REASONING_STRENGTHS,
@@ -16,18 +26,31 @@ import {
   getComposerControlState,
   getExecutionModelOptionsForAgent,
   type AssistantEditorDraft,
-  harnessStore
+  harnessStore,
 } from "../harness-store";
 import { pushToast } from "../toast-store";
+import { assistantUtilityStyles } from "./assistants-panel.styles";
 import { Button } from "./primitives/button";
 import { Dialog } from "./primitives/dialog";
 import { DropdownControl } from "./primitives/dropdown";
-import { getAgentDropdownIcon, getModeDropdownIcon } from "./primitives/dropdown-option-icons";
-import { DialogField, DialogFormSection, DialogInlineNote } from "./primitives/form-layout";
+import {
+  getAgentDropdownIcon,
+  getModeDropdownIcon,
+} from "./primitives/dropdown-option-icons";
+import {
+  DialogField,
+  DialogFormSection,
+  DialogInlineNote,
+} from "./primitives/form-layout";
 import { Input } from "./primitives/input";
 import { Textarea } from "./primitives/textarea";
 
-const assistantAssetKinds = ["skill", "script", "mode", "background-template"] as const;
+const assistantAssetKinds = [
+  "skill",
+  "script",
+  "mode",
+  "background-template",
+] as const;
 
 export function AssistantEditorDialog() {
   const state = harnessStore.state;
@@ -42,7 +65,10 @@ export function AssistantEditorDialog() {
   const [providerBrand, setProviderBrand] = createSignal<ProviderBrand>("gpt");
   const [modeId, setModeId] = createSignal("");
   const [executionModelId, setExecutionModelId] = createSignal("");
-  const [reasoningStrength, setReasoningStrength] = createSignal<ComposerReasoningStrength>(DEFAULT_COMPOSER_REASONING_STRENGTH);
+  const [reasoningStrength, setReasoningStrength] =
+    createSignal<ComposerReasoningStrength>(
+      DEFAULT_COMPOSER_REASONING_STRENGTH,
+    );
   const [fastMode, setFastMode] = createSignal(false);
   const [assetRefsText, setAssetRefsText] = createSignal("");
 
@@ -50,62 +76,186 @@ export function AssistantEditorDialog() {
   const availableModes = createMemo(() =>
     resolveModeCatalog(
       state.workspace.workspaceModes,
-      state.workspace.projects.find((project) => project.id === projectId())?.projectModes ?? []
-    )
+      state.workspace.projects.find((project) => project.id === projectId())
+        ?.projectModes ?? [],
+    ),
   );
   const agentOptions = createMemo(() =>
     state.availableAgents.map((agent) => ({
       value: agent.id,
       label: agent.label,
       description: agent.description,
-      icon: getAgentDropdownIcon(agent.id)
-    }))
+      icon: getAgentDropdownIcon(agent.id),
+    })),
   );
   const scopeOptions = () => [
-    { value: "project", label: "Current project", description: "Assistant stays scoped to one project.", icon: <Folder class="h-3 w-3" /> },
-    { value: "global", label: "Global", description: "Assistant stays available across workspace.", icon: <Globe class="h-3 w-3" /> }
+    {
+      value: "project",
+      label: "Current project",
+      description: "Assistant stays scoped to one project.",
+      icon: (
+        <Folder
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
+    {
+      value: "global",
+      label: "Global",
+      description: "Assistant stays available across workspace.",
+      icon: (
+        <Globe
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
   ];
   const projectOptions = createMemo(() =>
     state.workspace.projects.map((project) => ({
       value: project.id,
       label: project.name,
       description: project.rootPath,
-      icon: <FolderOpen class="h-3 w-3" />
-    }))
+      icon: (
+        <FolderOpen
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    })),
   );
   const providerOptions = () => [
-    { value: "gpt", label: "GPT", description: "OpenAI-hosted model family.", icon: <Cpu class="h-3 w-3" /> },
-    { value: "gemini", label: "Gemini", description: "Google-hosted model family.", icon: <Cpu class="h-3 w-3" /> },
-    { value: "claude", label: "Claude", description: "Anthropic-hosted model family.", icon: <Cpu class="h-3 w-3" /> }
+    {
+      value: "gpt",
+      label: "GPT",
+      description: "OpenAI-hosted model family.",
+      icon: (
+        <Cpu
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
+    {
+      value: "gemini",
+      label: "Gemini",
+      description: "Google-hosted model family.",
+      icon: (
+        <Cpu
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
+    {
+      value: "claude",
+      label: "Claude",
+      description: "Anthropic-hosted model family.",
+      icon: (
+        <Cpu
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
   ];
   const modeOptions = createMemo(() => [
-    { value: "", label: "Default", description: "Use workspace or project default mode.", icon: <Split class="h-3 w-3" /> },
+    {
+      value: "",
+      label: "Default",
+      description: "Use workspace or project default mode.",
+      icon: (
+        <Split
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
     ...availableModes().map((mode) => ({
       value: mode.id,
       label: mode.label,
       description: mode.description,
-      icon: getModeDropdownIcon(mode.id)
-    }))
+      icon: getModeDropdownIcon(mode.id),
+    })),
   ]);
   const executionModelOptions = createMemo(() => {
-    const options = getExecutionModelOptionsForAgent(state, agentId(), providerBrand());
+    const options = getExecutionModelOptionsForAgent(
+      state,
+      agentId(),
+      providerBrand(),
+    );
     const currentModel = executionModelId().trim();
     const knownOptions = options.map((model) => ({
       value: model.modelId,
       label: model.label,
       description: model.modelId,
-      icon: <Cpu class="h-3 w-3" />
+      icon: (
+        <Cpu
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
     }));
     return [
-      { value: "", label: "Default", description: "Use runtime default model.", icon: <Cpu class="h-3 w-3" /> },
-      ...(currentModel && !knownOptions.some((option) => option.value === currentModel)
-        ? [{ value: currentModel, label: currentModel, description: "Saved custom model.", icon: <Cpu class="h-3 w-3" /> }]
+      {
+        value: "",
+        label: "Default",
+        description: "Use runtime default model.",
+        icon: (
+          <Cpu
+            class={
+              stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+                .class
+            }
+          />
+        ),
+      },
+      ...(currentModel &&
+      !knownOptions.some((option) => option.value === currentModel)
+        ? [
+            {
+              value: currentModel,
+              label: currentModel,
+              description: "Saved custom model.",
+              icon: (
+                <Cpu
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h3,
+                      assistantUtilityStyles.w3,
+                    ).class
+                  }
+                />
+              ),
+            },
+          ]
         : []),
-      ...knownOptions
+      ...knownOptions,
     ];
   });
   const composerControlState = createMemo(() =>
-    getComposerControlState(state, agentId(), executionModelId().trim() || undefined)
+    getComposerControlState(
+      state,
+      agentId(),
+      executionModelId().trim() || undefined,
+    ),
   );
   const reasoningOptions = createMemo(() =>
     COMPOSER_REASONING_STRENGTHS.map((strength) => ({
@@ -113,18 +263,44 @@ export function AssistantEditorDialog() {
       label: formatReasoningOptionLabel(strength),
       description: getReasoningStrengthDescription(strength),
       disabled: !composerControlState().availableStrengths.includes(strength),
-      icon: <Brain class="h-3 w-3" />
-    }))
+      icon: (
+        <Brain
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    })),
   );
   const fastModeOptions = createMemo(() => [
-    { value: "false", label: "Off", description: "Use standard response path.", icon: <Gauge class="h-3 w-3" /> },
+    {
+      value: "false",
+      label: "Off",
+      description: "Use standard response path.",
+      icon: (
+        <Gauge
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
     {
       value: "true",
       label: "On",
       description: "Prefer lower-latency responses when supported.",
       disabled: !composerControlState().supportsFastMode,
-      icon: <Gauge class="h-3 w-3" />
-    }
+      icon: (
+        <Gauge
+          class={
+            stylex.attrs(assistantUtilityStyles.h3, assistantUtilityStyles.w3)
+              .class
+          }
+        />
+      ),
+    },
   ]);
 
   createEffect(() => {
@@ -139,7 +315,11 @@ export function AssistantEditorDialog() {
   function seedFromDraft(draft: AssistantEditorDraft) {
     setName(draft.name);
     setScope(draft.scope);
-    setProjectId(draft.projectId ?? state.workspace.activeProjectId ?? state.workspace.projects[0]?.id);
+    setProjectId(
+      draft.projectId ??
+        state.workspace.activeProjectId ??
+        state.workspace.projects[0]?.id,
+    );
     setDescription(draft.description);
     setPersonalityPrompt(draft.personalityPrompt);
     setJobPrompt(draft.jobPrompt);
@@ -147,7 +327,9 @@ export function AssistantEditorDialog() {
     setProviderBrand(draft.providerBrand ?? state.providerBrand);
     setModeId(draft.modeId ?? "");
     setExecutionModelId(draft.executionModelId ?? "");
-    setReasoningStrength(draft.reasoningStrength ?? DEFAULT_COMPOSER_REASONING_STRENGTH);
+    setReasoningStrength(
+      draft.reasoningStrength ?? DEFAULT_COMPOSER_REASONING_STRENGTH,
+    );
     setFastMode(Boolean(draft.fastMode));
     setAssetRefsText(draft.assetRefsText);
   }
@@ -164,17 +346,29 @@ export function AssistantEditorDialog() {
 
     const trimmedName = name().trim();
     if (!trimmedName) {
-      pushToast("Assistant name required", "Give assistant short visible name.", "error");
+      pushToast(
+        "Assistant name required",
+        "Give assistant short visible name.",
+        "error",
+      );
       return;
     }
 
     if (!personalityPrompt().trim() || !jobPrompt().trim()) {
-      pushToast("Assistant prompts required", "Fill personality and job prompts before saving.", "error");
+      pushToast(
+        "Assistant prompts required",
+        "Fill personality and job prompts before saving.",
+        "error",
+      );
       return;
     }
 
     if (scope() === "project" && !projectId()) {
-      pushToast("Project required", "Project-scoped assistant needs target project.", "error");
+      pushToast(
+        "Project required",
+        "Project-scoped assistant needs target project.",
+        "error",
+      );
       return;
     }
 
@@ -186,7 +380,9 @@ export function AssistantEditorDialog() {
       return;
     }
 
-    const existingAssistant = state.assistants.assistants.find((entry) => entry.id === assistantId);
+    const existingAssistant = state.assistants.assistants.find(
+      (entry) => entry.id === assistantId,
+    );
     const assistant: Assistant = {
       id: assistantId,
       name: trimmedName,
@@ -211,7 +407,7 @@ export function AssistantEditorDialog() {
       latestActivityAt: existingAssistant?.latestActivityAt ?? now,
       unreadQuestionCount: existingAssistant?.unreadQuestionCount ?? 0,
       createdAt: existingAssistant?.createdAt ?? now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     sendCommand({
@@ -219,8 +415,8 @@ export function AssistantEditorDialog() {
       requestId: createRequestId(),
       payload: {
         assistant,
-        assetRefs: parsedAssetRefs.value
-      }
+        assetRefs: parsedAssetRefs.value,
+      },
     });
     handleClose();
   }
@@ -229,173 +425,312 @@ export function AssistantEditorDialog() {
     <Dialog
       open={state.assistantEditorOpen}
       onClose={handleClose}
-      title={activeDraft()?.source === "edit" ? "Edit assistant" : "Create assistant"}
+      title={
+        activeDraft()?.source === "edit" ? "Edit assistant" : "Create assistant"
+      }
       eyebrow="Assistants"
       description="Define role, prompts, scope, and linked skills/scripts."
-      class="max-w-5xl"
-      contentClass="gap-5"
+      class={stylex.attrs(assistantUtilityStyles.maxW5xl).class}
+      contentClass={stylex.attrs(assistantUtilityStyles.gap5).class}
       footer={
         <>
-          <Button tooltip="Close assistant editor without saving" variant="ghost" onClick={handleClose}>
+          <Button
+            tooltip="Close assistant editor without saving"
+            variant="ghost"
+            onClick={handleClose}
+          >
             Cancel
           </Button>
-          <Button tooltip={activeDraft()?.source === "edit" ? "Save assistant changes" : "Create assistant"} onClick={handleSave}>{activeDraft()?.source === "edit" ? "Save assistant" : "Create assistant"}</Button>
+          <Button
+            tooltip={
+              activeDraft()?.source === "edit"
+                ? "Save assistant changes"
+                : "Create assistant"
+            }
+            onClick={handleSave}
+          >
+            {activeDraft()?.source === "edit"
+              ? "Save assistant"
+              : "Create assistant"}
+          </Button>
         </>
       }
     >
-      <DialogFormSection title="Identity" description="Name, ownership scope, runtime, and default execution posture.">
-        <div class="grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(12rem,0.55fr)]">
+      <DialogFormSection
+        title="Identity"
+        description="Name, ownership scope, runtime, and default execution posture."
+      >
+        <div
+          class={
+            stylex.attrs(
+              assistantUtilityStyles.grid,
+              assistantUtilityStyles.gap3,
+              assistantUtilityStyles.lgGridColsDialogIdentity,
+            ).class
+          }
+        >
           <DialogField label="Name">
-          <Input value={name()} onInput={(event) => setName(event.currentTarget.value)} placeholder="Mr Miyagi" />
+            <Input
+              value={name()}
+              onInput={(event) => setName(event.currentTarget.value)}
+              placeholder="Mr Miyagi"
+            />
           </DialogField>
 
           <DialogField label="Agent runtime">
-          <DropdownControl
-            kind="select"
-            ariaLabel="Select assistant runtime"
-            icon={<Bot class="h-3.5 w-3.5" />}
-            size="md"
-            class="w-full"
-            value={agentId()}
-            options={agentOptions()}
-            onChange={(value) => setAgentId(value as Assistant["agentId"])}
-          />
+            <DropdownControl
+              kind="select"
+              ariaLabel="Select assistant runtime"
+              icon={
+                <Bot
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h35,
+                      assistantUtilityStyles.w35,
+                    ).class
+                  }
+                />
+              }
+              size="md"
+              class={stylex.attrs(assistantUtilityStyles.wFull).class}
+              value={agentId()}
+              options={agentOptions()}
+              onChange={(value) => setAgentId(value as Assistant["agentId"])}
+            />
           </DialogField>
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div
+          class={
+            stylex.attrs(
+              assistantUtilityStyles.grid,
+              assistantUtilityStyles.gap3,
+              assistantUtilityStyles.smGridCols2,
+              assistantUtilityStyles.xlGridCols4,
+            ).class
+          }
+        >
           <DialogField label="Scope">
-          <DropdownControl
-            kind="select"
-            ariaLabel="Select assistant scope"
-            icon={<Globe class="h-3.5 w-3.5" />}
-            size="md"
-            class="w-full"
-            value={scope()}
-            options={scopeOptions()}
-            onChange={(value) => setScope(value as Assistant["scope"])}
-          />
+            <DropdownControl
+              kind="select"
+              ariaLabel="Select assistant scope"
+              icon={
+                <Globe
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h35,
+                      assistantUtilityStyles.w35,
+                    ).class
+                  }
+                />
+              }
+              size="md"
+              class={stylex.attrs(assistantUtilityStyles.wFull).class}
+              value={scope()}
+              options={scopeOptions()}
+              onChange={(value) => setScope(value as Assistant["scope"])}
+            />
           </DialogField>
 
           <Show when={scope() === "project"}>
             <DialogField label="Project">
-            <DropdownControl
-              kind="select"
-              ariaLabel="Select project"
-              icon={<FolderOpen class="h-3.5 w-3.5" />}
-              size="md"
-              class="w-full"
-              value={projectId() ?? ""}
-              options={projectOptions()}
-              onChange={(value) => setProjectId(value || undefined)}
-            />
+              <DropdownControl
+                kind="select"
+                ariaLabel="Select project"
+                icon={
+                  <FolderOpen
+                    class={
+                      stylex.attrs(
+                        assistantUtilityStyles.h35,
+                        assistantUtilityStyles.w35,
+                      ).class
+                    }
+                  />
+                }
+                size="md"
+                class={stylex.attrs(assistantUtilityStyles.wFull).class}
+                value={projectId() ?? ""}
+                options={projectOptions()}
+                onChange={(value) => setProjectId(value || undefined)}
+              />
             </DialogField>
           </Show>
 
           <DialogField label="Provider">
-          <DropdownControl
-            kind="select"
-            ariaLabel="Select assistant provider"
-            icon={<Cpu class="h-3.5 w-3.5" />}
-            size="md"
-            class="w-full"
-            value={providerBrand()}
-            options={providerOptions()}
-            onChange={(value) => setProviderBrand(value as ProviderBrand)}
-          />
+            <DropdownControl
+              kind="select"
+              ariaLabel="Select assistant provider"
+              icon={
+                <Cpu
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h35,
+                      assistantUtilityStyles.w35,
+                    ).class
+                  }
+                />
+              }
+              size="md"
+              class={stylex.attrs(assistantUtilityStyles.wFull).class}
+              value={providerBrand()}
+              options={providerOptions()}
+              onChange={(value) => setProviderBrand(value as ProviderBrand)}
+            />
           </DialogField>
 
           <DialogField label="Mode">
-          <DropdownControl
-            kind="select"
-            ariaLabel="Select assistant mode"
-            icon={<Split class="h-3.5 w-3.5" />}
-            size="md"
-            class="w-full"
-            value={modeId()}
-            options={modeOptions()}
-            onChange={setModeId}
-          />
+            <DropdownControl
+              kind="select"
+              ariaLabel="Select assistant mode"
+              icon={
+                <Split
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h35,
+                      assistantUtilityStyles.w35,
+                    ).class
+                  }
+                />
+              }
+              size="md"
+              class={stylex.attrs(assistantUtilityStyles.wFull).class}
+              value={modeId()}
+              options={modeOptions()}
+              onChange={setModeId}
+            />
           </DialogField>
 
           <DialogField label="Execution model">
-          <DropdownControl
-            kind="select"
-            ariaLabel="Select assistant execution model"
-            icon={<Cpu class="h-3.5 w-3.5" />}
-            size="md"
-            class="w-full"
-            value={executionModelId()}
-            options={executionModelOptions()}
-            onChange={setExecutionModelId}
-          />
+            <DropdownControl
+              kind="select"
+              ariaLabel="Select assistant execution model"
+              icon={
+                <Cpu
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h35,
+                      assistantUtilityStyles.w35,
+                    ).class
+                  }
+                />
+              }
+              size="md"
+              class={stylex.attrs(assistantUtilityStyles.wFull).class}
+              value={executionModelId()}
+              options={executionModelOptions()}
+              onChange={setExecutionModelId}
+            />
           </DialogField>
 
           <DialogField label="Effort">
-          <DropdownControl
-            kind="select"
-            ariaLabel="Select assistant reasoning effort"
-            icon={<Brain class="h-3.5 w-3.5" />}
-            size="md"
-            class="w-full"
-            value={reasoningStrength()}
-            options={reasoningOptions()}
-            onChange={(value) => setReasoningStrength(value as ComposerReasoningStrength)}
-          />
+            <DropdownControl
+              kind="select"
+              ariaLabel="Select assistant reasoning effort"
+              icon={
+                <Brain
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h35,
+                      assistantUtilityStyles.w35,
+                    ).class
+                  }
+                />
+              }
+              size="md"
+              class={stylex.attrs(assistantUtilityStyles.wFull).class}
+              value={reasoningStrength()}
+              options={reasoningOptions()}
+              onChange={(value) =>
+                setReasoningStrength(value as ComposerReasoningStrength)
+              }
+            />
           </DialogField>
 
           <DialogField label="Fast mode">
-          <DropdownControl
-            kind="select"
-            ariaLabel="Select assistant fast mode"
-            icon={<Gauge class="h-3.5 w-3.5" />}
-            size="md"
-            class="w-full"
-            value={fastMode() ? "true" : "false"}
-            options={fastModeOptions()}
-            onChange={(value) => setFastMode(value === "true")}
-          />
+            <DropdownControl
+              kind="select"
+              ariaLabel="Select assistant fast mode"
+              icon={
+                <Gauge
+                  class={
+                    stylex.attrs(
+                      assistantUtilityStyles.h35,
+                      assistantUtilityStyles.w35,
+                    ).class
+                  }
+                />
+              }
+              size="md"
+              class={stylex.attrs(assistantUtilityStyles.wFull).class}
+              value={fastMode() ? "true" : "false"}
+              options={fastModeOptions()}
+              onChange={(value) => setFastMode(value === "true")}
+            />
           </DialogField>
         </div>
 
         <DialogField label="Description">
-          <Textarea rows="2" value={description()} onInput={(event) => setDescription(event.currentTarget.value)} placeholder="Short purpose summary." />
+          <Textarea
+            rows="2"
+            value={description()}
+            onInput={(event) => setDescription(event.currentTarget.value)}
+            placeholder="Short purpose summary."
+          />
         </DialogField>
       </DialogFormSection>
 
-      <DialogFormSection title="Prompts" description="Separate communication style from recurring work instructions.">
-        <div class="grid gap-3 lg:grid-cols-2">
+      <DialogFormSection
+        title="Prompts"
+        description="Separate communication style from recurring work instructions."
+      >
+        <div
+          class={
+            stylex.attrs(
+              assistantUtilityStyles.grid,
+              assistantUtilityStyles.gap3,
+              assistantUtilityStyles.lgGridCols2,
+            ).class
+          }
+        >
           <DialogField label="Personality prompt">
-          <Textarea
-            rows="9"
-            value={personalityPrompt()}
-            onInput={(event) => setPersonalityPrompt(event.currentTarget.value)}
-            placeholder="Voice, temperament, communication style."
-          />
+            <Textarea
+              rows="9"
+              value={personalityPrompt()}
+              onInput={(event) =>
+                setPersonalityPrompt(event.currentTarget.value)
+              }
+              placeholder="Voice, temperament, communication style."
+            />
           </DialogField>
 
           <DialogField label="Job prompt">
-          <Textarea
-            rows="9"
-            value={jobPrompt()}
-            onInput={(event) => setJobPrompt(event.currentTarget.value)}
-            placeholder="Role, success criteria, research mandate, proactive work rules."
-          />
+            <Textarea
+              rows="9"
+              value={jobPrompt()}
+              onInput={(event) => setJobPrompt(event.currentTarget.value)}
+              placeholder="Role, success criteria, research mandate, proactive work rules."
+            />
           </DialogField>
         </div>
       </DialogFormSection>
 
-      <DialogFormSection title="Linked assets" description="Attach reusable skills, scripts, modes, or background templates.">
+      <DialogFormSection
+        title="Linked assets"
+        description="Attach reusable skills, scripts, modes, or background templates."
+      >
         <DialogField label="Asset refs">
-        <Textarea
-          rows="5"
-          value={assetRefsText()}
-          onInput={(event) => setAssetRefsText(event.currentTarget.value)}
-          placeholder={"skill | grill-me | .agents/skills/grill-me/SKILL.md\nscript | bootstrap | scripts/bootstrap.ts"}
-        />
+          <Textarea
+            rows="5"
+            value={assetRefsText()}
+            onInput={(event) => setAssetRefsText(event.currentTarget.value)}
+            placeholder={
+              "skill | grill-me | .agents/skills/grill-me/SKILL.md\nscript | bootstrap | scripts/bootstrap.ts"
+            }
+          />
         </DialogField>
         <DialogInlineNote>
-          One ref per line. Format: <code>kind | label | value</code>. Kinds: {assistantAssetKinds.join(", ")}.
+          One ref per line. Format: <code>kind | label | value</code>. Kinds:{" "}
+          {assistantAssetKinds.join(", ")}.
         </DialogInlineNote>
       </DialogFormSection>
     </Dialog>
@@ -431,7 +766,9 @@ function formatReasoningStrengthLabel(strength: ComposerReasoningStrength) {
 
 function formatReasoningOptionLabel(strength: ComposerReasoningStrength) {
   const label = formatReasoningStrengthLabel(strength);
-  return strength === DEFAULT_COMPOSER_REASONING_STRENGTH ? `${label} (default)` : label;
+  return strength === DEFAULT_COMPOSER_REASONING_STRENGTH
+    ? `${label} (default)`
+    : label;
 }
 
 function parseAssetRefs(input: string, assistantId: string) {
@@ -444,15 +781,23 @@ function parseAssetRefs(input: string, assistantId: string) {
   for (const [index, line] of lines.entries()) {
     const parts = line.split("|").map((part) => part.trim());
     if (parts.length !== 3) {
-      return { error: `Line ${index + 1} must use: kind | label | value` } as const;
+      return {
+        error: `Line ${index + 1} must use: kind | label | value`,
+      } as const;
     }
 
     const [kind, label, refValue] = parts;
-    if (!assistantAssetKinds.includes(kind as (typeof assistantAssetKinds)[number])) {
+    if (
+      !assistantAssetKinds.includes(
+        kind as (typeof assistantAssetKinds)[number],
+      )
+    ) {
       return { error: `Line ${index + 1} has invalid kind: ${kind}` } as const;
     }
     if (!label || !refValue) {
-      return { error: `Line ${index + 1} must include non-empty label and value` } as const;
+      return {
+        error: `Line ${index + 1} must include non-empty label and value`,
+      } as const;
     }
 
     value.push({
@@ -462,10 +807,9 @@ function parseAssetRefs(input: string, assistantId: string) {
       label,
       value: refValue,
       resolutionStatus: "resolved",
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     });
   }
 
   return { value } as const;
 }
-

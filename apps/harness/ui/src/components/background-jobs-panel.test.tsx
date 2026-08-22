@@ -599,8 +599,8 @@ createUiTest("BackgroundJobsPanel", () => {
 
     render(() => <BackgroundJobsPanel />);
 
-    expect(screen.getByRole("button", { name: "30d" }).className).toContain("bg-(--accent)");
-    expect(screen.getByRole("button", { name: "7d" }).className).not.toContain("bg-(--accent)");
+    expect(screen.getByRole("button", { name: "30d" }).className).toContain("healthWindowSelected");
+    expect(screen.getByRole("button", { name: "7d" }).className).toContain("healthWindowIdle");
   });
 
   it("renders runs header without scheduled-job actions", () => {
@@ -1177,7 +1177,7 @@ createUiTest("BackgroundJobsPanel", () => {
     expect(screen.getByText("1 total")).toBeTruthy();
     expect(screen.getAllByText("Harness / Active chat").length).toBeGreaterThan(0);
     expect(screen.getByText("Implement active run visibility")).toBeTruthy();
-    expect(screen.getByText("Implement active run visibility").parentElement?.className).toContain("[-webkit-line-clamp:3]");
+    expect(screen.getByText("Implement active run visibility").parentElement?.className).toContain("lineClampThree");
 
     fireEvent.click(screen.getByText("Implement active run visibility"));
 

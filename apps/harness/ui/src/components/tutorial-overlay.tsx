@@ -1,7 +1,9 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { getTutorialDefinition } from "./tutorial-definitions";
 import { PrimitivePortal } from "./primitives/primitive-portal";
 import { Tooltip } from "./primitives/tooltip";
+import { tutorialOverlayStyles as styles } from "./tutorial-overlay.styles";
 
 type TutorialOverlayProps = {
   tutorialId?: string;
@@ -27,18 +29,31 @@ type Particle = {
   startedAt: number;
 };
 
-const BOUNCE_CLASS = "tutorial-target-bounce";
+const BOUNCE_CLASSES = (stylex.attrs(styles.targetBounce).class ?? "").split(/\s+/).filter(Boolean);
 
 export function TutorialOverlay(props: TutorialOverlayProps) {
   let canvasRef: HTMLCanvasElement | undefined;
   let animationFrame = 0;
   let retryTimer: number | undefined;
+  let bounceTimer: number | undefined;
+  let bounceTarget: HTMLElement | undefined;
   const [targetRect, setTargetRect] = createSignal<RectSnapshot>();
   const [targetPresent, setTargetPresent] = createSignal(false);
   const [stepStartedAt, setStepStartedAt] = createSignal(Date.now());
   const [particles, setParticles] = createSignal<Particle[]>([]);
   const tutorial = createMemo(() => getTutorialDefinition(props.tutorialId));
   const currentStep = createMemo(() => tutorial()?.steps[props.stepIndex]);
+
+  const cleanupBounce = () => {
+    if (bounceTimer !== undefined) {
+      window.clearTimeout(bounceTimer);
+      bounceTimer = undefined;
+    }
+    if (bounceTarget) {
+      applyBounceTone(bounceTarget, false);
+      bounceTarget = undefined;
+    }
+  };
 
   const syncTarget = () => {
     const step = currentStep();
@@ -70,7 +85,7 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
     props.stepIndex;
     setParticles([]);
     setStepStartedAt(Date.now());
-    cleanupBounceClass();
+    cleanupBounce();
     syncTarget();
 
     if (retryTimer !== undefined) {
@@ -82,7 +97,7 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
       if (retryTimer !== undefined) {
         window.clearInterval(retryTimer);
       }
-      cleanupBounceClass();
+      cleanupBounce();
     });
   });
 
@@ -104,8 +119,17 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
 
     setParticles(createBurstParticles(rect));
     const target = document.querySelector<HTMLElement>(`[data-tour-id="${step.targetId}"]`);
-    target?.classList.add(BOUNCE_CLASS);
-    window.setTimeout(() => target?.classList.remove(BOUNCE_CLASS), 750);
+    if (target) {
+      bounceTarget = target;
+      applyBounceTone(target, true);
+      bounceTimer = window.setTimeout(() => {
+        applyBounceTone(target, false);
+        if (bounceTarget === target) {
+          bounceTarget = undefined;
+        }
+        bounceTimer = undefined;
+      }, 750);
+    }
   });
 
   createEffect(() => {
@@ -138,25 +162,25 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
 
   const content = (
     <Show when={props.tutorialId && currentStep()}>
-      <div class="tutorial-overlay-shell">
-        <canvas ref={canvasRef} class="tutorial-overlay-canvas" />
-        <div class="tutorial-overlay-backdrop" />
-        <div class="tutorial-overlay-panel">
-          <div class="text-[0.58rem] font-semibold uppercase tracking-[0.18em] text-white/70">
+      <div {...stylex.attrs(styles.shell)}>
+        <canvas ref={canvasRef} {...stylex.attrs(styles.canvas)} />
+        <div {...stylex.attrs(styles.backdrop)} />
+        <div {...stylex.attrs(styles.panel)}>
+          <div {...stylex.attrs(styles.eyebrow)}>
             Guided tutorial
           </div>
-          <div class="mt-2 text-lg font-semibold text-white">{currentStep()!.title}</div>
-          <div class="mt-2 text-sm leading-6 text-white/82">{currentStep()!.body}</div>
+          <div {...stylex.attrs(styles.title)}>{currentStep()!.title}</div>
+          <div {...stylex.attrs(styles.body)}>{currentStep()!.body}</div>
           <Show when={!targetPresent()}>
-            <div class="mt-3 rounded-2xl border border-white/15 bg-white/10 p-3 text-[0.75rem] leading-6 text-white/78">
+            <div {...stylex.attrs(styles.fallback)}>
               {currentStep()!.fallback}
             </div>
           </Show>
-          <div class="mt-4 flex flex-wrap gap-2">
+          <div {...stylex.attrs(styles.actions)}>
             <Tooltip content={props.stepIndex === 0 ? "Already at the first tutorial step" : "Go to previous tutorial step"}>
-              <span class="inline-flex">
+              <span {...stylex.attrs(styles.tooltipTrigger)}>
                 <button
-                  class="tutorial-overlay-button tutorial-overlay-button-secondary"
+                  {...stylex.attrs(styles.button, styles.buttonSecondary)}
                   type="button"
                   onClick={props.onBack}
                   disabled={props.stepIndex === 0}
@@ -165,10 +189,10 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
                 </button>
               </span>
             </Tooltip>
-            <button class="tutorial-overlay-button" type="button" onClick={props.onNext}>
+            <button {...stylex.attrs(styles.button)} type="button" onClick={props.onNext}>
               {props.stepIndex >= (tutorial()?.steps.length ?? 1) - 1 ? "Finish" : "Next"}
             </button>
-            <button class="tutorial-overlay-button tutorial-overlay-button-secondary" type="button" onClick={props.onClose}>
+            <button {...stylex.attrs(styles.button, styles.buttonSecondary)} type="button" onClick={props.onClose}>
               Skip
             </button>
           </div>
@@ -263,6 +287,8 @@ function createBurstParticles(rect: RectSnapshot) {
   });
 }
 
-function cleanupBounceClass() {
-  document.querySelectorAll(`.${BOUNCE_CLASS}`).forEach((element) => element.classList.remove(BOUNCE_CLASS));
+function applyBounceTone(element: HTMLElement, active: boolean) {
+  const bounceClasses = new Set(BOUNCE_CLASSES);
+  const baseClasses = element.className.split(/\s+/).filter((className) => className && !bounceClasses.has(className));
+  element.className = [...baseClasses, ...(active ? BOUNCE_CLASSES : [])].join(" ");
 }

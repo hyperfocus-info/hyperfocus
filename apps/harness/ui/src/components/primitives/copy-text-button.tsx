@@ -1,5 +1,6 @@
 import type { JSX } from "solid-js";
 import { Copy } from "lucide-solid";
+import * as stylex from "@stylexjs/stylex";
 import { pushToast } from "../../toast-store";
 import { ActionButton } from "../action-button";
 
@@ -41,7 +42,7 @@ export function CopyTextButton(props: CopyTextButtonProps) {
         tooltip={props.tooltip}
         disabled={props.disabled || !canCopy()}
         disabledReason={props.disabled ? props.disabledReason : props.disabledReason ?? "Nothing to copy"}
-        icon={<Copy class="h-3.5 w-3.5" />}
+        icon={<Copy {...stylex.attrs(styles.icon)} />}
         class={props.class}
         variant={props.variant}
         size={props.size}
@@ -53,3 +54,5 @@ export function CopyTextButton(props: CopyTextButtonProps) {
     </span>
   );
 }
+
+const styles = stylex.create({ icon: { height: "0.875rem", width: "0.875rem" } });

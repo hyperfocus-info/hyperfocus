@@ -28,17 +28,17 @@ annual royalty = 0.05 × max(0, adjusted annual game revenue − 50,000 USD)
 
 This marginal calculation avoids a revenue cliff and makes experimentation, hobby projects, free games, and small commercial releases practical.
 
-## Games are not engine forks
+## Games are not monetized Software forks
 
-A commercial game can remain closed source. The license does not require disclosure of proprietary gameplay code, engine changes used only inside the game, art, audio, story, data, or other independently authored content.
+A commercial game can remain closed source. The license does not require disclosure of proprietary gameplay code, Software changes used only inside the game, art, audio, story, data, or other independently authored content.
 
-The engine itself and engine forks may be redistributed only at no charge, with corresponding source, notices, and the same license. They may not be sold, rented, paywalled, bundled behind a required purchase, or offered as a monetized engine service without a separate written agreement. Bona fide consulting, training, support, hosting, and game-development work remain allowed when the engine itself stays freely accessible and the service fee is not a disguised engine license.
+The Software—including the engine, editor, harness, shared packages, and all other first-party repository code—and its Modifications may be redistributed only at no charge, with corresponding source, notices, and the same license. They may not be sold, rented, paywalled, bundled behind a required purchase, or offered as a monetized Software service without a separate written agreement. Bona fide consulting, training, support, hosting, and game-development work remain allowed when the Software itself stays freely accessible and the service fee is not a disguised Software license.
 
-Independent plugins, tools, libraries, and content can be commercial when they interoperate with Hyperfocus without copying engine code.
+Independent plugins, tools, libraries, and content can be commercial when they interoperate with Hyperfocus without copying Software.
 
 ## Exit and portability
 
-Project ownership does not depend on remaining a Hyperfocus customer. Game content can be recovered through the documented JSON, ZIP, glTF, RGBA, WAV, SHA-256, and neutral-export contracts and migrated at any time. If a release is fully moved off Hyperfocus and contains no engine code, revenue received from that migrated release afterward is outside the royalty calculation. Revenue for older releases that still contain Hyperfocus remains covered, and already accrued royalties remain due.
+Project ownership does not depend on remaining a Hyperfocus customer. Game content can be recovered through the documented JSON, ZIP, glTF, RGBA, WAV, SHA-256, and neutral-export contracts and migrated at any time. If a release is fully moved off Hyperfocus and contains no Software, revenue received from that migrated release afterward is outside the royalty calculation. Revenue for older releases that still contain Hyperfocus Software remains covered, and already accrued royalties remain due.
 
 The canonical editor project stays limited to two files:
 

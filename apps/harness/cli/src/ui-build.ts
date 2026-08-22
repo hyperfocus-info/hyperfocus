@@ -58,7 +58,7 @@ export async function buildUiBundle({ minify = false }: UiBuildOptions = {}) {
       metafile: true,
       plugins: [
         stylexSolidPlugin({
-          useCSSLayers: { before: ["reset", "legacy"], prefix: "hyperfocus" },
+          useCSSLayers: { before: ["reset"], prefix: "hyperfocus" },
           importSources: ["@stylexjs/stylex"]
         })
       ]
@@ -82,7 +82,8 @@ export async function buildUiBundle({ minify = false }: UiBuildOptions = {}) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pi Harness</title>
+    <title>Hyperfocus Harness</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230f766e'/%3E%3Cpath d='M18 18v28M46 18v28M18 32h28' stroke='%23f8fafc' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./main.css" />
   </head>
   <body>

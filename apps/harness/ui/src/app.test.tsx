@@ -309,7 +309,7 @@ createUiTest("App shortcuts", () => {
     expect(buttons[0]?.getAttribute("role")).toBe("tab");
     expect(buttons[0]?.getAttribute("aria-selected")).toBe("true");
     expect(buttons[1]?.getAttribute("aria-selected")).toBe("false");
-    expect(buttons[0]?.className).toBe("surface-tab");
+    expect(buttons[0]?.hasAttribute("data-test-button")).toBe(true);
   });
 
   it("renders settings in the shared left pane shell", () => {
@@ -318,8 +318,7 @@ createUiTest("App shortcuts", () => {
 
     const shell = container.querySelector("[data-test-left-pane-shell][data-left-pane-kind='preferences']");
     expect(shell).not.toBeNull();
-    expect(shell?.className).toContain("panel-shell");
-    expect(shell?.className).toContain("border-t-0");
+    expect(shell?.querySelector("nav[aria-label='Preference sections']")).not.toBeNull();
   });
 
   it("collapses left tab labels when tabs wrap", () => {
@@ -355,9 +354,8 @@ createUiTest("App shortcuts", () => {
 
     const grid = document.querySelector("[data-test-main-panel-grid]");
 
-    expect(grid?.className).toContain(
-      "lg:grid-cols-[minmax(0,var(--left-panel-size))_0.35rem_minmax(0,var(--center-panel-size))_0.35rem_minmax(0,var(--right-panel-size))]"
-    );
+    expect(grid?.getAttribute("data-main-panel-mode")).toBe("open");
+    expect(grid?.getAttribute("style")).toContain("--center-panel-size");
   });
 
   it("persists main panel sizes in browser session state", () => {
@@ -452,11 +450,11 @@ createUiTest("App shortcuts", () => {
     expect(ideWindow).not.toBeNull();
     expect(titlebar).not.toBeNull();
 
-    const maximizeButton = [...document.querySelectorAll<HTMLButtonElement>("button.ide-window-control")].find(
-      (button) => button.getAttribute("aria-label") === "Maximize IDE window"
-    );
+    const maximizeButton = document.querySelector<HTMLButtonElement>("button[aria-label='Maximize IDE window']");
     expect(maximizeButton).not.toBeNull();
     expect(document.querySelector("[data-test-ide-window-resize]")).not.toBeNull();
+
+    expect(ideWindow?.getAttribute("data-maximized")).toBe("false");
   });
 
   it("keeps default IDE bounds inside a narrow viewport", () => {

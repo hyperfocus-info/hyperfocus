@@ -127,7 +127,7 @@ createUiTest("ExecutionLog", () => {
     ));
 
     const fileLink = screen.getByRole("button", { name: "harness/ui/src/app.tsx:7" });
-    expect(fileLink.className).toContain("markdown-file-link");
+    expect(fileLink.hasAttribute("data-test-chat-file-link")).toBe(true);
 
     fireEvent.click(fileLink);
     expect(opened).toEqual([]);

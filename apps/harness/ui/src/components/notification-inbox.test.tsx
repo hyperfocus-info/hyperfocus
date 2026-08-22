@@ -1,5 +1,6 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
+import * as stylex from "@stylexjs/stylex";
 import { render } from "@solidjs/testing-library";
 import type {
   Assistant,
@@ -24,6 +25,7 @@ import {
   openBackgroundRunNotificationFromInbox,
   openCliUpdateNotificationFromInbox
 } from "./notification-inbox";
+import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 
 function isoNow() {
   return new Date().toISOString();
@@ -148,14 +150,16 @@ createUiTest("NotificationInbox", () => {
     seedInbox([planningQuestionNotification()]);
     expect(harnessStore.state.notifications.unreadCount).toBe(1);
     render(() => <NotificationInbox />);
-    expect(document.querySelector(".bg-rose-600")).not.toBeNull();
+    const unreadClasses = (stylex.attrs(styles.unreadCount).class ?? "").split(/\s+/).filter(Boolean);
+    expect(Array.from(document.querySelectorAll("div")).some((element) => unreadClasses.every((className) => (element.getAttribute("class") ?? "").split(/\s+/).includes(className)))).toBe(true);
   });
 
   it("hides the unread badge when no notifications are unread", () => {
     seedInbox([backgroundRunStatusNotification({ readAt: isoNow() })]);
     expect(harnessStore.state.notifications.unreadCount).toBe(0);
     render(() => <NotificationInbox />);
-    expect(document.querySelector(".bg-rose-600")).toBeNull();
+    const unreadClasses = (stylex.attrs(styles.unreadCount).class ?? "").split(/\s+/).filter(Boolean);
+    expect(Array.from(document.querySelectorAll("div")).some((element) => unreadClasses.every((className) => (element.getAttribute("class") ?? "").split(/\s+/).includes(className)))).toBe(false);
   });
 
   it("defines three assistant question default answers with one recommendation", () => {

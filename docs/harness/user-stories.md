@@ -255,7 +255,7 @@ US-ASSISTANTS-005: As a user, assistant operators make reasonable assumptions, s
 
 US-ASSISTANTS-006: As a user, a newly idle assistant asks whether to bootstrap default research, todo maintenance, and implementation jobs, and those jobs push toward market research, reusable skills, TypeScript scripts, and concrete product implementation.
 
-US-ASSISTANTS-007: As a user, build-oriented assistants keep structured todo work categories and targets, bias generated todos toward coding after early discovery, ask once for a coding-project stack preference, and default to TypeScript, Bun, `bun test`, SQLite when persistence is needed, SolidJS plus Tailwind when UI is needed, Happy DOM frontend tests, and useful documentation comments for new functions and variables when no existing stack or user preference overrides it.
+US-ASSISTANTS-007: As a user, build-oriented assistants keep structured todo work categories and targets, bias generated todos toward coding after early discovery, ask once for a coding-project stack preference, and default to TypeScript, Bun, `bun test`, SQLite when persistence is needed, SolidJS plus StyleX when UI is needed, Happy DOM frontend tests, and useful documentation comments for new functions and variables when no existing stack or user preference overrides it.
 
 ### JOBS
 
@@ -403,7 +403,7 @@ US-DEV-004: As a developer, I run `bun run dev:cli` to start the websocket serve
 
 US-DEV-005: As a developer, I see dev and bootstrap retry on a random open port when `HARNESS_PORT` is unset and `8787` is occupied. (README L118)
 
-US-DEV-006: As a developer, I run `bun run build:ui` which builds the browser bundle through `Bun.build` with Solid and Tailwind plugin support. (README L119)
+US-DEV-006: As a developer, I run `bun run build:ui` which builds the browser bundle through `Bun.build` with the shared Solid/StyleX compiler and extracted atomic CSS. (README Local Workflow)
 
 US-DEV-007: As a developer, I run `bun run doctor` which prints the shared activation and runtime health report, trims oversized `.local` artifacts, and exits non-zero when required first-task checks fail. (README L120)
 
@@ -435,7 +435,7 @@ US-DEV-020: As a developer, I see subagent startup timing captured in debug logs
 
 US-DEV-021: As a developer, I see development builds re-surface swallowed UI and command errors after toast display so local debugging keeps mapped stacks visible. (README L183)
 
-US-DEV-022: As a developer, I see Tailwind class canonicalization enforced through editor diagnostics and focused linting so shared UI utilities stay in one preferred form. (README L184)
+US-DEV-022: As a developer, I see StyleX boundary checks, compiler extraction, and focused linting prevent utility-class regressions and browser runtime transforms. (README Direction)
 
 US-DEV-025: As a developer, I see bundled ripgrep added to the agent toolchain path so subagent search does not depend on the user's global shell PATH. (README L185)
 

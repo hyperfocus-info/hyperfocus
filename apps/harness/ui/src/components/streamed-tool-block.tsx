@@ -1,5 +1,6 @@
 /** @jsxImportSource solid-js */
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { ArrowDown, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Logs, Terminal } from "lucide-solid";
 import type { ExecutionToolActivity } from "../../../shared/protocol";
 import type { TimelineToolBlock } from "../lib/chat-timeline-model";
@@ -68,19 +69,19 @@ export function StreamedToolBlock(props: StreamedToolBlockProps) {
   });
 
   return (
-    <article class="rounded-2xl border border-(--border) bg-white/55 p-3" data-test-streamed-tool-block="">
-      <div class="mb-2 flex items-center justify-between gap-3">
-        <div class="flex min-w-0 items-center gap-2 text-[0.585rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
-          <Terminal class="h-3.5 w-3.5" />
-          <span class="truncate">Tool calls ({props.block.activities.length})</span>
+    <article {...stylex.attrs(styles.root)} data-test-streamed-tool-block="">
+      <div {...stylex.attrs(styles.header)}>
+        <div {...stylex.attrs(styles.heading)}>
+          <Terminal {...stylex.attrs(styles.icon)} />
+          <span {...stylex.attrs(styles.truncate)}>Tool calls ({props.block.activities.length})</span>
         </div>
-        <div class="flex shrink-0 items-center gap-2">
+        <div {...stylex.attrs(styles.actions)}>
           <Show when={!atBottom()}>
-            <ActionButton tooltip="Scroll tool calls to latest" icon={<ArrowDown class="h-3.5 w-3.5" />} size="icon" variant="ghost" ariaLabel="Scroll tool calls to latest" onClick={scrollToBottom} />
+            <ActionButton tooltip="Scroll tool calls to latest" icon={<ArrowDown {...stylex.attrs(styles.icon)} />} size="icon" variant="ghost" ariaLabel="Scroll tool calls to latest" onClick={scrollToBottom} />
           </Show>
           <ActionButton
             tooltip={expanded() ? "Collapse tool call block" : "Show all tool calls"}
-            icon={expanded() ? <ChevronUp class="h-3.5 w-3.5" /> : <ChevronDown class="h-3.5 w-3.5" />}
+            icon={expanded() ? <ChevronUp {...stylex.attrs(styles.icon)} /> : <ChevronDown {...stylex.attrs(styles.icon)} />}
             size="sm"
             variant="ghost"
             onClick={() => setExpanded(!expanded())}
@@ -91,14 +92,13 @@ export function StreamedToolBlock(props: StreamedToolBlockProps) {
       </div>
       <div
         ref={scroller}
-        class="space-y-1"
-        classList={{ "overflow-y-visible": expanded(), "max-h-40": !expanded(), "overflow-y-auto": !expanded(), "pr-1": !expanded() }}
+        {...stylex.attrs(styles.activityList, expanded() ? styles.activityListExpanded : styles.activityListCollapsed)}
         onScroll={updateAtBottom}
       >
         <For each={props.block.activities}>
           {(activity) => (
             <article
-              class="grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-start gap-2 rounded-lg px-2 py-1.5 text-left text-[0.65rem] text-(--foreground) hover:bg-white/80"
+              {...stylex.attrs(styles.activityRow)}
               title={formatToolActivityTooltip(activity)}
               onClick={(event) => {
                 if (shouldIgnoreActivityRowClick(event.target)) {
@@ -109,7 +109,7 @@ export function StreamedToolBlock(props: StreamedToolBlockProps) {
             >
               <ToolActivityStatusIcon status={activity.status} />
               <div
-                class="min-w-0 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring)"
+                {...stylex.attrs(styles.activityDescription)}
                 role="button"
                 tabIndex={0}
                 aria-label={`Show details for ${formatToolActivitySnippet(activity, 96)}`}
@@ -125,38 +125,38 @@ export function StreamedToolBlock(props: StreamedToolBlockProps) {
                   openActivityDetails(activity.id);
                 }}
               >
-                <span class="flex min-w-0 items-center gap-1">
-                  <span class="truncate font-semibold">{formatToolActivityOwner(activity)}</span>
-                  <span class="text-(--muted)">|</span>
-                  <span class="truncate text-(--muted)">{activity.toolName}</span>
+                <span {...stylex.attrs(styles.activityIdentity)}>
+                  <span {...stylex.attrs(styles.activityOwner)}>{formatToolActivityOwner(activity)}</span>
+                  <span {...stylex.attrs(styles.muted)}>|</span>
+                  <span {...stylex.attrs(styles.activityToolName)}>{activity.toolName}</span>
                 </span>
-                <span class="block truncate text-[0.62rem] leading-4 text-(--muted)">
+                <span {...stylex.attrs(styles.invocationDescription)}>
                   {formatToolInvocationDescription(activity)}
                 </span>
-                <span class="tool-call-snippet mt-1 block">
+                <span {...stylex.attrs(styles.toolCallSnippet)}>
                   <FileLinkedText text={formatToolActivitySnippet(activity)} fileLinks={props.fileLinks} />
                 </span>
               </div>
-              <span class="shrink-0 uppercase tracking-[0.12em] text-(--accent-strong)">
+              <span {...stylex.attrs(styles.activityStatus)}>
                 {activity.exitCode === undefined ? activity.status : `${activity.status} ${activity.exitCode}`}
               </span>
-              <button
-                type="button"
-                class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-(--border) bg-(--panel-strong) text-(--foreground) transition hover:bg-(--panel) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring)"
-                aria-label={`Show details for ${activity.toolName} ${activity.toolCallId}`}
-                title="Show tool call details"
+              <ActionButton
+                tooltip="Show tool call details"
+                icon={<Logs {...stylex.attrs(styles.icon)} />}
+                size="icon"
+                variant="secondary"
+                ariaLabel={`Show details for ${activity.toolName} ${activity.toolCallId}`}
+                class={stylex.attrs(styles.detailButton).class}
                 onClick={(event) => {
                   event.stopPropagation();
                   openActivityDetails(activity.id);
                 }}
-              >
-                <Logs class="h-3.5 w-3.5" />
-              </button>
+              />
             </article>
           )}
         </For>
       </div>
-      <div class="mt-2 flex items-center justify-between gap-3 text-[0.575rem] uppercase tracking-[0.12em] text-(--muted)">
+      <div {...stylex.attrs(styles.footer)}>
         <span>{formatShortTimestamp(props.block.updatedAt)}</span>
         <CopyTextButton value={props.block.activities.map(formatToolActivityCopyText).join("\n\n---\n\n")} tooltip="Copy tool calls" copiedTitle="Tool calls copied" copiedDescription="Tool call details copied to clipboard." size="sm" variant="ghost" ariaLabel="Copy tool calls">
           Copy
@@ -172,13 +172,13 @@ export function StreamedToolBlock(props: StreamedToolBlockProps) {
                   open
                   title={`${selectedActivity().toolName} ${selectedActivity().status}`}
                   eyebrow="Tool call"
-                  class="max-w-5xl"
-                  contentClass="max-h-[85vh]"
+                  class={stylex.attrs(styles.dialog).class}
+                  contentClass={stylex.attrs(styles.dialogContent).class}
                   onClose={() => setSelectedActivityId(undefined)}
                 >
-                  <div class="space-y-3 text-xs">
-                    <div class="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-(--border) bg-white/70 p-3">
-                      <div class="min-w-0 flex-1 leading-5 text-(--muted)">
+                  <div {...stylex.attrs(styles.dialogBody)}>
+                    <div {...stylex.attrs(styles.dialogSummary)}>
+                      <div {...stylex.attrs(styles.dialogSummaryCopy)}>
                         {formatToolInvocationDescription(selectedActivity())}
                       </div>
                       <CopyTextButton
@@ -223,9 +223,9 @@ function shouldIgnoreActivityRowClick(target: EventTarget | null) {
 
 function DetailBlock(props: { title: string; value: string; mono?: boolean; tone?: "danger"; copyTooltip?: string; fileLinks?: FileLinkConfig }) {
   return (
-    <section class="rounded-xl border border-(--border) bg-white/70 p-3">
-      <div class="mb-2 flex items-center justify-between gap-3">
-        <div class="text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-(--muted)">{props.title}</div>
+    <section {...stylex.attrs(styles.detailBlock)}>
+      <div {...stylex.attrs(styles.detailHeader)}>
+        <div {...stylex.attrs(styles.detailTitle)}>{props.title}</div>
         <Show when={props.copyTooltip}>
           {(tooltip) => (
             <CopyTextButton
@@ -243,12 +243,11 @@ function DetailBlock(props: { title: string; value: string; mono?: boolean; tone
         </Show>
       </div>
       <pre
-        class="overflow-visible whitespace-pre-wrap wrap-break-word text-[0.7rem] leading-5"
-        classList={{
-          "font-mono": Boolean(props.mono),
-          "text-rose-700": props.tone === "danger",
-          "text-(--foreground)": props.tone !== "danger"
-        }}
+        {...stylex.attrs(
+          styles.detailValue,
+          props.mono && styles.monospace,
+          props.tone === "danger" ? styles.danger : styles.foreground
+        )}
       >
         <FileLinkedText text={props.value} fileLinks={props.fileLinks} />
       </pre>
@@ -259,11 +258,51 @@ function DetailBlock(props: { title: string; value: string; mono?: boolean; tone
 function ToolActivityStatusIcon(props: { status: ExecutionToolActivity["status"] }) {
   switch (props.status) {
     case "running":
-      return <LoaderCircle class="h-3.5 w-3.5 animate-spin" aria-label="Tool running" />;
+      return <LoaderCircle {...stylex.attrs(styles.icon, styles.spinning)} aria-label="Tool running" />;
     case "completed":
-      return <CheckCircle2 class="h-3.5 w-3.5 text-emerald-600" aria-label="Tool completed" />;
+      return <CheckCircle2 {...stylex.attrs(styles.icon, styles.success)} aria-label="Tool completed" />;
     case "failed":
     case "timed-out":
-      return <CircleAlert class="h-3.5 w-3.5 text-rose-600" aria-label="Tool failed" />;
+      return <CircleAlert {...stylex.attrs(styles.icon, styles.failure)} aria-label="Tool failed" />;
   }
 }
+
+const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
+
+const styles = stylex.create({
+  root: { backgroundColor: "rgb(255 255 255 / 0.55)", borderColor: "var(--border)", borderRadius: "1rem", borderStyle: "solid", borderWidth: "1px", padding: "0.75rem" },
+  header: { alignItems: "center", display: "flex", gap: "0.75rem", justifyContent: "space-between", marginBottom: "0.5rem" },
+  heading: { alignItems: "center", color: "var(--muted)", display: "flex", fontSize: "0.585rem", fontWeight: 600, gap: "0.5rem", letterSpacing: "0.18em", minWidth: 0, textTransform: "uppercase" },
+  icon: { height: "0.875rem", width: "0.875rem" },
+  truncate: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  actions: { alignItems: "center", display: "flex", flexShrink: 0, gap: "0.5rem" },
+  activityList: { display: "flex", flexDirection: "column", gap: "0.25rem" },
+  activityListExpanded: { overflowY: "visible" },
+  activityListCollapsed: { maxHeight: "10rem", overflowY: "auto", paddingRight: "0.25rem" },
+  activityRow: { alignItems: "start", borderRadius: "0.5rem", color: "var(--foreground)", display: "grid", fontSize: "0.65rem", gap: "0.5rem", gridTemplateColumns: "auto minmax(0, 1fr) auto auto", padding: "0.375rem 0.5rem", textAlign: "left", width: "100%", backgroundColor: { default: "transparent", ":hover": "rgb(255 255 255 / 0.8)" } },
+  activityDescription: { borderRadius: "0.5rem", boxShadow: { default: "none", ":focus-visible": "0 0 0 2px var(--ring)" }, cursor: "pointer", minWidth: 0, outline: { default: "none", ":focus-visible": "none" } },
+  activityIdentity: { alignItems: "center", display: "flex", gap: "0.25rem", minWidth: 0 },
+  activityOwner: { fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  muted: { color: "var(--muted)" },
+  activityToolName: { color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  invocationDescription: { color: "var(--muted)", display: "block", fontSize: "0.62rem", lineHeight: "1rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  toolCallSnippet: { WebkitBoxOrient: "vertical", WebkitLineClamp: 3, backgroundColor: "var(--panel-strong)", borderColor: "var(--border)", borderRadius: "0.5rem", borderStyle: "solid", borderWidth: "1px", color: "var(--foreground)", display: "-webkit-box", fontSize: "0.62rem", letterSpacing: 0, lineHeight: 1.45, marginTop: "0.25rem", maxWidth: "100%", overflow: "hidden", overflowWrap: "anywhere", padding: "0.32rem 0.45rem" },
+  activityStatus: { color: "var(--accent-strong)", flexShrink: 0, letterSpacing: "0.12em", textTransform: "uppercase" },
+  detailButton: { height: "1.75rem", flexShrink: 0, width: "1.75rem" },
+  footer: { alignItems: "center", color: "var(--muted)", display: "flex", fontSize: "0.575rem", gap: "0.75rem", justifyContent: "space-between", letterSpacing: "0.12em", marginTop: "0.5rem", textTransform: "uppercase" },
+  dialog: { maxWidth: "64rem" },
+  dialogContent: { maxHeight: "85vh" },
+  dialogBody: { display: "flex", flexDirection: "column", fontSize: "0.75rem", gap: "0.75rem" },
+  dialogSummary: { alignItems: "start", backgroundColor: "rgb(255 255 255 / 0.7)", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", display: "flex", flexWrap: "wrap", gap: "0.75rem", justifyContent: "space-between", padding: "0.75rem" },
+  dialogSummaryCopy: { color: "var(--muted)", flex: "1 1 0%", lineHeight: "1.25rem", minWidth: 0 },
+  detailBlock: { backgroundColor: "rgb(255 255 255 / 0.7)", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", padding: "0.75rem" },
+  detailHeader: { alignItems: "center", display: "flex", gap: "0.75rem", justifyContent: "space-between", marginBottom: "0.5rem" },
+  detailTitle: { color: "var(--muted)", fontSize: "0.58rem", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase" },
+  detailValue: { fontSize: "0.7rem", lineHeight: "1.25rem", overflow: "visible", overflowWrap: "break-word", whiteSpace: "pre-wrap" },
+  monospace: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" },
+  danger: { color: "rgb(190 18 60)" },
+  foreground: { color: "var(--foreground)" },
+  spinning: { animationName: spin, animationDuration: "1s", animationIterationCount: "infinite", animationTimingFunction: "linear" },
+  success: { color: "rgb(5 150 105)" },
+  failure: { color: "rgb(225 29 72)" }
+});

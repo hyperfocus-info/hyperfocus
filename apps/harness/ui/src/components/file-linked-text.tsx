@@ -1,5 +1,11 @@
 import { For, createMemo } from "solid-js";
-import { findChatFileReferences, type ChatFileLinkContext, type ChatFileTarget } from "../lib/chat-file-links";
+import * as stylex from "@stylexjs/stylex";
+import {
+  findChatFileReferences,
+  type ChatFileLinkContext,
+  type ChatFileTarget,
+} from "../lib/chat-file-links";
+import { markdownStyles } from "./markdown-content.styles";
 
 export type FileLinkConfig = ChatFileLinkContext & {
   onOpenFile: (target: ChatFileTarget) => void;
@@ -16,8 +22,11 @@ export type FileLinkedTextProps = {
 };
 
 export function FileLinkedText(props: FileLinkedTextProps) {
-  const readText = () => (typeof props.text === "function" ? props.text() : props.text);
-  const segments = createMemo(() => splitFileLinkedText(readText(), props.fileLinks));
+  const readText = () =>
+    typeof props.text === "function" ? props.text() : props.text;
+  const segments = createMemo(() =>
+    splitFileLinkedText(readText(), props.fileLinks),
+  );
 
   function handleFileClick(event: MouseEvent, target: ChatFileTarget) {
     event.preventDefault();
@@ -36,7 +45,9 @@ export function FileLinkedText(props: FileLinkedTextProps) {
             <button
               type="button"
               data-test-chat-file-link=""
-              class="markdown-link markdown-file-link"
+              class={
+                stylex.attrs(markdownStyles.link, markdownStyles.fileLink).class
+              }
               onClick={(event) => handleFileClick(event, segment.target)}
             >
               {segment.text}
@@ -50,7 +61,10 @@ export function FileLinkedText(props: FileLinkedTextProps) {
   );
 }
 
-function splitFileLinkedText(text: string, fileLinks: FileLinkConfig | undefined): FileLinkedTextSegment[] {
+function splitFileLinkedText(
+  text: string,
+  fileLinks: FileLinkConfig | undefined,
+): FileLinkedTextSegment[] {
   if (!fileLinks) {
     return [{ kind: "text", text }];
   }
@@ -64,9 +78,16 @@ function splitFileLinkedText(text: string, fileLinks: FileLinkConfig | undefined
   let cursor = 0;
   for (const reference of references) {
     if (reference.index > cursor) {
-      segments.push({ kind: "text", text: text.slice(cursor, reference.index) });
+      segments.push({
+        kind: "text",
+        text: text.slice(cursor, reference.index),
+      });
     }
-    segments.push({ kind: "file", text: reference.text, target: reference.target });
+    segments.push({
+      kind: "file",
+      text: reference.text,
+      target: reference.target,
+    });
     cursor = reference.index + reference.length;
   }
   if (cursor < text.length) {

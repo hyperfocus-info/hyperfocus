@@ -1,8 +1,10 @@
 import { createMemo } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { VirtualList } from "../../components/primitives/virtual-list";
 import { resolveTerminalKeyboardAction } from "../terminal-keybindings";
 import { closeTerminalSearch, toggleTerminalSearch } from "../terminal-search-actions";
 import { terminalStore } from "../terminal-store";
+import { terminalStyles as styles, terminalUtilities as utilities } from "../terminal.styles";
 
 export function SolidTerminalRendererPrototype(props: {
   output: string;
@@ -63,7 +65,7 @@ export function SolidTerminalRendererPrototype(props: {
       aria-label="Terminal output"
       aria-readonly={props.readOnly ? "true" : "false"}
       data-test-solid-terminal-input=""
-      class="h-full min-h-0 focus:outline-none"
+      class={stylex.attrs(utilities.hFull, utilities.minH0, utilities.focusOutlineNone).class}
       onKeyDown={handleKeyDown}
       onMouseDown={(event) => event.currentTarget.focus()}
     >
@@ -72,11 +74,11 @@ export function SolidTerminalRendererPrototype(props: {
         estimateSize={20}
         pagination={{ kind: "all" }}
         getKey={(row) => row.id}
-        class="h-full bg-(--terminal-shell) px-3 py-2"
-        contentClass="font-mono tracking-normal"
+        class={stylex.attrs(styles.surface, utilities.hFull, utilities.px3, utilities.py2).class}
+        contentClass={stylex.attrs(utilities.fontMono, utilities.trackingNormal).class}
         dataTest="solid-terminal-prototype"
       >
-        {(row) => <div class="terminal-solid-row whitespace-pre text-[0.76rem] leading-5 text-(--terminal-foreground)">{row.line || " "}</div>}
+        {(row) => <div class={stylex.attrs(styles.solidRow, utilities.whitespacePre, utilities.text076, utilities.leading5, styles.foreground).class}>{row.line || " "}</div>}
       </VirtualList>
     </div>
   );

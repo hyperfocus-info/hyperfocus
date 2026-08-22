@@ -22,7 +22,7 @@ const result = await Bun.build({
   metafile: true,
   plugins: [
     stylexSolidPlugin({
-      useCSSLayers: { before: ["reset", "legacy"], prefix: "hyperfocus" },
+      useCSSLayers: { before: ["reset"], prefix: "hyperfocus" },
       importSources: ["@stylexjs/stylex"]
     })
   ]

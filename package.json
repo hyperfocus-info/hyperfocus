@@ -24,7 +24,7 @@
     "typecheck:editor": "bunx tsc --noEmit -p apps/engine-editor/tsconfig.json",
     "typecheck:engine": "bun run --cwd engine typecheck && bun run --cwd engine typecheck:tests && bun run --cwd engine typecheck:tooling && bun run --cwd engine typecheck:examples",
     "test": "bun run test:repository && bun run test:packages && bun run test:harness && bun run test:editor && bun run test:engine",
-    "test:repository": "bun test scripts/check-repository-size.test.ts scripts/stylex-solid-plugin.test.ts",
+    "test:repository": "bun test scripts/check-repository-size.test.ts scripts/stylex-solid-plugin.test.ts scripts/check-license-scope.test.ts",
     "test:packages": "bun test packages",
     "test:harness": "bun apps/harness/scripts/run-tests.ts",
     "test:editor": "bun test apps/engine-editor",

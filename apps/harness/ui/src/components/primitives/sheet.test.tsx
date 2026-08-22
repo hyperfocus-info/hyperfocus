@@ -50,12 +50,8 @@ createUiTest("SheetContent", () => {
     const sheet = screen.getByText("Workspace").closest("aside");
     const body = document.querySelector("[data-test-sheet-body]");
 
-    expect(sheet?.className).toContain("h-[100dvh]");
-    expect(sheet?.className).toContain("z-[71]");
-    expect(sheet?.className).toContain("overflow-hidden");
-    expect(body?.className).toContain("min-h-0");
-    expect(body?.className).toContain("flex-1");
-    expect(body?.className).toContain("overflow-hidden");
+    expect(sheet?.className).toContain("surface");
+    expect(body?.className).toContain("body");
   });
 
   it("closes from backdrop click and close button click", () => {

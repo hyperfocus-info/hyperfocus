@@ -1,9 +1,11 @@
 import { Show, createEffect } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { createRequestId } from "../../../shared/protocol";
 import { getActiveProject, harnessStore } from "../harness-store";
 import { sendCliSessionInput } from "../harness-websocket";
 import { ActionButton } from "./action-button";
 import { Input } from "./primitives/input";
+import { terminalStyles as styles, terminalUtilities as utilities } from "../terminal/terminal.styles";
 
 export function CliSessionPanel() {
   let outputRef: HTMLPreElement | undefined;
@@ -85,25 +87,25 @@ export function CliSessionPanel() {
     <Show
       when={activeSession()}
       fallback={
-        <div class="rounded-[1.35rem] border border-dashed border-(--border) bg-white/40 p-4 text-[0.675rem] text-(--muted)">
+        <div class={stylex.attrs(styles.emptyCard, utilities.rounded135, utilities.border, utilities.borderDashed, utilities.p4, utilities.text068).class}>
           No live CLI session.
         </div>
       }
     >
       {(session) => (
-        <div class="space-y-3 rounded-[1.35rem] border border-(--border) bg-white/55 p-4">
-          <div class="flex flex-wrap items-center justify-between gap-3 text-[0.625rem] uppercase tracking-[0.14em] text-(--muted)">
+        <div class={stylex.attrs(styles.card, utilities.flex, utilities.flexCol, utilities.gap3, utilities.rounded135, utilities.border, utilities.p4).class}>
+          <div class={stylex.attrs(utilities.flex, utilities.flexWrap, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.text062, utilities.uppercase, utilities.tracking014, styles.muted).class}>
             <span>{session().agentId}</span>
             <span>Status: {session().status}</span>
             <span>{terminalState()?.connected ? "Attached" : "Detached"}</span>
           </div>
           <pre
             ref={outputRef}
-            class="max-h-72 overflow-auto rounded-2xl border border-(--border) bg-stone-950 p-3 font-mono text-[0.7rem] leading-5 text-stone-100"
+            class={stylex.attrs(styles.cliOutput, utilities.maxH72, utilities.overflowAuto, utilities.rounded2xl, utilities.border, utilities.p3, utilities.fontMono, utilities.text07, utilities.leading5).class}
           >
             {(terminalState()?.stdout ?? "") + (terminalState()?.stderr ?? "")}
           </pre>
-          <div class="flex flex-wrap gap-2">
+          <div class={stylex.attrs(utilities.flex, utilities.flexWrap, utilities.gap2).class}>
             <Input
               placeholder="Type terminal input and press Enter"
               onKeyDown={(event) => {
@@ -121,7 +123,7 @@ export function CliSessionPanel() {
               }}
             />
           </div>
-          <div class="flex flex-wrap gap-2">
+          <div class={stylex.attrs(utilities.flex, utilities.flexWrap, utilities.gap2).class}>
             <ActionButton tooltip="Reconnect PTY stream" variant="secondary" onClick={handleReconnect}>
               Reconnect
             </ActionButton>

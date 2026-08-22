@@ -1,4 +1,5 @@
 import { Show, createSignal } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { AlertTriangle, Maximize2, Search, SplitSquareHorizontal, SplitSquareVertical, Square } from "lucide-solid";
 import { createRequestId, type TerminalSession } from "../../../shared/protocol";
 import { getActiveProject, harnessStore } from "../harness-store";
@@ -10,6 +11,7 @@ import { TerminalSearch } from "./terminal-search";
 import { shouldUseSolidTerminalRenderer } from "./terminal-renderer-mode";
 import { openTerminalSearch } from "./terminal-search-actions";
 import { sendTerminalInput } from "./terminal-transport";
+import { terminalStyles as styles, terminalUtilities as utilities } from "./terminal.styles";
 
 export function TerminalPane(props: {
   session: TerminalSession;
@@ -60,28 +62,28 @@ export function TerminalPane(props: {
   };
 
   return (
-    <section class="flex h-full min-h-0 min-w-0 flex-1 flex-col border border-(--terminal-border) bg-(--terminal-shell)" data-test-terminal-pane={props.session.id}>
-      <div class="flex min-h-11 shrink-0 items-center justify-between gap-2 border-b border-(--terminal-border) px-3 py-1.5">
-        <div class="min-w-0">
-          <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[0.72rem] leading-4 text-(--terminal-muted)">
-            <span class="truncate font-semibold text-(--terminal-foreground)">{props.session.name}</span>
+    <section class={stylex.attrs(styles.surface, utilities.flex, utilities.hFull, utilities.minH0, utilities.minW0, utilities.flex1, utilities.flexCol, utilities.border).class} data-test-terminal-pane={props.session.id}>
+      <div class={stylex.attrs(utilities.flex, utilities.minH11, utilities.shrink0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2, utilities.borderB, utilities.borderDefault, utilities.px3, utilities.py15).class}>
+        <div class={stylex.attrs(utilities.minW0).class}>
+          <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flexWrap, utilities.itemsCenter, utilities.gapX2, utilities.gapY05, utilities.fontMono, utilities.text072, utilities.leading4, styles.muted).class}>
+            <span class={stylex.attrs(utilities.truncate, utilities.fontSemibold, styles.foreground).class}>{props.session.name}</span>
             <span>{"\u2022"}</span>
             <span>{connectionState()}</span>
             <span>{"\u2022"}</span>
             <span>{props.session.cols}x{props.session.rows}</span>
           </div>
-          <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.62rem] leading-4 text-(--terminal-muted)">
-            <Show when={agentSource()}>{(agent) => <span class="truncate">{agent().label}</span>}</Show>
-            <span class="uppercase tracking-[0.08em]">{props.session.status}</span>
+          <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flexWrap, utilities.itemsCenter, utilities.gap2, utilities.text062, utilities.leading4, styles.muted).class}>
+            <Show when={agentSource()}>{(agent) => <span class={stylex.attrs(utilities.truncate).class}>{agent().label}</span>}</Show>
+            <span class={stylex.attrs(utilities.uppercase, utilities.tracking008).class}>{props.session.status}</span>
           </div>
         </div>
-        <div class="flex shrink-0 items-center gap-1">
+        <div class={stylex.attrs(utilities.flex, utilities.shrink0, utilities.itemsCenter, utilities.gap1).class}>
           <Show when={readOnly()}>
             <TerminalBadge tone="warning">read-only</TerminalBadge>
           </Show>
           <Show when={agentSource() && props.session.inputOverride === true}>
             <TerminalBadge tone="success">override on</TerminalBadge>
-            <ActionButton tooltip="Return input control to the agent" ariaLabel="Release terminal input override" variant="ghost" class="h-7 rounded-md px-2 text-[0.68rem] text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" onClick={() => setInputOverride(false)}>
+            <ActionButton tooltip="Return input control to the agent" ariaLabel="Release terminal input override" variant="ghost" class={stylex.attrs(styles.action, utilities.h7, utilities.roundedMd, utilities.px2, utilities.text068).class} onClick={() => setInputOverride(false)}>
               Release Override
             </ActionButton>
           </Show>
@@ -94,10 +96,10 @@ export function TerminalPane(props: {
               onPrevious={() => renderer()?.findPrevious(terminalStore.state.searchQuery)}
             />
           )}
-          <ActionButton tooltip="Search terminal" ariaLabel="Search terminal" variant="ghost" size="icon" class="h-7 w-7 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<Search class="h-3.5 w-3.5" />} onClick={openTerminalSearch} />
-          <ActionButton tooltip="Split terminal right" ariaLabel="Split terminal right" variant="ghost" size="icon" class="h-7 w-7 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<SplitSquareVertical class="h-3.5 w-3.5" />} onClick={props.onSplitVertical} />
-          <ActionButton tooltip="Split terminal down" ariaLabel="Split terminal down" variant="ghost" size="icon" class="h-7 w-7 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<SplitSquareHorizontal class="h-3.5 w-3.5" />} onClick={props.onSplitHorizontal} />
-          <ActionButton tooltip="Restart terminal" ariaLabel="Restart terminal" variant="ghost" size="icon" class="h-7 w-7 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<Maximize2 class="h-3.5 w-3.5" />} onClick={() => harnessStore.actions.sendCommand({
+          <ActionButton tooltip="Search terminal" ariaLabel="Search terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Search class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={openTerminalSearch} />
+          <ActionButton tooltip="Split terminal right" ariaLabel="Split terminal right" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<SplitSquareVertical class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={props.onSplitVertical} />
+          <ActionButton tooltip="Split terminal down" ariaLabel="Split terminal down" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<SplitSquareHorizontal class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={props.onSplitHorizontal} />
+          <ActionButton tooltip="Restart terminal" ariaLabel="Restart terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Maximize2 class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={() => harnessStore.actions.sendCommand({
             type: "terminal.session.restart",
             requestId: createRequestId(),
             payload: {
@@ -107,7 +109,7 @@ export function TerminalPane(props: {
               rows: props.session.rows
             }
           })} />
-          <ActionButton tooltip="Stop terminal" ariaLabel="Stop terminal" variant="ghost" size="icon" class="h-7 w-7 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<Square class="h-3.5 w-3.5" />} onClick={() => harnessStore.actions.sendCommand({
+          <ActionButton tooltip="Stop terminal" ariaLabel="Stop terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Square class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={() => harnessStore.actions.sendCommand({
             type: "terminal.session.stop",
             requestId: createRequestId(),
             payload: {
@@ -118,17 +120,17 @@ export function TerminalPane(props: {
         </div>
       </div>
       <Show when={readOnly()}>
-        <div class="flex shrink-0 items-center justify-between gap-3 border-b border-(--terminal-warning-border) bg-(--terminal-warning-bg) px-3 py-2 text-[0.72rem] text-(--terminal-warning-text)">
-          <div class="flex min-w-0 items-center gap-2">
-            <AlertTriangle class="h-3.5 w-3.5 shrink-0" />
-            <span class="truncate">Caution: {lockReason()}</span>
+        <div class={stylex.attrs(styles.warningSurface, utilities.flex, utilities.shrink0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.borderB, utilities.px3, utilities.py2, utilities.text072).class}>
+          <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.gap2).class}>
+            <AlertTriangle class={stylex.attrs(utilities.h35, utilities.w35, utilities.shrink0).class} />
+            <span class={stylex.attrs(utilities.truncate).class}>Caution: {lockReason()}</span>
           </div>
-          <ActionButton tooltip="Override terminal input lock" ariaLabel="Override terminal input lock" variant="secondary" class="h-7 shrink-0 rounded-md border-(--terminal-warning-border) bg-(--terminal-warning-button) px-3 text-[0.68rem] text-(--terminal-foreground) hover:bg-(--terminal-warning-button-hover)" onClick={() => setInputOverride(true)}>
+          <ActionButton tooltip="Override terminal input lock" ariaLabel="Override terminal input lock" variant="secondary" class={stylex.attrs(styles.warningAction, utilities.h7, utilities.shrink0, utilities.roundedMd, utilities.px3, utilities.text068).class} onClick={() => setInputOverride(true)}>
             Override Lock
           </ActionButton>
         </div>
       </Show>
-      <div class="min-h-0 flex-1 bg-(--terminal-shell)">
+      <div class={stylex.attrs(styles.surface, utilities.minH0, utilities.flex1).class}>
         {shouldUseSolidTerminalRenderer(terminalStore.state.preferences.rendererMode) ? (
           <SolidTerminalRendererPrototype
             output={props.output}
@@ -162,13 +164,9 @@ export function TerminalPane(props: {
 
 function TerminalBadge(props: { tone: "success" | "warning"; children: string }) {
   return (
-    <span
-      class="inline-flex h-6 shrink-0 items-center rounded-md border px-2 text-[0.62rem] font-semibold uppercase tracking-[0.08em]"
-      classList={{
-        "border-(--terminal-warning-border) bg-(--terminal-warning-bg) text-(--terminal-warning-text)": props.tone === "warning",
-        "border-(--success-strong) bg-[color-mix(in_srgb,var(--success)_15%,transparent)] text-(--success-strong)": props.tone === "success"
-      }}
-    >
+    <span class={props.tone === "warning"
+      ? stylex.attrs(styles.warningBadge, utilities.inlineFlex, utilities.h6, utilities.shrink0, utilities.itemsCenter, utilities.roundedMd, utilities.border, utilities.px2, utilities.text062, utilities.fontSemibold, utilities.uppercase, utilities.tracking008).class
+      : stylex.attrs(styles.successBadge, utilities.inlineFlex, utilities.h6, utilities.shrink0, utilities.itemsCenter, utilities.roundedMd, utilities.border, utilities.px2, utilities.text062, utilities.fontSemibold, utilities.uppercase, utilities.tracking008).class}>
       {props.children}
     </span>
   );
@@ -176,8 +174,8 @@ function TerminalBadge(props: { tone: "success" | "warning"; children: string })
 
 function WarningBadge(props: { label: string }) {
   return (
-    <span class="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-(--terminal-warning-border) bg-(--terminal-warning-bg) px-2 text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-(--terminal-warning-text)">
-      <AlertTriangle class="h-3 w-3" />
+    <span class={stylex.attrs(styles.warningBadge, utilities.inlineFlex, utilities.h6, utilities.shrink0, utilities.itemsCenter, utilities.gap1, utilities.roundedMd, utilities.border, utilities.px2, utilities.text062, utilities.fontSemibold, utilities.uppercase, utilities.tracking008).class}>
+      <AlertTriangle class={stylex.attrs(utilities.h3, utilities.w3).class} />
       {props.label}
     </span>
   );

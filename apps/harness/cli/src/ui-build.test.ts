@@ -83,6 +83,8 @@ describe("ui build", () => {
     expect(existsSync(jsPath)).toBe(true);
     expect(existsSync(mapPath)).toBe(false);
     expect(readFileSync(jsPath, "utf8")).not.toContain("sourceMappingURL");
+    expect(readFileSync(path.join(uiOutDir, "index.html"), "utf8")).toContain("<title>Hyperfocus Harness</title>");
+    expect(readFileSync(path.join(uiOutDir, "index.html"), "utf8")).toContain('rel="icon" href="data:image/svg+xml');
   });
 
   test("adds cleanup guidance to out-of-space build failures", () => {

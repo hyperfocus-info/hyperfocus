@@ -23,9 +23,7 @@ const later = "2026-04-28T12:05:00.000Z";
 
 function expectRunningAgentsText(expected: string) {
   const normalize = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim();
-  expect(
-    screen.getByText((_, element) => normalize(element?.textContent) === expected && element?.classList.contains("shrink-0") === true)
-  ).not.toBeNull();
+  expect(normalize(document.querySelector("[data-test-trace-running-counts]")?.textContent)).toBe(expected);
 }
 
 createUiTest("TracePanel", () => {
@@ -126,10 +124,10 @@ createUiTest("TracePanel", () => {
     const panel = document.querySelector<HTMLElement>("[data-test-trace-panel]");
     const runCard = document.querySelector<HTMLElement>("[data-test-trace-run-card]");
     const runActions = document.querySelector<HTMLElement>("[data-test-trace-run-actions]");
-    expect(panel?.classList.contains("overflow-x-hidden")).toBe(true);
-    expect(runCard?.classList.contains("min-w-0")).toBe(true);
-    expect(runActions?.classList.contains("w-full")).toBe(true);
-    expect(runActions?.classList.contains("flex-wrap")).toBe(true);
+    expect(panel?.className).toContain("overflowXHidden");
+    expect(runCard?.className).toContain("minW0");
+    expect(runActions?.className).toContain("wFull");
+    expect(runActions?.className).toContain("flexWrap");
   });
 
   it("opens run terminal history through a typed command", async () => {
@@ -258,7 +256,7 @@ createUiTest("TracePanel", () => {
     captureDispatchedCommands(commands);
     render(() => <TracePanel />);
     expect(screen.getByRole("button", { name: "Copy code block" })).not.toBeNull();
-    expect(document.querySelector(".markdown-code-content")?.textContent).toContain("{\"ok\":true}");
+    expect(document.querySelector("[data-test-markdown-code-content]")?.textContent).toContain("{\"ok\":true}");
     expect(screen.getByText("{\"url\":\"https://example.com\"}").closest("a")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Approve this browser step" }));
@@ -484,9 +482,9 @@ createUiTest("TracePanel", () => {
     expect(screen.getByText("ai-routine | enabled | unsafe")).not.toBeNull();
     expect(screen.queryByText(/next April 28 '26 - 1:00 PM/)).toBeNull();
     expect(screen.getByText(/ai-routine \| enabled \| safe \| next April 28 '26 - 2:00 PM/)).not.toBeNull();
-    expect(screen.getByText("Running routine").parentElement?.className).toContain("text-amber-700");
-    expect(screen.getByText("Successful routine").parentElement?.className).toContain("text-emerald-700");
-    expect(screen.getByText("Error routine").parentElement?.className).toContain("text-rose-700");
+    expect(screen.getByText("Running routine").parentElement?.dataset.state).toBe("running");
+    expect(screen.getByText("Successful routine").parentElement?.dataset.state).toBe("successful");
+    expect(screen.getByText("Error routine").parentElement?.dataset.state).toBe("error");
   });
 
   it("opens an assistant job in the jobs tab when clicked", () => {
@@ -530,7 +528,7 @@ createUiTest("TracePanel", () => {
     render(() => <TracePanel />);
 
     const row = screen.getByRole("button", { name: /Openable routine/ });
-    expect(row.className).toContain("cursor-pointer");
+    expect(row.getAttribute("data-test-trace-assistant-job")).toBe("");
     fireEvent.click(row);
 
     expect(harnessStore.state.activeLeftTab).toBe("jobs");

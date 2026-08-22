@@ -348,7 +348,7 @@ createUiTest("AssistantsPanel", () => {
     render(() => <AssistantsPanel />);
 
     expect(harnessStore.state.assistants.selectedTab).toBe("learnings");
-    expect(screen.getByRole("tab", { name: "Learnings" }).className).toContain("border-(--accent)");
+    expect(screen.getByRole("tab", { name: "Learnings" }).className).toContain("tabActive");
   });
 
   it("filters assistant roster by search and persists query", async () => {

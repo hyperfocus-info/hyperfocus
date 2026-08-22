@@ -1,8 +1,10 @@
 import { For } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import type { SetupState } from "../../../shared/protocol";
 import { tutorialDefinitions } from "./tutorial-definitions";
 import { Dialog } from "./primitives/dialog";
 import { ActionButton } from "./action-button";
+import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 
 type HelpTutorialDialogProps = {
   open: boolean;
@@ -21,19 +23,19 @@ export function HelpTutorialDialog(props: HelpTutorialDialogProps) {
       eyebrow="Guided help"
       title="Walkthroughs and setup"
       description="Run a targeted tutorial, then come back to the activation checklist when you need another repair step."
-      class="max-w-4xl"
+      class={stylex.attrs(styles.dialogWide).class}
     >
-      <section class="rounded-[1.35rem] border border-(--border) bg-white/70 p-4">
-        <div class="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">Current setup</div>
-        <div class="mt-2 text-[0.9rem] font-semibold text-(--foreground)">
+      <section {...stylex.attrs(styles.setupSummary)}>
+        <div {...stylex.attrs(styles.setupLabel)}>Current setup</div>
+        <div {...stylex.attrs(styles.setupCount)}>
           {props.setup.readyRequiredCount}/{props.setup.totalRequiredCount} required checks ready
         </div>
-        <div class="mt-1 text-[0.7rem] leading-6 text-(--muted)">
+        <div {...stylex.attrs(styles.setupDescription)}>
           Launch mode: {props.setup.launchMode}. Guided help stays local to this browser profile.
         </div>
       </section>
 
-      <div class="grid gap-3 md:grid-cols-2">
+      <div {...stylex.attrs(styles.tutorialGrid)}>
         <For each={tutorialDefinitions}>
           {(tutorial) => {
             const status = () =>
@@ -44,14 +46,14 @@ export function HelpTutorialDialog(props: HelpTutorialDialogProps) {
                 : "Ready";
 
             return (
-              <article class="rounded-[1.35rem] border border-(--border) bg-white/72 p-4 shadow-sm">
-                <div class="text-[0.58rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">{status()}</div>
-                <h3 class="mt-2 text-[1rem] font-semibold tracking-[-0.04em] text-(--foreground)">
+              <article {...stylex.attrs(styles.tutorialCard)}>
+                <div {...stylex.attrs(styles.tutorialStatus)}>{status()}</div>
+                <h3 {...stylex.attrs(styles.tutorialTitle)}>
                   {tutorial.title}
                 </h3>
-                <p class="mt-2 text-[0.72rem] leading-6 text-(--muted)">{tutorial.summary}</p>
-                <div class="mt-4 flex items-center justify-between gap-3">
-                  <span class="text-[0.62rem] uppercase tracking-[0.16em] text-(--muted)">
+                <p {...stylex.attrs(styles.tutorialSummary)}>{tutorial.summary}</p>
+                <div {...stylex.attrs(styles.tutorialFooter)}>
+                  <span {...stylex.attrs(styles.tutorialSteps)}>
                     {tutorial.steps.length} steps
                   </span>
                   <ActionButton tooltip={`Start ${tutorial.title}`} type="button" onClick={() => props.onStartTutorial(tutorial.id)}>

@@ -1,8 +1,10 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
+import * as stylex from "@stylexjs/stylex";
 import { createUiTest } from "../utils/tests/test-harness";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { ExecutionPlanDialog } from "./execution-plan-dialog";
+import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 import { harnessStore } from "../harness-store";
 import { clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
 import { createExecutionPlanFixture, createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
@@ -59,8 +61,8 @@ createUiTest("ExecutionPlanDialog", () => {
     expect(screen.getByText(plan.prerequisites[0]!.title)).not.toBeNull();
     expect(screen.getByText(plan.contracts[0]!.title)).not.toBeNull();
     expect(screen.getByRole("button", { name: "Copy code block" })).not.toBeNull();
-    expect(dialog.querySelector(".max-h-\\[80vh\\]")).not.toBeNull();
-    expect(dialog.querySelector(".overflow-auto")).not.toBeNull();
+    const contentClasses = (stylex.attrs(styles.dialogContent).class ?? "").split(/\s+/).filter(Boolean);
+    expect(Array.from(dialog.querySelectorAll("div")).some((element) => contentClasses.every((className) => (element.getAttribute("class") ?? "").split(/\s+/).includes(className)))).toBe(true);
   });
 
   it("closes from Escape and backdrop click", async () => {

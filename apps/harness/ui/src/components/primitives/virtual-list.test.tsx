@@ -65,7 +65,7 @@ createUiTest("VirtualList", () => {
     const canvas = container.querySelector("[data-test-virtual-list] > div");
     const firstItem = container.querySelector("[data-test-virtual-list-item]");
     expect(canvas?.getAttribute("style")).toContain("height: 200px");
-    expect(firstItem?.className).toContain("absolute");
+    expect(firstItem?.className).toContain("item");
   });
 
   it("lets measured virtual content shrink below the initial estimate", () => {

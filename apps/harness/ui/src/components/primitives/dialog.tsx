@@ -1,5 +1,6 @@
 import { createEffect, createMemo, onCleanup, Show, type JSX } from "solid-js";
 import { X } from "lucide-solid";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
 import { PrimitivePortal } from "./primitive-portal";
 import { isTopOverlay, registerFocusReturn, registerOverlay, restoreOverlayFocus, trapFocusInOverlay } from "./overlay-stack";
@@ -52,11 +53,11 @@ export function Dialog(props: DialogProps) {
   return (
     <PrimitivePortal active={isOpen()} layer="dialog">
       <Show when={isOpen()}>
-        <div data-test-dialog-backdrop="" class="fixed inset-0 z-[80] bg-black/45 backdrop-blur-sm" onClick={() => props.onClose?.()} />
-        <div class="fixed inset-0 z-[81] flex items-center justify-center px-3 py-3 md:px-5 md:py-5">
+        <div data-test-dialog-backdrop="" {...stylex.attrs(styles.backdrop)} onClick={() => props.onClose?.()} />
+        <div {...stylex.attrs(styles.positioner)}>
           <section
             class={cn(
-              "app-zoom-portal-dialog panel-shell flex max-h-[90vh] w-full max-w-xl flex-col gap-4 rounded-[1.75rem] p-5 shadow-2xl",
+              stylex.attrs(styles.surface).class,
               props.class
             )}
             data-test-dialog=""
@@ -78,30 +79,30 @@ export function Dialog(props: DialogProps) {
             }}
             onClick={(event) => event.stopPropagation()}
           >
-            <div class="flex items-start justify-between gap-3">
-              <div class="space-y-1">
-                <div class="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-(--muted)">
+            <div {...stylex.attrs(styles.header)}>
+              <div {...stylex.attrs(styles.heading)}>
+                <div {...stylex.attrs(styles.eyebrow)}>
                   {props.eyebrow ?? "Dialog"}
                 </div>
-                <h2 class="text-xl font-semibold tracking-[-0.04em] text-(--foreground)">{props.title}</h2>
+                <h2 {...stylex.attrs(styles.title)}>{props.title}</h2>
                 <Show when={props.description}>
-                  <p class="text-xs leading-5 text-(--muted)">{props.description}</p>
+                  <p {...stylex.attrs(styles.description)}>{props.description}</p>
                 </Show>
               </div>
               <button
-                class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-(--muted) transition hover:bg-(--panel-strong) hover:text-(--foreground) disabled:cursor-not-allowed"
+                {...stylex.attrs(styles.close)}
                 type="button"
                 aria-label="Close dialog"
                 onClick={() => props.onClose?.()}
               >
-                <X class="h-4 w-4" />
+                <X {...stylex.attrs(styles.icon)} />
               </button>
             </div>
 
-            <div data-test-dialog-content="" class={cn("flex max-h-[70%] flex-col gap-4 overflow-auto", props.contentClass)}>{renderChildren()}</div>
+            <div data-test-dialog-content="" class={cn(stylex.attrs(styles.content).class, props.contentClass)}>{renderChildren()}</div>
 
             <Show when={props.footer}>
-              <div class="flex flex-wrap justify-end gap-2">{props.footer}</div>
+              <div {...stylex.attrs(styles.footer)}>{props.footer}</div>
             </Show>
           </section>
         </div>
@@ -109,3 +110,53 @@ export function Dialog(props: DialogProps) {
     </PrimitivePortal>
   );
 }
+
+const styles = stylex.create({
+  backdrop: { backdropFilter: "blur(4px)", backgroundColor: "rgb(0 0 0 / 0.45)", inset: 0, position: "fixed", zIndex: 80 },
+  positioner: {
+    alignItems: "center",
+    display: "flex",
+    inset: 0,
+    justifyContent: "center",
+    padding: { default: "0.75rem", "@media (min-width: 768px)": "1.25rem" },
+    position: "fixed",
+    zIndex: 81
+  },
+  surface: {
+    backgroundColor: "var(--panel)",
+    borderColor: "var(--border)",
+    borderRadius: "1.75rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "1rem",
+    maxHeight: "90vh",
+    maxWidth: "36rem",
+    padding: "1.25rem",
+    width: "100%"
+  },
+  header: { alignItems: "flex-start", display: "flex", gap: "0.75rem", justifyContent: "space-between" },
+  heading: { display: "flex", flexDirection: "column", gap: "0.25rem" },
+  eyebrow: { color: "var(--muted)", fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase" },
+  title: { color: "var(--foreground)", fontSize: "1.25rem", fontWeight: 600, letterSpacing: "-0.04em", lineHeight: "1.75rem", margin: 0 },
+  description: { color: "var(--muted)", fontSize: "0.75rem", lineHeight: "1.25rem", margin: 0 },
+  close: {
+    alignItems: "center",
+    backgroundColor: { default: "transparent", ":hover": "var(--panel-strong)" },
+    borderWidth: 0,
+    borderRadius: "0.5rem",
+    color: { default: "var(--muted)", ":hover": "var(--foreground)" },
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    display: "inline-flex",
+    height: "2rem",
+    justifyContent: "center",
+    transitionProperty: "background-color, color",
+    transitionDuration: "150ms",
+    width: "2rem"
+  },
+  icon: { height: "1rem", width: "1rem" },
+  content: { display: "flex", flexDirection: "column", gap: "1rem", maxHeight: "70%", overflow: "auto" },
+  footer: { display: "flex", flexWrap: "wrap", gap: "0.5rem", justifyContent: "flex-end" }
+});

@@ -45,9 +45,18 @@ Footnote here.[^1]
     expect(screen.getByText("strike").tagName).toBe("DEL");
     expect(screen.getByText("Quote line").closest("blockquote")).not.toBeNull();
     expect(screen.getByRole("table")).not.toBeNull();
-    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByRole("link", { name: "https://example.com" })).not.toBeNull();
-    expect(screen.getByText("Footnote body")).not.toBeNull();
+    expect(
+      document.querySelector("[data-test-markdown-table-scroll]"),
+    ).not.toBeNull();
+    const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    expect(checkbox.closest("[data-task-list-item]")).not.toBeNull();
+    expect(
+      screen.getByRole("link", { name: "https://example.com" }),
+    ).not.toBeNull();
+    expect(
+      screen.getByText("Footnote body").closest("[data-footnotes]"),
+    ).not.toBeNull();
   });
 
   it("preserves single-line breaks through remark-breaks", () => {
@@ -57,12 +66,16 @@ Footnote here.[^1]
     expect(lineBreak).not.toBeNull();
   });
 
-  it("renders inline code with the contrast chip class", () => {
-    render(() => <MarkdownContent content={"Run `assistant-actions` from chat."} />);
+  it("renders inline code with the contrast chip styling hook", () => {
+    render(() => (
+      <MarkdownContent content={"Run `assistant-actions` from chat."} />
+    ));
 
     const inlineCode = screen.getByText("assistant-actions");
     expect(inlineCode.tagName).toBe("CODE");
-    expect(inlineCode.className).toContain("markdown-inline-code");
+    expect(inlineCode.hasAttribute("data-test-markdown-inline-code")).toBe(
+      true,
+    );
   });
 
   it("drops raw html and blocks unsafe links while hardening safe links", () => {
@@ -97,14 +110,18 @@ Footnote here.[^1]
       value: {
         writeText: async (value: string) => {
           copied.push(value);
-        }
-      }
+        },
+      },
     });
 
     render(() => <MarkdownContent content={"```ts\nconst value = 1;\n```"} />);
 
-    expect(document.querySelector(".markdown-code-block")).not.toBeNull();
-    expect(document.querySelector(".hljs-keyword")).not.toBeNull();
+    expect(
+      document.querySelector("[data-test-markdown-code-block]"),
+    ).not.toBeNull();
+    expect(document.querySelector(".hljs-keyword")?.className).toContain(
+      "syntaxKeyword",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Copy code block" }));
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -114,9 +131,13 @@ Footnote here.[^1]
   });
 
   it("skips syntax highlighting while content is live", () => {
-    render(() => <MarkdownContent content={"```ts\nconst value = 1;\n```"} live />);
+    render(() => (
+      <MarkdownContent content={"```ts\nconst value = 1;\n```"} live />
+    ));
 
-    expect(document.querySelector(".markdown-code-block")).not.toBeNull();
+    expect(
+      document.querySelector("[data-test-markdown-code-block]"),
+    ).not.toBeNull();
     expect(document.querySelector(".hljs-keyword")).toBeNull();
   });
 
@@ -126,8 +147,8 @@ Footnote here.[^1]
       value: {
         writeText: async () => {
           throw new Error("denied");
-        }
-      }
+        },
+      },
     });
 
     render(() => <MarkdownContent content={"```txt\ncopy me\n```"} />);
@@ -145,17 +166,21 @@ Footnote here.[^1]
         fileLinks={{
           rootPath: "C:\\repo",
           filePaths: ["harness/ui/src/app.tsx"],
-          onOpenFile: (target) => opened.push(target)
+          onOpenFile: (target) => opened.push(target),
         }}
       />
     ));
 
-    const fileLink = screen.getByRole("button", { name: "harness/ui/src/app.tsx:12:4" });
+    const fileLink = screen.getByRole("button", {
+      name: "harness/ui/src/app.tsx:12:4",
+    });
     fireEvent.click(fileLink);
     expect(opened).toEqual([]);
 
     fireEvent.click(fileLink, { ctrlKey: true });
-    expect(opened).toEqual([{ path: "harness/ui/src/app.tsx", line: 12, column: 4 }]);
+    expect(opened).toEqual([
+      { path: "harness/ui/src/app.tsx", line: 12, column: 4 },
+    ]);
   });
 
   it("opens inline code file paths on control click", () => {
@@ -166,14 +191,18 @@ Footnote here.[^1]
         fileLinks={{
           rootPath: "C:\\repo",
           filePaths: ["harness/ui/src/app.tsx"],
-          onOpenFile: (target) => opened.push(target)
+          onOpenFile: (target) => opened.push(target),
         }}
       />
     ));
 
-    const fileLink = screen.getByRole("button", { name: "harness/ui/src/app.tsx:12" });
+    const fileLink = screen.getByRole("button", {
+      name: "harness/ui/src/app.tsx:12",
+    });
     fireEvent.click(fileLink, { metaKey: true });
 
-    expect(opened).toEqual([{ path: "harness/ui/src/app.tsx", line: 12, column: undefined }]);
+    expect(opened).toEqual([
+      { path: "harness/ui/src/app.tsx", line: 12, column: undefined },
+    ]);
   });
 });

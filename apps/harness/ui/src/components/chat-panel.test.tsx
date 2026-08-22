@@ -1460,9 +1460,9 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
 
     expect(screen.getByRole("status").textContent).toContain("Working for 1m 5s");
     expect(document.querySelector("[data-test-waiting-timer]")).not.toBeNull();
-    expect(document.querySelectorAll(".agent-waiting-dot")).toHaveLength(3);
-    expect(document.querySelector(".agent-waiting-dot-2")).not.toBeNull();
-    expect(document.querySelector(".agent-waiting-dot-3")).not.toBeNull();
+    expect(document.querySelectorAll("[data-test-agent-waiting-dot]")).toHaveLength(3);
+    expect(document.querySelector('[data-test-agent-waiting-dot][data-delay-index="1"]')).not.toBeNull();
+    expect(document.querySelector('[data-test-agent-waiting-dot][data-delay-index="2"]')).not.toBeNull();
   });
 
   it("shows the last response time and duration above the composer after the agent finishes", () => {
@@ -1882,7 +1882,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     cleanup();
     render(() => <ChatPanel />);
     expect(screen.getByRole("button", { name: "Copy code block" })).not.toBeNull();
-    expect(document.querySelector(".markdown-code-content")?.textContent).toContain("const streamed = true;");
+    expect(document.querySelector("[data-test-markdown-code-content]")?.textContent).toContain("const streamed = true;");
   });
 
   it("renders live planning status even before transcript messages exist", () => {

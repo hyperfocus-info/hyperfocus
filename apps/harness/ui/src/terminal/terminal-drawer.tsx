@@ -1,4 +1,5 @@
 import { Match, Switch, createEffect, createMemo, createSignal, onMount } from "solid-js";
+import * as stylex from "@stylexjs/stylex";
 import { ClipboardCheck, ChevronDown, Copy, Plus, RotateCw, Search, Settings2, Square, TerminalSquare } from "lucide-solid";
 import { createRequestId, type CliSession, type TerminalEnvVar, type TerminalSession } from "../../../shared/protocol";
 import { harnessStore, getActiveProject, type ViewProjectState } from "../harness-store";
@@ -18,6 +19,7 @@ import { normalizeTerminalGlyphSpacing } from "./terminal-output-format";
 import { shouldUseSolidTerminalRenderer } from "./terminal-renderer-mode";
 import { closeTerminalSearch, openTerminalSearch, toggleTerminalSearch } from "./terminal-search-actions";
 import { resolveTerminalKeyboardAction } from "./terminal-keybindings";
+import { terminalStyles as styles, terminalUtilities as utilities } from "./terminal.styles";
 
 type DrawerSession =
   | {
@@ -266,27 +268,28 @@ export function TerminalDrawer() {
     <>
       <section
         data-test-terminal-drawer=""
-        class="terminal-drawer-shell fixed inset-x-0 bottom-0 z-40 flex min-h-0 flex-col border-t border-(--terminal-border) bg-(--terminal-shell) text-(--terminal-foreground) shadow-2xl transition-transform"
-        classList={{ "translate-y-full": !terminalStore.state.open }}
+        class={terminalStore.state.open
+          ? stylex.attrs(styles.drawer, utilities.fixed, utilities.insetX0, utilities.bottom0, utilities.z40, utilities.flex, utilities.minH0, utilities.flexCol, utilities.borderT, utilities.shadow2xl, utilities.transition).class
+          : stylex.attrs(styles.drawer, styles.drawerClosed, utilities.fixed, utilities.insetX0, utilities.bottom0, utilities.z40, utilities.flex, utilities.minH0, utilities.flexCol, utilities.borderT, utilities.shadow2xl, utilities.transition).class}
         style={{ height: `${terminalStore.state.height}px` }}
         onKeyDown={handleDrawerKeyDown}
       >
         <button
           type="button"
-          class="h-2 cursor-row-resize border-b border-(--terminal-border) bg-transparent transition hover:bg-(--terminal-hover)"
+          class={stylex.attrs(styles.hoverSurface, utilities.h2, utilities.cursorRowResize, utilities.borderB, utilities.borderDefault, utilities.bgTransparent, utilities.transition).class}
           aria-label="Resize terminal drawer"
           onPointerDown={startResize}
         />
-        <div class="flex min-h-0 flex-1">
-          <aside class="flex w-48 shrink-0 flex-col border-r border-(--terminal-border) bg-(--terminal-sidebar) sm:w-60">
-            <header class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-(--terminal-border) px-3">
-              <div class="min-w-0">
-                <div class="text-[0.56rem] font-semibold uppercase tracking-[0.18em] text-(--terminal-muted)">Sessions</div>
-                <div class="truncate text-[0.82rem] font-semibold text-(--terminal-foreground)">Terminal</div>
+        <div class={stylex.attrs(utilities.flex, utilities.minH0, utilities.flex1).class}>
+          <aside class={stylex.attrs(styles.sidebar, utilities.flex, utilities.shrink0, utilities.flexCol, utilities.borderR).class}>
+            <header class={stylex.attrs(utilities.flex, utilities.h12, utilities.shrink0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2, utilities.borderB, utilities.borderDefault, utilities.px3).class}>
+              <div class={stylex.attrs(utilities.minW0).class}>
+                <div class={stylex.attrs(utilities.text056, utilities.fontSemibold, utilities.uppercase, utilities.tracking018, styles.muted).class}>Sessions</div>
+                <div class={stylex.attrs(utilities.truncate, utilities.text082, utilities.fontSemibold, styles.foreground).class}>Terminal</div>
               </div>
-              <ActionButton tooltip="New terminal" ariaLabel="New terminal" variant="secondary" size="icon" class="h-8 w-8 rounded-lg border-(--terminal-border) bg-(--terminal-hover) text-(--terminal-foreground) hover:bg-(--terminal-selection)" icon={<Plus class="h-4 w-4" />} onClick={createSession} />
+              <ActionButton tooltip="New terminal" ariaLabel="New terminal" variant="secondary" size="icon" class={stylex.attrs(styles.emphasizedAction, utilities.h8, utilities.w8, utilities.roundedLg).class} icon={<Plus class={stylex.attrs(utilities.h4, utilities.w4).class} />} onClick={createSession} />
             </header>
-            <div class="min-h-0 flex-1 overflow-auto px-2 py-2">
+            <div class={stylex.attrs(utilities.minH0, utilities.flex1, utilities.overflowAuto, utilities.px2, utilities.py2).class}>
               <TerminalTabs
                 sessions={tabItems()}
                 activeSessionId={activeEntry()?.id}
@@ -309,10 +312,10 @@ export function TerminalDrawer() {
                 onClose={closeEntry}
               />
             </div>
-            <footer class="grid shrink-0 gap-2 border-t border-(--terminal-border) p-2">
+            <footer class={stylex.attrs(utilities.grid, utilities.shrink0, utilities.gap2, utilities.borderT, utilities.borderDefault, utilities.p2).class}>
               <DropdownControl
                 kind="select"
-                icon={<TerminalSquare class="h-3.5 w-3.5" />}
+                icon={<TerminalSquare class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                 ariaLabel="Select terminal shell"
                 value={shellId() || terminalStore.state.preferences.defaultShellId || ""}
                 options={terminalStore.state.shells.map((shell) => ({
@@ -322,16 +325,16 @@ export function TerminalDrawer() {
                   disabled: !shell.available
                 }))}
                 onChange={(value) => setShellId(value)}
-                class="w-full"
+                class={stylex.attrs(utilities.wFull).class}
               />
-              <div class="flex items-center gap-1">
-                <ActionButton tooltip="Terminal preferences" ariaLabel="Terminal preferences" variant="ghost" size="icon" class="h-8 w-8 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<Settings2 class="h-4 w-4" />} onClick={() => setSettingsOpen(true)} />
-                <ActionButton tooltip="Copy terminal buffer" ariaLabel="Copy terminal buffer" variant="ghost" size="icon" class="h-8 w-8 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<Copy class="h-4 w-4" />} onClick={copyActiveBuffer} />
-                <ActionButton tooltip="Close terminal drawer" ariaLabel="Close terminal drawer" variant="ghost" size="icon" class="ml-auto h-8 w-8 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<ChevronDown class="h-4 w-4" />} onClick={() => terminalStore.setOpen(false)} />
+              <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.gap1).class}>
+                <ActionButton tooltip="Terminal preferences" ariaLabel="Terminal preferences" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h8, utilities.w8, utilities.roundedLg).class} icon={<Settings2 class={stylex.attrs(utilities.h4, utilities.w4).class} />} onClick={() => setSettingsOpen(true)} />
+                <ActionButton tooltip="Copy terminal buffer" ariaLabel="Copy terminal buffer" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h8, utilities.w8, utilities.roundedLg).class} icon={<Copy class={stylex.attrs(utilities.h4, utilities.w4).class} />} onClick={copyActiveBuffer} />
+                <ActionButton tooltip="Close terminal drawer" ariaLabel="Close terminal drawer" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.mlAuto, utilities.h8, utilities.w8, utilities.roundedLg).class} icon={<ChevronDown class={stylex.attrs(utilities.h4, utilities.w4).class} />} onClick={() => terminalStore.setOpen(false)} />
               </div>
             </footer>
           </aside>
-          <main class="flex min-h-0 min-w-0 flex-1 flex-col bg-(--terminal-shell) p-1.5">
+          <main class={stylex.attrs(styles.surface, utilities.flex, utilities.minH0, utilities.minW0, utilities.flex1, utilities.flexCol, utilities.p15).class}>
             <Switch fallback={<EmptyTerminalState onCreate={createSession} />}>
               <Match when={activeEntry()?.kind === "cli" ? activeEntry() : undefined}>
                 {(entry) => (
@@ -359,8 +362,8 @@ export function TerminalDrawer() {
           </ActionButton>
         }
       >
-        <div class="grid gap-4">
-          <label class="grid gap-1 text-xs font-medium">
+        <div class={stylex.attrs(utilities.grid, utilities.gap4).class}>
+          <label class={stylex.attrs(utilities.grid, utilities.gap1, utilities.textXs, utilities.fontMedium).class}>
             Scrollback limit
             <Input
               type="number"
@@ -380,7 +383,7 @@ export function TerminalDrawer() {
               })}
             />
           </label>
-          <label class="grid gap-1 text-xs font-medium">
+          <label class={stylex.attrs(utilities.grid, utilities.gap1, utilities.textXs, utilities.fontMedium).class}>
             Environment variables
             <Textarea rows="5" value={envText()} placeholder={"NAME=value\nSECRET_TOKEN=***"} onInput={(event) => setEnvText(event.currentTarget.value)} />
           </label>
@@ -392,13 +395,13 @@ export function TerminalDrawer() {
 
 function EmptyTerminalState(props: { onCreate: () => void }) {
   return (
-    <div class="flex h-full min-h-0 items-center justify-center border border-(--terminal-border) bg-(--terminal-shell)">
-      <div class="flex max-w-sm flex-col items-center gap-4 text-center">
-        <Plus class="h-12 w-12 text-(--terminal-muted)" strokeWidth={1.5} />
-        <ActionButton tooltip="Create a new terminal session" ariaLabel="New terminal session" variant="secondary" class="h-9 rounded-md border-(--terminal-border) bg-(--terminal-hover) px-4 text-sm text-(--terminal-foreground) hover:bg-(--terminal-selection)" icon={<Plus class="h-4 w-4" />} onClick={props.onCreate}>
+    <div class={stylex.attrs(styles.surface, utilities.flex, utilities.hFull, utilities.minH0, utilities.itemsCenter, utilities.justifyCenter, utilities.border).class}>
+      <div class={stylex.attrs(utilities.flex, utilities.maxWSm, utilities.flexCol, utilities.itemsCenter, utilities.gap4, utilities.textCenter).class}>
+        <Plus class={stylex.attrs(utilities.h12, utilities.w12, styles.muted).class} strokeWidth={1.5} />
+        <ActionButton tooltip="Create a new terminal session" ariaLabel="New terminal session" variant="secondary" class={stylex.attrs(styles.emphasizedAction, utilities.h9, utilities.roundedMd, utilities.px4, utilities.textSm).class} icon={<Plus class={stylex.attrs(utilities.h4, utilities.w4).class} />} onClick={props.onCreate}>
           New Terminal Session
         </ActionButton>
-        <p class="max-w-xs text-sm leading-6 text-(--terminal-muted)">
+        <p class={stylex.attrs(utilities.maxWXs, utilities.textSm, utilities.leading6, styles.muted).class}>
           No active terminals. Click to create a new session or choose one from the sidebar.
         </p>
       </div>
@@ -456,32 +459,32 @@ function CliSessionDrawerPane(props: { session: CliSession; name: string }) {
   };
 
   return (
-    <section class="flex h-full min-h-0 min-w-0 flex-1 flex-col border border-(--terminal-border) bg-(--terminal-shell)" data-test-cli-terminal-pane={props.session.id}>
-      <div class="flex min-h-11 shrink-0 items-center justify-between gap-2 border-b border-(--terminal-border) px-3 py-1.5">
-        <div class="min-w-0">
-          <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[0.72rem] leading-4 text-(--terminal-muted)">
-            <span class="truncate font-semibold text-(--terminal-foreground)">{props.name}</span>
+    <section class={stylex.attrs(styles.surface, utilities.flex, utilities.hFull, utilities.minH0, utilities.minW0, utilities.flex1, utilities.flexCol, utilities.border).class} data-test-cli-terminal-pane={props.session.id}>
+      <div class={stylex.attrs(utilities.flex, utilities.minH11, utilities.shrink0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2, utilities.borderB, utilities.borderDefault, utilities.px3, utilities.py15).class}>
+        <div class={stylex.attrs(utilities.minW0).class}>
+          <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flexWrap, utilities.itemsCenter, utilities.gapX2, utilities.gapY05, utilities.fontMono, utilities.text072, utilities.leading4, styles.muted).class}>
+            <span class={stylex.attrs(utilities.truncate, utilities.fontSemibold, styles.foreground).class}>{props.name}</span>
             <span>{"\u2022"}</span>
             <span>{connectionState()}</span>
             <span>{"\u2022"}</span>
             <span>{props.session.cols}x{props.session.rows}</span>
           </div>
-          <div class="text-[0.62rem] leading-4 text-(--terminal-muted)">Spawned agent/CLI-created session</div>
+          <div class={stylex.attrs(utilities.text062, utilities.leading4, styles.muted).class}>Spawned agent/CLI-created session</div>
         </div>
-        <div class="flex shrink-0 items-center gap-1">
+        <div class={stylex.attrs(utilities.flex, utilities.shrink0, utilities.itemsCenter, utilities.gap1).class}>
           {terminalStore.state.searchOpen && (
             <TerminalSearch
               onNext={() => renderer()?.findNext(terminalStore.state.searchQuery)}
               onPrevious={() => renderer()?.findPrevious(terminalStore.state.searchQuery)}
             />
           )}
-          <ActionButton tooltip="Search terminal" ariaLabel="Search terminal" variant="ghost" size="icon" class="h-7 w-7 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<Search class="h-3.5 w-3.5" />} onClick={openTerminalSearch} />
-          <ActionButton tooltip="Reconnect CLI terminal" ariaLabel="Reconnect CLI terminal" variant="ghost" size="icon" class="h-7 w-7 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<RotateCw class="h-3.5 w-3.5" />} onClick={attachSession} />
-          <ActionButton tooltip="Capture current terminal state for follow-up" ariaLabel="Capture CLI terminal state" variant="ghost" size="icon" class="h-7 w-7 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<ClipboardCheck class="h-3.5 w-3.5" />} onClick={captureVisibleState} />
-          <ActionButton tooltip="Stop CLI terminal" ariaLabel="Stop CLI terminal" variant="ghost" size="icon" class="h-7 w-7 rounded-lg text-(--terminal-muted) hover:bg-(--terminal-hover) hover:text-(--terminal-foreground)" icon={<Square class="h-3.5 w-3.5" />} onClick={stopSession} />
+          <ActionButton tooltip="Search terminal" ariaLabel="Search terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Search class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={openTerminalSearch} />
+          <ActionButton tooltip="Reconnect CLI terminal" ariaLabel="Reconnect CLI terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<RotateCw class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={attachSession} />
+          <ActionButton tooltip="Capture current terminal state for follow-up" ariaLabel="Capture CLI terminal state" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<ClipboardCheck class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={captureVisibleState} />
+          <ActionButton tooltip="Stop CLI terminal" ariaLabel="Stop CLI terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Square class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={stopSession} />
         </div>
       </div>
-      <div class="min-h-0 flex-1 bg-(--terminal-shell)">
+      <div class={stylex.attrs(styles.surface, utilities.minH0, utilities.flex1).class}>
         {shouldUseSolidTerminalRenderer(terminalStore.state.preferences.rendererMode) ? (
           <SolidTerminalRendererPrototype output={output()} onInput={(input) => sendCliSessionInput(props.session.id, input)} />
         ) : (

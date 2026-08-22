@@ -1,35 +1,24 @@
 import { splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { cva, type VariantProps } from "class-variance-authority";
+import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "./tooltip";
 
-const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:ring-offset-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 ring-offset-(--bg)",
-  {
-    variants: {
-      variant: {
-        default:
-          "bg-(--accent) text-white shadow-sm hover:bg-(--accent-strong)",
-        secondary:
-          "bg-(--panel-strong) text-(--foreground) border border-(--border) hover:bg-(--panel)",
-        ghost: "text-(--foreground) hover:bg-(--panel-strong)",
-        danger: "bg-(--danger) text-white hover:bg-(--danger-strong)",
-        warning:
-          "bg-(--warning) text-white shadow-sm hover:bg-(--warning-strong)"
-      },
-      size: {
-        default: "h-9 px-3 py-2",
-        sm: "h-8 rounded-lg px-3",
-        icon: "h-9 w-9"
-      }
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default"
-    }
-  }
-);
+type ButtonVariant = "default" | "secondary" | "ghost" | "danger" | "warning";
+type ButtonSize = "default" | "sm" | "icon";
+
+/** Returns compiled StyleX classes for the shared button variants. */
+export function buttonVariants(options?: { variant?: ButtonVariant; size?: ButtonSize }) {
+  const variant = options?.variant ?? "default";
+  const size = options?.size ?? "default";
+  return stylex.attrs(
+    styles.base,
+    styles[variant],
+    size === "default" && styles.defaultSize,
+    size === "sm" && styles.small,
+    size === "icon" && styles.icon
+  ).class;
+}
 
 type ButtonTooltipProps =
   | {
@@ -39,13 +28,15 @@ type ButtonTooltipProps =
   | {
       tooltip?: never;
       justificationForNoTooltip: string;
-    };
+};
 
 type ButtonProps = {
   class?: string;
   as?: "button" | "span";
   tooltipTriggerClass?: string;
-} & VariantProps<typeof buttonVariants> &
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+} &
   JSX.IntrinsicElements["button"] &
   ButtonTooltipProps;
 
@@ -77,4 +68,77 @@ export function Button(props: ButtonProps) {
   );
 }
 
-export { buttonVariants };
+const styles = stylex.create({
+  base: {
+    alignItems: "center",
+    borderStyle: "solid",
+    borderWidth: 0,
+    borderRadius: "0.75rem",
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    display: "inline-flex",
+    fontSize: "0.75rem",
+    fontWeight: 500,
+    gap: "0.5rem",
+    justifyContent: "center",
+    lineHeight: "1rem",
+    transitionProperty: "color, background-color, border-color, box-shadow",
+    transitionDuration: "150ms",
+    whiteSpace: "nowrap",
+    boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--bg), 0 0 0 4px var(--ring)" },
+    opacity: { default: 1, ":disabled": 0.45 },
+    outline: { default: null, ":focus-visible": "none" },
+    pointerEvents: { default: "auto", ":disabled": "none" }
+  },
+  default: {
+    backgroundColor: {
+      default: "var(--accent)",
+      ":hover": "var(--accent-strong)"
+    },
+    boxShadow: "0 1px 2px rgb(0 0 0 / 0.05)",
+    color: "white"
+  },
+  secondary: {
+    backgroundColor: {
+      default: "var(--panel-strong)",
+      ":hover": "var(--panel)"
+    },
+    borderColor: "var(--border)",
+    borderWidth: "1px",
+    color: "var(--foreground)"
+  },
+  ghost: {
+    backgroundColor: {
+      default: "transparent",
+      ":hover": "var(--panel-strong)"
+    },
+    color: "var(--foreground)"
+  },
+  danger: {
+    backgroundColor: {
+      default: "var(--danger)",
+      ":hover": "var(--danger-strong)"
+    },
+    color: "white"
+  },
+  warning: {
+    backgroundColor: {
+      default: "var(--warning)",
+      ":hover": "var(--warning-strong)"
+    },
+    boxShadow: "0 1px 2px rgb(0 0 0 / 0.05)",
+    color: "white"
+  },
+  defaultSize: {
+    height: "2.25rem",
+    padding: "0.5rem 0.75rem"
+  },
+  small: {
+    borderRadius: "0.5rem",
+    height: "2rem",
+    paddingInline: "0.75rem"
+  },
+  icon: {
+    height: "2.25rem",
+    width: "2.25rem"
+  }
+});

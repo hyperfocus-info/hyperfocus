@@ -1,0 +1,2435 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Three Arena</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #080b0d;
+        color: #eef5ed;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow: hidden;
+        background: #050807;
+      }
+
+      body.menu-open,
+      body.pause-open,
+      body.menu-open canvas,
+      body.pause-open canvas {
+        cursor: auto;
+      }
+
+      canvas {
+        display: block;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button {
+        border: 1px solid var(--ce-ui-control-border, rgba(202, 226, 183, 0.35));
+        background: var(--ce-ui-control-surface, rgba(39, 59, 43, 0.92));
+        color: var(--ce-ui-control-text, #f3ffe7);
+        min-height: 38px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible,
+      button.controller-focus {
+        background: var(--ce-ui-control-surface-hover, rgba(61, 91, 62, 0.96));
+        outline: 2px solid var(--ce-ui-focus-ring, rgba(171, 221, 126, 0.45));
+        outline-offset: 2px;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: var(--ce-ui-disabled-opacity, 0.45);
+      }
+
+      button[aria-disabled="true"] {
+        cursor: pointer;
+      }
+
+      .button-icon {
+        position: relative;
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        flex: 0 0 16px;
+      }
+
+      .loadout-config-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+      }
+
+      .loadout-config-button.active {
+        border-color: rgba(215, 255, 141, 0.68);
+        background: rgba(65, 91, 49, 0.96);
+      }
+
+      .loadout-icon {
+        background:
+          linear-gradient(90deg, currentColor 2px, transparent 2px 7px, currentColor 7px 9px, transparent 9px),
+          linear-gradient(0deg, currentColor 2px, transparent 2px 7px, currentColor 7px 9px, transparent 9px);
+        opacity: 0.9;
+      }
+
+      input {
+        min-height: 38px;
+        border: 1px solid var(--ce-ui-control-border, rgba(202, 226, 183, 0.25));
+        background: var(--ce-ui-input-surface, rgba(8, 13, 11, 0.86));
+        color: var(--ce-ui-text, #f8fff2);
+        padding: 8px 10px;
+      }
+
+      #hud {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 1;
+        transition: opacity 180ms ease;
+      }
+
+      body.menu-open #hud {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      body.menu-open .topbar,
+      body.menu-open .objective,
+      body.menu-open .statusbar,
+      body.menu-open .passivebar,
+      body.menu-open .minimap,
+      body.menu-open .telemetry,
+      body.menu-open .combo {
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      .fx-overlay {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 3;
+        opacity: 0;
+        background:
+          radial-gradient(circle at 50% 55%, transparent 34%, rgba(0, 0, 0, 0.3) 72%, rgba(0, 0, 0, 0.62) 100%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 18%, rgba(0, 0, 0, 0.18));
+      }
+
+      .fx-overlay.flash-danger {
+        animation: flashDanger 260ms ease-out;
+      }
+
+      .fx-overlay.flash-gold {
+        animation: flashGold 420ms ease-out;
+      }
+
+      .fx-overlay.flash-level {
+        animation: flashLevel 540ms ease-out;
+      }
+
+      @keyframes flashDanger {
+        0% { opacity: 0; background-color: rgba(230, 54, 45, 0); }
+        22% { opacity: 1; background-color: rgba(230, 54, 45, 0.25); }
+        100% { opacity: 0; background-color: rgba(230, 54, 45, 0); }
+      }
+
+      @keyframes flashGold {
+        0% { opacity: 0; background-color: rgba(255, 210, 98, 0); }
+        25% { opacity: 1; background-color: rgba(255, 210, 98, 0.18); }
+        100% { opacity: 0; background-color: rgba(255, 210, 98, 0); }
+      }
+
+      @keyframes flashLevel {
+        0% { opacity: 0; background-color: rgba(148, 220, 255, 0); }
+        28% { opacity: 1; background-color: rgba(148, 220, 255, 0.2); }
+        100% { opacity: 0; background-color: rgba(148, 220, 255, 0); }
+      }
+
+      .topbar,
+      .statusbar,
+      .objective,
+      .toast,
+      .lobby {
+        position: fixed;
+        color: #f6fff0;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+      }
+
+      .topbar {
+        top: 12px;
+        left: 12px;
+        right: 12px;
+        display: grid;
+        grid-template-columns: repeat(6, minmax(96px, max-content));
+        gap: 8px;
+        align-items: center;
+      }
+
+      .pill {
+        position: relative;
+        min-height: 34px;
+        padding: 7px 10px 8px;
+        border: 1px solid rgba(200, 245, 154, 0.32);
+        background: linear-gradient(180deg, rgba(9, 18, 14, 0.82), rgba(5, 11, 9, 0.68));
+        backdrop-filter: blur(9px);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.05),
+          0 8px 22px rgba(0, 0, 0, 0.3);
+        font-size: 13px;
+        line-height: 1.25;
+      }
+
+      .pill::after {
+        content: "";
+        position: absolute;
+        inset: 1px;
+        pointer-events: none;
+        border: 1px solid transparent;
+        opacity: 0;
+        transition: opacity 140ms ease, border-color 140ms ease;
+      }
+
+      .pill strong {
+        color: #d5ff8d;
+        font-weight: 750;
+      }
+
+      .meter-pill {
+        min-width: 156px;
+      }
+
+      .vital-pill {
+        overflow: hidden;
+        border-color: rgba(145, 255, 164, 0.38);
+      }
+
+      .vital-pill::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, rgba(115, 229, 255, 0.14) 0 var(--shield-level, 0%), transparent var(--shield-level, 0%)),
+          linear-gradient(90deg, rgba(136, 255, 122, 0.08), transparent 64%);
+        opacity: 0.85;
+      }
+
+      .vital-pill.damaged {
+        animation: hpBite 240ms ease-out;
+      }
+
+      .vital-pill.critical {
+        border-color: rgba(255, 92, 82, 0.72);
+        box-shadow: 0 0 0 1px rgba(255, 92, 82, 0.2), 0 0 22px rgba(255, 48, 38, 0.18);
+      }
+
+      .vital-pill.critical::after {
+        border-color: rgba(255, 92, 82, 0.42);
+        opacity: 1;
+        animation: criticalPulse 720ms ease-in-out infinite alternate;
+      }
+
+      .shared-slurry {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 3px;
+        display: grid;
+        grid-template-columns: var(--hp-level, 1fr) var(--shield-fr, 0.22fr) var(--stress-fr, 0.08fr);
+        gap: 2px;
+        height: 2px;
+        pointer-events: none;
+        opacity: 0.9;
+      }
+
+      .shared-slurry span {
+        min-width: 2px;
+        background: #a8ff7d;
+        box-shadow: 0 0 8px currentColor;
+      }
+
+      .shared-slurry .shield {
+        background: #82e9ff;
+      }
+
+      .shared-slurry .stress {
+        background: #ffd16f;
+      }
+
+      .xp-meter {
+        min-width: 190px;
+      }
+
+      .hud-icon {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        margin-right: 6px;
+        vertical-align: -2px;
+      }
+
+      .xp-gem {
+        border: 1px solid rgba(229, 252, 255, 0.9);
+        background: linear-gradient(135deg, #ecfbff 0%, #7bd6ff 42%, #245bd8 100%);
+        box-shadow: 0 0 14px rgba(123, 214, 255, 0.72);
+        transform: rotate(45deg) scale(0.82);
+      }
+
+      .meter-count {
+        margin-left: 6px;
+        color: #b9ecff;
+        font-weight: 750;
+      }
+
+      .hud-bar {
+        position: relative;
+        height: 5px;
+        margin-top: 5px;
+        overflow: hidden;
+        border: 1px solid rgba(226, 255, 195, 0.18);
+        background: rgba(0, 0, 0, 0.42);
+      }
+
+      .hud-bar::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(90deg, transparent 0 24%, rgba(255, 255, 255, 0.18) 24% 25%, transparent 25% 49%, rgba(255, 255, 255, 0.18) 49% 50%, transparent 50% 74%, rgba(255, 255, 255, 0.18) 74% 75%, transparent 75%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent);
+        opacity: 0.55;
+        z-index: 1;
+      }
+
+      .hud-fill {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        transform-origin: left center;
+        transition: transform 140ms ease;
+      }
+
+      .hp-fill {
+        background: linear-gradient(90deg, #ec4f49, #ffd16d, #a9ff74);
+        box-shadow: 0 0 10px rgba(169, 255, 116, 0.44);
+      }
+
+      .vital-pill.critical .hp-fill {
+        background: linear-gradient(90deg, #ff3b35, #ff8a5d);
+        box-shadow: 0 0 12px rgba(255, 59, 53, 0.7);
+      }
+
+      .xp-fill {
+        background: linear-gradient(90deg, #2368e8, #7bd6ff, #d9ff86);
+        box-shadow: 0 0 12px rgba(123, 214, 255, 0.62);
+      }
+
+      .class-pill {
+        padding-left: 22px;
+        border-color: color-mix(in srgb, var(--class-color, #d7ff8d) 48%, rgba(255, 255, 255, 0.14));
+        background:
+          linear-gradient(90deg, color-mix(in srgb, var(--class-color, #d7ff8d) 16%, transparent), transparent 70%),
+          linear-gradient(180deg, rgba(9, 18, 14, 0.82), rgba(5, 11, 9, 0.68));
+      }
+
+      .class-pill::before {
+        content: "";
+        position: absolute;
+        left: 9px;
+        top: 8px;
+        width: 8px;
+        height: calc(100% - 16px);
+        background: var(--class-color, #d7ff8d);
+        box-shadow: 0 0 12px color-mix(in srgb, var(--class-color, #d7ff8d) 58%, transparent);
+      }
+
+      .objective {
+        top: 58px;
+        right: 12px;
+        max-width: min(420px, calc(100vw - 24px));
+        text-align: right;
+      }
+
+      .combo {
+        position: fixed;
+        top: 58px;
+        left: 12px;
+        min-height: 30px;
+        padding: 6px 10px;
+        border-left: 3px solid #ffd86a;
+        background: rgba(8, 11, 9, 0.66);
+        color: #fff3b2;
+        font-size: 13px;
+        font-weight: 800;
+        opacity: 0;
+        transform: translateY(-6px);
+        transition: opacity 120ms ease, transform 120ms ease;
+      }
+
+      .combo.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .statusbar {
+        left: 12px;
+        right: 156px;
+        bottom: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        max-width: min(760px, calc(100vw - 180px));
+        gap: 8px;
+      }
+
+      .passivebar {
+        position: fixed;
+        left: 12px;
+        right: 156px;
+        bottom: 52px;
+        display: flex;
+        flex-wrap: wrap;
+        max-width: min(440px, calc(100vw - 180px));
+        gap: 4px;
+        color: #f6fff0;
+        pointer-events: none;
+      }
+
+      .passive-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-height: 24px;
+        padding: 3px 5px;
+        border: 1px solid color-mix(in srgb, var(--passive-color, #d7ff8d) 42%, rgba(255, 255, 255, 0.12));
+        background:
+          linear-gradient(90deg, color-mix(in srgb, var(--passive-color, #d7ff8d) 16%, transparent), transparent),
+          rgba(5, 10, 9, 0.68);
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
+        font-size: 10px;
+        font-weight: 800;
+        text-shadow: 0 1px 2px #000;
+      }
+
+      .passive-icon {
+        display: inline-grid;
+        flex: 0 0 18px;
+        width: 18px;
+        height: 18px;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--passive-color, #d7ff8d) 46%, rgba(255, 255, 255, 0.14));
+        background: rgba(0, 0, 0, 0.34);
+      }
+
+      .passive-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .passive-chip span {
+        color: color-mix(in srgb, var(--passive-color, #d7ff8d) 78%, white 22%);
+      }
+
+      .weapon-pill {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        max-width: 152px;
+        border-color: rgba(255, 224, 148, 0.34);
+        overflow: hidden;
+        transform: translateY(0);
+        transition: transform 120ms ease, border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+      }
+
+      .weapon-pill:hover,
+      .weapon-pill.focus-state,
+      .weapon-pill:focus-within {
+        transform: translateY(-1px);
+        border-color: color-mix(in srgb, var(--weapon-color, #d5ff8d) 66%, white 10%);
+      }
+
+      .weapon-pill::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        pointer-events: none;
+        background:
+          conic-gradient(from -90deg, color-mix(in srgb, var(--weapon-color, #d5ff8d) 74%, transparent) calc(var(--cooldown, 1) * 1turn), rgba(255, 255, 255, 0.05) 0),
+          linear-gradient(90deg, color-mix(in srgb, var(--weapon-color, #d5ff8d) 13%, transparent), transparent 58%);
+        opacity: 0.32;
+        mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        padding: 1px;
+      }
+
+      .weapon-pill.cooldown::before {
+        opacity: 0.58;
+        animation: cooldownSweep 900ms linear infinite;
+      }
+
+      .weapon-pill.locked-state {
+        filter: grayscale(0.5);
+        opacity: 0.58;
+      }
+
+      .weapon-pill.locked-state .weapon-glyph {
+        border-style: dashed;
+        background: rgba(12, 16, 14, 0.82);
+        box-shadow: none;
+        color: #9ba99a;
+      }
+
+      .weapon-pill.upgrade-state {
+        border-color: rgba(255, 219, 118, 0.72);
+        box-shadow: 0 0 0 1px rgba(255, 219, 118, 0.18), 0 0 20px rgba(255, 195, 85, 0.14);
+      }
+
+      .weapon-pill.equipped-state .status-badge {
+        color: #06100a;
+        background: #d5ff8d;
+      }
+
+      .weapon-pill strong {
+        min-width: 0;
+        max-width: 92px;
+        overflow: hidden;
+        color: #f7fff0;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .weapon-glyph {
+        display: inline-grid;
+        flex: 0 0 24px;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        border: 1px solid var(--weapon-color, #d5ff8d);
+        background:
+          radial-gradient(circle at 42% 34%, rgba(255, 255, 255, 0.32), transparent 32%),
+          color-mix(in srgb, var(--weapon-color, #d5ff8d) 30%, rgba(4, 9, 8, 0.84));
+        box-shadow: 0 0 12px color-mix(in srgb, var(--weapon-color, #d5ff8d) 42%, transparent);
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 850;
+        line-height: 1;
+      }
+
+      .weapon-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .status-badge,
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 16px;
+        padding: 0 5px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+        color: #dfffd4;
+        font-size: 9px;
+        font-weight: 850;
+        line-height: 1;
+        text-shadow: none;
+        text-transform: uppercase;
+      }
+
+      .status-badge {
+        border-color: color-mix(in srgb, var(--weapon-color, #d5ff8d) 44%, rgba(255, 255, 255, 0.18));
+        color: color-mix(in srgb, var(--weapon-color, #d5ff8d) 80%, white 20%);
+      }
+
+      .tag-risk {
+        color: #ffd0c7;
+        border-color: rgba(255, 116, 96, 0.42);
+        background: rgba(255, 82, 68, 0.14);
+      }
+
+      .tag-utility {
+        color: #cbf4ff;
+        border-color: rgba(122, 221, 255, 0.42);
+        background: rgba(73, 174, 255, 0.13);
+      }
+
+      .tag-synergy {
+        color: #f0dcff;
+        border-color: rgba(206, 144, 255, 0.42);
+        background: rgba(177, 92, 255, 0.13);
+      }
+
+      .tag-skill {
+        color: #fff4bc;
+        border-color: rgba(255, 224, 128, 0.44);
+        background: rgba(255, 194, 83, 0.13);
+      }
+
+      .active-weapon {
+        border-color: var(--weapon-color, #d5ff8d);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.08),
+          0 0 0 1px color-mix(in srgb, var(--weapon-color, #d5ff8d) 22%, transparent),
+          0 8px 22px rgba(0, 0, 0, 0.34);
+      }
+
+      .active-weapon::after {
+        border-color: color-mix(in srgb, var(--weapon-color, #d5ff8d) 58%, transparent);
+        opacity: 1;
+      }
+
+      .weapon-slot-placeholder {
+        max-width: 156px;
+      }
+
+      .minimap {
+        position: fixed;
+        right: 12px;
+        bottom: 12px;
+        width: 136px;
+        aspect-ratio: 1;
+        padding: 8px;
+        border: 1px solid rgba(190, 228, 160, 0.28);
+        background:
+          radial-gradient(circle at 50% 50%, rgba(129, 176, 93, 0.13), transparent 62%),
+          rgba(5, 10, 8, 0.68);
+        backdrop-filter: blur(8px);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.32);
+      }
+
+      .minimap::before,
+      .minimap::after {
+        content: "";
+        position: absolute;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .minimap::before {
+        width: 12px;
+        height: 12px;
+        right: 18px;
+        top: 38px;
+        border: 2px solid rgba(255, 92, 82, 0.88);
+        border-radius: 999px;
+        box-shadow: 0 0 16px rgba(255, 92, 82, 0.7);
+        animation: minimapPing 1.28s ease-out infinite;
+      }
+
+      .minimap::after {
+        right: -10px;
+        top: 48%;
+        width: 0;
+        height: 0;
+        border-top: 7px solid transparent;
+        border-bottom: 7px solid transparent;
+        border-left: 12px solid rgba(255, 103, 85, 0.92);
+        filter: drop-shadow(0 0 8px rgba(255, 103, 85, 0.75));
+        animation: offscreenArrow 680ms ease-in-out infinite alternate;
+      }
+
+      .minimap-label {
+        position: absolute;
+        top: 6px;
+        left: 8px;
+        color: #cbf38e;
+        font-size: 10px;
+        font-weight: 750;
+        letter-spacing: 0;
+        line-height: 1;
+      }
+
+      #minimapCanvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        border: 1px solid rgba(211, 240, 176, 0.15);
+        background:
+          linear-gradient(rgba(211, 240, 176, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(211, 240, 176, 0.08) 1px, transparent 1px),
+          radial-gradient(circle at 50% 50%, rgba(202, 243, 142, 0.14), transparent 9%),
+          rgba(3, 7, 6, 0.74);
+        background-size: 24px 24px, 24px 24px, 100% 100%, 100% 100%;
+      }
+
+      .minimap-legend {
+        position: absolute;
+        left: 8px;
+        right: 8px;
+        bottom: 6px;
+        display: flex;
+        justify-content: space-between;
+        color: #d8ffd0;
+        font-size: 9px;
+        font-weight: 800;
+        line-height: 1;
+        text-shadow: 0 1px 2px #000;
+        pointer-events: none;
+      }
+
+      .minimap-legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+
+      .minimap-legend span::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        background: currentColor;
+      }
+
+      .minimap-legend .threat {
+        color: #ff6658;
+      }
+
+      .minimap-legend .loot {
+        color: #ffd27a;
+      }
+
+      .minimap-legend .safe {
+        color: #d7ff7d;
+      }
+
+      .telemetry {
+        position: fixed;
+        right: 12px;
+        top: 64px;
+        width: 260px;
+        max-width: calc(100vw - 24px);
+        padding: 8px 10px;
+        border: 1px solid rgba(190, 228, 160, 0.26);
+        background: rgba(5, 10, 8, 0.72);
+        color: #dbefcf;
+        font: 11px/1.35 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+        white-space: pre;
+        text-shadow: none;
+        pointer-events: none;
+      }
+
+      .telemetry.hidden {
+        display: none;
+      }
+
+      .toast {
+        left: 50%;
+        bottom: 84px;
+        transform: translateX(-50%);
+        max-width: min(520px, calc(100vw - 24px));
+        padding: 10px 14px;
+        border: 1px solid rgba(222, 235, 168, 0.32);
+        background: rgba(9, 14, 11, 0.84);
+        opacity: 0;
+        transition: opacity 160ms ease;
+        text-align: center;
+        font-weight: 750;
+        z-index: 5;
+      }
+
+      .toast.show {
+        opacity: 1;
+      }
+
+      .center-banner {
+        position: fixed;
+        top: 82px;
+        left: 50%;
+        width: min(520px, calc(100vw - 24px));
+        transform: translate(-50%, -10px) scale(0.98);
+        padding: 12px 16px;
+        border: 1px solid rgba(255, 233, 159, 0.34);
+        background: rgba(7, 10, 9, 0.82);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.06),
+          0 18px 45px rgba(0, 0, 0, 0.38);
+        opacity: 0;
+        transition: opacity 160ms ease, transform 160ms ease;
+        text-align: center;
+        z-index: 5;
+      }
+
+      .center-banner.show {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+      }
+
+      .center-banner strong {
+        display: block;
+        color: #fff4b8;
+        font-size: 18px;
+        line-height: 1.1;
+      }
+
+      .center-banner span {
+        display: block;
+        margin-top: 4px;
+        color: #cce8d8;
+        font-size: 12px;
+      }
+
+      .float-text {
+        position: fixed;
+        z-index: 2;
+        transform: translate(-50%, -50%);
+        color: var(--float-color, #fff3a0);
+        font-size: 15px;
+        font-weight: 900;
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.75), 0 0 12px rgba(255, 243, 160, 0.5);
+        will-change: transform, opacity;
+      }
+
+      .menu {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 18px;
+        background:
+          linear-gradient(90deg, rgba(3, 7, 7, 0.74), rgba(3, 8, 7, 0.34) 46%, rgba(0, 0, 0, 0.72)),
+          linear-gradient(180deg, rgba(4, 7, 7, 0.18), rgba(0, 0, 0, 0.72) 62%, rgba(0, 0, 0, 0.98)),
+          url("./assets/source/kenney/graveyard-kit/Sample.png");
+        background-size: cover, cover, auto 118%;
+        background-position: center, center, center 42%;
+        color: #f7fff2;
+        z-index: 4;
+      }
+
+      .menu.hidden {
+        display: none;
+      }
+
+      .pause-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 5;
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        background:
+          radial-gradient(circle at 50% 42%, rgba(70, 103, 71, 0.18), transparent 34%),
+          linear-gradient(180deg, rgba(2, 5, 5, 0.48), rgba(0, 0, 0, 0.82));
+        color: #f7fff2;
+      }
+
+      .pause-overlay.hidden {
+        display: none;
+      }
+
+      .pause-panel {
+        width: min(520px, calc(100vw - 24px));
+        max-height: calc(100vh - 24px);
+        max-height: calc(100dvh - 24px);
+        overflow: auto;
+        border: 1px solid rgba(210, 230, 180, 0.34);
+        background: linear-gradient(180deg, rgba(8, 13, 12, 0.94), rgba(4, 8, 7, 0.9));
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        padding: 18px;
+      }
+
+      .pause-root,
+      .pause-settings,
+      .pause-confirm {
+        display: grid;
+        gap: 12px;
+      }
+
+      .pause-root.hidden,
+      .pause-settings.hidden,
+      .pause-confirm.hidden {
+        display: none;
+      }
+
+      .pause-header {
+        display: grid;
+        gap: 5px;
+      }
+
+      .pause-header strong {
+        color: #f7fff2;
+        font-size: 24px;
+        line-height: 1.05;
+      }
+
+      .pause-actions,
+      .pause-confirm-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .pause-confirm-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .pause-actions button,
+      .pause-confirm-actions button {
+        min-width: 0;
+      }
+
+      .pause-danger {
+        border-color: rgba(255, 132, 102, 0.46);
+        background: rgba(52, 19, 15, 0.92);
+      }
+
+      .pause-settings-grid {
+        display: grid;
+        gap: 8px;
+      }
+
+      .pause-setting {
+        display: grid;
+        grid-template-columns: minmax(116px, 1fr) minmax(132px, 1.1fr) minmax(38px, max-content);
+        gap: 10px;
+        align-items: center;
+        min-height: 44px;
+        padding: 8px 10px;
+        border: 1px solid rgba(202, 226, 183, 0.2);
+        background: rgba(3, 8, 8, 0.58);
+        color: #f5ffe8;
+      }
+
+      .pause-setting:focus-within,
+      .pause-setting:has(.controller-focus) {
+        border-color: rgba(215, 255, 141, 0.68);
+        box-shadow: 0 0 0 1px rgba(215, 255, 141, 0.18);
+      }
+
+      .pause-setting > span:first-child {
+        min-width: 0;
+        color: #d7ead1;
+        font-size: 12px;
+        font-weight: 850;
+        line-height: 1.15;
+        text-transform: uppercase;
+      }
+
+      .pause-setting output,
+      .pause-setting > span:last-child {
+        color: #d7ff8d;
+        font-size: 12px;
+        font-weight: 900;
+        text-align: right;
+      }
+
+      .pause-setting input[type="range"] {
+        width: 100%;
+        accent-color: #d7ff8d;
+      }
+
+      .pause-setting input[type="checkbox"] {
+        justify-self: start;
+        width: 22px;
+        min-height: 22px;
+        accent-color: #d7ff8d;
+      }
+
+      .pause-setting input.controller-focus {
+        outline: 2px solid rgba(171, 221, 126, 0.55);
+        outline-offset: 2px;
+      }
+
+      .menu-panel {
+        width: min(1100px, calc(100vw - 24px));
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      .menu-copy,
+      .lobby-panel {
+        border: 1px solid rgba(210, 230, 180, 0.3);
+        background: linear-gradient(180deg, rgba(8, 13, 12, 0.9), rgba(4, 8, 7, 0.84));
+        backdrop-filter: blur(12px);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        padding: 18px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(32px, 7vw, 74px);
+        line-height: 0.94;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin: 0 0 10px;
+        font-size: 18px;
+      }
+
+      p {
+        margin: 0;
+        color: #d7e7cf;
+        line-height: 1.5;
+      }
+
+      .menu-actions,
+      .lobby-actions,
+      .room-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .menu-actions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 16px;
+      }
+
+      .class-select {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .class-progress-strip {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(84px, 0.42fr);
+        gap: 10px;
+        align-items: center;
+        min-height: 30px;
+        padding: 6px 8px;
+        border: 1px solid rgba(202, 226, 183, 0.18);
+        background: rgba(3, 8, 8, 0.58);
+        color: #d7ead1;
+        font-size: 11px;
+        font-weight: 850;
+        line-height: 1.15;
+      }
+
+      .class-progress-strip > span:first-child {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .class-progress-track {
+        display: block;
+        height: 6px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(0, 0, 0, 0.36);
+      }
+
+      .class-progress-track span {
+        display: block;
+        width: 100%;
+        height: 100%;
+        transform: scaleX(0.08);
+        transform-origin: left center;
+        background: linear-gradient(90deg, var(--class-color, #d7ff8d), rgba(255, 255, 255, 0.72));
+      }
+
+      .class-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .class-card {
+        position: relative;
+        display: grid;
+        grid-template-rows: max-content max-content max-content max-content 1fr max-content;
+        gap: 7px;
+        min-height: 176px;
+        padding: 9px;
+        border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 38%, rgba(255, 255, 255, 0.14));
+        background:
+          linear-gradient(135deg, color-mix(in srgb, var(--class-color, #d7ff8d) 21%, transparent), transparent 42%),
+          linear-gradient(180deg, rgba(8, 12, 14, 0.9), rgba(3, 7, 7, 0.76)),
+          rgba(5, 10, 9, 0.62);
+        color: #f7fff0;
+        text-align: left;
+        overflow: hidden;
+      }
+
+      .class-card:hover,
+      .class-card:focus-visible,
+      .class-card.controller-focus,
+      .class-card.selected {
+        border-color: color-mix(in srgb, var(--class-color, #d7ff8d) 76%, white 10%);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--class-color, #d7ff8d) 24%, transparent), 0 0 22px color-mix(in srgb, var(--class-color, #d7ff8d) 16%, transparent);
+      }
+
+      .class-card.selected {
+        background:
+          linear-gradient(135deg, color-mix(in srgb, var(--class-color, #d7ff8d) 34%, transparent), transparent 48%),
+          linear-gradient(180deg, rgba(18, 28, 29, 0.94), rgba(4, 9, 8, 0.86));
+      }
+
+      .class-card-lock {
+        position: absolute;
+        right: 7px;
+        bottom: 7px;
+        opacity: 0.7;
+      }
+
+      .class-card-header {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) max-content;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .class-card-header > span:nth-child(2) {
+        min-width: 0;
+      }
+
+      .class-level-badge {
+        align-self: start;
+        padding: 3px 5px;
+        border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 46%, rgba(255, 255, 255, 0.12));
+        background: rgba(0, 0, 0, 0.28);
+        color: color-mix(in srgb, var(--class-color, #d7ff8d) 80%, white 12%);
+        font-size: 9px;
+        font-weight: 950;
+        line-height: 1;
+      }
+
+      .class-sigil,
+      .choice-icon {
+        display: grid;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--class-color, var(--choice-color, #d7ff8d)) 58%, rgba(255, 255, 255, 0.14));
+        background:
+          radial-gradient(circle at 46% 34%, rgba(255, 255, 255, 0.22), transparent 38%),
+          color-mix(in srgb, var(--class-color, var(--choice-color, #d7ff8d)) 22%, rgba(0, 0, 0, 0.6));
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0 16px color-mix(in srgb, var(--class-color, var(--choice-color, #d7ff8d)) 22%, transparent);
+        overflow: hidden;
+      }
+
+      .class-sigil {
+        width: 32px;
+        height: 32px;
+      }
+
+      .class-sigil img,
+      .class-loadout-icon img,
+      .choice-icon img {
+        width: 88%;
+        height: 88%;
+        object-fit: contain;
+        filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.45));
+      }
+
+      .class-card strong {
+        display: block;
+        font-size: 12px;
+        line-height: 1.12;
+      }
+
+      .class-card em,
+      .class-card small,
+      .class-card span {
+        font-style: normal;
+        line-height: 1.2;
+      }
+
+      .class-card em {
+        color: color-mix(in srgb, var(--class-color, #d7ff8d) 75%, white 20%);
+        font-size: 10px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .class-card span {
+        color: #e9f8df;
+        font-size: 11px;
+        font-weight: 750;
+      }
+
+      .class-card small {
+        color: #afc4aa;
+        font-size: 10px;
+      }
+
+      .class-loadout {
+        display: grid;
+        grid-template-columns: 26px minmax(0, 1fr);
+        gap: 7px;
+        align-items: center;
+        min-width: 0;
+      }
+
+      .class-loadout-icon {
+        display: grid;
+        width: 26px;
+        height: 26px;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 46%, rgba(255, 255, 255, 0.12));
+        background: rgba(0, 0, 0, 0.28);
+      }
+
+      .class-loadout-copy,
+      .class-passive-line {
+        min-width: 0;
+      }
+
+      .class-loadout-label {
+        display: block;
+        color: color-mix(in srgb, var(--class-color, #d7ff8d) 74%, white 12%);
+        font-size: 9px;
+        font-weight: 850;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .class-loadout-name {
+        display: block;
+        overflow: hidden;
+        color: #f8fff1;
+        font-size: 11px;
+        font-weight: 850;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .class-passive-line {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .class-perk {
+        display: -webkit-box;
+        overflow: hidden;
+        color: #d1dfc9;
+        font-size: 10px;
+        font-weight: 650;
+        line-height: 1.25;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .class-passive-line img {
+        flex: 0 0 18px;
+        width: 18px;
+        height: 18px;
+        object-fit: cover;
+        border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 40%, rgba(255, 255, 255, 0.12));
+      }
+
+      .class-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .bias-chip {
+        min-width: 0;
+        padding: 2px 5px;
+        border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 36%, rgba(255, 255, 255, 0.12));
+        background: rgba(0, 0, 0, 0.22);
+        color: color-mix(in srgb, var(--class-color, #d7ff8d) 74%, white 16%);
+        font-size: 9px;
+        font-weight: 850;
+        line-height: 1.1;
+        text-transform: uppercase;
+      }
+
+      .class-next-unlock {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+        color: #d2e1cf;
+        font-size: 10px;
+        font-weight: 850;
+      }
+
+      .class-next-unlock span:last-child {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .lock-icon {
+        position: relative;
+        display: inline-block;
+        width: 14px;
+        height: 12px;
+        flex: 0 0 14px;
+        border: 2px solid currentColor;
+        color: #f0f7e6;
+        opacity: 0.9;
+      }
+
+      .lock-icon::before {
+        content: "";
+        position: absolute;
+        left: 2px;
+        top: -9px;
+        width: 6px;
+        height: 8px;
+        border: 2px solid currentColor;
+        border-bottom: 0;
+        border-radius: 7px 7px 0 0;
+      }
+
+      .loadout-panel {
+        display: grid;
+        gap: 10px;
+        padding: 10px;
+        border: 1px solid rgba(202, 226, 183, 0.2);
+        background:
+          linear-gradient(180deg, rgba(11, 18, 18, 0.9), rgba(4, 9, 9, 0.76)),
+          rgba(5, 10, 9, 0.72);
+      }
+
+      .loadout-panel.hidden {
+        display: none;
+      }
+
+      .loadout-section {
+        display: grid;
+        gap: 7px;
+      }
+
+      .loadout-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        color: #f5ffe8;
+      }
+
+      .loadout-section-header strong,
+      .loadout-section-header span {
+        font-size: 11px;
+        font-weight: 900;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .loadout-section-header span {
+        color: color-mix(in srgb, var(--class-color, #d7ff8d) 74%, white 12%);
+      }
+
+      .loadout-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .loadout-option {
+        position: relative;
+        display: grid;
+        grid-template-rows: 42px max-content max-content;
+        gap: 5px;
+        min-width: 0;
+        min-height: 104px;
+        padding: 7px;
+        border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 36%, rgba(255, 255, 255, 0.14));
+        background:
+          linear-gradient(180deg, color-mix(in srgb, var(--class-color, #d7ff8d) 11%, transparent), transparent 44%),
+          rgba(2, 7, 7, 0.72);
+        color: #eef8e7;
+        text-align: left;
+      }
+
+      .loadout-option:hover,
+      .loadout-option:focus-visible,
+      .loadout-option.controller-focus,
+      .loadout-option.is-selected {
+        border-color: color-mix(in srgb, var(--class-color, #d7ff8d) 78%, white 10%);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--class-color, #d7ff8d) 22%, transparent);
+      }
+
+      .loadout-option.is-selected::after {
+        content: "";
+        position: absolute;
+        inset: 2px;
+        border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 58%, transparent);
+        pointer-events: none;
+      }
+
+      .loadout-option.is-locked {
+        opacity: 1;
+        border-color: rgba(190, 202, 184, 0.22);
+        background:
+          repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 6px, transparent 6px 12px),
+          rgba(3, 6, 7, 0.82);
+        color: #9aa89a;
+      }
+
+      .loadout-option:disabled {
+        opacity: 1;
+      }
+
+      .loadout-option[aria-disabled="true"].controller-focus,
+      .loadout-option[aria-disabled="true"]:focus-visible {
+        border-color: rgba(255, 226, 132, 0.58);
+        box-shadow: 0 0 0 1px rgba(255, 226, 132, 0.16);
+      }
+
+      .loadout-option-icon {
+        display: grid;
+        place-items: center;
+        min-width: 0;
+        border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 40%, rgba(255, 255, 255, 0.12));
+        background: rgba(0, 0, 0, 0.3);
+      }
+
+      .loadout-option-icon img {
+        width: 88%;
+        height: 88%;
+        object-fit: contain;
+        filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.45));
+      }
+
+      .loadout-option.is-locked img {
+        filter: grayscale(1) opacity(0.42);
+      }
+
+      .loadout-option strong {
+        min-width: 0;
+        overflow: hidden;
+        color: #f8fff1;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1.12;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .loadout-option span {
+        min-width: 0;
+        color: color-mix(in srgb, var(--class-color, #d7ff8d) 70%, white 14%);
+        font-size: 9px;
+        font-weight: 900;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .loadout-option.is-locked span,
+      .loadout-option.is-locked strong {
+        color: #aeb9ac;
+      }
+
+      .loadout-lock {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(0, 0, 0, 0.58);
+        color: #f0f7e6;
+      }
+
+      .lobby-actions {
+        margin-top: 12px;
+      }
+
+      .room-list {
+        max-height: 170px;
+        overflow: auto;
+        margin-top: 10px;
+      }
+
+      .room-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) max-content;
+        gap: 8px;
+        align-items: center;
+        border: 1px solid rgba(198, 226, 174, 0.18);
+        background: rgba(18, 25, 20, 0.7);
+        padding: 8px;
+      }
+
+      .room-row span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .small {
+        color: #aebfaa;
+        font-size: 12px;
+      }
+
+      .glyph-row,
+      .architect-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .glyph-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 28px;
+        padding: 3px 7px;
+        border: 1px solid rgba(202, 226, 183, 0.22);
+        background: rgba(5, 10, 9, 0.58);
+        color: #e6f7dc;
+        font-size: 11px;
+        font-weight: 750;
+        line-height: 1;
+      }
+
+      .glyph-chip img {
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
+      }
+
+      .architect-loadout {
+        margin-top: 14px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .architect-loadout-header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 8px;
+        color: #f5ffe8;
+      }
+
+      .architect-loadout-header strong {
+        font-size: 13px;
+      }
+
+      .architect-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .architect-card {
+        min-width: 0;
+        padding: 8px;
+        border: 1px solid color-mix(in srgb, var(--architect-color, #d5ff8d) 42%, rgba(255, 255, 255, 0.14));
+        background:
+          linear-gradient(180deg, color-mix(in srgb, var(--architect-color, #d5ff8d) 12%, transparent), transparent 42%),
+          rgba(5, 10, 9, 0.58);
+      }
+
+      .architect-card h3 {
+        margin: 0;
+        color: #f8fff4;
+        font-size: 11px;
+        line-height: 1.1;
+        min-height: 24px;
+      }
+
+      .architect-role {
+        margin-top: 3px;
+        color: color-mix(in srgb, var(--architect-color, #d5ff8d) 70%, white 20%);
+        font-size: 10px;
+        font-weight: 800;
+        line-height: 1;
+      }
+
+      .architect-icons {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+        margin-top: 8px;
+      }
+
+      .architect-icon {
+        position: relative;
+        display: grid;
+        place-items: center;
+        aspect-ratio: 1;
+        min-width: 0;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background:
+          radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.14), transparent 58%),
+          rgba(0, 0, 0, 0.35);
+      }
+
+      .architect-icon img {
+        width: 86%;
+        height: 86%;
+        object-fit: contain;
+        filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.45));
+      }
+
+      .architect-passives {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 3px;
+        margin-top: 7px;
+      }
+
+      .architect-passive {
+        aspect-ratio: 1;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.26);
+      }
+
+      .architect-passive img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .weapon-glyph img {
+        width: 20px;
+        height: 20px;
+        object-fit: contain;
+      }
+
+      .level-choice-overlay {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        background:
+          radial-gradient(circle at 50% 48%, rgba(124, 214, 255, 0.16), transparent 28%),
+          rgba(0, 0, 0, 0.68);
+        z-index: 6;
+        pointer-events: auto;
+      }
+
+      .level-choice-overlay.hidden {
+        display: none;
+      }
+
+      .level-choice-panel {
+        position: relative;
+        z-index: 1;
+        pointer-events: auto;
+        width: min(780px, calc(100vw - 24px));
+        max-height: calc(100vh - 24px);
+        max-height: calc(100dvh - 24px);
+        overflow: auto;
+        border: 1px solid rgba(222, 238, 172, 0.34);
+        background: linear-gradient(180deg, rgba(8, 13, 12, 0.94), rgba(4, 8, 7, 0.9));
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        padding: 14px;
+      }
+
+      .level-choice-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 12px;
+        color: #f8fff2;
+        margin-bottom: 12px;
+      }
+
+      .level-choice-header strong {
+        font-size: 24px;
+        line-height: 1;
+      }
+
+      .level-choice-header span {
+        color: #bcd0b8;
+        font-size: 12px;
+        text-align: right;
+      }
+
+      .level-choice-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .level-choice-card {
+        display: grid;
+        grid-template-columns: 54px minmax(0, 1fr);
+        gap: 10px;
+        min-height: 178px;
+        padding: 12px;
+        border: 1px solid color-mix(in srgb, var(--choice-color, #d7ff8d) 46%, rgba(255, 255, 255, 0.16));
+        background:
+          linear-gradient(135deg, color-mix(in srgb, var(--choice-color, #d7ff8d) 18%, transparent), transparent 48%),
+          linear-gradient(180deg, rgba(8, 12, 13, 0.92), rgba(2, 6, 7, 0.78)),
+          rgba(5, 10, 9, 0.78);
+        color: #f7fff0;
+        text-align: left;
+      }
+
+      .level-choice-card:hover,
+      .level-choice-card:focus-visible,
+      .level-choice-card.controller-focus,
+      .level-choice-card.selected-choice {
+        border-color: color-mix(in srgb, var(--choice-color, #d7ff8d) 82%, white 10%);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--choice-color, #d7ff8d) 24%, transparent), 0 0 24px color-mix(in srgb, var(--choice-color, #d7ff8d) 18%, transparent);
+      }
+
+      .choice-evolution {
+        border-color: rgba(255, 226, 132, 0.68);
+        background:
+          linear-gradient(135deg, rgba(255, 214, 91, 0.24), transparent 46%),
+          linear-gradient(180deg, rgba(24, 17, 7, 0.96), rgba(7, 6, 3, 0.84));
+      }
+
+      .choice-passive {
+        background:
+          linear-gradient(135deg, color-mix(in srgb, var(--choice-color, #d7ff8d) 16%, transparent), rgba(98, 74, 165, 0.1) 54%, transparent),
+          linear-gradient(180deg, rgba(10, 11, 15, 0.92), rgba(4, 6, 8, 0.8));
+      }
+
+      .choice-frame {
+        display: grid;
+        grid-template-rows: 54px max-content;
+        gap: 8px;
+        align-content: start;
+        min-width: 0;
+      }
+
+      .choice-icon {
+        width: 54px;
+        height: 54px;
+      }
+
+      .choice-kind {
+        overflow: hidden;
+        color: color-mix(in srgb, var(--choice-color, #d7ff8d) 80%, white 12%);
+        font-size: 9px;
+        font-weight: 900;
+        line-height: 1.05;
+        text-align: center;
+        text-overflow: ellipsis;
+        text-transform: uppercase;
+      }
+
+      .choice-copy {
+        display: grid;
+        grid-template-rows: max-content max-content max-content max-content 1fr;
+        gap: 7px;
+        min-width: 0;
+      }
+
+      .choice-badge {
+        justify-self: start;
+        min-height: 20px;
+        padding: 3px 7px;
+        border: 1px solid color-mix(in srgb, var(--choice-color, #d7ff8d) 58%, rgba(255, 255, 255, 0.18));
+        background: color-mix(in srgb, var(--choice-color, #d7ff8d) 18%, rgba(0, 0, 0, 0.6));
+        color: color-mix(in srgb, var(--choice-color, #d7ff8d) 84%, white 16%);
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .level-choice-card strong {
+        font-size: 18px;
+        line-height: 1.12;
+      }
+
+      .level-choice-card em {
+        color: color-mix(in srgb, var(--choice-color, #d7ff8d) 70%, white 18%);
+        font-size: 12px;
+        font-style: normal;
+        font-weight: 850;
+      }
+
+      .choice-description {
+        color: #d1e2c9;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .choice-payoff {
+        display: grid;
+        gap: 4px;
+        margin-top: 2px;
+      }
+
+      .choice-payoff span {
+        display: block;
+        padding: 4px 6px;
+        border-left: 2px solid color-mix(in srgb, var(--choice-color, #d7ff8d) 66%, rgba(255, 255, 255, 0.12));
+        background: color-mix(in srgb, var(--choice-color, #d7ff8d) 12%, rgba(0, 0, 0, 0.32));
+        color: #f1ffe5;
+        font-size: 11px;
+        font-weight: 850;
+        line-height: 1.2;
+      }
+
+      .level-choice-actions {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .level-choice-action {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+        border-color: rgba(124, 214, 255, 0.34);
+        background: rgba(12, 24, 25, 0.9);
+      }
+
+      .level-choice-action::before {
+        content: "R";
+        display: grid;
+        flex: 0 0 28px;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 1px solid rgba(124, 214, 255, 0.46);
+        background: rgba(33, 84, 96, 0.3);
+        color: #bff5ff;
+        font-weight: 900;
+      }
+
+      .level-choice-action.action-banish {
+        border-color: rgba(255, 132, 102, 0.38);
+        background: rgba(38, 18, 15, 0.9);
+      }
+
+      .level-choice-action.action-banish::before {
+        content: "B";
+        border-color: rgba(255, 132, 102, 0.52);
+        background: rgba(110, 42, 28, 0.28);
+        color: #ffd3c7;
+      }
+
+      .level-choice-action strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 12px;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .level-choice-action span {
+        min-width: 28px;
+        padding: 2px 7px;
+        border: 1px solid rgba(216, 244, 180, 0.32);
+        background: rgba(0, 0, 0, 0.24);
+        color: #e9ffd1;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      #reticle {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 18px;
+        height: 18px;
+        margin: -9px 0 0 -9px;
+        border: 2px solid rgba(223, 255, 172, 0.85);
+        border-radius: 999px;
+        pointer-events: none;
+        box-shadow: 0 0 0 4px rgba(190, 255, 122, 0.08), 0 0 16px rgba(190, 255, 122, 0.7);
+        will-change: transform;
+        z-index: 2;
+      }
+
+      @keyframes hpBite {
+        0% { transform: translateX(0); }
+        22% { transform: translateX(-2px); }
+        48% { transform: translateX(2px); }
+        100% { transform: translateX(0); }
+      }
+
+      @keyframes criticalPulse {
+        from { opacity: 0.45; }
+        to { opacity: 1; }
+      }
+
+      @keyframes cooldownSweep {
+        from { filter: brightness(1); }
+        to { filter: brightness(1.35); }
+      }
+
+      @keyframes minimapPing {
+        0% { opacity: 1; transform: scale(0.72); }
+        80%, 100% { opacity: 0; transform: scale(2.2); }
+      }
+
+      @keyframes offscreenArrow {
+        from { transform: translateX(0); }
+        to { transform: translateX(-4px); }
+      }
+
+      @media (max-width: 760px) {
+        .topbar {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 6px;
+          right: 12px;
+        }
+
+        .pill {
+          min-height: 32px;
+          font-size: 12px;
+        }
+
+        .meter-pill {
+          min-width: 0;
+        }
+
+        .xp-meter {
+          min-width: 0;
+        }
+
+        .objective {
+          top: auto;
+          bottom: 78px;
+          left: 12px;
+          right: 122px;
+          text-align: left;
+        }
+
+        .statusbar {
+          right: 122px;
+          max-width: calc(100vw - 134px);
+        }
+
+        .passivebar {
+          right: 122px;
+          bottom: 116px;
+          max-width: calc(100vw - 134px);
+        }
+
+        .weapon-pill {
+          max-width: calc(50vw - 72px);
+        }
+
+        .weapon-pill strong {
+          max-width: 98px;
+        }
+
+        .weapon-meta {
+          display: none;
+        }
+
+        .class-card {
+          min-height: 126px;
+        }
+
+        .combo {
+          top: 124px;
+          left: 12px;
+        }
+
+        .center-banner {
+          top: 144px;
+        }
+
+        .minimap {
+          width: 104px;
+          padding: 6px;
+        }
+
+        .menu-panel {
+          grid-template-columns: 1fr;
+        }
+
+        .menu {
+          place-items: start center;
+        }
+
+        .menu-actions {
+          grid-template-columns: 1fr;
+        }
+
+        .class-grid,
+        .level-choice-grid,
+        .loadout-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .class-progress-strip {
+          grid-template-columns: 1fr;
+        }
+
+        .level-choice-card {
+          grid-template-columns: 46px minmax(0, 1fr);
+          min-height: 156px;
+        }
+
+        .choice-frame {
+          grid-template-rows: 46px max-content;
+        }
+
+        .choice-icon {
+          width: 46px;
+          height: 46px;
+        }
+
+        .level-choice-actions {
+          grid-template-columns: 1fr;
+        }
+
+        .pause-actions,
+        .pause-confirm-actions,
+        .pause-setting {
+          grid-template-columns: 1fr;
+        }
+
+        .pause-setting output,
+        .pause-setting > span:last-child {
+          text-align: left;
+        }
+
+        .architect-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body class="menu-open">
+    <div id="reticle" aria-hidden="true"></div>
+    <div id="fxOverlay" class="fx-overlay" aria-hidden="true"></div>
+    <div id="hud">
+      <div class="topbar">
+        <div class="pill meter-pill">HP <strong id="hpText">100</strong><div class="hud-bar"><div id="hpFill" class="hud-fill hp-fill"></div></div></div>
+        <div class="pill">Kills <strong id="killsText">0</strong></div>
+        <div class="pill">Wave <strong id="waveText">1</strong></div>
+        <div class="pill meter-pill xp-meter"><span class="hud-icon xp-gem"></span>Level <strong id="levelText">1</strong><span id="xpText" class="meter-count">0/12</span><div class="hud-bar"><div id="xpFill" class="hud-fill xp-fill"></div></div></div>
+        <div class="pill class-pill">Class <strong id="classText">Vanguard</strong></div>
+        <div class="pill">Mode <strong id="modeText">Solo</strong></div>
+      </div>
+      <div class="objective pill" id="objectiveText">Kite the first grave hands. Grab blue shards before they sink.</div>
+      <div class="combo" id="comboText"></div>
+      <div class="minimap" role="img" aria-label="Arena minimap">
+        <div class="minimap-label">MAP</div>
+        <canvas id="minimapCanvas" width="240" height="240" aria-hidden="true"></canvas>
+        <div class="minimap-legend" aria-hidden="true"><span class="threat">T</span><span class="loot">L</span><span class="safe">P</span></div>
+      </div>
+      <pre class="telemetry" id="telemetryPanel" aria-hidden="true"></pre>
+      <div class="passivebar" id="passiveText"></div>
+      <div class="statusbar" id="weaponText"></div>
+      <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div class="center-banner" id="centerBanner" role="status" aria-live="polite" aria-atomic="true"></div>
+    </div>
+
+    <section class="menu" id="menu" role="dialog" aria-modal="true" aria-labelledby="gameTitle">
+      <div class="menu-panel">
+        <div class="menu-copy">
+          <h1 id="gameTitle">Three Arena</h1>
+          <p>
+            The graveyard wards failed. Pick a suit, keep a lane open, collect soul shards, and spend each cache before the dead box you in.
+          </p>
+          <div class="menu-actions">
+            <button id="soloButton" type="button">Singleplayer</button>
+            <button id="onlineButton" type="button">Connect Lobby</button>
+            <button id="loadoutConfigButton" class="loadout-config-button" type="button" aria-expanded="false">
+              <span class="button-icon loadout-icon" aria-hidden="true"></span>
+              <span>Loadout</span>
+            </button>
+          </div>
+          <div class="class-select">
+            <div class="architect-loadout-header">
+              <strong>Class</strong>
+              <span class="small" id="classProgressText">Class L1</span>
+            </div>
+            <div class="class-progress-strip" aria-hidden="true">
+              <span id="loadoutSummary">Starter loadout ready</span>
+              <span class="class-progress-track"><span id="classProgressFill"></span></span>
+            </div>
+            <div class="class-grid" id="classGrid" aria-label="Class selection"></div>
+            <div class="loadout-panel hidden" id="loadoutPanel" aria-label="Loadout configuration">
+              <div class="loadout-section">
+                <div class="loadout-section-header">
+                  <strong>Starter Weapon</strong>
+                  <span id="loadoutWeaponStatus">L1</span>
+                </div>
+                <div class="loadout-grid" id="loadoutWeaponGrid"></div>
+              </div>
+              <div class="loadout-section">
+                <div class="loadout-section-header">
+                  <strong>Passive</strong>
+                  <span id="loadoutPassiveStatus">L1</span>
+                </div>
+                <div class="loadout-grid" id="loadoutPassiveGrid"></div>
+              </div>
+            </div>
+          </div>
+          <p class="small" style="margin-top: 12px">
+            <span id="controlHint">Keyboard: WASD move, mouse aim, Space jumps. PS5: left stick moves, D-pad moves menus, Cross selects, Start pauses.</span>
+          </p>
+          <div class="architect-controls" id="architectControls" aria-label="Input glyph preview"></div>
+          <div class="architect-loadout" id="architectLoadout" aria-label="Architect suit asset preview">
+            <div class="architect-loadout-header">
+              <strong>Architect Suits</strong>
+              <span class="small">1 weapon + 3 passive loadout</span>
+            </div>
+            <div class="architect-grid" id="architectGrid"></div>
+          </div>
+        </div>
+
+        <div class="lobby-panel">
+          <h2>Lobby</h2>
+          <p class="small" id="lobbyStatus">Lobby bell silent. Solo run is ready; start the server for rooms.</p>
+          <p class="small" id="controllerStatus">Controller line idle. Connect a pad any time.</p>
+          <div class="lobby-actions">
+            <input id="playerName" type="text" maxlength="18" value="Hunter" autocomplete="nickname" spellcheck="false" aria-label="Player name" />
+            <button id="createRoomButton" type="button" disabled>Host Lobby</button>
+            <button id="startRoomButton" type="button" disabled>Start Lobby Game</button>
+            <button id="refreshRoomsButton" type="button" disabled>Refresh Rooms</button>
+          </div>
+          <div class="room-list" id="roomList"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pause-overlay hidden" id="pauseOverlay" role="dialog" aria-modal="true" aria-label="Pause menu">
+      <div class="pause-panel">
+        <div class="pause-root" id="pauseRootPanel">
+          <div class="pause-header">
+            <strong>Paused</strong>
+            <p class="small">Cross select, Circle back, Start resume.</p>
+          </div>
+          <div class="pause-actions">
+            <button id="pauseResumeButton" type="button">Resume</button>
+            <button id="pauseSettingsButton" type="button">Settings</button>
+            <button id="pauseMainMenuButton" class="pause-danger" type="button">Main Menu</button>
+          </div>
+        </div>
+
+        <div class="pause-settings hidden" id="pauseSettingsPanel" aria-label="Settings">
+          <div class="pause-header">
+            <strong>Settings</strong>
+            <p class="small">Controls and audio update live.</p>
+          </div>
+          <div class="pause-settings-grid">
+            <label class="pause-setting" for="mouseSensitivityInput">
+              <span>Mouse Look</span>
+              <input id="mouseSensitivityInput" type="range" min="0.5" max="2.0" step="0.05" />
+              <output data-setting-value="mouseSensitivity">1.00</output>
+            </label>
+            <label class="pause-setting" for="stickSensitivityInput">
+              <span>Stick Look</span>
+              <input id="stickSensitivityInput" type="range" min="0.5" max="2.0" step="0.05" />
+              <output data-setting-value="stickSensitivity">1.00</output>
+            </label>
+            <label class="pause-setting" for="invertYToggle">
+              <span>Invert Y</span>
+              <input id="invertYToggle" type="checkbox" />
+              <span data-setting-value="invertY">Off</span>
+            </label>
+            <label class="pause-setting" for="masterVolumeInput">
+              <span>Master</span>
+              <input id="masterVolumeInput" type="range" min="0" max="1" step="0.05" />
+              <output data-setting-value="masterVolume">1.00</output>
+            </label>
+            <label class="pause-setting" for="musicVolumeInput">
+              <span>Music</span>
+              <input id="musicVolumeInput" type="range" min="0" max="1" step="0.05" />
+              <output data-setting-value="musicVolume">1.00</output>
+            </label>
+            <label class="pause-setting" for="sfxVolumeInput">
+              <span>SFX</span>
+              <input id="sfxVolumeInput" type="range" min="0" max="1" step="0.05" />
+              <output data-setting-value="sfxVolume">1.00</output>
+            </label>
+            <label class="pause-setting" for="muteToggle">
+              <span>Mute</span>
+              <input id="muteToggle" type="checkbox" />
+              <span data-setting-value="muted">Off</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="pause-confirm hidden" id="pauseConfirmDialog" role="dialog" aria-modal="true" aria-label="Leave run confirmation">
+          <div class="pause-header">
+            <strong>Leave Run?</strong>
+            <p class="small">Progress from this run ends when you return to main menu.</p>
+          </div>
+          <div class="pause-confirm-actions">
+            <button id="pauseConfirmLeaveButton" class="pause-danger" type="button">Main Menu</button>
+            <button id="pauseConfirmCancelButton" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="level-choice-overlay hidden" id="levelChoiceOverlay" role="dialog" aria-modal="true" aria-labelledby="levelChoiceTitle" aria-describedby="levelChoiceSubtitle">
+      <div class="level-choice-panel">
+        <div class="level-choice-header">
+          <strong id="levelChoiceTitle">Level Up</strong>
+          <span id="levelChoiceSubtitle">Choose one edge before the graves move again.</span>
+        </div>
+        <div class="level-choice-grid" id="levelChoiceGrid"></div>
+        <div class="level-choice-actions">
+          <button class="level-choice-action action-reroll" id="levelChoiceRerollButton" type="button" disabled><strong>Reroll</strong><span>0</span></button>
+          <button class="level-choice-action action-banish" id="levelChoiceBanishButton" type="button" disabled><strong>Banish</strong><span>0</span></button>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      (() => {
+        const hpPill = document.querySelector("#hpText")?.closest(".pill");
+        const hpText = document.querySelector("#hpText");
+        const weaponText = document.querySelector("#weaponText");
+        const architectControls = document.querySelector("#architectControls");
+        const architectGrid = document.querySelector("#architectGrid");
+        const architectRoot = "assets/usable/architect-ui";
+        const weaponIconByLowerName = {
+          "bone splinter": "weapons/quantum-needle-rail.png",
+          "grave lantern": "weapons/singularity-crucible.png",
+          "silver stake": "weapons/vanguard-lance-gun.png",
+          "plague vial": "weapons/bio-catalyst-grenadier.png",
+          "coffin lid": "weapons/vanguard-repulser.png",
+          "bat swarm": "weapons/quantum-blink-dagger-shotgun.png",
+          "funeral bell": "weapons/singularity-mass-driver.png",
+          "reaper scythe": "weapons/quantum-event-horizon-knuckles.png",
+          "pistol": "weapons/quantum-phase-pistols.png",
+          "shotgun": "weapons/vanguard-repulser.png",
+          "smg": "weapons/tech-rivet-smg.png",
+          "rifle": "weapons/vanguard-slugger.png",
+          "flame": "weapons/bio-chem-sprayer.png",
+          "ossuary storm": "weapons/singularity-orbiting-shards.png",
+          "witchfire halo": "weapons/singularity-crucible.png",
+          "sunless impaler": "weapons/vanguard-lance-gun.png",
+          "black mold bloom": "weapons/bio-symbiote-siphon.png",
+          "mausoleum gate": "weapons/vanguard-repulser.png",
+          "blood moon flock": "weapons/quantum-blink-dagger-shotgun.png",
+          "cathedral knell": "weapons/singularity-mass-driver.png",
+          "midnight harvest": "weapons/quantum-event-horizon-knuckles.png"
+        };
+        const architectClasses = [
+          { id: "vanguard", name: "Vanguard", role: "Line-holder", color: "#82e9ff", weapons: ["vanguard-ar90", "vanguard-slugger", "vanguard-lance-gun", "vanguard-repulser"] },
+          { id: "tech", name: "Tech-Sapper", role: "Engineer", color: "#ffd36d", weapons: ["tech-rivet-smg", "tech-arc-welder", "tech-trip-mine-launcher", "tech-command-spike-array"] },
+          { id: "bio", name: "Bio-Reclaimer", role: "Support", color: "#85ff9a", weapons: ["bio-chem-sprayer", "bio-spore-darter", "bio-catalyst-grenadier", "bio-symbiote-siphon"] },
+          { id: "quantum", name: "Quantum Striker", role: "Assassin", color: "#b38cff", weapons: ["quantum-phase-pistols", "quantum-blink-dagger-shotgun", "quantum-needle-rail", "quantum-event-horizon-knuckles"] },
+          { id: "singularity", name: "Singularity Weaver", role: "Force mage", color: "#ff9de8", weapons: ["singularity-mass-driver", "singularity-orbiting-shards", "singularity-gravity-well-mortar", "singularity-crucible"] }
+        ];
+        let lastHpRatio = 1;
+        let lastHpGrid = "";
+        let scheduled = false;
+
+        if (hpPill) {
+          hpPill.classList.add("vital-pill");
+          hpPill.style.setProperty("--shield-level", "18%");
+          const slurry = document.createElement("div");
+          slurry.className = "shared-slurry";
+          slurry.setAttribute("aria-hidden", "true");
+          for (const className of ["hp", "shield", "stress"]) {
+            const layer = document.createElement("span");
+            layer.className = className;
+            slurry.append(layer);
+          }
+          hpPill.append(slurry);
+        }
+
+        const parseHpRatio = () => {
+          if (!hpText || !hpPill) return;
+          const match = hpText.textContent.match(/(\d+)\s*\/\s*(\d+)/);
+          if (!match) return;
+          const hp = Number(match[1]);
+          const max = Math.max(1, Number(match[2]));
+          const ratio = Math.max(0, Math.min(1, hp / max));
+          const nextGrid = `${Math.max(0.08, ratio).toFixed(2)}fr`;
+          if (nextGrid !== lastHpGrid) {
+            hpPill.style.setProperty("--hp-level", nextGrid);
+            lastHpGrid = nextGrid;
+          }
+          hpPill.classList.toggle("critical", ratio <= 0.28);
+          if (ratio < lastHpRatio - 0.04) {
+            hpPill.classList.remove("damaged");
+            void hpPill.offsetWidth;
+            hpPill.classList.add("damaged");
+          }
+          lastHpRatio = ratio;
+        };
+
+        const tagForWeapon = (name) => {
+          const lower = name.toLowerCase();
+          if (lower.includes("aura") || lower.includes("magnet") || lower.includes("field")) return ["utility", "util"];
+          if (lower.includes("chain") || lower.includes("split") || lower.includes("echo")) return ["synergy", "syn"];
+          if (lower.includes("dash") || lower.includes("blade") || lower.includes("bolt")) return ["skill", "skill"];
+          return ["risk", "risk"];
+        };
+
+        const decorateWeapons = () => {
+          if (!weaponText) return;
+          weaponText.querySelectorAll(".weapon-pill:not(.weapon-slot-placeholder)").forEach((pill, index) => {
+            if (pill.dataset.uiDecorated === "1") return;
+            pill.dataset.uiDecorated = "1";
+            const name = pill.querySelector("strong")?.textContent ?? "";
+            const [kind, label] = tagForWeapon(name);
+            const iconPath = pill.dataset.weaponIcon || weaponIconByLowerName[name.toLowerCase()];
+            const glyph = pill.querySelector(".weapon-glyph");
+            if (iconPath && glyph) {
+              glyph.textContent = "";
+              const img = document.createElement("img");
+              img.alt = "";
+              img.src = iconPath.startsWith("assets/") ? iconPath : `${architectRoot}/${iconPath}`;
+              glyph.append(img);
+            }
+            pill.classList.add("equipped-state");
+            pill.classList.toggle("upgrade-state", pill.dataset.weaponState === "EVO" || Number(pill.dataset.weaponLevel ?? 1) > 1);
+            pill.classList.toggle("focus-state", pill.classList.contains("active-weapon"));
+            pill.classList.toggle("cooldown", !pill.classList.contains("active-weapon"));
+            pill.style.setProperty("--cooldown", pill.classList.contains("active-weapon") ? "1" : "0.68");
+            const meta = document.createElement("span");
+            meta.className = "weapon-meta";
+            meta.setAttribute("aria-hidden", "true");
+            const badge = pill.dataset.weaponState === "EVO" ? "EVO" : `L${pill.dataset.weaponLevel ?? index + 1}`;
+            const statusBadge = document.createElement("span");
+            statusBadge.className = "status-badge";
+            statusBadge.textContent = badge;
+            const tag = document.createElement("span");
+            tag.className = `tag tag-${kind}`;
+            tag.textContent = label;
+            meta.append(statusBadge, tag);
+            pill.append(meta);
+          });
+          const realSlots = weaponText.querySelectorAll(".weapon-pill:not(.weapon-slot-placeholder)").length;
+          const placeholders = weaponText.querySelectorAll(".weapon-slot-placeholder").length;
+          if (realSlots > 0 && realSlots + placeholders < 3) {
+            for (let i = realSlots + placeholders; i < 3; i += 1) {
+              const slot = document.createElement("div");
+              slot.className = "pill weapon-pill weapon-slot-placeholder locked-state";
+              slot.dataset.uiDecorated = "1";
+              slot.style.setProperty("--weapon-color", "#9ba99a");
+              const glyph = document.createElement("span");
+              glyph.className = "weapon-glyph";
+              glyph.textContent = "--";
+              const title = document.createElement("strong");
+              title.textContent = "Locked";
+              const meta = document.createElement("span");
+              meta.className = "weapon-meta";
+              meta.setAttribute("aria-hidden", "true");
+              const badge = document.createElement("span");
+              badge.className = "status-badge";
+              badge.textContent = "L";
+              const tag = document.createElement("span");
+              tag.className = "tag tag-utility";
+              tag.textContent = "slot";
+              meta.append(badge, tag);
+              slot.append(glyph, title, meta);
+              weaponText.append(slot);
+            }
+          }
+        };
+
+        const renderArchitectControls = () => {
+          if (!architectControls) return;
+          const chips = [
+            ["glyphs/keyboard-r.png", "Lock"],
+            ["glyphs/ps-r3.png", "Lock"],
+            ["glyphs/xbox-rs.png", "Lock"],
+            ["glyphs/mouse.png", "Aim"],
+            ["glyphs/ps-right-stick.png", "Aim"],
+            ["glyphs/ps-cross.png", "Jump"],
+            ["glyphs/ps-circle.png", "Menu"]
+          ];
+          architectControls.replaceChildren(...chips.map(([src, label]) => {
+            const chip = document.createElement("span");
+            chip.className = "glyph-chip";
+            const img = document.createElement("img");
+            img.alt = "";
+            img.src = `${architectRoot}/${src}`;
+            chip.append(img, document.createTextNode(label));
+            return chip;
+          }));
+        };
+
+        const renderArchitectLoadout = () => {
+          if (!architectGrid) return;
+          architectGrid.replaceChildren(...architectClasses.map((klass) => {
+            const card = document.createElement("article");
+            card.className = "architect-card";
+            card.style.setProperty("--architect-color", klass.color);
+            const title = document.createElement("h3");
+            title.textContent = klass.name;
+            const role = document.createElement("div");
+            role.className = "architect-role";
+            role.textContent = klass.role;
+            card.append(title, role);
+            const weaponRow = document.createElement("div");
+            weaponRow.className = "architect-icons";
+            for (const weapon of klass.weapons) {
+              const slot = document.createElement("span");
+              slot.className = "architect-icon";
+              const img = document.createElement("img");
+              img.alt = "";
+              img.src = `${architectRoot}/weapons/${weapon}.png`;
+              slot.append(img);
+              weaponRow.append(slot);
+            }
+            const passiveRow = document.createElement("div");
+            passiveRow.className = "architect-passives";
+            for (let i = 1; i <= 12; i += 1) {
+              const slot = document.createElement("span");
+              slot.className = "architect-passive";
+              const img = document.createElement("img");
+              img.alt = "";
+              img.src = `${architectRoot}/passives/${klass.id}-${i}.png`;
+              slot.append(img);
+              passiveRow.append(slot);
+            }
+            card.append(weaponRow, passiveRow);
+            return card;
+          }));
+        };
+
+        const refresh = () => {
+          scheduled = false;
+          parseHpRatio();
+          decorateWeapons();
+        };
+
+        const scheduleRefresh = () => {
+          if (scheduled) return;
+          scheduled = true;
+          requestAnimationFrame(refresh);
+        };
+
+        new MutationObserver(scheduleRefresh).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "style"] });
+
+        renderArchitectControls();
+        renderArchitectLoadout();
+        parseHpRatio();
+        decorateWeapons();
+      })();
+    </script>
+    <script type="module">
+      if (!new URLSearchParams(location.search).has("uiPreview")) {
+        await import("./dist/client.js");
+      }
+    </script>
+  </body>
+</html>

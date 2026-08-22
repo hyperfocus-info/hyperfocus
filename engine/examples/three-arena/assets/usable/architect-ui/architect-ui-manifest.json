@@ -1,0 +1,88 @@
+{
+  "created": "2026-06-09",
+  "root": "assets/usable/architect-ui",
+  "glyphs": {
+    "xboxB": "assets/usable/architect-ui/glyphs/xbox-b.png",
+    "mouse": "assets/usable/architect-ui/glyphs/mouse.png",
+    "psR3": "assets/usable/architect-ui/glyphs/ps-r3.png",
+    "space": "assets/usable/architect-ui/glyphs/keyboard-space.png",
+    "psCross": "assets/usable/architect-ui/glyphs/ps-cross.png",
+    "keyboardR": "assets/usable/architect-ui/glyphs/keyboard-r.png",
+    "xboxRightStick": "assets/usable/architect-ui/glyphs/xbox-right-stick.png",
+    "psLeftStick": "assets/usable/architect-ui/glyphs/ps-left-stick.png",
+    "psOptions": "assets/usable/architect-ui/glyphs/ps-options.png",
+    "psCircle": "assets/usable/architect-ui/glyphs/ps-circle.png",
+    "xboxMenu": "assets/usable/architect-ui/glyphs/xbox-menu.png",
+    "psRightStick": "assets/usable/architect-ui/glyphs/ps-right-stick.png",
+    "xboxA": "assets/usable/architect-ui/glyphs/xbox-a.png",
+    "xboxLeftStick": "assets/usable/architect-ui/glyphs/xbox-left-stick.png",
+    "xboxRS": "assets/usable/architect-ui/glyphs/xbox-rs.png"
+  },
+  "classes": [
+    {
+      "id": "vanguard",
+      "name": "Vanguard",
+      "color": "#82e9ff",
+      "weapons": [
+        "vanguard-ar90",
+        "vanguard-slugger",
+        "vanguard-lance-gun",
+        "vanguard-repulser"
+      ],
+      "role": "Line-holder",
+      "passivePrefix": "vanguard"
+    },
+    {
+      "id": "tech",
+      "name": "Tech-Sapper",
+      "color": "#ffd36d",
+      "weapons": [
+        "tech-rivet-smg",
+        "tech-arc-welder",
+        "tech-trip-mine-launcher",
+        "tech-command-spike-array"
+      ],
+      "role": "Engineer",
+      "passivePrefix": "tech"
+    },
+    {
+      "id": "bio",
+      "name": "Bio-Reclaimer",
+      "color": "#85ff9a",
+      "weapons": [
+        "bio-chem-sprayer",
+        "bio-spore-darter",
+        "bio-catalyst-grenadier",
+        "bio-symbiote-siphon"
+      ],
+      "role": "Support harvester",
+      "passivePrefix": "bio"
+    },
+    {
+      "id": "quantum",
+      "name": "Quantum Striker",
+      "color": "#b38cff",
+      "weapons": [
+        "quantum-phase-pistols",
+        "quantum-blink-dagger-shotgun",
+        "quantum-needle-rail",
+        "quantum-event-horizon-knuckles"
+      ],
+      "role": "Glass assassin",
+      "passivePrefix": "quantum"
+    },
+    {
+      "id": "singularity",
+      "name": "Singularity Weaver",
+      "color": "#ff9de8",
+      "weapons": [
+        "singularity-mass-driver",
+        "singularity-orbiting-shards",
+        "singularity-gravity-well-mortar",
+        "singularity-crucible"
+      ],
+      "role": "Force mage",
+      "passivePrefix": "singularity"
+    }
+  ]
+}

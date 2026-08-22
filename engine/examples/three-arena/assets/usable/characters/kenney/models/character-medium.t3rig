@@ -1,0 +1,755 @@
+{
+  "assetFingerprint": {
+    "algorithm": "fnv1a32",
+    "value": "f6f980f5"
+  },
+  "humanoidPreset": "humanoid-v1",
+  "mapperVersion": "1.0.4",
+  "normalization": {
+    "metersPerUnit": 1,
+    "sourceForward": "+z",
+    "sourceHandedness": "right",
+    "sourceToCanonicalRotation": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "sourceUp": "+y"
+  },
+  "overrides": {},
+  "schemaVersion": 1,
+  "semantics": {
+    "chest": {
+      "boneIndex": 15,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.011894642205000115,
+            9.999340513066984e-9,
+            1.1040931263436298e-8,
+            0.9999292562410678
+          ],
+          "scale": [
+            1,
+            0.9999998211860655,
+            0.9999999403953552
+          ],
+          "translation": [
+            1.3624497390745186e-11,
+            0.2870488166809082,
+            2.5606221171203813e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 15,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "cdeb0d38"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "head": {
+      "boneIndex": 18,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            -0.07413526532849977,
+            -2.5269782216665918e-14,
+            -8.820014059585319e-15,
+            0.9972481950019629
+          ],
+          "scale": [
+            1.0000040531158445,
+            0.9999998807907103,
+            0.9999999999999998
+          ],
+          "translation": [
+            1.3696619359515605e-11,
+            0.27800926566124007,
+            -1.3969514489620138e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/Neck/Head",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 18,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "0a975d3f"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "hips": {
+      "boneIndex": 13,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.00009301443380652786,
+            -2.66477873609454e-7,
+            0.9999989543997873,
+            0.0014431034530810152
+          ],
+          "scale": [
+            1.0000040531158447,
+            0.9999999999999998,
+            0.9999998807907103
+          ],
+          "translation": [
+            0.0004645995213650167,
+            0.3219510018825531,
+            -4.69114169697471e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 13,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "73a171d7"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "leftFoot": {
+      "boneIndex": 39,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            -0.5438064818762975,
+            -0.19418123693708575,
+            -0.18754350567428757,
+            0.7946040466611693
+          ],
+          "scale": [
+            1.000020503997803,
+            0.9999836087226871,
+            0.9999957680702214
+          ],
+          "translation": [
+            -5.587935447692871e-9,
+            0.6088110208511354,
+            1.862645149230957e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/LeftUpLeg/LeftLeg/LeftFoot",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 39,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "53ce501e"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "leftHand": {
+      "boneIndex": 22,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            -0.02654677941509574,
+            0.7247396685505382,
+            -0.021308184492244375,
+            0.6881814023973526
+          ],
+          "scale": [
+            0.9999999403953553,
+            0.9999995827674864,
+            0.9999998807907106
+          ],
+          "translation": [
+            -2.5890767618719224e-7,
+            0.5272276997566221,
+            -3.7252902845841263e-9
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 22,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "7ffcc370"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "leftLowerArm": {
+      "boneIndex": 21,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.04676153938699437,
+            0.012573271019035,
+            0.005446292642537521,
+            0.9988120990388993
+          ],
+          "scale": [
+            0.999999940395355,
+            0.9999999403953553,
+            0.9999999999999998
+          ],
+          "translation": [
+            -2.996239345520735e-7,
+            0.47077494859695435,
+            2.3283064417428667e-9
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 21,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "762319d9"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "leftLowerLeg": {
+      "boneIndex": 38,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.14157400866769404,
+            0.03244448115105104,
+            0.05285427755327646,
+            0.9879830874346586
+          ],
+          "scale": [
+            0.9999994635581968,
+            0.9999988079071043,
+            1.0000022649765012
+          ],
+          "translation": [
+            1.4901161193847656e-8,
+            0.5261740684509275,
+            2.444721751426737e-9
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/LeftUpLeg/LeftLeg",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 38,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "83c6785a"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "leftShoulder": {
+      "boneIndex": 19,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.5868819991980845,
+            0.410653620355426,
+            0.5482944688987252,
+            -0.43163213328169386
+          ],
+          "scale": [
+            0.999999761581421,
+            0.9999998211860657,
+            0.9999998807907102
+          ],
+          "translation": [
+            0.08828003704547882,
+            0.2810818850994101,
+            0.06496106088161469
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder",
+        "siblingOrdinal": 1,
+        "skinJointOrdinal": 19,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "5ae057d8"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "leftToes": {
+      "boneIndex": 40,
+      "confidence": 0,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            -0.01981786155782542,
+            0.9522868074069503,
+            -0.2982552509036582,
+            0.061651391795715514
+          ],
+          "scale": [
+            0.9999999403953551,
+            0.9999998807907106,
+            0.9999999403953554
+          ],
+          "translation": [
+            -6.4028426449702636e-9,
+            0.30125394463539124,
+            -9.31322539921009e-10
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToes",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 40,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "7f1cebb5"
+        }
+      },
+      "provenance": "manual",
+      "verified": true
+    },
+    "leftUpperArm": {
+      "boneIndex": 20,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.08389000161444281,
+            0.7108129267041796,
+            0.061310612384161,
+            0.6956640422419765
+          ],
+          "scale": [
+            1.000000596046448,
+            0.9999957680702207,
+            1.0000069141387937
+          ],
+          "translation": [
+            0,
+            0.25880143046379095,
+            -2.569577204347695e-7
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 20,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "4071c09b"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "leftUpperLeg": {
+      "boneIndex": 37,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.986703058594693,
+            0.0010609757124685792,
+            0.16252845803531252,
+            0.00066993960855285
+          ],
+          "scale": [
+            1.0000545978546145,
+            1.0000014305114748,
+            1.0000004768371582
+          ],
+          "translation": [
+            0.2015291154384613,
+            0.058463305234908836,
+            7.509206056965922e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/LeftUpLeg",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 37,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "02ec22f3"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "neck": {
+      "boneIndex": 17,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.07661575813516533,
+            -2.541474296118895e-13,
+            -3.6255770352807086e-12,
+            0.9970606930399845
+          ],
+          "scale": [
+            1,
+            0.9999999999999999,
+            0.9999999403953553
+          ],
+          "translation": [
+            2.2970769980156652e-12,
+            0.2708645164966579,
+            -4.2935015473477556e-9
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/Neck",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 17,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "5a1843dd"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "rightFoot": {
+      "boneIndex": 43,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            -0.5484954951675229,
+            0.22882911386928245,
+            0.171820791116225,
+            0.7856637602479367
+          ],
+          "scale": [
+            0.9999949932098392,
+            1.0000036954879763,
+            1.0000011920928955
+          ],
+          "translation": [
+            -1.30385160446167e-8,
+            0.6088117957115173,
+            -1.862645149230957e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/RightUpLeg/RightLeg/RightFoot",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 43,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "e7cb072b"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "rightHand": {
+      "boneIndex": 31,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.008204221082400015,
+            0.0003330626556269743,
+            -0.03303726526819708,
+            0.9994203914916372
+          ],
+          "scale": [
+            0.9999999403953554,
+            0.9999998807907108,
+            0.9999998807907106
+          ],
+          "translation": [
+            7.450580624679404e-9,
+            0.5272275805473329,
+            9.03382892936122e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm/RightHand",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 31,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "e6b68bb2"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "rightLowerArm": {
+      "boneIndex": 30,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.0007336911302361518,
+            -0.004767492503430163,
+            0.04707185033727605,
+            0.9988798594517662
+          ],
+          "scale": [
+            1,
+            0.9999999999999999,
+            1.0000001192092896
+          ],
+          "translation": [
+            -1.536682245339982e-8,
+            0.47077491879463196,
+            2.4519977204207066e-7
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 30,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "9407188e"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "rightLowerLeg": {
+      "boneIndex": 42,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.13894788031222444,
+            0.011510127295933708,
+            -0.0591732172956612,
+            0.9884632182743331
+          ],
+          "scale": [
+            0.9999991059303281,
+            1.0000003576278684,
+            0.9999999999999994
+          ],
+          "translation": [
+            -6.984919281860513e-9,
+            0.5261740684509277,
+            -4.831235862756689e-9
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/RightUpLeg/RightLeg",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 42,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "c1457e3f"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "rightShoulder": {
+      "boneIndex": 28,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.6583795269981921,
+            -0.5076111717307401,
+            0.459993431969274,
+            0.31188674115600185
+          ],
+          "scale": [
+            1,
+            1.0000000000000002,
+            1
+          ],
+          "translation": [
+            -0.08828005939722058,
+            0.28108188509941057,
+            0.06496106088161469
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder",
+        "siblingOrdinal": 2,
+        "skinJointOrdinal": 28,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "8b1e06ad"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "rightToes": {
+      "boneIndex": 44,
+      "confidence": 0,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.028260881823056295,
+            0.9539411518330503,
+            -0.2975736289068705,
+            -0.025446743941275576
+          ],
+          "scale": [
+            1.0000001192092893,
+            1.000000238418579,
+            0.9999999999999999
+          ],
+          "translation": [
+            2.6193447355549182e-8,
+            0.3012544512748718,
+            -1.8626451450676207e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/RightUpLeg/RightLeg/RightFoot/RightToes",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 44,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "a2d6367c"
+        }
+      },
+      "provenance": "manual",
+      "verified": true
+    },
+    "rightUpperArm": {
+      "boneIndex": 29,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            -0.0009363195055426993,
+            0.9648764042921906,
+            -0.1039024798925678,
+            -0.24128183192717043
+          ],
+          "scale": [
+            1.0000070333480833,
+            0.9999955296516422,
+            1.000001311302185
+          ],
+          "translation": [
+            1.4901161193847656e-8,
+            0.2588014006614683,
+            -5.727633878294114e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 29,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "53b3bb84"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "rightUpperLeg": {
+      "boneIndex": 41,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.976587714759119,
+            -0.0013587963553778938,
+            -0.21511474743386616,
+            0.000484242181283048
+          ],
+          "scale": [
+            0.9999869465827942,
+            0.9999994635581972,
+            0.9999992847442628
+          ],
+          "translation": [
+            -0.20152910053730008,
+            0.058463308960199356,
+            7.520936407684475e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/RightUpLeg",
+        "siblingOrdinal": 1,
+        "skinJointOrdinal": 41,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "d7783851"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "spine": {
+      "boneIndex": 14,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            -0.061042572052316224,
+            -1.0545779577861622e-8,
+            -1.0392164547353262e-8,
+            0.9981351633908293
+          ],
+          "scale": [
+            1.0000040531158447,
+            0.9999999403953557,
+            1.000000238418579
+          ],
+          "translation": [
+            -5.0465330427972716e-12,
+            0.3219515979290011,
+            7.755615073767874e-10
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine",
+        "siblingOrdinal": 2,
+        "skinJointOrdinal": 14,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "c913713a"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    },
+    "upperChest": {
+      "boneIndex": 16,
+      "confidence": 0.96,
+      "evidence": {
+        "bindTransform": {
+          "rotation": [
+            0.04916578558898078,
+            -3.827961708872704e-13,
+            -1.895667471913242e-14,
+            0.9987906314775977
+          ],
+          "scale": [
+            1,
+            1.0000001192092898,
+            0.9999999999999999
+          ],
+          "translation": [
+            4.3997712916542253e-13,
+            0.30527660250663824,
+            -2.6077360659737536e-8
+          ]
+        },
+        "hierarchyPath": "HipsCtrl/Hips/Spine/Chest/UpperChest",
+        "siblingOrdinal": 0,
+        "skinJointOrdinal": 16,
+        "structuralHash": {
+          "algorithm": "fnv1a32",
+          "value": "30117a7e"
+        }
+      },
+      "provenance": "gltf-heuristic",
+      "verified": false
+    }
+  },
+  "skinFingerprint": {
+    "algorithm": "fnv1a32",
+    "value": "a883251a"
+  },
+  "tags": {}
+}

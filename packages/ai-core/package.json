@@ -1,0 +1,22 @@
+{
+  "name": "@hyperfocus/ai-core",
+  "version": "0.1.0",
+  "description": "Typed, framework-neutral contracts and clients for Hyperfocus AI runtimes.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/harness/protocol.ts",
+    "./modes": "./src/harness/modes.ts"
+  },
+  "files": ["src", "README.md"],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target browser --format esm --external zod",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
+}
+

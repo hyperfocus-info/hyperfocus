@@ -1,0 +1,11 @@
+{
+  "name": "three-arena",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run ./build.ts",
+    "dev": "bun run ./build.ts && bun run ./server.ts",
+    "profile": "bun run ./profile-bench.ts",
+    "proof:animation-keyframes": "bun run ./scripts/keyframe-contact-sheet.ts"
+  }
+}

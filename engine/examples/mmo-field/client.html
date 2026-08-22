@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MMO Field</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; min-height: 100dvh; font-family: system-ui, sans-serif; background: #101418; color: #f4f7fb; }
+      main { box-sizing: border-box; width: min(100%, 688px); margin-inline: auto; padding: clamp(12px, 4vw, 24px); }
+      canvas { box-sizing: border-box; display: block; width: 100%; height: auto; background: #17212b; border: 1px solid #344252; touch-action: none; }
+      canvas:focus-visible { outline: 3px solid #7dd3fc; outline-offset: 3px; }
+      #telemetry { overflow-wrap: anywhere; color: #bdc9d6; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>MMO Field</h1>
+      <p id="controls">Move with WASD or the arrow keys.</p>
+      <canvas id="field" width="640" height="360" tabindex="0" aria-label="Authoritative multiplayer field" aria-describedby="controls">Your browser does not support this demo's canvas.</canvas>
+      <p id="status" role="status" aria-live="polite" aria-atomic="true">Connecting...</p>
+      <p id="telemetry" aria-live="off"></p>
+    </main>
+    <script type="module" src="./dist/client.js"></script>
+  </body>
+</html>

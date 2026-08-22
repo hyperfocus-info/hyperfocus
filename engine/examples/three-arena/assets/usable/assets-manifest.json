@@ -1,0 +1,115 @@
+{
+  "game": "three-arena",
+  "created": "2026-06-06",
+  "sourceFolders": {
+    "kenney": "assets/source/kenney",
+    "craftpix": "assets/source/craftpix"
+  },
+  "sources": [
+    {
+      "name": "Kenney Animated Characters Survivors",
+      "url": "https://kenney.nl/assets/animated-characters-survivors",
+      "localArchive": "assets/source/kenney/kenney_animated-characters-survivors.zip",
+      "license": "CC0"
+    },
+    {
+      "name": "Kenney Survival Kit",
+      "url": "https://kenney.nl/assets/survival-kit",
+      "localArchive": "assets/source/kenney/kenney_survival-kit.zip",
+      "license": "CC0"
+    },
+    {
+      "name": "Kenney Animated Characters Retro",
+      "url": "https://kenney.nl/assets/animated-characters-retro",
+      "localArchive": "assets/source/kenney/kenney_animated-characters-retro.zip",
+      "license": "CC0"
+    },
+    {
+      "name": "Kenney Graveyard Kit",
+      "url": "https://kenney.nl/assets/graveyard-kit",
+      "localArchive": "assets/source/kenney/kenney_graveyard-kit_5.0.zip",
+      "license": "CC0"
+    },
+    {
+      "name": "Craftpix Zombie TDS 2D Game Kit",
+      "url": "https://craftpix.net/product/zombie-tds-2d-game-kit/",
+      "localArchive": "assets/source/craftpix/craftpix-871156-zombie-tds-2d-game-kit.zip",
+      "license": "Craftpix file license: https://craftpix.net/file-licenses/"
+    },
+    {
+      "name": "KayKit Fantasy Weapon Bits",
+      "url": "local import",
+      "localArchive": "assets/source/imported/kaykit-fantasy-weapons",
+      "license": "included source license"
+    },
+    {
+      "name": "Universal Animation Library 1 and 2",
+      "url": "local import",
+      "localArchive": "assets/source/imported/universal-animation-library-1 and assets/source/imported/universal-animation-library-2",
+      "license": "included source license"
+    },
+    {
+      "name": "Ruin 3D Low Poly Model Pack",
+      "url": "local import",
+      "localArchive": "assets/source/imported/ruin-low-poly",
+      "license": "included source license"
+    },
+    {
+      "name": "Treasure 3D Low Poly Models",
+      "url": "local import",
+      "localArchive": "assets/source/imported/treasure-low-poly",
+      "license": "included source license"
+    }
+  ],
+  "usableFolders": {
+    "kenneyCharacterModel": "assets/usable/characters/kenney/models/character-medium.fbx",
+    "kenneyCharacterAnimations": "assets/usable/characters/kenney/animations",
+    "kenneyCharacterSkins": "assets/usable/characters/kenney/skins",
+    "kenneyGraveyardCharacters": "assets/usable/characters/kenney/graveyard",
+    "kenneyProps": "assets/usable/props/kenney",
+    "kenneyEnvironment": "assets/usable/environment/kenney",
+    "kenneyTextures": "assets/usable/textures/kenney",
+    "craftpixCharacters": "assets/usable/characters/craftpix",
+    "craftpixTextures": "assets/usable/textures/craftpix",
+    "kaykitWeapons": "assets/usable/weapons/kaykit",
+    "importedRuins": "assets/usable/scenery/ruin-low-poly",
+    "importedTreasure": "assets/usable/collectibles/treasure-low-poly",
+    "universalAnimations": "assets/usable/animations/universal",
+    "architectUi": "assets/usable/architect-ui",
+    "fallbacks": "assets/usable/fallbacks"
+  },
+  "curatedCounts": {
+    "fbx": 4,
+    "glb": 44,
+    "png": 160
+  },
+  "architectUi": {
+    "manifest": "assets/usable/architect-ui/architect-ui-manifest.json",
+    "weapons": "assets/usable/architect-ui/weapons",
+    "passives": "assets/usable/architect-ui/passives",
+    "status": "assets/usable/architect-ui/status",
+    "glyphs": "assets/usable/architect-ui/glyphs"
+  },
+  "craftpixCurated": {
+    "icons": [
+      "assets/usable/characters/craftpix/icons/zombie1-icon-no-bg.png",
+      "assets/usable/characters/craftpix/icons/zombie5-icon-no-bg.png"
+    ],
+    "zombieFemale": {
+      "walkFrames": "assets/usable/characters/craftpix/zombie-female/walk",
+      "attackFrames": "assets/usable/characters/craftpix/zombie-female/attack"
+    },
+    "survivorGirl": {
+      "idleGunFrames": "assets/usable/characters/craftpix/survivor-girl/idle-gun",
+      "walkGunFrames": "assets/usable/characters/craftpix/survivor-girl/walk-gun",
+      "gunShotFrames": "assets/usable/characters/craftpix/survivor-girl/gun-shot"
+    },
+    "topDownTextures": [
+      "assets/usable/textures/craftpix/soil-stones-tilelist-1.png",
+      "assets/usable/textures/craftpix/soil-stones-tilelist-2.png",
+      "assets/usable/textures/craftpix/outside-object-layer-0000.png",
+      "assets/usable/textures/craftpix/outside-object-layer-0007.png"
+    ]
+  },
+  "fallbackManifest": "assets/usable/fallbacks/fallback-texture-manifest.json"
+}

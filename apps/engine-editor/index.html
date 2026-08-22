@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:," />
+    <title>Hyperfocus Editor</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/dist/main.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <div class="eyebrow">@hyperfocus/engine</div>
+            <h1>Engine Editor</h1>
+          </div>
+        </div>
+        <nav class="workspace-tabs" aria-label="Project resource editors" role="tablist">
+          <button class="workspace-tab is-active" role="tab" data-workspace-tab="stage" aria-controls="workspace-stage" aria-selected="true">
+            <span class="tab-index">01</span><span>Stage</span>
+          </button>
+          <button class="workspace-tab" role="tab" data-workspace-tab="scene3d" aria-controls="workspace-scene3d" aria-selected="false">
+            <span class="tab-index">02</span><span>3D</span>
+          </button>
+          <button class="workspace-tab" role="tab" data-workspace-tab="tilemap" aria-controls="workspace-tilemap" aria-selected="false">
+            <span class="tab-index">03</span><span>Tilemap</span>
+          </button>
+          <button class="workspace-tab" role="tab" data-workspace-tab="atlas" aria-controls="workspace-atlas" aria-selected="false">
+            <span class="tab-index">04</span><span>Assets</span>
+          </button>
+          <button class="workspace-tab" role="tab" data-workspace-tab="script" aria-controls="workspace-script" aria-selected="false">
+            <span class="tab-index">05</span><span>Code</span>
+          </button>
+          <button class="workspace-tab" role="tab" data-workspace-tab="post" aria-controls="workspace-post" aria-selected="false">
+            <span class="tab-index">06</span><span>Polish</span>
+          </button>
+          <button class="workspace-tab" role="tab" data-workspace-tab="motion" aria-controls="workspace-motion" aria-selected="false">
+            <span class="tab-index">07</span><span>Sequence</span>
+          </button>
+          <button class="workspace-tab" role="tab" data-workspace-tab="diagnostics" aria-controls="workspace-diagnostics" aria-selected="false">
+            <span class="tab-index">08</span><span>Debug</span>
+          </button>
+        </nav>
+        <div class="runtime-status">
+          <span class="status-dot"></span>
+          <div><strong id="playback-status">RUNNING</strong><small id="runtime-backend">initializing kernel</small></div>
+          <span class="global-budget-badge" id="global-frame-budget">p95 0.00 / 16.67 ms</span>
+          <button class="playback-button" id="global-playback" title="Pause or resume (Space)">Ⅱ</button>
+        </div>
+      </header>
+
+      <main class="workspace-host">
+        <section class="workspace is-active" id="workspace-stage" data-workspace="stage">
+          <div class="workspace-heading">
+            <div><span class="eyebrow">Scene editor</span><h2>Stage &amp; Entity Inspector</h2></div>
+            <div class="heading-tools"><span class="chip chip-live">● LIVE</span><span class="chip">60 HZ FIXED STEP</span></div>
+          </div>
+          <div class="stage-layout">
+            <aside class="panel hierarchy-panel">
+              <div class="panel-title"><span>Scene hierarchy</span><span class="panel-count" id="stage-node-count">0 nodes</span></div>
+              <label class="search-control"><span>⌕</span><input id="hierarchy-filter" aria-label="Filter hierarchy" placeholder="Filter entities" /></label>
+              <div class="tree" id="entity-tree">
+                <div class="tree-row tree-root"><span class="chevron">⌄</span><span class="node-icon">◇</span><strong>Dungeon_Run_04</strong></div>
+                <div class="tree-branch">
+                  <div class="tree-row"><span class="chevron">⌄</span><span class="node-icon cyan">▦</span><span>Environment</span><small>L0</small></div>
+                  <div class="tree-branch">
+                    <button class="tree-row entity-row" data-entity-id="floor-grid"><span class="node-icon">▦</span><span>Floor Grid</span><small>48 tiles</small></button>
+                    <button class="tree-row entity-row" data-entity-id="torch-west"><span class="node-icon amber">✦</span><span>Torch West</span><small>L1</small></button>
+                    <button class="tree-row entity-row" data-entity-id="torch-east"><span class="node-icon amber">✦</span><span>Torch East</span><small>L1</small></button>
+                  </div>
+                  <div class="tree-row"><span class="chevron">⌄</span><span class="node-icon violet">◈</span><span>Actors</span><small>L2</small></div>
+                  <div class="tree-branch">
+                    <button class="tree-row entity-row" data-entity-id="player-01"><span class="node-icon cyan">◆</span><span>Player_01</span><small>selected</small></button>
+                    <button class="tree-row entity-row" data-entity-id="sentinel-a"><span class="node-icon danger">◆</span><span>Sentinel_A</span><small>hostile</small></button>
+                    <button class="tree-row entity-row" data-entity-id="sentinel-b"><span class="node-icon danger">◆</span><span>Sentinel_B</span><small>hostile</small></button>
+                  </div>
+                </div>
+              </div>
+              <div class="panel-subtitle">Entity colliders <span id="stage-collider-count">0</span></div>
+              <div class="collision-list" id="collision-list">
+                <div><i style="--rect-color:#4de1c1"></i><span>player_body</span><code>38 × 48</code></div>
+                <div><i style="--rect-color:#ffb547"></i><span>north_wall</span><code>520 × 24</code></div>
+                <div><i style="--rect-color:#ff5f75"></i><span>sentinel_a</span><code>36 × 40</code></div>
+                <div><i style="--rect-color:#ff5f75"></i><span>sentinel_b</span><code>36 × 40</code></div>
+              </div>
+            </aside>
+
+            <div class="viewport-panel panel">
+              <div class="viewport-toolbar">
+                 <div class="tool-group"><button class="tool is-active" data-stage-tool="select" aria-pressed="true" title="Select entities">Select</button><button class="tool" data-stage-tool="pan" aria-pressed="false" title="Pan camera">Pan</button><button class="tool" id="toggle-stage-grid" aria-pressed="true" title="Toggle grid (G)">Grid</button></div>
+                <div class="viewport-title"><span class="status-dot"></span>createStage / main</div>
+                 <div class="tool-group"><span class="zoom-label">100%</span><button class="tool" id="center-stage-camera" title="Center camera">Center</button><button class="tool" data-editor-action="fullscreen" title="Fullscreen viewport">⛶</button></div>
+              </div>
+              <div class="stage-canvas-wrap" id="stage-canvas-wrap">
+                 <canvas id="stage-canvas" width="760" height="480" tabindex="0" aria-label="Stage viewport. Use arrow keys to move the selected entity."></canvas>
+                <div class="canvas-badge top-left">CAMERA 01</div>
+                <div class="canvas-badge calibration-badge" id="calibration-badge">G · GRID ON&nbsp;&nbsp; ALT + Z · CALIBRATE ZERO</div>
+                <div class="canvas-badge bottom-left"><span>XY</span><b>12, 8</b><span>GRID 32</span></div>
+                <div class="selection-readout" id="selection-readout"><span>SELECTED</span><strong>Player_01</strong><code>x 320 · y 242 · L2</code></div>
+              </div>
+              <div class="telemetry-strip">
+                <div><span>FPS</span><strong id="stage-fps">60.0</strong></div>
+                <div><span>ENTITIES</span><strong id="stage-runtime-entity-count">0</strong></div>
+                <div><span>DRAWN</span><strong id="stage-drawn">0</strong></div>
+                <div><span>FRAME</span><strong id="stage-frame-ms">0.00 ms</strong></div>
+                <div class="sparkline"><svg viewBox="0 0 200 32" preserveAspectRatio="none"><polyline id="stage-spark" points="0,20 20,19 40,21 60,18 80,20 100,17 120,19 140,16 160,18 180,15 200,17" /></svg></div>
+              </div>
+            </div>
+
+            <aside class="panel tile-panel">
+              <div class="panel-title"><span>Tile painter</span><span class="panel-count">terrain.atlas</span></div>
+              <div class="segmented"><button class="is-active" data-brush="paint">Paint</button><button data-brush="erase">Erase</button><button data-brush="inspect">Inspect</button></div>
+              <div class="tile-palette" aria-label="Tile palette">
+                <button class="tile-swatch is-active" data-tile="0"><span class="tile-stone"></span><small>Stone</small></button>
+                <button class="tile-swatch" data-tile="1"><span class="tile-moss"></span><small>Moss</small></button>
+                <button class="tile-swatch" data-tile="2"><span class="tile-water"></span><small>Void</small></button>
+                <button class="tile-swatch" data-tile="3"><span class="tile-trim"></span><small>Trim</small></button>
+              </div>
+              <div class="panel-subtitle">Grid editor <span id="paint-coordinate">col 0 · row 0</span></div>
+              <div class="mini-grid" id="tile-grid" role="grid" aria-label="Editable view of the active project tilemap"></div>
+              <div class="inspector-card">
+                <div class="inspector-head"><span class="node-icon cyan">◆</span><div><strong id="inspector-name">Player_01</strong><small id="inspector-id">ID player-01</small></div><span class="chip">ACTIVE</span></div>
+                <dl>
+                  <div><dt>Layer</dt><dd id="inspector-layer">2 · Actors</dd></div>
+                  <div class="scrub-row"><dt class="scrub-label" data-scrub-property="x">X <small>↔</small></dt><dd id="inspector-x">320.0</dd></div>
+                  <div class="scrub-row"><dt class="scrub-label" data-scrub-property="y">Y <small>↔</small></dt><dd id="inspector-y">242.0</dd></div>
+                  <div class="scrub-row"><dt class="scrub-label" data-scrub-property="scale">Scale <small>↔</small></dt><dd id="inspector-scale">1.00×</dd></div>
+                  <div><dt>Position</dt><dd id="inspector-position">320, 242</dd></div><div><dt>Bounds</dt><dd id="inspector-bounds">38 × 48</dd></div>
+                </dl>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="workspace" id="workspace-scene3d" data-workspace="scene3d" hidden>
+          <div class="workspace-heading approachable-heading">
+            <div><span class="eyebrow">3D scene editor</span><h2>Build a playable WebGL2 world</h2><p>Select an object, edit its transform, then press Play and move with WASD.</p></div>
+            <div class="heading-tools"><span class="chip chip-live">WEBGL2</span><button class="primary-button compact" type="button" data-editor-action="create-template" data-template="3d-action">Create 3D starter</button></div>
+          </div>
+          <div class="scene3d-layout">
+            <aside class="panel scene3d-hierarchy">
+              <div class="panel-title"><span>Scene objects</span><button class="text-button" type="button" data-editor-action="import-assets">+ Import glTF</button></div>
+              <div id="scene3d-entities" class="scene3d-entity-list"><p class="empty-copy">Create or open a 3D project to see its objects.</p></div>
+              <div class="friendly-hint"><strong>Where do models go?</strong><span>Drop .gltf or .glb files onto Assets, then attach them from this scene.</span></div>
+            </aside>
+            <div class="panel scene3d-viewport">
+              <div class="viewport-toolbar"><div class="tool-group"><span class="chip chip-live" id="scene3d-status">PREVIEW READY</span></div><div class="viewport-title">Perspective camera</div><div class="tool-group"><span class="zoom-label">WASD · ORBIT PREVIEW</span></div></div>
+              <div class="scene3d-canvas-wrap"><canvas id="scene3d-canvas" width="960" height="600" tabindex="0" aria-label="Interactive 3D scene preview"></canvas><div class="canvas-badge top-left">PLAY TO MOVE · ESC TO EDIT</div><div class="scene3d-empty" id="scene3d-empty"><strong>No 3D scene yet</strong><span>Start with a lit, playable scene instead of configuring a renderer by hand.</span><button class="primary-button" type="button" data-editor-action="create-template" data-template="3d-action">Create 3D starter</button></div></div>
+            </div>
+            <aside class="panel scene3d-inspector" id="scene3d-inspector"><div class="panel-title"><span>Inspector</span><span class="panel-count">NOTHING SELECTED</span></div><p class="empty-copy">Select a 3D object to edit its position, rotation, scale, material, and physics.</p></aside>
+          </div>
+        </section>
+
+        <section class="workspace" id="workspace-script" data-workspace="script" hidden>
+          <div class="workspace-heading approachable-heading">
+            <div><span class="eyebrow">TypeScript workspace</span><h2>Edit game behavior without leaving the editor</h2><p>Project scripts are saved with project data and exported as ordinary source files.</p></div>
+            <div class="heading-tools"><button type="button" data-editor-action="download-script">Download current file</button><button class="primary-button compact" type="button" data-editor-action="save-script">Save script</button></div>
+          </div>
+          <div class="script-layout">
+            <aside class="panel script-files-panel"><div class="panel-title"><span>Project files</span><button class="text-button" type="button" data-editor-action="create-script">+ New script</button></div><div id="script-file-list" class="script-file-list"></div><div class="friendly-hint"><strong>Attach a script</strong><span>Select an entity, add Behavior, and set its module to a relative path such as <code>./src/player.ts</code>.</span></div></aside>
+            <section class="panel script-editor-panel"><header><div><span>EDITING</span><strong id="script-editor-path">No script selected</strong></div><output id="script-editor-status" role="status">Saved</output></header><textarea id="script-editor" spellcheck="false" aria-label="TypeScript source editor" placeholder="Create a TypeScript file to begin…"></textarea><footer><span>TypeScript · UTF-8</span><span>Ctrl/Cmd+S saves the current script</span><span id="script-line-count">0 lines</span></footer></section>
+            <aside class="panel script-reference-panel"><div class="panel-title"><span>Runtime contract</span><span class="panel-count">DETERMINISTIC</span></div><p>Behavior functions receive the entity snapshot, component values, actions, fixed delta, and tick.</p><pre>export const update = ({
+  entity,
+  actions,
+  deltaSeconds,
+}) =&gt; ({
+  velocityX: 0,
+  velocityY: 0,
+});</pre><div class="build-truth"><strong>How it ships</strong><span>Custom TypeScript is bundled by <code>bun run build:game</code>. Built-in behaviors can also use the one-click offline HTML build.</span></div></aside>
+          </div>
+        </section>
+
+        <section class="workspace" id="workspace-tilemap" data-workspace="tilemap" hidden>
+          <div class="workspace-heading">
+            <div><span class="eyebrow">LEVEL DESIGN</span><h2>Visual Tilemap &amp; Collision Painter</h2></div>
+            <div class="heading-tools"><span class="chip" id="tile-tool-chip">B · BRUSH</span><span class="chip chip-live" id="collision-extract-status">COLLISION LIVE</span></div>
+          </div>
+          <div class="tilemap-layout">
+            <aside class="panel tile-tools-panel">
+              <div class="panel-title"><span>Toolbox</span><span class="panel-count">terrain.atlas</span></div>
+              <div class="large-tool-grid">
+                <button class="large-tool is-active" data-tile-tool="paint"><kbd>B</kbd><span>Brush</span></button>
+                <button class="large-tool" data-tile-tool="erase"><kbd>E</kbd><span>Erase</span></button>
+                <button class="large-tool" data-tile-tool="fill"><kbd>G</kbd><span>Flood Fill</span></button>
+                <button class="large-tool" data-tile-tool="marquee"><kbd>M</kbd><span>Marquee</span></button>
+              </div>
+              <div class="panel-subtitle">Active paint slot <span id="tile-sample-readout">ID 0 · STONE</span></div>
+              <div class="tile-palette large" id="tilemap-palette">
+                <button class="tile-swatch is-active" data-map-tile="0"><span class="tile-stone"></span><small>Stone · 0</small></button>
+                <button class="tile-swatch" data-map-tile="1"><span class="tile-moss"></span><small>Moss · 1</small></button>
+                <button class="tile-swatch" data-map-tile="2"><span class="tile-water"></span><small>Void · 2</small></button>
+                <button class="tile-swatch" data-map-tile="3"><span class="tile-trim"></span><small>Solid Trim · 3</small></button>
+              </div>
+              <div class="shortcut-help"><p><kbd>Shift</kbd> straight line</p><p><kbd>Alt</kbd> temporary eraser</p><p><kbd>I</kbd> eyedropper</p><p><kbd>C</kbd> extract collisions</p></div>
+            </aside>
+            <div class="panel tilemap-viewport-panel">
+              <div class="viewport-toolbar"><div class="tool-group"><span class="chip chip-live">LAYER · TERRAIN</span></div><div class="viewport-title" id="tilemap-coordinate">COL 0 · ROW 0</div><div class="tool-group"><span class="zoom-label">GRID 48 PX</span></div></div>
+              <div class="tilemap-canvas-wrap"><canvas id="tilemap-canvas" width="960" height="600" tabindex="0" aria-label="Tilemap collision painting canvas"></canvas><div class="canvas-badge top-left">SHIFT · AXIS LOCK&nbsp;&nbsp; ALT · ERASE&nbsp;&nbsp; I · SAMPLE</div></div>
+              <div class="telemetry-strip"><div><span>MAP</span><strong>16 × 10</strong></div><div><span>TILE</span><strong>48 PX</strong></div><div><span>SOLID</span><strong id="solid-tile-count">0</strong></div><div><span>RECTS</span><strong id="extracted-rect-count">0</strong></div><div class="marquee-summary" id="marquee-summary">No marquee selection · drag with M</div></div>
+            </div>
+            <aside class="panel collision-results-panel">
+              <div class="panel-title"><span>Collision extraction</span><button class="text-button" id="extract-collisions">RUN C</button></div>
+              <div class="collision-summary"><strong id="collision-area">0 px²</strong><span>merged collision coverage</span></div>
+              <div id="extracted-collision-list" class="extracted-collision-list"></div>
+              <div class="collision-code"><span>ENGINE CALL</span><code>extractCollisionRects(map, {<br>&nbsp;&nbsp;tags: ["solid"],<br>&nbsp;&nbsp;merge: true<br>})</code></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="workspace" id="workspace-atlas" data-workspace="atlas" hidden>
+          <div class="workspace-heading">
+            <div><span class="eyebrow">SPRITE ANIMATION</span><h2>Texture Atlas Slicer &amp; Animator</h2></div>
+            <div class="heading-tools"><span class="chip">SPRITESHEET · 512 × 320</span><span class="chip chip-live" id="atlas-playback-chip">PLAYING · 1.0×</span></div>
+          </div>
+          <div class="atlas-layout">
+            <aside class="panel atlas-controls-panel">
+              <div class="panel-title"><span>Slicing tools</span><span class="panel-count">8 frames</span></div>
+              <button class="primary-button slice-button" id="slice-grid">Slice Grid</button>
+              <div class="slice-fields"><label>Frame W<input id="slice-width" type="number" value="128" min="8" max="512"></label><span>×</span><label>Frame H<input id="slice-height" type="number" value="160" min="8" max="320"></label></div>
+              <button class="large-tool manual-slice" data-atlas-tool="manual"><kbd>⌁</kbd><span>Manual Slice</span></button>
+              <div class="panel-subtitle">Frame keys <span>↑ / ↓ NAVIGATE</span></div>
+              <div class="atlas-frame-list" id="atlas-frame-list"></div>
+            </aside>
+            <div class="panel atlas-source-panel">
+              <div class="viewport-toolbar"><div class="tool-group"><button class="tool is-active" aria-pressed="true">Slice frames</button></div><div class="viewport-title">hero_actions.png</div><div class="tool-group"><span class="zoom-label">100%</span></div></div>
+              <div class="atlas-canvas-wrap"><canvas id="atlas-canvas" width="800" height="560" tabindex="0" aria-label="Texture atlas slicing canvas"></canvas><div class="canvas-badge top-left">DRAG · MANUAL FRAME&nbsp;&nbsp; ENTER · COMMIT GRID</div></div>
+            </div>
+            <aside class="panel animation-panel">
+              <div class="panel-title"><span>Animation sequence</span><span class="panel-count">walk_cycle</span></div>
+              <div class="animation-preview"><canvas id="animation-canvas" width="250" height="220"></canvas><span id="animation-frame-name">walk_00</span></div>
+              <label class="playback-speed-label"><span>Playback speed <output id="atlas-speed-output">1.0×</output></span><input id="atlas-speed" type="range" min="0.2" max="2.5" step="0.1" value="1"></label>
+              <div class="panel-subtitle">Timeline <span>DRAG TO REORDER</span></div>
+              <div class="atlas-timeline" id="atlas-timeline"></div>
+              <div class="atlas-hint"><kbd>F2</kbd> Rename selected frame<br><kbd>Double-click</kbd> Reset playback to 1.0×</div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="workspace" id="workspace-post" data-workspace="post" hidden>
+          <div class="workspace-heading">
+            <div><span class="eyebrow">VISUAL POLISH</span><h2>Interactive Post-Processing Composer</h2></div>
+            <div class="heading-tools"><span class="chip">ENGINE CONTRACT</span><span class="chip chip-live">AUTO COMPILE</span></div>
+          </div>
+          <div class="post-layout">
+            <div class="panel preview-panel">
+              <div class="panel-title"><span>Effect preview</span><span class="panel-count" id="post-render-time">0.00 ms render</span></div>
+              <div class="compare-stage">
+                <div class="preview-frame"><canvas id="post-preview-raw" width="520" height="310"></canvas><span>RAW PIPELINE</span></div>
+                <div class="preview-frame active"><canvas id="post-preview-active" width="520" height="310"></canvas><span>COMPILED STACK</span></div>
+              </div>
+              <div class="post-timeline"><span>00:00:04:18</span><div><i></i><i></i><i></i><i></i><i></i><b style="left:63%"></b></div><button id="post-preview-playback" title="Pause or resume preview">Ⅱ</button></div>
+            </div>
+            <div class="panel stack-panel">
+              <div class="panel-title"><span>Effects stack compiler</span><button class="text-button" id="reset-effects">RESET</button></div>
+              <div id="effects-list" class="effects-list"></div>
+            </div>
+            <aside class="post-sidebar">
+              <div class="panel budget-card" id="budget-component">
+                <div class="panel-title"><span>Performance budget</span><span class="budget-state" id="budget-state">PASS</span></div>
+                <div class="budget-gauge"><div><strong id="budget-percent">0%</strong><small>of FX allocation</small></div></div>
+                <div class="budget-metrics"><div><span>FX allocation</span><strong id="budget-time">0.00 / 2.00 ms FX</strong></div><div><span>Frame target</span><strong id="budget-frame-time">16.67 ms frame</strong></div><div><span>Pixel effects</span><strong id="budget-pixels">0 / 2</strong></div><div><span>Full passes</span><strong id="budget-passes">0 / 4</strong></div><div><span>Distortions</span><strong id="budget-distortions">0 / 1</strong></div></div>
+                <div class="budget-surcharge" id="budget-surcharge" hidden><strong>Performance Cost Surcharge</strong><span>Stack is approaching the 16.67 ms frame budget.</span></div>
+                <div class="budget-flame" id="budget-flame" aria-label="Post-processing flame graph"></div>
+                <div class="budget-warning" id="budget-warning" hidden><strong>High Budget Warning</strong><p id="budget-overrun-copy">Post-Processing Budget Overrun</p><p id="budget-violations">Effect stack exceeds the configured mobile frame budget.</p></div>
+              </div>
+              <div class="panel compiler-log"><div class="panel-title"><span>Compiler output</span><span class="panel-count">LIVE</span></div><pre id="compiler-output"></pre></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="workspace sequence-workspace" id="workspace-motion" data-workspace="motion" hidden>
+          <div class="workspace-heading sequence-heading">
+            <div><span class="eyebrow">ANIMATION &amp; AUDIO</span><h2>Sequence &amp; Motion</h2></div>
+            <div class="heading-tools"><span class="chip chip-live" id="sequence-save-state">AUTOSAVED</span><span class="chip" id="rig-capabilities">RIG READY</span><button class="sequence-export" id="production-lab-open">PRODUCTION LAB</button><button class="sequence-export" id="sequence-export">EXPORT VIDEO</button></div>
+          </div>
+          <div class="sequence-shell">
+            <div class="sequence-commandbar panel">
+              <div class="sequence-transport" role="toolbar" aria-label="Timeline transport"><button id="sequence-jump-start">|&lt;</button><button id="sequence-step-back">&lt;</button><button class="transport-play" id="sequence-play">&#9654;</button><button id="sequence-step-forward">&gt;</button><button id="sequence-jump-end">&gt;|</button></div>
+              <code class="sequence-timecode" id="sequence-timecode">00:00:00:00</code>
+              <label class="sequence-field">FPS <select id="sequence-fps"><option>24</option><option selected>30</option><option>60</option></select></label>
+              <label class="sequence-field">BPM <input id="sequence-bpm" type="number" value="120" min="20" max="400"></label><button class="tap-tempo" id="tap-tempo">TAP</button><div class="sequence-divider"></div>
+              <button class="toggle-button is-active" id="sequence-snap" aria-pressed="true">&#9670; SNAP</button><button class="toggle-button is-active" id="sequence-beat-grid" aria-pressed="true"># BEATS</button><button class="toggle-button" id="sequence-onion" aria-pressed="false">&#9680; ONION</button>
+              <label class="sequence-field speed-field">SPEED <select id="sequence-speed"><option value=".5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option><option value="2">2x</option></select></label>
+            </div>
+            <aside class="panel sequence-tracks-panel">
+              <div class="panel-title"><span>Tracks</span><button class="text-button" id="add-sequence-track">+ TRACK</button></div>
+              <label class="sequence-search"><span>/</span><input id="sequence-track-filter" placeholder="Filter tracks · t:transform"></label>
+              <div class="sequence-collection-head"><button class="disclosure">&#9660;</button><span class="track-type-icon actor">A</span><div><strong>Player_01</strong><small>4 animated properties</small></div><button title="Lock entity">&#128274;</button><button title="Hide entity">&#9673;</button></div>
+              <div class="sequence-track-list" id="sequence-track-list"></div>
+              <div class="sequence-collection-head audio-head"><button class="disclosure">&#9660;</button><span class="track-type-icon audio">&#9835;</span><div><strong>Music</strong><small>1 stem · stereo</small></div><button title="Solo">S</button><button title="Mute">M</button></div>
+              <div class="audio-track-label"><span class="wave-icon">&#8779;</span><div><strong>neon_pulse_demo</strong><small>48 kHz · stereo</small></div><button id="find-audio-transients" title="Detect beats">&#10022;</button></div>
+              <div class="sequence-collection-head events-head"><button class="disclosure">&#9660;</button><span class="track-type-icon event">!</span><div><strong>Events</strong><small>audio · logic · camera</small></div><button id="add-sequence-event">+</button><button title="Jump to next marker">&gt;</button></div>
+            </aside>
+            <section class="panel sequence-editor-panel">
+              <div class="sequence-view-tabs"><button class="is-active" data-sequence-view="dope">DOPE SHEET</button><button data-sequence-view="graph">CURVE EDITOR</button><span></span><button id="sequence-normalize">NORMALIZE</button><label>CHANNEL <select id="sequence-channel"><option>All</option><option>X</option><option>Y</option><option>Scale</option></select></label></div>
+              <div class="sequence-ruler" id="sequence-ruler" aria-label="Timeline ruler. Drag to scrub."></div>
+              <div class="sequence-canvas" id="sequence-canvas"><div class="loop-region" id="sequence-loop-region"><i class="loop-handle start"></i><i class="loop-handle end"></i></div><div class="beat-grid" id="sequence-beat-lines"></div><div class="sequence-track-rows" id="sequence-track-rows"></div><div class="sequence-playhead" id="sequence-playhead"><i></i><span></span></div><div class="box-selection" id="sequence-box-selection" hidden></div></div>
+              <div class="curve-editor" id="curve-editor" hidden><svg id="curve-svg" viewBox="0 0 1000 300" preserveAspectRatio="none" aria-label="Bezier animation curve editor"></svg></div>
+              <div class="sequence-zoom-footer"><span id="sequence-selection-readout">No keys selected</span><span class="shortcut-strip">BOX SELECT · DRAG RETIME · CTRL C/V · , / . STEP</span><input id="sequence-zoom" type="range" min="1" max="4" step=".1" value="1"></div>
+            </section>
+            <aside class="sequence-right-column">
+              <section class="panel key-inspector"><div class="panel-title"><span>Keyframe</span><span class="panel-count" id="keyframe-inspector-count">NONE</span></div><div class="key-inspector-empty" id="key-inspector-empty"><span class="key-diamond">&#9670;</span><p>Select a key to edit its frame, value, and interpolation.</p></div><div class="key-inspector-fields" id="key-inspector-fields" hidden><label>FRAME<input id="key-frame-input" type="number"></label><label>VALUE<input id="key-value-input" type="number" step=".01"></label><label class="wide">EASING<select id="key-easing"><option value="linear">Linear</option><option value="ease-in">Ease in</option><option value="ease-out">Ease out</option><option value="ease-in-out">Ease in + out</option><option value="bounce">Bounce</option></select></label></div><div class="easing-presets"><button data-easing="linear">／</button><button data-easing="ease-in">&#8970;</button><button data-easing="ease-out">&#8971;</button><button data-easing="ease-in-out">S</button><button data-easing="bounce">M</button></div></section>
+              <section class="panel mixer-panel"><div class="panel-title"><span>Audio mixer</span><span class="panel-count">MASTER -6.2 dB</span></div><div class="mixer-strip"><div class="mixer-channel"><span>MUSIC</span><div class="meter"><i></i><i></i></div><input id="mixer-volume" type="range" min="0" max="1.2" step=".01" value=".82"><output id="mixer-db">-1.7 dB</output><div><button id="mixer-mute">M</button><button id="mixer-solo">S</button></div></div><div class="mixer-channel master"><span>MASTER</span><div class="meter"><i></i><i></i></div><input type="range" min="0" max="1" step=".01" value=".8"><output>-2.1 dB</output><div><button>M</button><button>MON</button></div></div></div><div class="audio-detail"><label>PAN <input id="mixer-pan" type="range" min="-1" max="1" step=".01" value="0"><output id="mixer-pan-output">C</output></label><div><span>FADE IN <b>12f</b></span><span>FADE OUT <b>18f</b></span></div><small>Loop 00:00:00:24 — 00:00:08:24</small></div></section>
+            </aside>
+            <section class="panel rig-dock">
+              <div class="rig-dock-info"><div class="panel-title"><span>Motion lab / live rig</span><span class="panel-count">ZERO CLIP</span></div><div class="motion-state-actions"><button id="walk-toggle" data-walk-state="idle"><span>&#9654;</span> Walk</button><button id="single-step">STEP</button><button id="motion-reset">RESET</button></div><div class="rig-live-stats"><span>PHASE <b id="rig-phase">IDLE</b></span><span>POSE <b id="rig-pose-time">0.000 ms</b></span><span>SLIP <b id="foot-slip-value">0.0000 m</b></span><span id="foot-slip-status">Within engine acceptance threshold</span></div></div>
+              <div class="rig-canvas-wrap"><canvas id="rig-canvas" width="760" height="600" tabindex="0" aria-label="Procedural humanoid rig viewport. Select IK handles to drag hands."></canvas><div class="rig-overlay"><span>SEMANTIC RIG</span><small>DRAG HANDS · IK</small></div></div>
+              <div class="rig-mini-controls control-stack"><label><span>Speed <output id="speed-output">1.60 m/s</output></span><input id="locomotion-speed" type="range" min="0" max="3.2" step="0.1" value="1.6"></label><label><span>Stride <output id="stride-output">1.35</output></span><input id="stride-scale" type="range" min="0.7" max="2" step=".05" value="1.35"></label><label><span>Terrain <output id="terrain-output">0.00 m</output></span><input id="terrain-height" type="range" min="-.2" max=".5" step=".01" value="0"></label><input id="joint-limit" type="range" min="35" max="140" value="100" hidden><output id="joint-output" hidden>100%</output><input id="terrain-heightfield" type="checkbox" hidden><output id="terrain-mode-output" hidden>OFF</output></div>
+              <div class="motion-compat" aria-hidden="true"><span id="motion-time">00:00:00</span><span id="rig-fps">60 FPS</span><span id="rig-joints">17 BONES</span><span id="rig-checksum">POSE —</span><span id="gait-phase">0.000</span><span id="root-position">0.000 m</span><span id="plant-error">0.0000 m</span><span id="limits-clamped">0</span><span id="pose-finite">FINITE</span><span class="foot-slip-card"><i id="foot-slip-bar"></i></span><span id="symmetry-state"><em>READY</em></span><div id="pose-tracks"></div></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="workspace" id="workspace-diagnostics" data-workspace="diagnostics" hidden>
+          <div class="workspace-heading">
+            <div><span class="eyebrow">PERFORMANCE &amp; DEBUG</span><h2>Performance &amp; MMO Diagnostic Panel</h2></div>
+            <div class="heading-tools"><span class="chip chip-live" id="room-status">● MOCK ROOM CONNECTED</span><span class="chip">AOI GRID 96 PX</span></div>
+          </div>
+          <div class="diagnostics-layout">
+            <div class="diagnostic-column">
+              <div class="panel graph-panel"><div class="panel-title"><span>Frame timing</span><span class="panel-count" id="frame-p95">p95 0.00 ms</span></div><canvas id="frame-graph" width="440" height="180"></canvas><div class="graph-legend"><span class="cyan-line">RAF loop</span><span class="amber-line">Clamp time</span></div></div>
+              <div class="panel graph-panel"><div class="panel-title"><span>Kernel comparison</span><span class="panel-count">100k overlap calls / backend</span></div><div class="benchmark-bars"><div><span>WASM SIMD</span><i><b id="wasm-bar"></b></i><strong id="wasm-latency">— ms</strong></div><div><span>TypeScript</span><i><b id="js-bar"></b></i><strong id="js-latency">— ms</strong></div></div><button class="primary-button" id="run-benchmark">Run Benchmark</button><div id="benchmark-output" class="benchmark-output">Awaiting benchmark run.</div></div>
+            </div>
+            <div class="panel aoi-panel"><div class="panel-title"><span>Active area of interest map</span><span class="panel-count" id="aoi-visible-count">0 visible entities</span></div><div class="aoi-toolbar"><span>Sector G-12</span><span>drag focus to query</span></div><canvas id="aoi-canvas" width="820" height="550" aria-label="Interactive interest grid map"></canvas><div class="aoi-legend"><span><i class="player"></i>Players</span><span><i class="hostile"></i>Hostiles</span><span><i class="loot"></i>Loot</span><span><i class="bounds"></i>AOI bounds</span></div></div>
+            <aside class="diagnostic-column">
+              <div class="panel stat-panel"><div class="panel-title"><span>Runtime overview</span><span class="status-dot"></span></div><div class="big-stat"><strong id="diag-fps">60.0</strong><span>frames / second</span></div><dl><div><dt>RAF loops</dt><dd id="raf-count">0</dd></div><div><dt>Clamp events</dt><dd id="clamp-count">0</dd></div><div><dt>Stage entities</dt><dd>7</dd></div><div><dt>Kernel backend</dt><dd id="diag-backend">—</dd></div></dl></div>
+              <div class="panel room-panel"><div class="panel-title"><span>Mock room / ash-01</span><span class="panel-count">ONLINE</span></div><div class="room-util"><div><span>Connections</span><strong>84 / 100</strong></div><progress value="84" max="100"></progress></div><div class="room-util"><div><span>Entity visibility</span><strong id="room-visibility">0 / 32</strong></div><progress id="visibility-progress" value="0" max="32"></progress></div><label class="latency-control"><span>Injected latency <output id="latency-output">0 ms</output></span><input id="latency-slider" type="range" min="0" max="500" step="10" value="0"></label></div>
+              <div class="panel event-log"><div class="panel-title"><span>Raw packet stream</span><button class="text-button" id="clear-log">CLEAR</button></div><label class="packet-filter"><span>/</span><input id="packet-filter" placeholder="Filter packets (press /)"></label><div id="event-log"></div><pre id="packet-payload">Select a packet to decode its payload.</pre></div>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <div class="production-center" id="production-center" hidden>
+        <div class="production-dialog" role="dialog" aria-modal="true" aria-label="Production Lab">
+          <header><div><span>SEQUENCE / ADVANCED AUTHORING</span><strong>Production Lab</strong></div><div class="production-health"><i></i><span id="production-health">ALL SYSTEMS READY</span></div><button id="production-center-close" aria-label="Close Production Lab">×</button></header>
+          <nav aria-label="Production tools">
+            <button class="is-active" data-production-tab="export"><span>01</span>Export</button><button data-production-tab="reactive"><span>02</span>Reactive + MIDI</button><button data-production-tab="logic"><span>03</span>Logic Graph</button><button data-production-tab="rig"><span>04</span>Sprite Rig</button><button data-production-tab="review"><span>05</span>Review</button>
+          </nav>
+          <main>
+            <section class="production-view export-view is-active" data-production-view="export">
+              <div class="export-preview-card"><div class="production-panel-head"><div><span>OUTPUT PREVIEW</span><strong id="export-preview-label">YouTube · 1920 × 1080</strong></div><span class="codec-pill">WEBCODECS · VP8</span></div><canvas id="export-preview-canvas" width="640" height="360"></canvas><div class="export-safe-area"><span>SAFE AREA 90%</span><i></i></div><div class="export-progress" id="export-progress"><i></i><span id="export-progress-label">Ready to encode</span></div></div>
+              <aside class="export-settings-card"><div class="production-panel-head"><div><span>DELIVERY</span><strong>Render settings</strong></div></div><div class="export-presets"><button class="is-active" data-export-preset="youtube">16:9<span>YouTube</span></button><button data-export-preset="shorts">9:16<span>Shorts</span></button><button data-export-preset="square">1:1<span>Square</span></button></div><label>RESOLUTION<div><input id="export-width" type="number" value="1920"><span>×</span><input id="export-height" type="number" value="1080"></div></label><label>FRAME RATE<select id="export-fps"><option>24</option><option selected>30</option><option>60</option></select></label><label>CODEC<select id="export-codec"><option value="vp8">VP8 · WebM</option><option value="vp9">VP9 · WebM</option></select></label><dl><div><dt>Timeline</dt><dd>10.00 seconds</dd></div><div><dt>Estimated</dt><dd id="export-estimate">7.8 MB</dd></div><div><dt>Audio</dt><dd>48 kHz stereo</dd></div></dl><button class="production-primary" id="start-webm-export">RENDER WEBM</button><small id="webcodecs-support">Checking WebCodecs support…</small></aside>
+            </section>
+            <section class="production-view reactive-view" data-production-view="reactive" hidden>
+              <div class="fft-card"><div class="production-panel-head"><div><span>LIVE ANALYSIS</span><strong>Frequency Spectrum</strong></div><span class="live-pill">● LIVE</span></div><canvas id="fft-canvas" width="760" height="280"></canvas><div class="fft-labels"><span>20 Hz</span><span>100 Hz</span><span>500 Hz</span><span>2 kHz</span><span>10 kHz</span><span>20 kHz</span></div><div class="band-readouts"><div><span>RMS</span><strong id="fft-rms">-12.4 dB</strong></div><div><span>BASS</span><strong id="fft-bass">0.72</strong></div><div><span>MID</span><strong id="fft-mid">0.48</strong></div><div><span>TREBLE</span><strong id="fft-treble">0.31</strong></div></div></div>
+              <div class="binding-card"><div class="production-panel-head"><div><span>PROPERTY ROUTING</span><strong>Audio-reactive bindings</strong></div><button id="add-reactive-binding">+ BINDING</button></div><div id="reactive-binding-list" class="reactive-binding-list"></div><div class="automation-record"><button id="automation-record"><i></i> RECORD AUTOMATION</button><span id="automation-record-status">ARMED · move a control during playback</span></div></div>
+              <aside class="midi-card"><div class="production-panel-head"><div><span>WEB MIDI</span><strong>Controller input</strong></div><i class="midi-led" id="midi-led"></i></div><button class="midi-connect" id="midi-connect">CONNECT MIDI DEVICE</button><div class="midi-device"><span>INPUT</span><strong id="midi-device-name">No device connected</strong><small id="midi-message">Waiting for MIDI access</small></div><div class="midi-monitor"><span>LIVE MONITOR</span><div><i id="midi-value-bar"></i></div><output id="midi-value">CC 01 · 000</output></div><div id="midi-mapping-list" class="midi-mapping-list"></div><button id="midi-simulate">SIMULATE CC 01</button></aside>
+            </section>
+            <section class="production-view logic-view" data-production-view="logic" hidden>
+              <div class="logic-toolbar"><button data-add-node="event">+ EVENT</button><button data-add-node="condition">+ CONDITION</button><button data-add-node="action">+ ACTION</button><span></span><button id="run-logic-graph">▶ TEST GRAPH</button><strong id="logic-status">GRAPH VALID · 4 NODES</strong></div><div class="logic-canvas" id="logic-canvas"><svg id="logic-wires" viewBox="0 0 900 520" preserveAspectRatio="none"></svg><div id="logic-nodes"></div><div class="logic-minimap"><i></i><span>100%</span></div></div><aside class="logic-inspector"><div class="production-panel-head"><div><span>DATA-DRIVEN</span><strong>Graph inspector</strong></div></div><p>Events flow through conditions into actions. The graph is serialized with the project—no generated source required.</p><dl><div><dt>Execution</dt><dd>Deterministic</dd></div><div><dt>Nodes</dt><dd id="logic-node-count">4</dd></div><div><dt>Edges</dt><dd id="logic-edge-count">3</dd></div><div><dt>Last run</dt><dd id="logic-last-run">Not run</dd></div></dl><div class="logic-trace" id="logic-trace"><span>TRACE</span><code>Awaiting test run…</code></div></aside>
+            </section>
+            <section class="production-view sprite-rig-view" data-production-view="rig" hidden>
+              <aside class="bone-list-card"><div class="production-panel-head"><div><span>SKELETON</span><strong>Sprite bones</strong></div><button id="add-sprite-bone">+</button></div><div id="sprite-bone-list"></div><div class="rig-tools"><button class="is-active" data-sprite-tool="pose">POSE</button><button data-sprite-tool="weight">WEIGHTS</button><button data-sprite-tool="ik">IK</button></div></aside><div class="sprite-rig-stage"><canvas id="sprite-rig-canvas" width="720" height="560"></canvas><div class="sprite-rig-badge">MESH DEFORM · LIVE</div><div class="sprite-rig-help">DRAG JOINTS · SHIFT MIRROR · P SAVE POSE</div></div><aside class="pose-library-card"><div class="production-panel-head"><div><span>LIBRARY</span><strong>Poses</strong></div><button id="save-sprite-pose">+ SAVE</button></div><div id="sprite-pose-list"></div><div class="weight-preview"><span>WEIGHT HEATMAP</span><i></i><small>Selected bone influence</small></div><button class="production-primary" id="key-sprite-pose">KEY POSE AT FRAME <span id="key-pose-frame">72</span></button></aside>
+            </section>
+            <section class="production-view review-view" data-production-view="review" hidden>
+              <div class="review-stage"><div class="production-panel-head"><div><span>REVIEW FRAME · 00:00:00:24</span><strong>World comments</strong></div><button id="add-review-pin">+ DROP PIN</button></div><canvas id="review-canvas" width="760" height="430"></canvas><div class="review-pin" style="left:56%;top:38%"><span>1</span></div><div class="review-pin secondary" style="left:31%;top:64%"><span>2</span></div><div class="review-timeline"><i style="left:8%"></i><i style="left:40%"></i><i style="left:72%"></i><b style="left:24%"></b></div></div><aside class="comments-card"><div class="production-panel-head"><div><span>COLLABORATION</span><strong>Comments</strong></div><span id="open-comment-count">1 OPEN</span></div><div id="annotation-list"></div><div class="new-comment"><textarea id="annotation-body" placeholder="Leave a note on this frame…"></textarea><button id="post-annotation">POST COMMENT</button></div></aside><aside class="share-card"><div class="share-icon">↗</div><span>READ-ONLY REVIEW</span><h3>Share this cut</h3><p>Publish a browser preview with comment pins linked to entities and frames.</p><label>ACCESS<select id="share-access"><option>Anyone with the link</option><option>Project members</option></select></label><button class="production-primary" id="create-review-link">CREATE REVIEW LINK</button><code id="review-link" hidden></code><small>Runtime assets remain local until you publish.</small></aside>
+            </section>
+          </main>
+          <footer><span><i></i> Project data is versioned and autosaved</span><span id="production-footer-status">Sequence tools online</span><kbd>ESC CLOSE</kbd></footer>
+        </div>
+      </div>
+
+      <div class="command-palette" id="command-palette" hidden>
+        <div class="command-dialog" role="dialog" aria-modal="true" aria-label="Command palette">
+          <div class="command-input"><span>⌘</span><input id="command-query" placeholder="Search actions, workspaces, entities…" autocomplete="off"><kbd>ESC</kbd></div>
+          <div class="command-results" id="command-results"></div>
+          <div class="command-footer"><span>↑↓ Navigate</span><span>Enter Run</span><span>Ctrl P / Cmd K</span></div>
+        </div>
+      </div>
+
+      <footer class="app-footer"><span><i class="status-dot"></i> Catalog Engine Editor 0.1.0</span><span id="footer-status">Project loading</span><span>Project JSON · TypeScript · Canvas 2D · Three.js · WASM</span></footer>
+    </div>
+    <div id="editor-ai-root"></div>
+    <script type="module" src="/dist/main.js"></script>
+  </body>
+</html>

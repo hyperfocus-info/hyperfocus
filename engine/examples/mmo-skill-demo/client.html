@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MMO Skill Demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #10140f;
+        color: #f5f3e8;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: start center;
+        background: #11160f;
+      }
+      main {
+        width: min(100vw, 1180px);
+        box-sizing: border-box;
+        padding: 18px;
+        position: relative;
+      }
+      .ui {
+        position: absolute;
+        inset: 28px 28px auto auto;
+        display: grid;
+        justify-items: end;
+        gap: 10px;
+        z-index: 3;
+        pointer-events: none;
+      }
+      .ui[hidden] {
+        display: none;
+      }
+      .toolbar,
+      .window {
+        pointer-events: auto;
+        background: linear-gradient(180deg, rgba(22, 34, 20, 0.94), rgba(8, 12, 9, 0.94));
+        border: 1px solid var(--ce-ui-border, rgba(128, 150, 92, 0.72));
+        box-shadow: var(--ce-ui-shadow, 0 12px 28px rgba(0, 0, 0, 0.36));
+      }
+      .toolbar {
+        display: flex;
+        gap: 6px;
+        padding: 6px;
+        border-radius: 6px;
+      }
+      .toolbar button,
+      .travel-list button,
+      .cheat-row button {
+        min-height: 30px;
+        color: var(--ce-ui-control-text, #f5f3e8);
+        background: var(--ce-ui-control-surface, #26361f);
+        border: 1px solid var(--ce-ui-control-border, #667a4f);
+        border-radius: var(--ce-ui-radius, 4px);
+        font: 700 12px Inter, ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      .toolbar button:hover,
+      .toolbar button[aria-pressed="true"],
+      .travel-list button:hover,
+      .cheat-row button:hover {
+        color: var(--ce-ui-accent-text, #161b11);
+        background: var(--ce-ui-control-surface-hover, #e2c15f);
+        border-color: var(--ce-ui-accent, #f3df91);
+      }
+      .toolbar button {
+        min-width: 52px;
+        padding: 0 10px;
+      }
+      .window {
+        width: min(430px, calc(100vw - 56px));
+        max-height: min(72vh, 620px);
+        overflow: auto;
+        padding: 14px;
+        border-radius: 6px;
+      }
+      .window[hidden] {
+        display: none;
+      }
+      .window h2 {
+        margin: 0 0 10px;
+        color: #f6d77a;
+        font-size: 15px;
+        letter-spacing: 0;
+      }
+      .window[data-window="inventory"] {
+        background:
+          linear-gradient(180deg, rgba(17, 25, 15, 0.99), rgba(9, 13, 9, 0.99)),
+          url("./assets/ui/craftpix-inventory.png") right 12px top 34px / 168px 80px no-repeat;
+      }
+      .window[data-window="equipment"] {
+        background:
+          linear-gradient(180deg, rgba(17, 25, 15, 0.99), rgba(9, 13, 9, 0.99)),
+          url("./assets/ui/craftpix-equipment.png") right 12px top 38px / 120px 288px no-repeat;
+      }
+      .window pre {
+        margin: 0;
+        white-space: pre-wrap;
+        color: #dfe6ca;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      .inventory-panel,
+      .equipment-panel {
+        display: grid;
+        gap: 10px;
+      }
+      .inventory-summary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .wallet-card,
+      .item-card,
+      .equipment-slot {
+        background: rgba(14, 18, 14, 0.82);
+        border: 1px solid rgba(111, 130, 84, 0.72);
+        border-radius: 6px;
+      }
+      .wallet-card {
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        gap: 8px;
+        align-items: center;
+        min-width: 0;
+        padding: 8px;
+      }
+      .wallet-card img,
+      .item-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        image-rendering: auto;
+      }
+      .wallet-card img {
+        width: 36px;
+        height: 36px;
+      }
+      .wallet-card strong,
+      .item-name,
+      .slot-title {
+        display: block;
+        color: #f5f3e8;
+        font-weight: 800;
+        line-height: 1.15;
+      }
+      .wallet-meta,
+      .item-meta,
+      .slot-meta {
+        display: block;
+        margin-top: 3px;
+        color: #bccaa5;
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      .inventory-grid,
+      .equipment-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .item-card,
+      .equipment-slot {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        min-height: 58px;
+        padding: 8px;
+      }
+      .equipment-slot {
+        grid-template-columns: 44px minmax(0, 1fr);
+      }
+      .item-card.is-empty,
+      .equipment-slot.is-empty {
+        opacity: 0.58;
+      }
+      .item-icon {
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at 45% 35%, #35452c, #10160f 72%);
+        border: 1px solid rgba(215, 187, 96, 0.42);
+        border-radius: 5px;
+      }
+      .item-count {
+        min-width: 30px;
+        padding: 4px 6px;
+        color: #151a11;
+        background: #e2c15f;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 900;
+        text-align: center;
+      }
+      .section-label {
+        margin: 2px 0 -2px;
+        color: #f6d77a;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      .travel-list {
+        display: grid;
+        gap: 8px;
+      }
+      .travel-list button,
+      .cheat-row button {
+        width: 100%;
+      }
+      .cheat-row {
+        display: grid;
+        grid-template-columns: 1fr 92px 58px;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .cheat-row[hidden] {
+        display: none;
+      }
+      .cheat-row select,
+      .cheat-row input {
+        min-width: 0;
+        color: var(--ce-ui-text, #f5f3e8);
+        background: var(--ce-ui-input-surface, #10160e);
+        border: 1px solid var(--ce-ui-control-border, #53633d);
+        font: 12px Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      canvas {
+        box-sizing: border-box;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        display: block;
+        background: #2e4a27;
+        border: 1px solid #40543a;
+      }
+      canvas:focus-visible {
+        outline: 3px solid var(--ce-ui-focus-ring, #f3df91);
+        outline-offset: 3px;
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      main::after {
+        content: "WASD/Arrows or PS5 left stick move  Mouse or right stick aim  L2/LMB  R2/RMB  X/Space  Square/Q  Triangle/E  Circle or R1/R  L1/Z interact";
+        position: absolute;
+        left: 28px;
+        bottom: 52px;
+        color: #dfe6ca;
+        font-size: 12px;
+        z-index: 1;
+        pointer-events: none;
+      }
+      main.is-boot-loading::after {
+        display: none;
+      }
+      #status {
+        min-height: 24px;
+        margin: 10px 0 0;
+        color: #d9dfbd;
+        font-size: 14px;
+      }
+      #client-log {
+        box-sizing: border-box;
+        width: 100%;
+        max-height: 160px;
+        overflow: auto;
+        margin: 10px 0 0;
+        padding: 10px;
+        color: #ffd7a6;
+        background: #170d0b;
+        border: 1px solid #9a5132;
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+        white-space: pre-wrap;
+      }
+      #client-log[hidden] {
+        display: none;
+      }
+      .login {
+        position: absolute;
+        inset: 18px;
+        display: grid;
+        place-items: center;
+        background: rgba(9, 13, 8, 0.84);
+      }
+      .login[hidden] {
+        display: none;
+      }
+      .login form {
+        width: min(360px, calc(100vw - 48px));
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+        background: var(--ce-ui-surface-alt, #162012);
+        border: 1px solid var(--ce-ui-control-border, #53633d);
+      }
+      .login h1 {
+        margin: 0;
+        font-size: 22px;
+      }
+      .login input,
+      .login button {
+        min-height: 40px;
+        font: inherit;
+      }
+      .login input {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 8px 10px;
+        color: var(--ce-ui-text, #f5f3e8);
+        background: var(--ce-ui-input-surface, #0f150d);
+        border: 1px solid var(--ce-ui-control-border, #53633d);
+      }
+      .login button {
+        color: var(--ce-ui-accent-text, #11160f);
+        background: var(--ce-ui-accent, #e2c15f);
+        border: 0;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      @media (max-width: 700px) {
+        main {
+          padding: 10px;
+        }
+        .ui {
+          inset: auto;
+          justify-items: stretch;
+          margin-top: 8px;
+          position: static;
+        }
+        .toolbar {
+          justify-content: stretch;
+        }
+        .toolbar button {
+          min-width: 0;
+          flex: 1;
+          padding: 0 5px;
+        }
+        .window {
+          width: auto;
+          max-height: calc(100vh - 92px);
+          max-height: calc(100dvh - 92px);
+        }
+        .inventory-summary,
+        .inventory-grid,
+        .equipment-grid {
+          grid-template-columns: 1fr;
+        }
+        main::after {
+          left: 14px;
+          right: 14px;
+          bottom: 44px;
+          line-height: 1.35;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p id="game-controls" class="visually-hidden">Move with WASD, the arrow keys, or the left controller stick. Aim with the mouse or right stick. Use the toolbar to open game panels.</p>
+      <canvas id="game" width="960" height="540" tabindex="0" aria-label="MMO Skill Demo game world" aria-describedby="game-controls">Your browser does not support the canvas used by this demo.</canvas>
+      <section class="ui" id="ui" hidden>
+        <nav class="toolbar" aria-label="Game windows">
+          <button type="button" data-toggle="quests" title="Quest board">Quest</button>
+          <button type="button" data-toggle="inventory" title="Inventory">Bag</button>
+          <button type="button" data-toggle="equipment" title="Equipment">Gear</button>
+          <button type="button" data-toggle="stats" title="Stats and dev cheats">Stats</button>
+          <button type="button" data-toggle="travel" title="Instances">Go</button>
+        </nav>
+        <section class="window" data-window="quests" hidden>
+          <h2>Quest Board</h2>
+          <pre id="quest-body"></pre>
+        </section>
+        <section class="window" data-window="inventory" hidden>
+          <h2>Inventory</h2>
+          <div class="inventory-panel" id="inventory-body"></div>
+        </section>
+        <section class="window" data-window="equipment" hidden>
+          <h2>Equipment</h2>
+          <div class="equipment-panel" id="equipment-body"></div>
+        </section>
+        <section class="window" data-window="stats" hidden>
+          <h2>Stats</h2>
+          <pre id="stats-body"></pre>
+          <form class="cheat-row" id="cheat-form">
+            <select id="cheat-field" aria-label="Dev field">
+              <option value="hp">hp</option>
+              <option value="maxHp">maxHp</option>
+              <option value="mana">mana</option>
+              <option value="maxMana">maxMana</option>
+              <option value="combatLevel">combatLevel</option>
+              <option value="combatXp">combatXp</option>
+              <option value="miningLevel">miningLevel</option>
+              <option value="miningXp">miningXp</option>
+              <option value="woodcuttingLevel">woodcuttingLevel</option>
+              <option value="woodcuttingXp">woodcuttingXp</option>
+              <option value="gold">gold</option>
+              <option value="renown">renown</option>
+              <option value="masteryRank">masteryRank</option>
+              <option value="contractKills">contractKills</option>
+              <option value="contractStreak">contractStreak</option>
+              <option value="ashLogs">ashLogs</option>
+              <option value="ironOre">ironOre</option>
+              <option value="silkThread">silkThread</option>
+              <option value="inventoryFlags">inventoryFlags</option>
+              <option value="equipmentFlags">equipmentFlags</option>
+              <option value="knownAbilities">knownAbilities</option>
+              <option value="unlockedSlots">unlockedSlots</option>
+              <option value="questBits">questBits</option>
+              <option value="activeQuestId">activeQuestId</option>
+              <option value="contractId">contractId</option>
+            </select>
+            <input id="cheat-value" type="text" spellcheck="false" aria-label="Dev value" />
+            <button type="submit">Set</button>
+          </form>
+        </section>
+        <section class="window" data-window="travel" hidden>
+          <h2>Instances</h2>
+          <div class="travel-list">
+            <button type="button" data-room="" data-type="mmo-skill-demo">Shared World</button>
+            <button type="button" data-room="dungeon-party-1" data-type="mmo-skill-demo-dungeon">Party Dungeon</button>
+            <button type="button" data-room="cottage-demo" data-type="mmo-skill-demo-cottage">Player Cottage</button>
+          </div>
+        </section>
+      </section>
+      <section class="login" id="login" role="dialog" aria-modal="true" aria-labelledby="login-title">
+        <form id="login-form">
+          <h1 id="login-title">MMO Skill Demo</h1>
+          <label>
+            Character name
+            <input id="character-name" name="character" type="text" maxlength="24" autocomplete="username" spellcheck="false" required />
+          </label>
+          <button type="submit">Log in</button>
+        </form>
+      </section>
+      <p id="status" role="status" aria-live="polite" aria-atomic="true">Connecting...</p>
+      <pre id="client-log" hidden></pre>
+    </main>
+    <script type="module" src="/examples/mmo-skill-demo/dist/client.js"></script>
+  </body>
+</html>

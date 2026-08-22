@@ -1,0 +1,17 @@
+{
+  "name": "@hyperfocus/workspace",
+  "version": "0.1.0",
+  "description": "Framework-neutral workspace and filesystem contracts.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["src", "README.md"],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json",
+    "test": "bun test"
+  }
+}
+

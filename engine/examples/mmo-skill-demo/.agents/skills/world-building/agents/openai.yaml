@@ -1,0 +1,4 @@
+interface:
+  display_name: "World Building"
+  short_description: "Grow living MMO world density and lore."
+  default_prompt: "Use $world-building to run a density-led world pass with WHY notes and future quest ideas."

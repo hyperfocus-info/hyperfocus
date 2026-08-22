@@ -1,0 +1,18 @@
+node_modules/
+dist/
+release/
+.local/
+.tmp-test-data/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+coverage/
+apps/engine-editor/*.log
+apps/engine-editor/wasm/
+engine/browser/
+engine/wasm/*.wat
+
+# Licensed upstream asset archives are restored out-of-band and must never
+# enter ordinary Git history. Runtime-ready example assets remain tracked.
+engine/examples/**/assets/source/

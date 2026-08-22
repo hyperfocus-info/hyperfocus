@@ -1,0 +1,59 @@
+{
+  "asset": { "version": "2.0", "generator": "Hyperfocus independent skin fixture" },
+  "buffers": [
+    {
+      "byteLength": 316,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAABAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAA/AACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAPMENT/zBDU/AAAAAAAAAAAAAIA/AAAAAA=="
+    }
+  ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 48, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 96, "byteLength": 128 },
+    { "buffer": 0, "byteOffset": 224, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": 232, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 256, "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 268, "byteLength": 48 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 1, "componentType": 5121, "count": 3, "type": "VEC4" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5126, "count": 2, "type": "MAT4" },
+    { "bufferView": 4, "componentType": 5126, "count": 2, "type": "SCALAR" },
+    { "bufferView": 5, "componentType": 5126, "count": 2, "type": "VEC3" },
+    { "bufferView": 6, "componentType": 5126, "count": 3, "type": "SCALAR" },
+    { "bufferView": 7, "componentType": 5126, "count": 3, "type": "VEC4" }
+  ],
+  "nodes": [
+    { "name": "RigRoot", "translation": [1, 0, 0], "children": [1] },
+    { "name": "Hip", "children": [2] },
+    { "name": "Tip", "translation": [0, 1, 0] },
+    { "name": "Mesh", "mesh": 0, "skin": 0 }
+  ],
+  "meshes": [
+    {
+      "name": "Triangle",
+      "primitives": [
+        { "attributes": { "POSITION": 0, "JOINTS_0": 1, "WEIGHTS_0": 2 } }
+      ]
+    }
+  ],
+  "skins": [
+    { "name": "TwoJoint", "inverseBindMatrices": 3, "skeleton": 0, "joints": [1, 2] }
+  ],
+  "animations": [
+    {
+      "name": "Wave",
+      "samplers": [
+        { "input": 4, "output": 5, "interpolation": "LINEAR" },
+        { "input": 6, "output": 7, "interpolation": "STEP" }
+      ],
+      "channels": [
+        { "sampler": 0, "target": { "node": 2, "path": "translation" } },
+        { "sampler": 1, "target": { "node": 1, "path": "rotation" } }
+      ]
+    }
+  ]
+}

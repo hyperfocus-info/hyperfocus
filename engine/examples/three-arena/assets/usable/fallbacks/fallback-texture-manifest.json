@@ -1,0 +1,36 @@
+{
+  "game": "three-arena",
+  "created": "2026-06-06",
+  "status": "fallback_only",
+  "craftpixCookieStatus": "No .local/craftpix/cookies.txt file was present, but the public Craftpix download endpoint resolved and downloaded successfully.",
+  "textures": [
+    {
+      "id": "fallback-arena-floor",
+      "kind": "checker",
+      "size": 256,
+      "colors": ["#31363d", "#3f474f"],
+      "intendedUse": "arena floor"
+    },
+    {
+      "id": "fallback-wall",
+      "kind": "stripe",
+      "size": 256,
+      "colors": ["#656a70", "#22262b"],
+      "intendedUse": "blocking wall or fence"
+    },
+    {
+      "id": "fallback-survivor",
+      "kind": "solid",
+      "size": 128,
+      "colors": ["#3b82f6"],
+      "intendedUse": "player placeholder"
+    },
+    {
+      "id": "fallback-zombie",
+      "kind": "solid",
+      "size": 128,
+      "colors": ["#5fa35f"],
+      "intendedUse": "enemy placeholder"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>First-party WebGL2 3D acceptance</title>
+    <style>
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #080b12; color: #dcecff; }
+      * { box-sizing: border-box; }
+      body { margin: 0; overflow: hidden; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      #status {
+        position: fixed; left: 16px; top: 16px; margin: 0; padding: 9px 12px;
+        border: 1px solid #52739d; border-radius: 6px; background: #101827dd; color: #dcecff;
+        font: 13px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      #status[data-state="error"] { border-color: #df5f70; color: #ffd8de; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view" aria-label="First-party WebGL2 3D acceptance scene"></canvas>
+    <pre id="status" data-state="loading">initializing WebGL2…</pre>
+    <script type="module" src="/client.js"></script>
+  </body>
+</html>

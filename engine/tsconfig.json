@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@hyperfocus/engine": ["./src/index.ts"],
+      "@hyperfocus/engine/*": ["./src/*"]
+    },
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": ["bun"]
+  },
+  "include": ["./src/**/*.ts", "./onScreenGamepad.ts", "./index.ts"],
+  "exclude": ["./src/**/*.test.ts"]
+}

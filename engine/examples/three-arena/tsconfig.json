@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "files": [
+    "./src/client.ts",
+    "./src/arena-data.ts"
+  ],
+  "include": [],
+  "exclude": []
+}

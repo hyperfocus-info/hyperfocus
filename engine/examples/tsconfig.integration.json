@@ -1,0 +1,26 @@
+{
+  "extends": "../tsconfig.json",
+  "files": [
+    "./server-utils.ts",
+    "./server-utils.test.ts",
+    "./build-utils.ts",
+    "./build-utils.test.ts",
+    "./text-utils.ts",
+    "./text-utils.test.ts",
+    "./mmo-field/server.ts",
+    "./mmo-field/src/shared.ts",
+    "./mmo-field/src/shared.test.ts",
+    "./mmo-skill-demo/server-flow.test.ts",
+    "./magic-map-shmup/build.ts",
+    "./magic-map-shmup/src/main.ts",
+    "./three-arena/build.ts",
+    "./three-arena/server.ts",
+    "./three-arena/binary-state.ts",
+    "./three-arena/binary-state.test.ts",
+    "./three-arena/src/network.ts",
+    "./three-arena/src/network.test.ts",
+    "./three-arena/lobby-flow.test.ts"
+  ],
+  "include": [],
+  "exclude": []
+}

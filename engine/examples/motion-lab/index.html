@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="Isolated procedural-motion laboratory for Catalog Engine humanoid rigs.">
+    <title>Motion Laboratory</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="lab-shell">
+      <header class="lab-header">
+        <div>
+          <p class="eyebrow">Catalog Engine / isolated laboratory</p>
+          <h1>Motion Laboratory</h1>
+          <p class="subtitle">One zero-clip rig. Three synchronized views. Every compromise made visible.</p>
+        </div>
+        <div class="header-actions">
+          <span id="labStatus" class="status-pill" role="status" aria-live="polite">Loading fixtures...</span>
+          <button id="pauseButton" class="button button-secondary" type="button" disabled>Pause</button>
+          <button id="resetButton" class="button" type="button" disabled>Reset pose</button>
+        </div>
+      </header>
+
+      <section class="lab-toolbar" aria-label="Motion laboratory setup">
+        <label class="field fixture-field" for="fixtureSelect">
+          <span>Fixture</span>
+          <select id="fixtureSelect" disabled>
+            <option value="canonical">Canonical rig</option>
+            <option value="renamed-bones">Renamed bones</option>
+            <option value="ape-proportions">Ape proportions</option>
+            <option value="extra-bones">Extra bones</option>
+            <option value="incomplete">Incomplete limbs</option>
+          </select>
+        </label>
+
+        <div class="scenario-control" aria-label="Acceptance scenario">
+          <span>Scenario</span>
+          <div class="scenario-buttons">
+            <button type="button" data-scenario="forward" aria-pressed="true">Forward <kbd>W</kbd></button>
+            <button type="button" data-scenario="backward" aria-pressed="false">Backward <kbd>S</kbd></button>
+            <button type="button" data-scenario="strafe" aria-pressed="false">Strafe <kbd>A</kbd></button>
+            <button type="button" data-scenario="aim" aria-pressed="false">Aim <kbd>F</kbd></button>
+            <button type="button" data-scenario="slope" aria-pressed="false">15&deg; slope <kbd>1</kbd></button>
+            <button type="button" data-scenario="stairs" aria-pressed="false">Stairs <kbd>2</kbd></button>
+          </div>
+        </div>
+      </section>
+
+      <div class="lab-grid">
+        <section class="viewport-grid" aria-label="Synchronized motion views">
+          <article class="viewport-card">
+            <header>
+              <div>
+                <p class="panel-kicker">Contact proof</p>
+                <h2>Side</h2>
+              </div>
+              <span>terrain + foot travel</span>
+            </header>
+            <canvas id="sideCanvas" aria-label="Side view of procedural humanoid motion"></canvas>
+          </article>
+
+          <article class="viewport-card">
+            <header>
+              <div>
+                <p class="panel-kicker">Silhouette proof</p>
+                <h2>Front</h2>
+              </div>
+              <span>strafe + symmetry</span>
+            </header>
+            <canvas id="frontCanvas" aria-label="Front view of procedural humanoid motion"></canvas>
+          </article>
+
+          <article class="viewport-card">
+            <header>
+              <div>
+                <p class="panel-kicker">Briefcase test</p>
+                <h2>Perspective</h2>
+              </div>
+              <span>distributed aim</span>
+            </header>
+            <canvas id="aimCanvas" aria-label="Perspective view of procedural humanoid aiming"></canvas>
+          </article>
+        </section>
+
+        <aside class="diagnostics" aria-label="Controls and diagnostics">
+          <section class="diagnostic-section controls-section">
+            <div class="section-heading">
+              <h2>Signals</h2>
+              <span>main-thread / 60 Hz</span>
+            </div>
+
+            <label class="range-field" for="speedInput">
+              <span>Desired speed</span>
+              <output id="speedOutput" for="speedInput">2.40 m/s</output>
+              <input id="speedInput" type="range" min="0" max="5" step="0.05" value="2.4">
+            </label>
+
+            <label class="range-field" for="aimPitchInput">
+              <span>Aim pitch</span>
+              <output id="aimPitchOutput" for="aimPitchInput">38&deg;</output>
+              <input id="aimPitchInput" type="range" min="-75" max="75" step="1" value="38">
+            </label>
+
+            <label class="range-field" for="aimYawInput">
+              <span>Aim yaw</span>
+              <output id="aimYawOutput" for="aimYawInput">18&deg;</output>
+              <input id="aimYawInput" type="range" min="-70" max="70" step="1" value="18">
+            </label>
+          </section>
+
+          <section class="diagnostic-section">
+            <div class="section-heading">
+              <h2>Pose telemetry</h2>
+              <span id="adapterMode">adapter pending</span>
+            </div>
+            <dl class="telemetry-grid">
+              <div><dt>Pose p95</dt><dd id="poseP95">--</dd></div>
+              <div><dt>Foot slip</dt><dd id="footSlip">--</dd></div>
+              <div><dt>Plant error</dt><dd id="plantError">--</dd></div>
+              <div><dt>Finite pose</dt><dd id="nanCount">--</dd></div>
+              <div><dt>Gait phase</dt><dd id="gaitPhase">--</dd></div>
+              <div class="telemetry-wide"><dt>Pose checksum</dt><dd id="poseChecksum">--------</dd></div>
+            </dl>
+            <p class="metric-note">Targets: pose stack &lt; 2 ms, planted slip &lt; 0.02 m, zero non-finite transforms.</p>
+          </section>
+
+          <section class="diagnostic-section">
+            <div class="section-heading">
+              <h2>Capabilities</h2>
+              <span id="mappingStatus">unresolved</span>
+            </div>
+            <ul id="capabilityList" class="capability-list"></ul>
+          </section>
+
+          <section class="diagnostic-section warning-section">
+            <div class="section-heading">
+              <h2>Rig warnings</h2>
+              <span id="warningCount">0</span>
+            </div>
+            <ul id="warningList" class="warning-list" aria-live="polite"></ul>
+          </section>
+
+          <section class="diagnostic-section fixture-section">
+            <div class="section-heading"><h2>Fixture</h2></div>
+            <dl class="fixture-meta">
+              <div><dt>Joints</dt><dd id="fixtureJoints">--</dd></div>
+              <div><dt>Clips</dt><dd id="fixtureClips">--</dd></div>
+              <div><dt>Payload</dt><dd id="fixtureBytes">--</dd></div>
+              <div><dt>Transform</dt><dd id="fixtureTransform">--</dd></div>
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <noscript>This laboratory requires JavaScript and WebGL.</noscript>
+    <script type="module" src="./dist/client.js"></script>
+  </body>
+</html>

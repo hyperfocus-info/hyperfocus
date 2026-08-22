@@ -1,0 +1,561 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyperfocus.dev/schema/editor-project-v2.schema.json",
+  "title": "Hyperfocus Editor Project v2",
+  "description": "Machine-readable schema for .hyperfocus/project.json written by Editor schema version 2. Cross-record reference integrity and tile value count equality require semantic validation in addition to JSON Schema.",
+  "type": "object",
+  "required": ["format", "version", "id", "name", "createdAt", "updatedAt", "activeSceneId", "scenes", "assets", "tilemap", "atlas", "postProcessing", "timeline", "production", "settings", "layout"],
+  "properties": {
+    "format": { "const": "catalog-engine-editor-project" },
+    "version": { "const": 2 },
+    "id": { "$ref": "#/$defs/id" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "createdAt": { "type": "string", "minLength": 1, "maxLength": 128, "format": "date-time" },
+    "updatedAt": { "type": "string", "minLength": 1, "maxLength": 128, "format": "date-time" },
+    "activeSceneId": { "$ref": "#/$defs/id" },
+    "scenes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/scene" }
+    },
+    "assets": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": { "$ref": "#/$defs/asset" }
+    },
+    "tilemap": { "$ref": "#/$defs/tilemap" },
+    "atlas": { "$ref": "#/$defs/atlas" },
+    "postProcessing": { "$ref": "#/$defs/postProcessing" },
+    "timeline": { "$ref": "#/$defs/timeline" },
+    "production": { "$ref": "#/$defs/production" },
+    "settings": { "$ref": "#/$defs/settings" },
+    "layout": { "$ref": "#/$defs/layout" },
+    "extensions": { "$ref": "#/$defs/extensions" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+    "primitive": { "type": ["string", "number", "boolean"] },
+    "component": {
+      "type": "object",
+      "required": ["id", "type", "enabled", "values"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["transform", "sprite", "collider", "input", "behavior", "camera", "audio", "ui"] },
+        "enabled": { "type": "boolean" },
+        "values": {
+          "type": "object",
+          "maxProperties": 128,
+          "propertyNames": { "minLength": 1, "maxLength": 128 },
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string", "maxLength": 4096 },
+              { "type": "number", "minimum": -1000000000, "maximum": 1000000000 },
+              { "type": "boolean" }
+            ]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "entity": {
+      "type": "object",
+      "required": ["id", "label", "x", "y", "width", "height", "scale", "layer", "color", "accent", "kind", "components"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "x": { "type": "number", "minimum": -10000000, "maximum": 10000000 },
+        "y": { "type": "number", "minimum": -10000000, "maximum": 10000000 },
+        "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000000 },
+        "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000000 },
+        "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000000 },
+        "layer": { "type": "integer", "minimum": -10000, "maximum": 10000 },
+        "color": { "$ref": "#/$defs/color" },
+        "accent": { "$ref": "#/$defs/color" },
+        "kind": { "enum": ["prop", "actor", "hostile"] },
+        "parentId": { "$ref": "#/$defs/id" },
+        "components": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/component" } }
+      },
+      "additionalProperties": true
+    },
+    "scene": {
+      "type": "object",
+      "required": ["id", "name", "entities"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "entities": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/entity" } }
+      },
+      "additionalProperties": true
+    },
+    "asset": {
+      "type": "object",
+      "required": ["id", "name", "kind", "mimeType", "size", "lastModified", "source"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "kind": { "enum": ["image", "audio", "data", "font", "unknown"] },
+        "mimeType": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "size": { "type": "number", "minimum": 0, "maximum": 10000000000 },
+        "lastModified": { "type": "number", "minimum": 0, "maximum": 10000000000000 },
+        "source": { "enum": ["imported", "generated"] },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "source": { "const": "imported" } }, "required": ["source"] },
+          "then": { "required": ["sha256"] }
+        },
+        { "not": { "required": ["objectUrl"] } }
+      ],
+      "additionalProperties": true
+    },
+    "tilemap": {
+      "type": "object",
+      "required": ["id", "name", "columns", "rows", "tileSize", "values", "solidValues"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "columns": { "type": "integer", "minimum": 1, "maximum": 1024 },
+        "rows": { "type": "integer", "minimum": 1, "maximum": 1024 },
+        "tileSize": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "values": { "type": "array", "maxItems": 1048576, "items": { "type": "integer", "minimum": 0, "maximum": 65535 } },
+        "solidValues": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "type": "integer", "minimum": 0, "maximum": 65535 } }
+      },
+      "additionalProperties": true
+    },
+    "atlasFrame": {
+      "type": "object",
+      "required": ["id", "name", "x", "y", "width", "height", "color"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "x": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "width": { "type": "number", "minimum": 1, "maximum": 1000000 },
+        "height": { "type": "number", "minimum": 1, "maximum": 1000000 },
+        "color": { "$ref": "#/$defs/color" }
+      },
+      "additionalProperties": true
+    },
+    "atlas": {
+      "type": "object",
+      "required": ["id", "name", "frameWidth", "frameHeight", "playbackSpeed", "frames", "sequence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sourceAssetId": { "$ref": "#/$defs/id" },
+        "frameWidth": { "type": "number", "minimum": 1, "maximum": 16384 },
+        "frameHeight": { "type": "number", "minimum": 1, "maximum": 16384 },
+        "playbackSpeed": { "type": "number", "minimum": 0.01, "maximum": 100 },
+        "frames": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/atlasFrame" } },
+        "sequence": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/id" } }
+      },
+      "additionalProperties": true
+    },
+    "effect": {
+      "type": "object",
+      "required": ["id", "enabled", "value"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "enabled": { "type": "boolean" },
+        "value": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+      },
+      "additionalProperties": true
+    },
+    "postProcessing": {
+      "type": "object",
+      "required": ["effects", "frameBudgetMs", "allocationMs"],
+      "properties": {
+        "effects": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/effect" } },
+        "frameBudgetMs": { "type": "number", "minimum": 1, "maximum": 1000 },
+        "allocationMs": { "type": "number", "minimum": 0, "maximum": 1000 }
+      },
+      "additionalProperties": true
+    },
+    "keyframe": {
+      "type": "object",
+      "required": ["id", "frame", "value", "easing"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "frame": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "value": { "type": "number", "minimum": -1000000000, "maximum": 1000000000 },
+        "easing": { "enum": ["linear", "ease-in", "ease-out", "ease-in-out", "bounce"] }
+      },
+      "additionalProperties": true
+    },
+    "timelineTrack": {
+      "type": "object",
+      "required": ["id", "targetId", "label", "property", "color", "muted", "locked", "keyframes"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "targetId": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "property": { "enum": ["x", "y", "scale", "rotation", "opacity", "camera"] },
+        "color": { "$ref": "#/$defs/color" },
+        "muted": { "type": "boolean" },
+        "locked": { "type": "boolean" },
+        "keyframes": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/keyframe" } }
+      },
+      "additionalProperties": true
+    },
+    "audioTrack": {
+      "type": "object",
+      "required": ["id", "name", "startFrame", "durationFrames", "trimStart", "trimEnd", "fadeIn", "fadeOut", "loopStart", "loopEnd", "volume", "pan", "muted", "solo"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "assetId": { "$ref": "#/$defs/id" },
+        "startFrame": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "durationFrames": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "trimStart": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "trimEnd": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "fadeIn": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "fadeOut": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "loopStart": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "loopEnd": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "volume": { "type": "number", "minimum": 0, "maximum": 2 },
+        "pan": { "type": "number", "minimum": -1, "maximum": 1 },
+        "muted": { "type": "boolean" },
+        "solo": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "animationEvent": {
+      "type": "object",
+      "required": ["id", "frame", "label", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "frame": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "kind": { "enum": ["audio", "logic", "camera", "marker"] }
+      },
+      "additionalProperties": true
+    },
+    "timeline": {
+      "type": "object",
+      "required": ["fps", "durationFrames", "bpm", "beatsPerBar", "loopStart", "loopEnd", "playbackSpeed", "tracks", "audioTracks", "events"],
+      "properties": {
+        "fps": { "type": "number", "minimum": 1, "maximum": 240 },
+        "durationFrames": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "bpm": { "type": "number", "minimum": 20, "maximum": 400 },
+        "beatsPerBar": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "loopStart": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "loopEnd": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "playbackSpeed": { "type": "number", "minimum": 0.05, "maximum": 8 },
+        "tracks": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/timelineTrack" } },
+        "audioTracks": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/audioTrack" } },
+        "events": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/animationEvent" } }
+      },
+      "additionalProperties": true
+    },
+    "production": {
+      "type": "object",
+      "required": ["export", "reactiveBindings", "midiMappings", "logicGraph", "spriteRig", "annotations"],
+      "properties": {
+        "export": { "$ref": "#/$defs/videoExport" },
+        "reactiveBindings": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/reactiveBinding" } },
+        "midiMappings": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/midiMapping" } },
+        "logicGraph": { "$ref": "#/$defs/logicGraph" },
+        "spriteRig": { "$ref": "#/$defs/spriteRig" },
+        "annotations": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/annotation" } }
+      },
+      "additionalProperties": true
+    },
+    "videoExport": {
+      "type": "object",
+      "required": ["width", "height", "fps", "codec", "preset"],
+      "properties": { "width": { "type": "integer", "minimum": 16, "maximum": 8192 }, "height": { "type": "integer", "minimum": 16, "maximum": 8192 }, "fps": { "type": "number", "minimum": 1, "maximum": 240 }, "codec": { "enum": ["vp8", "vp9"] }, "preset": { "type": "string", "minLength": 1, "maxLength": 128 } },
+      "additionalProperties": true
+    },
+    "reactiveBinding": {
+      "type": "object",
+      "required": ["id", "source", "targetId", "property", "gain", "smoothing", "enabled"],
+      "properties": { "id": { "$ref": "#/$defs/id" }, "source": { "enum": ["rms", "bass", "mid", "treble", "midi-cc"] }, "targetId": { "$ref": "#/$defs/id" }, "property": { "enum": ["x", "y", "scale", "rotation", "opacity"] }, "gain": { "type": "number", "minimum": -10000, "maximum": 10000 }, "smoothing": { "type": "number", "minimum": 0, "maximum": 1 }, "enabled": { "type": "boolean" } },
+      "additionalProperties": true
+    },
+    "midiMapping": {
+      "type": "object",
+      "required": ["id", "channel", "control", "targetId", "property", "minimum", "maximum"],
+      "properties": { "id": { "$ref": "#/$defs/id" }, "channel": { "type": "integer", "minimum": 1, "maximum": 16 }, "control": { "type": "integer", "minimum": 0, "maximum": 127 }, "targetId": { "$ref": "#/$defs/id" }, "property": { "enum": ["x", "y", "scale", "rotation", "opacity"] }, "minimum": { "type": "number" }, "maximum": { "type": "number" } },
+      "additionalProperties": true
+    },
+    "logicNode": {
+      "type": "object",
+      "required": ["id", "kind", "label", "x", "y", "config"],
+      "properties": { "id": { "$ref": "#/$defs/id" }, "kind": { "enum": ["event", "condition", "action"] }, "label": { "type": "string", "minLength": 1, "maxLength": 256 }, "x": { "type": "number" }, "y": { "type": "number" }, "config": { "type": "object" } },
+      "additionalProperties": true
+    },
+    "logicGraph": {
+      "type": "object",
+      "required": ["nodes", "edges"],
+      "properties": { "nodes": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/logicNode" } }, "edges": { "type": "array", "maxItems": 8192, "items": { "type": "object", "required": ["id", "from", "to"], "properties": { "id": { "$ref": "#/$defs/id" }, "from": { "$ref": "#/$defs/id" }, "to": { "$ref": "#/$defs/id" } } } } },
+      "additionalProperties": true
+    },
+    "spriteBone": {
+      "type": "object",
+      "required": ["id", "name", "x", "y", "length", "rotation"],
+      "properties": { "id": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1, "maxLength": 128 }, "parentId": { "$ref": "#/$defs/id" }, "x": { "type": "number" }, "y": { "type": "number" }, "length": { "type": "number" }, "rotation": { "type": "number" } },
+      "additionalProperties": true
+    },
+    "spriteRig": {
+      "type": "object",
+      "required": ["bones", "poses"],
+      "properties": { "bones": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/spriteBone" } }, "poses": { "type": "array", "maxItems": 4096, "items": { "type": "object", "required": ["id", "name", "rotations"], "properties": { "id": { "$ref": "#/$defs/id" }, "name": { "type": "string", "minLength": 1, "maxLength": 128 }, "rotations": { "type": "object", "additionalProperties": { "type": "number" } } } } } },
+      "additionalProperties": true
+    },
+    "annotation": {
+      "type": "object",
+      "required": ["id", "author", "body", "frame", "resolved", "createdAt"],
+      "properties": { "id": { "$ref": "#/$defs/id" }, "author": { "type": "string", "minLength": 1, "maxLength": 128 }, "body": { "type": "string", "minLength": 1, "maxLength": 4096 }, "frame": { "type": "integer", "minimum": 0, "maximum": 1000000 }, "entityId": { "$ref": "#/$defs/id" }, "resolved": { "type": "boolean" }, "createdAt": { "type": "string", "minLength": 1, "maxLength": 128 } },
+      "additionalProperties": true
+    },
+    "inputMapping": {
+      "type": "object",
+      "required": ["action", "bindings"],
+      "properties": {
+        "action": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "bindings": { "type": "array", "maxItems": 32, "items": { "type": "string", "minLength": 1, "maxLength": 128 } }
+      },
+      "additionalProperties": true
+    },
+    "settings": {
+      "type": "object",
+      "required": ["targetProfile", "locale", "uiScale", "reducedMotion", "masterVolume", "input"],
+      "properties": {
+        "targetProfile": { "enum": ["desktop", "mobile", "low-power"] },
+        "locale": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "uiScale": { "type": "number", "minimum": 0.75, "maximum": 2 },
+        "reducedMotion": { "type": "boolean" },
+        "masterVolume": { "type": "number", "minimum": 0, "maximum": 1 },
+        "input": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/inputMapping" } }
+      },
+      "additionalProperties": true
+    },
+    "saveDeclaration": {
+      "type": "object",
+      "required": ["schema", "dataVersion", "slotPolicy", "slots", "defaultSlot", "restoreOnBoot", "editorPlay", "maxBytes"],
+      "properties": {
+        "schema": { "const": "portable-world-snapshot-v1" },
+        "dataVersion": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "slotPolicy": { "enum": ["single", "named"] },
+        "slots": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+        "defaultSlot": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "restoreOnBoot": { "type": "boolean" },
+        "editorPlay": { "enum": ["reset", "restore"] },
+        "maxBytes": { "type": "integer", "minimum": 1024, "maximum": 4194304 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "slotPolicy": { "const": "single" } }, "required": ["slotPolicy"] },
+          "then": { "properties": { "slots": { "minItems": 1, "maxItems": 1 } } }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object",
+      "properties": {
+        "hyperfocusSave": { "$ref": "#/$defs/saveDeclaration" },
+        "hyperfocusStory": { "$ref": "#/$defs/storyDeclaration" },
+        "hyperfocus3D": { "$ref": "#/$defs/hyperfocus3DDeclaration" }
+      },
+      "additionalProperties": true
+    },
+    "vector3": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "number" }
+    },
+    "vector4": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number" }
+    },
+    "hyperfocus3DBudgets": {
+      "type": "object",
+      "required": ["meshes", "vertices", "indices", "textures", "textureBytes", "materials", "lights", "entities"],
+      "properties": {
+        "meshes": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "vertices": { "type": "integer", "minimum": 1, "maximum": 5000000 },
+        "indices": { "type": "integer", "minimum": 1, "maximum": 15000000 },
+        "textures": { "type": "integer", "minimum": 1, "maximum": 1024 },
+        "textureBytes": { "type": "integer", "minimum": 1, "maximum": 268435456 },
+        "materials": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "lights": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "entities": { "type": "integer", "minimum": 1, "maximum": 100000 }
+      },
+      "additionalProperties": false
+    },
+    "hyperfocus3DMesh": {
+      "type": "object",
+      "required": ["id", "assetId", "primitive", "buffers"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "assetId": { "$ref": "#/$defs/id" },
+        "primitive": { "type": "integer", "minimum": 0 },
+        "buffers": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": ["uri", "assetId"],
+            "properties": { "uri": { "type": "string", "minLength": 1, "maxLength": 1024 }, "assetId": { "$ref": "#/$defs/id" } },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "hyperfocus3DTexture": {
+      "type": "object",
+      "required": ["id", "assetId", "width", "height", "filter", "wrap", "flipY"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "assetId": { "$ref": "#/$defs/id" },
+        "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 },
+        "filter": { "enum": ["nearest", "linear"] }, "wrap": { "enum": ["clamp", "repeat"] }, "flipY": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "hyperfocus3DMaterial": {
+      "type": "object",
+      "required": ["id", "shading", "baseColor", "metallic", "roughness", "doubleSided"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "shading": { "enum": ["unlit", "lit"] }, "baseColor": { "$ref": "#/$defs/vector4" },
+        "textureId": { "$ref": "#/$defs/id" }, "metallic": { "type": "number", "minimum": 0, "maximum": 1 },
+        "roughness": { "type": "number", "minimum": 0, "maximum": 1 }, "doubleSided": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "hyperfocus3DEntity": {
+      "type": "object",
+      "required": ["id", "meshId", "materialId", "position", "scale", "rotationY"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "meshId": { "$ref": "#/$defs/id" }, "materialId": { "$ref": "#/$defs/id" },
+        "position": { "$ref": "#/$defs/vector3" }, "scale": { "$ref": "#/$defs/vector3" }, "rotationY": { "type": "number" },
+        "controller": { "type": "object", "required": ["speed"], "properties": { "speed": { "type": "number", "minimum": 0, "maximum": 1000 } }, "additionalProperties": false },
+        "animation": { "type": "object", "required": ["kind", "radiansPerSecond"], "properties": { "kind": { "const": "rotate-y" }, "radiansPerSecond": { "type": "number", "minimum": -100, "maximum": 100 } }, "additionalProperties": false },
+        "physics": {
+          "type": "object",
+          "required": ["type", "shape", "gravityScale", "continuous"],
+          "properties": { "type": { "enum": ["static", "dynamic"] }, "shape": { "enum": ["box", "sphere"] }, "gravityScale": { "type": "number", "minimum": 0, "maximum": 100 }, "continuous": { "type": "boolean" } },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "hyperfocus3DLight": {
+      "type": "object",
+      "required": ["id", "kind", "color", "intensity"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "kind": { "enum": ["ambient", "directional", "point", "spot"] },
+        "color": { "$ref": "#/$defs/vector3" }, "intensity": { "type": "number", "minimum": 0 },
+        "position": { "$ref": "#/$defs/vector3" }, "direction": { "$ref": "#/$defs/vector3" }, "range": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "hyperfocus3DScene": {
+      "type": "object",
+      "required": ["id", "camera", "lights", "entities"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "camera": {
+          "type": "object",
+          "required": ["position", "target", "up", "fovYRadians", "near", "far"],
+          "properties": {
+            "position": { "$ref": "#/$defs/vector3" }, "target": { "$ref": "#/$defs/vector3" }, "up": { "$ref": "#/$defs/vector3" },
+            "fovYRadians": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 3.141592653589793 }, "near": { "type": "number", "exclusiveMinimum": 0 }, "far": { "type": "number", "exclusiveMinimum": 0 },
+            "followEntityId": { "$ref": "#/$defs/id" }, "followOffset": { "$ref": "#/$defs/vector3" }
+          },
+          "additionalProperties": false
+        },
+        "lights": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/hyperfocus3DLight" } },
+        "entities": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/hyperfocus3DEntity" } }
+      },
+      "additionalProperties": false
+    },
+    "hyperfocus3DDeclaration": {
+      "type": "object",
+      "required": ["version", "activeSceneId", "budgets", "meshes", "textures", "materials", "scenes", "audio", "save"],
+      "properties": {
+        "version": { "const": 1 }, "activeSceneId": { "$ref": "#/$defs/id" }, "budgets": { "$ref": "#/$defs/hyperfocus3DBudgets" },
+        "meshes": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/hyperfocus3DMesh" } },
+        "textures": { "type": "array", "maxItems": 1024, "items": { "$ref": "#/$defs/hyperfocus3DTexture" } },
+        "materials": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/hyperfocus3DMaterial" } },
+        "scenes": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "$ref": "#/$defs/hyperfocus3DScene" } },
+        "audio": { "type": "object", "required": ["policy", "cues"], "properties": { "policy": { "enum": ["gesture-unlock", "disabled"] }, "cues": { "type": "array", "maxItems": 4096, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } } }, "additionalProperties": false },
+        "save": { "type": "object", "required": ["restoreOnBoot", "slot", "maxBytes"], "properties": { "restoreOnBoot": { "type": "boolean" }, "slot": { "$ref": "#/$defs/id" }, "maxBytes": { "type": "integer", "minimum": 1024, "maximum": 4194304 } }, "additionalProperties": false }
+      },
+      "additionalProperties": false
+    },
+    "storyScalar": { "type": ["string", "number", "boolean", "null"] },
+    "storyScalarRecord": {
+      "type": "object",
+      "maxProperties": 128,
+      "propertyNames": { "minLength": 1, "maxLength": 256 },
+      "additionalProperties": { "$ref": "#/$defs/storyScalar" }
+    },
+    "storyChoiceAction": {
+      "type": "object",
+      "required": ["dialogueId", "nodeId", "choiceId", "action"],
+      "properties": {
+        "dialogueId": { "$ref": "#/$defs/id" },
+        "nodeId": { "$ref": "#/$defs/id" },
+        "choiceId": { "$ref": "#/$defs/id" },
+        "action": { "$ref": "#/$defs/id" }
+      },
+      "additionalProperties": false
+    },
+    "storyQuestEventAction": {
+      "type": "object",
+      "required": ["questId", "event", "action"],
+      "properties": {
+        "questId": { "$ref": "#/$defs/id" },
+        "event": { "$ref": "#/$defs/id" },
+        "action": { "$ref": "#/$defs/id" },
+        "flags": { "$ref": "#/$defs/storyScalarRecord" }
+      },
+      "additionalProperties": false
+    },
+    "storyDeclaration": {
+      "type": "object",
+      "required": ["version", "source", "locale", "variables", "flags", "entryDialogue", "activeQuests", "advanceAction", "choiceActions", "questEventActions"],
+      "properties": {
+        "version": { "const": 1 },
+        "source": {
+          "type": "object",
+          "required": ["defaultLocale", "locales"],
+          "properties": {
+            "defaultLocale": { "$ref": "#/$defs/id" },
+            "locales": { "type": "array", "minItems": 1, "maxItems": 16 },
+            "dialogues": { "type": "array", "maxItems": 256 },
+            "quests": { "type": "array", "maxItems": 256 }
+          },
+          "additionalProperties": false
+        },
+        "locale": { "$ref": "#/$defs/id" },
+        "variables": { "$ref": "#/$defs/storyScalarRecord" },
+        "flags": { "$ref": "#/$defs/storyScalarRecord" },
+        "entryDialogue": { "$ref": "#/$defs/id" },
+        "activeQuests": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "advanceAction": { "$ref": "#/$defs/id" },
+        "choiceActions": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/storyChoiceAction" } },
+        "questEventActions": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/storyQuestEventAction" } }
+      },
+      "additionalProperties": false
+    },
+    "layout": {
+      "type": "object",
+      "required": ["sidebarWidth", "sidebarCollapsed"],
+      "properties": {
+        "sidebarWidth": { "type": "number", "minimum": 180, "maximum": 600 },
+        "sidebarCollapsed": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

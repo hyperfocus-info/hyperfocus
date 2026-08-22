@@ -1,0 +1,569 @@
+# Engine Performance Optimizations
+
+Living scan date: 2026-08-21
+
+This is the overview doc for performance work that already exists in the engine, plus current opt-in flags and failed experiment learnings. Open hypotheses, future experiments, and target ideas live in ./docs/engine-performance-hypothesises.md.
+
+## How To Read This
+
+- Default optimization means it is active through normal engine APIs.
+- Opt-in means it exists but callers must enable it or choose the optimized API.
+- Experimental flag means it is code-backed and tested, but should not be enabled without a local bench.
+- Demo-local means it proves a pattern in ./examples/mmo-skill-demo but is not necessarily stable engine API.
+
+## Fast Map
+
+| Area | Optimization | Status | Main Files |
+| --- | --- | --- | --- |
+| MMO scale | 10 room x 100 player preset with least-loaded or fill-first admission | Default API | ./src/server/scaling.ts, ./src/server/server.ts |
+| Server clock | Fixed tick with catch-up cap | Default | ./src/server/clock.ts |
+| Presence | O(1) player/user/session lookups | Default | ./src/server/presence-index.ts |
+| Replication scheduling | Round-robin spread, initial snapshot bypass, phase offsets | Default when configured | ./src/server/server.ts, ./src/server/scaling.ts |
+| Replication budget | Per-client byte caps and static deferral | Default | ./src/server/replicator.ts |
+| Multipart replication | Volatile/static/private/world/transient segment lanes | Default API | ./src/server/replicator.ts, ./src/protocol/frames.ts |
+| Protocol | Typed schemas, compact numeric fields, DataView IO | Default | ./src/protocol/ |
+| Protocol deltas | Field/map/array patch encoding | Default | ./src/protocol/delta.ts |
+| Protocol dirty hints | Caller-provided dirty root fields | Opt-in API | ./src/protocol/delta.ts |
+| Protocol byte views | Zero-copy frame/envelope payload views | Default for frame decode | ./src/protocol/frames.ts, ./src/protocol/encode.ts |
+| Binary inputs | Compact binary input frames | Default when codec exists | ./src/protocol/messages.ts |
+| Binary input view | Borrowed input payload view | Experimental flag | ./src/protocol/messages.ts |
+| Shared memory | Cache-line-separated control regions, optional isolated slots, typed field columns, stable reads | Default API/opt-in slot isolation | ./src/core/schema.ts |
+| Shared slabs | Cell slab replication with contiguous copy fast path | Default API | ./src/server/replicator.ts |
+| Interest grid | Nearby-cell scan, AOI hysteresis, caps, enter/leave | Default API | ./src/server/interest-grid.ts |
+| Interest selection | Priority buckets and bounded heap before full sort | Default | ./src/server/interest-grid.ts |
+| Spatial hash | Packed numeric keys, reusable output arrays, dirty cells | Default API | ./src/server/spatial-hash.ts |
+| Broadphase | Packed static queries and allocation-free sweep pairs | Default API | ./src/math/broadphase.ts, ./src/server/physics.ts |
+| Map collision | Merged static rects and broadphase collision index | Default API | ./src/map/collision.ts |
+| Object pooling | Reusable object pools for hot transient records | Default API | ./src/runtime/object-pool.ts |
+| MMO registry | Internal read views avoid clone-heavy scans | Default when safe | ./src/mmo/entity-registry.ts, ./src/mmo/interest.ts |
+| MMO movement | Cached static solid rect source | Opt-in API | ./src/mmo/movement.ts |
+| MMO targeting | First line target fast path avoids sorting all hits | Default API | ./src/mmo/targeting.ts |
+| Client interpolation | Short sample buffers with interpolate/hold/snap | Default API | ./src/mmo/interpolation.ts |
+| Render stage | Layer order cache and pooled stage entries | Default | ./src/render/stage.ts |
+| Render frame pool | Reused arrays, records, points, commands | Opt-in allocation tradeoff | ./src/render/frame-pool.ts |
+| Render draw data | Bounded text, gradient, and dash caches | Opt-in API/flag | ./src/render/draw-data.ts, ./src/render/stage.ts |
+| 3D LOD | Distance-band policy, lazy bake cache, instance LOD split helper, and meshoptimizer BufferGeometry simplifier | Opt-in API | ./src/render/3d.ts |
+| 3D BSP | Static 3D item sphere/box query tree | Opt-in API | ./src/render/3d.ts |
+| Three Arena props | Fixed-grid prop collision broadphase | Demo-local default | ./examples/three-arena/ |
+| Three Arena static visibility | BSP-backed static prop visibility flag | Demo-local experimental flag | ./examples/three-arena/ |
+| Three Arena generated prop LOD | Meshoptimizer static prop LOD bake and geometry swap | Demo-local opt-in flag | ./examples/three-arena/ |
+| WASM collision | SIMD-capable collision kernel plus TS fallback | Default API | ./src/wasm/collision-kernel.ts, ./assembly/collision-kernel.ts |
+| Post processing | Precomputed retro dither constants | Default prototype helper | ./src/canvas/post-processing.ts |
+| Package builds | Minified whole-entry bundles with enforced per-entry and total byte budgets | Default | ./scripts/build-package.ts, ./scripts/bundle-size-budget.ts |
+
+## Three Arena Client
+
+### Prop Collision Broadphase
+
+./examples/three-arena now keeps blocking props in a fixed world grid. Actor collision still runs the exact circle or box resolution, but only after nearby-cell filtering.
+
+Default: enabled for Three Arena. Use `?propCollisionGrid=0` only for rollback or A/B checks.
+
+Latest late-game all-props combat bench, 500 enemies / 500 pickups / 1000 particles, repeat 3:
+
+- Control p95 frame/update median: 15.0ms / 13.3ms
+- Default p95 frame/update median: 3.7ms / 1.9ms
+
+### Static Visibility BSP
+
+./src/render/3d.ts now exposes a reusable 3D BSP query tree. ./examples/three-arena uses it behind `?staticPropBsp=1` for static prop visibility. It keeps exact toroidal visibility checks, but replaces full prop scans with broad candidate queries and a visible-set swap.
+
+Default: enabled in Three Arena for local proof, with `?staticPropBsp=0` as rollback.
+
+Latest 500 enemy / 500 pickup / 1000 particle / all-props stress lane, repeat 3:
+
+- Pre-change control p95 frame/update/render medians: 4.5ms / 2.2ms / 2.0ms
+- BSP-on p95 frame/update/render medians: 5.1ms / 2.8ms / 2.4ms
+- Same-build BSP-off p95 frame/update/render medians: 5.4ms / 2.7ms / 2.4ms
+
+Read: browser noise moved upward after the first control, so the clean same-build comparison is more useful than the pre-change number. BSP-on was slightly better than same-build off for frame p95 and update worst, but this scene has only 369 static props, so it is not a strong default-on proof for large scenes.
+
+Engine microbench, 10k static items and 1k sphere queries:
+
+- Full scan: 530.5ms
+- BSP query: 14.2ms
+- Same hit count, 37.3x faster
+
+Use BSP when the static item set is large or queries repeat across many actors. Keep simple scans for small sets where tree traversal overhead can dominate.
+
+### 3D LOD Helpers
+
+./src/render/3d.ts now has policy-first LOD helpers for simple distance bands, lazy bake caches, splitting one logical instance batch into per-LOD batches, and `simplifyThreeBufferGeometry()` for meshoptimizer-backed lower-index `BufferGeometry` bakes. This fills the engine API gap without hiding authored art choices.
+
+Default: opt-in API. Do not default generated LOD until the scene proves lower triangles without draw-call, shader-program, material, or mesh churn.
+
+### Three Arena Generated Prop LOD
+
+./examples/three-arena can bake static prop mid/low geometry from loaded models with `?staticPropLod=1`. The current implementation bakes once per source geometry, stores high/mid/low geometry sets, then swaps mesh geometry when visible prop distance crosses 15m and 30m.
+
+Default: off. The feature works, but the current stress scene is not static-prop-triangle-bound enough to justify default-on.
+
+Latest 500 enemy / 500 pickup / 1000 particle / all-props stress lane, repeat 3:
+
+- LOD-off p95 frame/update/render medians: 3.7ms / 1.8ms / 1.7ms, triangles 44712
+- LOD-on geometry-swap p95 frame/update/render medians: 4.1ms / 2.2ms / 1.8ms, triangles 44542
+- Bake: 24 prop model sources, 54 baked geometries, about 147-148ms during optional model load
+
+Read: generated LOD reduced only 170 triangles in this scene and raised CPU-side update cost. This is useful engine capability, but Three Arena needs heavier static meshes, impostor/HLOD proxies, or larger visible prop populations before generated LOD becomes a clean perf win.
+
+## Server And MMO Scale
+
+### MMO 1000 Preset
+
+./src/server/scaling.ts provides `createMmo1000Preset()`, which defaults to 10 public rooms x 100 players. Admission in ./src/server/server.ts pre-creates managed rooms, fills rooms below soft cap first, then falls back to least-loaded open rooms by default. `admissionSelection: "fill-first"` is available for demo or lobby flows that should keep early players together before spilling to the next public shard.
+
+Key knobs:
+
+- `publicRooms`
+- `playersPerRoom`
+- `admissionSelection`
+- `softPlayersPerRoom`
+- `tickRate`
+- `replication.snapshotRate`
+- `replication.deltaRate`
+- `replication.maxBytesPerClientPerSecond`
+- `replication.maxClientsPerTick`
+- `replication.spread`
+- `replication.phase`
+
+### Fixed Server Clock
+
+./src/server/clock.ts runs a fixed tick step and caps catch-up ticks. If the process stalls, the clock drops accumulated backlog instead of spiraling through an unbounded catch-up loop.
+
+Default: enabled whenever the authoritative server owns its clock.
+
+### Presence Index
+
+./src/server/presence-index.ts keeps player, user, session, and room indexes so duplicate login and player lookup do not require full room scans. ./src/server/server.ts uses this during join, leave, duplicate-login replacement, and server stats.
+
+Default: enabled.
+
+### Room Ordering And Scheduling
+
+./src/server/server.ts sorts rooms deterministically for ticks and replication. The server also has experimental flags for caching or reducing scheduling allocation:
+
+| Flag | Default | Purpose | Caveat |
+| --- | --- | --- | --- |
+| `ENGINE_SERVER_STABLE_ROOM_ORDER=1` | off | Cache sorted room order until room add/remove. | Needs high-room-count bench before enabling. |
+| `ENGINE_SERVER_DIRECT_SCHEDULE_CURSOR=1` | off | Iterate scheduled replication buckets by cursor instead of slice/concat rotation. | Preserves tests, but still needs fairness/tail bench. |
+
+Async server ticks are serialized by default. Clock-driven ticks coalesce to one queued fixed step while a prior async tick is active, preventing concurrent room mutation without an environment flag.
+
+### Replication Scheduling
+
+When `replication.spread` is `round-robin` and `maxClientsPerTick` is set, ./src/server/server.ts spreads scheduled replication across rooms and players. Initial snapshots bypass the scheduler cap once so joined clients get a first world view quickly. Optional hash-based phase offsets spread later snapshot/delta bursts across time.
+
+Default: configured by `createMmo1000Preset()`.
+
+## Shared Memory
+
+### Cache-Line-Aware Layout
+
+The shared-memory header occupies one 64-byte control line, occupancy metadata starts on the next line, and entity data begins on a later 64-byte boundary. Compact entity strides remain the default because padding every record can reduce useful cache density.
+
+Use `cacheLineAlignedSlots: true` only when independent workers write neighboring slots. That mode gives every occupancy token and entity slot its own 64-byte stride. Shared cell replication detects padded strides and falls back from contiguous slab copy to per-record copy.
+
+### Typed Field Columns
+
+`occupiedSlots()`, `readFieldColumn()`, and `writeFieldColumn()` let hot systems stage selected fields in caller-reused typed arrays. This bypasses entity proxies and gives the compute phase compact linear inputs while retaining the record-oriented shared wire layout.
+
+## Replication
+
+### Per-Client Byte Budgets
+
+./src/server/replicator.ts caps each client's bytes per second. Normal packets drop when the client is over budget. Multipart static segments defer instead of evicting volatile data.
+
+Default: enabled through `maxBytesPerClientPerSecond`.
+
+### Multipart Segment Lanes
+
+Multipart replication separates:
+
+- `private-volatile`
+- `world-cell-volatile`
+- `transient`
+- `private-static`
+- `world-cell-static`
+
+Segment priority keeps private and volatile data ahead of static bulk. Static segments that do not fit stay pending.
+
+Default: available through `multipartSnapshot()` and `multipartDelta()`.
+
+### Static Segment Dedupe
+
+Pending static segments are keyed by `kind:id`. If a newer static segment arrives before the older pending one is sent, the newer segment replaces it. This prevents stale static backlog from growing by duplicate segment identity.
+
+Default: enabled in ./src/server/replicator.ts.
+
+### Shared Segment Stable Reads
+
+Shared replication segments can carry a `sharedSource` with a shared-memory tick reader. Multipart encode retries while the source is mid-write and only emits a frame when all referenced shared sources are stable.
+
+Default: enabled for shared replication helpers in ./src/server/replicator.ts.
+
+### Shared Cell Slabs
+
+`createSharedCellReplicator()` writes compact cell slabs with fixed headers and sorted entity metadata. When slots are contiguous, it copies one contiguous memory block instead of copying each entity separately. Dirty slab mode can emit only configured byte ranges for dirty masks.
+
+Status: default API. Dirty slab emission is available as an API, but workload proof should decide whether to use it.
+
+### Replication Telemetry
+
+Replication telemetry tracks:
+
+- volatile bytes
+- static deferred bytes
+- static deferred count
+- total bytes
+- budget utilization
+- pending static count and bytes
+- sustained static deferral warnings
+
+Enable with server config `replication.telemetry`, `ENGINE_REPLICATION_TELEMETRY=1`, or `MMO_REPLICATION_TELEMETRY=1`.
+
+## Protocol
+
+### Typed Binary Snapshots
+
+./src/protocol/encode.ts and ./src/protocol/schema.ts use typed replication schemas and DataView writes for compact numeric fields. Strings use compact length prefixes, ASCII fast path, and a bounded UTF-8 byte cache for repeated short strings.
+
+Default: enabled through `encodeSnapshot()` and `decodeSnapshot()`.
+
+### Compiled Field Encoders
+
+Field encoders and root schema encoders are cached in WeakMaps. Snapshot writer size hints are remembered per schema so repeat snapshots avoid growing from a tiny buffer each time.
+
+Default: enabled.
+
+### Preencoded Snapshot Bytes
+
+Objects can expose `PREENCODED_SNAPSHOT_BYTES` to bypass snapshot encoding when a producer already has stable encoded bytes.
+
+Status: opt-in producer contract.
+
+### Delta Replication
+
+./src/protocol/delta.ts sends patches for changed root fields, nested object fields, map entries, and array entries when a baseline exists. If no baseline exists, the delta payload carries a full snapshot.
+
+Default: enabled through `encodeDelta()`.
+
+### Dirty Root Field Hints
+
+`encodeDelta(schema, before, after, { dirtyFields })` can scan only trusted root fields. This avoids recursive diff work when the state producer already knows what changed.
+
+Status: opt-in API. The caller must be correct or updates can be missed.
+
+### Zero-Copy Frame Views
+
+./src/protocol/frames.ts decodes replication frames and multipart segment payloads as subarray views. ./src/protocol/encode.ts also exposes `readBytesView()` internally for decode paths that do not need ownership.
+
+Default: enabled. Caveat: do not retain a tiny view if it pins a large backing buffer longer than needed.
+
+### Binary Input Frames
+
+./src/protocol/messages.ts can encode high-rate inputs as compact binary frames when a codec exists. Frame headers are fixed-size and payload codecs own the actual input shape.
+
+Default: enabled when caller provides `inputCodec`.
+
+### Binary Input Payload View Flag
+
+`ENGINE_PROTOCOL_BINARY_INPUT_VIEW=1` makes binary input decode pass a borrowed `subarray` payload to the input codec instead of a copied payload.
+
+Status: experimental flag. Use only when the codec decodes immediately and does not retain the backing network buffer.
+
+## Interest, Spatial, And Collision
+
+### Interest Grid
+
+./src/server/interest-grid.ts indexes entities by numeric cell key, scans only cells near the target radius, includes entity radius in broad query bounds, and supports global entities.
+
+Default: enabled through `createInterestGrid()` and `createMmoInterestGrid()`.
+
+### AOI Hysteresis
+
+`computeVisibility()` expands the target radius by `hysteresisCells` for previously visible entities. This keeps near-boundary entities visible briefly and reduces enter/leave churn.
+
+Default: `hysteresisCells` is 1 in the MMO profile.
+
+### Visibility Caps And Priority
+
+Interest selection caps visible entities per client. Common integer priorities in the 0-63 range use priority buckets; large uncapped sets use a bounded heap before final ordering. Per-type caps are available through `maxEntitiesPerClientByType`.
+
+Default: enabled.
+
+### Spatial Hash
+
+./src/server/spatial-hash.ts provides reusable-output nearby queries, dirty-cell mutation reports, swap-pop cell removal, max-radius caching, and packed numeric cell keys with string fallback outside packed coordinate bounds.
+
+Default: enabled through `createSpatialHash()`.
+
+### Physics Broadphase
+
+./src/math/broadphase.ts lazily builds a Flatbush packed typed-array index for rectangle queries and uses a min-X sweep for dynamic pairs. `forEachPair()` avoids transient pair objects; ./src/server/physics.ts uses that allocation-free path.
+
+EXP-019 repeated spatial bench, 40k static rectangles / 2k queries and 8k dynamic rectangles / 30 frames, repeat 3. Median-of-run medians:
+
+- Static engine path: 244.496ms before to 37.478ms after, 84.7 percent faster.
+- Dynamic engine path: 4440.154ms before to 218.081ms after, 95.1 percent faster.
+- Checksums matched every control and candidate.
+
+The generic engine wrapper remains slower than using Flatbush or a workload-specific sweep directly because it validates ids, maintains lookup state, and returns public ids. Prefer the lower-level fixed/static indexes when those features are unnecessary.
+
+Default: enabled in `createServerPhysicsWorld()`.
+
+### Static Map Collision Index
+
+./src/map/collision.ts extracts merged collision rects from tile runs and builds a broadphase index for static rect collision. Circle queries reuse scratch ids internally and can write candidate rects into caller-provided output arrays.
+
+Default: enabled through `createStaticRectCollisionIndex()`.
+
+## MMO Package
+
+### Registry Read Views
+
+./src/mmo/entity-registry.ts exposes internal read-only iteration for trusted engine loops. ./src/mmo/interest.ts uses it when there is no custom filter and `useReadableViews !== false`.
+
+Status: default when safe. Public `get()` and `all()` remain clone-safe.
+
+Latest bench: 3317.104ms to 295.029ms median, 91.106 percent faster in ./scripts/engine-candidate-bench.ts.
+
+### Clone-Safe Snapshotter Caveat
+
+The high-level ./src/mmo/interest.ts snapshotter is intentionally simple: registry scan, visibility filter, sort, cap, snapshot. This is fine for small/medium rooms and general API safety. For scale-critical MMO server paths, prefer ./src/server/interest-grid.ts or custom segmented `getReplication()`.
+
+### Cached Static Occupancy Inputs
+
+./src/mmo/movement.ts can cache a static solid-rect source with `cacheSolidRects: true`.
+
+Status: opt-in API. Use only when solid rects are static for the tester lifetime.
+
+Latest bench: 291.464ms to 4.701ms median, 98.387 percent faster in ./scripts/engine-candidate-bench.ts.
+
+### Targeting Fast Path
+
+./src/mmo/targeting.ts includes `firstMmoLineTargetHit()`, which tracks the best line hit without collecting and sorting every hit.
+
+Default: available API.
+
+### Status And Id Bitmasks
+
+./src/mmo/status.ts and ./src/mmo/inventory.ts include compact token/id helpers that let callers store repeated status/id facts as bitmasks where appropriate.
+
+Default: available API.
+
+### Client Interpolation
+
+./src/mmo/interpolation.ts keeps a bounded timeline per entity, delays sampling slightly, interpolates between nearby samples, holds short gaps, and snaps large jumps. This lets servers send fewer updates without making normal movement visually harsh.
+
+Default: available API.
+
+## Runtime And Rendering
+
+### Generic Object Pool
+
+./src/runtime/object-pool.ts provides bounded reusable object pools with optional preload and serialization. Server transient effects and render stage entries use this pattern to reduce hot allocation.
+
+Default: available API.
+
+### Transient Effect Lanes
+
+./src/server/transient-effects.ts uses pooled compact effect records, in-place lane compaction, priority selection, and AOI-capped viewer selection.
+
+Default: available API.
+
+### Render Stage Pooling
+
+./src/render/stage.ts pools render-stage entries, reuses per-layer sorted-call arrays, and caches ordered layer lists until layers change.
+
+Default: enabled.
+
+### Render Frame Pool
+
+./src/render/frame-pool.ts reuses per-frame render arrays, records, points, and path commands. It is an opt-in allocation-control surface, not a general CPU optimization. The focused microbenchmark currently shows substantial reset overhead, so promotion to a default requires full-loop p95/p99 and GC evidence.
+
+Default: available API. The MMO skill demo consumes it heavily.
+
+### Draw Data Caches
+
+./src/render/draw-data.ts has bounded per-canvas caches for gradients, line dash arrays, wrapped text blocks, and truncated labels. It is controlled by render state, stage/HUD config, or `ENGINE_RENDER_DRAW_DATA_CACHES=1`.
+
+Status: opt-in. Latest isolated draw-data microbench improved 34.476ms to 25.985ms median, 24.629 percent faster. API-mode MMO render benches did not clear the win bar, so keep off by default in the demo.
+
+Use:
+
+- `createRenderStage(ctx, camera, { drawDataCaches: true })`
+- `stage.setDrawDataCaches(true)`
+- `createHudRenderer({ drawDataCaches: true })`
+- `ENGINE_RENDER_DRAW_DATA_CACHES=1`
+
+### Canvas Culling And Stable Dimensions
+
+Render helpers provide bounds extraction and culling helpers in ./src/render/batch.ts, while map rendering has viewport and rotated-terrain culling in ./src/map/render.ts and ./src/map/game-map.ts.
+
+Default: available API.
+
+## WASM And Numeric Kernels
+
+### Build Compactness And CPU Profiles
+
+Package entry bundles are minified during both transactional and individual builds. `bun run check:bundle-size` enforces per-entry budgets plus a 1,375,000-byte aggregate budget. The verified 2026-08-22 build totaled 1,353,571 bytes across the published JavaScript entries, including the isolated `wasm` and `experimental` subpaths and the new deployment/3D capability work. The `server` and `project-runtime-3d` raw ceilings were raised to 170,000 and 92,000 bytes for the measured control-plane and rigid-runtime growth; minimal-canvas and canonical-browser consumer gzip gates remain unchanged.
+
+`bun run bench:cpu-profile` records Bun CPU profiles, a grep-friendly Markdown report, and benchmark JSON under `./.local/engine-perf/cpu-profile/`. The first profile showed GC, broadphase pair enumeration, sorting, and rebuild bookkeeping as the main engine-relevant costs. JavaScript JIT profile guidance is owned by the runtime; the project-controlled WASM build continues to use `-O3` and SIMD.
+
+Protocol, MMO load, admission, warm-tick, scheduled-delta, interest, and rollback performance gates now use explicit warmups and p95 samples. They no longer accept the fastest or a single sample from a run as regression evidence.
+
+### Collision Kernel
+
+./src/wasm/collision-kernel.ts wraps the AssemblyScript collision kernel from ./assembly/collision-kernel.ts. It supports scalar circle-rect overlap, movement integration, point/vector rotation, range filters, mask filters, rect overlap batches, and circle-rect batches.
+
+Default: available API with TypeScript fallback.
+
+### Bridge Safeguards
+
+The WASM wrapper validates batch counts, supports typed-array fast paths, copies outputs back into caller-provided buffers, and falls back cleanly on fetch/instantiate/missing-export failures.
+
+Default: enabled.
+
+### WASM Caveat
+
+WASM helps when data is already numeric and batched. It is not a free win for object-heavy paths because JS object to typed-buffer copy can dominate the kernel savings.
+
+## Demo-Local Performance Proofs
+
+./examples/mmo-skill-demo is the current end-to-end proof surface. It adds game-local optimizations that are useful signals for engine work but are not all stable engine APIs.
+
+### Demo Server And Replication
+
+The demo uses:
+
+- packed volatile/static multipart segments in ./examples/mmo-skill-demo/src/segmented-replication.ts
+- world-cell, private, static, volatile, and transient segment lanes
+- enum/string interning for repeated zone/action/slot/combat/status values
+- bit masks for sparse packed fields
+- shared-hot slabs from ./examples/mmo-skill-demo/src/shared-hot.ts
+- direct shared-slot reads for hot entity fields
+- counted typed indexes for entity buckets
+- accessor caching around shared-hot views
+- lazy static segment encoding
+- coarse snapshot AOI for snapshots
+- preencoded multipart payloads with `PREENCODED_SNAPSHOT_BYTES`
+
+### Demo Client Render
+
+The demo uses:
+
+- engine render frame pooling
+- retained arrays per render category
+- viewport culling before creating render calls
+- cached hazard/effect timing maps
+- map overlay and render-call benches
+- opt-in draw-data cache mode exposed as `drawDataCaches: "auto" | "always" | "never"`
+
+### Demo Flags
+
+| Flag | Default | Purpose | Current Guidance |
+| --- | --- | --- | --- |
+| `MMO_SKILL_DEMO_COUNTED_INDEX` | on | Use counted typed indexes instead of sliced slot arrays. | Keep on. |
+| `MMO_SKILL_DEMO_DIRECT_SHARED_SLOTS` | on | Read hot entity data directly from shared slots. | Keep on. |
+| `MMO_SKILL_DEMO_ACCESSOR_CACHE` | on | Cache shared-hot accessor views. | Keep on. |
+| `MMO_SKILL_DEMO_STATIC_LAZY` | on | Defer static segment encoding until needed. | Keep on. |
+| `MMO_SKILL_DEMO_COARSE_SNAPSHOT_AOI` | on | Use coarse snapshot AOI in demo replication. | Keep on unless dungeon bench regresses. |
+| `MMO_SKILL_DEMO_DIRTY_REPLICATION` | off | Track dirty entity ids for replication. | Failed previous default-shape proof; keep off. |
+| `MMO_SKILL_DEMO_SHARED_DIRTY_SLAB` | off | Emit dirty shared-hot slab ranges. | Failed previous default-shape proof; keep off. |
+
+Demo bench commands:
+
+```powershell
+bun.cmd run ./examples/mmo-skill-demo/scripts/dungeon-20-player-bench.ts
+bun.cmd run ./examples/mmo-skill-demo/scripts/render-call-bench.ts
+```
+
+## Current Engine Flags And Opt-Ins
+
+| Surface | Flag Or Option | Default | Status |
+| --- | --- | --- | --- |
+| Server telemetry | `replication.telemetry`, `ENGINE_REPLICATION_TELEMETRY=1`, `MMO_REPLICATION_TELEMETRY=1` | off unless config/env | Supported. |
+| Server room order | `ENGINE_SERVER_STABLE_ROOM_ORDER=1` | off | Experimental. |
+| Server scheduler cursor | `ENGINE_SERVER_DIRECT_SCHEDULE_CURSOR=1` | off | Experimental. |
+| Protocol binary input views | `ENGINE_PROTOCOL_BINARY_INPUT_VIEW=1` | off | Experimental. |
+| Render draw caches | `drawDataCaches`, `ENGINE_RENDER_DRAW_DATA_CACHES=1` | off | Opt-in. |
+| MMO interest read views | `useReadableViews` | safe auto-on | Accepted. |
+| MMO static occupancy cache | `cacheSolidRects` | off | Opt-in. |
+| Delta dirty root fields | `dirtyFields` | absent | Opt-in. |
+
+## Retired Failed Flags
+
+These were removed from engine code after benchmarks failed or were mixed:
+
+| Removed Flag/API | Learning |
+| --- | --- |
+| `ENGINE_SERVER_REPLICATION_STATE_REFERENCE` / `stateTracking: "reference"` | Reference baseline tracking worsened server benches and had unsafe mutation contracts. |
+| `ENGINE_STATIC_SEGMENT_ORDER_CACHE` / `staticSegmentOrderCache` | Static order cache was mixed and worsened main-loop/snapshot p95 in demo dungeon bench. |
+| `ENGINE_INTEREST_VISIBILITY_DIFF_SCRATCH` / `allocationLightVisibilityDiff` | Scratch visibility diff regressed MMO dungeon p95 and complicated result lifetime. |
+| `ENGINE_RENDER_STABLE_Y_INSERTION_SORT` | Render insertion sort regressed frame p95 and p50. |
+
+## Failed Experiment Learnings
+
+### EXP-004 Reference State Tracking
+
+Hypothesis: avoid cloning last replicated state by storing references.
+
+Result: server MMO load median worsened from 7.63ms to 8.22ms. Warm tick median worsened from 16.81ms to 22.79ms.
+
+Learning: clone bypass needs a stronger immutable-state or caller-owned baseline contract. A broad reference flag is not safe or fast enough.
+
+### EXP-008 Static Segment Order Cache
+
+Hypothesis: maintain per-client pending static segment order incrementally instead of rebuilding and sorting.
+
+Result: MMO dungeon bench was mixed. Main loop p95 worsened from 9.364ms to 9.942ms and snapshot p95 worsened from 5.362ms to 5.934ms, while replication tick and scheduler medians were only slightly better.
+
+Learning: per-client cache memory and bookkeeping erase the current benefit. Revisit only with a static backlog stress bench.
+
+### EXP-009 Allocation-Light Visibility Diff
+
+Hypothesis: reuse client visible sets and scratch buffers to avoid visibility diff allocations.
+
+Result: server samples were mixed, and MMO dungeon bench regressed. Main loop p95 worsened from 9.364ms to 10.556ms, snapshot p95 worsened from 5.362ms to 6.108ms, replication tick p95 worsened from 6.572ms to 6.626ms.
+
+Learning: public result lifetime and scratch management add complexity without a clean server win.
+
+### EXP-015 WASM AOI Cull
+
+Hypothesis: move AOI distance culling into WASM.
+
+Result: rejected before implementation because current AOI sources are JS objects. Copying object data into typed buffers before every query would likely dominate numeric savings.
+
+Learning: WASM AOI should wait until AOI source data already lives in typed buffers.
+
+### EXP-017 Stable Y Insertion Sort
+
+Hypothesis: frame-to-frame render y-order is often nearly sorted, so insertion sort should beat native sort.
+
+Result: render world p95 worsened from 9.737ms to 10.131ms and p50 worsened from 6.791ms to 7.054ms.
+
+Learning: extra inversion scans and JS insertion work lost to native sort for the tested frame shape.
+
+### EXP-018 Default-On Draw Data Caches
+
+Hypothesis: draw-data caches should be enabled automatically in the MMO demo.
+
+Result: latest API-mode MMO render bench did not clear the win bar. `none` p95 moved 5.972ms to 5.837ms, `minimap` moved 6.545ms to 6.542ms, and `world` moved 6.967ms to 6.897ms while heap grew by 3.48MB.
+
+Learning: draw-data caches are real in microbench but workload-sensitive. Ship as explicit opt-in, not a demo default.
+
+## Bench Commands
+
+Use `bun.cmd` on Windows when PowerShell blocks `bun.ps1`.
+
+```powershell
+bun.cmd run bench:candidates
+bun.cmd run bench:render-draw-cache
+bun.cmd run bench:protocol
+bun.cmd run bench:server
+bun.cmd run bench:mmo
+bun.cmd run bench:rollback
+bun.cmd run bench
+```
+
+Store raw control and candidate artifacts under ./.local/engine-perf/ with date, experiment id, command line, and summary.

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@hyperfocus/ai-core": ["../../packages/ai-core/src/index.ts"],
+      "@hyperfocus/ui": ["../../packages/ui/src/index.ts"],
+      "@hyperfocus/workspace": ["../../packages/workspace/src/index.ts"]
+    }
+  },
+  "include": ["./**/*.ts", "./**/*.tsx", "../../packages/**/*.ts", "../../packages/**/*.tsx"],
+  "exclude": ["dist", "**/*.test.ts", "**/*.test.tsx"]
+}

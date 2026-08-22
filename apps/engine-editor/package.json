@@ -1,0 +1,45 @@
+{
+  "name": "hyperfocus-editor",
+  "version": "0.1.0",
+  "description": "Portable local-first project editor for Hyperfocus Engine.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "bin": {
+    "hyperfocus-editor": "./cli.ts"
+  },
+  "files": [
+    "cli.ts",
+    "server.ts",
+    "server-utils.ts",
+    "index.html",
+    "styles.css",
+    "dist",
+    "wasm",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "bun server.ts",
+    "build": "bun build.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test src",
+    "verify": "bun verify-client.ts",
+    "verify:system": "bun verify-system.ts",
+    "prepublishOnly": "bun build.ts"
+  },
+  "dependencies": {
+    "@hyperfocus/ai-core": "workspace:*",
+    "@hyperfocus/ui": "workspace:*",
+    "@hyperfocus/workspace": "workspace:*",
+    "@stylexjs/stylex": "^0.19.0",
+    "solid-js": "^1.9.12",
+    "three": "^0.163.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.163.0",
+    "puppeteer-core": "^25.8.0",
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "name": "hyperfocus",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "engine"
+  ],
+  "scripts": {
+    "dev": "bun run dev:harness",
+    "dev:harness": "bun apps/harness/cli/src/index.ts",
+    "dev:editor": "bun apps/engine-editor/server.ts",
+    "build": "bun run build:packages && bun run build:harness && bun run build:editor && bun run build:engine",
+    "build:packages": "bun run --cwd packages/workspace build && bun run --cwd packages/ai-core build && bun run --cwd packages/ui build",
+    "build:harness": "bun apps/harness/scripts/build-ui.ts --minify",
+    "build:editor": "bun apps/engine-editor/build.ts",
+    "build:engine": "bun run --cwd engine build",
+    "typecheck": "bun run typecheck:packages && bun run typecheck:harness && bun run typecheck:editor && bun run typecheck:engine",
+    "typecheck:packages": "bunx tsc --noEmit -p tsconfig.packages.json",
+    "typecheck:harness": "bunx tsc --noEmit -p apps/harness/tsconfig.json",
+    "typecheck:editor": "bunx tsc --noEmit -p apps/engine-editor/tsconfig.json",
+    "typecheck:engine": "bun run --cwd engine typecheck && bun run --cwd engine typecheck:tests && bun run --cwd engine typecheck:tooling && bun run --cwd engine typecheck:examples",
+    "test": "bun run test:repository && bun run test:packages && bun run test:harness && bun run test:editor && bun run test:engine",
+    "test:repository": "bun test scripts/check-repository-size.test.ts scripts/stylex-solid-plugin.test.ts",
+    "test:packages": "bun test packages",
+    "test:harness": "bun apps/harness/scripts/run-tests.ts",
+    "test:editor": "bun test apps/engine-editor",
+    "test:engine": "bun run --cwd engine test",
+    "verify:editor": "bun apps/engine-editor/verify-client.ts",
+    "verify:editor:system": "bun apps/engine-editor/verify-system.ts",
+    "lint": "bunx eslint packages apps/harness/ui/src apps/engine-editor/src",
+    "check:repository-size": "bun scripts/check-repository-size.ts",
+    "check": "bun run check:repository-size && bun run typecheck && bun run test && bun run build"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-typescript": "^7.28.5",
+    "@stylexjs/babel-plugin": "^0.19.0",
+    "@stylexjs/eslint-plugin": "^0.19.0",
+    "@types/babel__core": "^7.20.5",
+    "@types/bun": "1.3.14",
+    "@typescript-eslint/parser": "^8.58.2",
+    "eslint": "^10.2.0",
+    "babel-preset-solid": "^1.9.12",
+    "typescript": "6.0.3"
+  }
+}

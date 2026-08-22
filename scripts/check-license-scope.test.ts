@@ -46,13 +46,15 @@ describe("repository license scope", () => {
     expect(license).toContain("or governed by separate license terms");
   });
 
-  test("keeps the engine package license synchronized with the repository license", async () => {
-    const [repositoryLicense, enginePackageLicense] = await Promise.all([
+  test("keeps distributed package licenses synchronized with the repository license", async () => {
+    const [repositoryLicense, enginePackageLicense, editorPackageLicense] = await Promise.all([
       readRepositoryFile("LICENSE"),
       readRepositoryFile("engine/LICENSE"),
+      readRepositoryFile("apps/engine-editor/LICENSE"),
     ]);
 
     expect(enginePackageLicense).toBe(repositoryLicense);
+    expect(editorPackageLicense).toBe(repositoryLicense);
   });
 
   test("keeps public license summaries aligned with the operative text", async () => {

@@ -1,0 +1,230 @@
+Hyperfocus Source-Available Game License 2.0
+
+Copyright (c) 2026 the Licensor
+
+This license is a source-available license, not an open-source license.
+
+1. Definitions
+
+"Licensor" means the copyright owner or owners of the Software.
+
+"Software" means all source code, object code, documentation, applications,
+packages, tools, scripts, assets, and other first-party materials contained in
+the Hyperfocus repository or distributed from that repository with this
+license. This includes, without limitation, the Hyperfocus engine, engine
+editor, AI development harness, shared packages, and all other first-party
+code in the repository. Software does not include materials expressly
+identified as third-party materials or governed by separate license terms,
+and does not include Your Independent Content.
+
+"You" means the individual or legal entity exercising rights under this
+license. "Your Group" means You and every entity that directly or indirectly
+controls, is controlled by, or is under common control with You.
+
+"Modification" means any work based on, incorporating, translating, or
+modifying any part of the Software.
+
+"Independent Content" means code, art, audio, writing, data, project files,
+and other material that does not copy protectable expression from the
+Software. Output produced by the Software is Independent Content unless that
+output itself contains Software.
+
+"Licensed Game" means an interactive software title whose primary purpose is
+play or entertainment and that includes or uses the Software. A Licensed Game
+does not include an Engine Offering.
+
+"Related Releases" means ports, editions, downloadable content, expansions,
+renamed releases, and substantially similar releases of the same Licensed
+Game. Related Releases are treated as one Licensed Game for the threshold and
+royalty calculation.
+
+"Engine Offering" means software or a hosted service whose primary purpose is
+to create, edit, build, execute, or host games and that contains the Software
+or a Modification. A Licensed Game is not an Engine Offering merely because
+it includes ordinary game-specific modding tools, a level editor for that
+game, or a dedicated server for that game.
+
+"Adjusted Game Revenue" means money actually received by Your Group from, or
+collected on its behalf for, commercial exploitation of a Licensed Game,
+including sales, licenses, subscriptions, paid access, downloadable content,
+in-game purchases, advertising, sponsorships, crowdfunding tied to access or
+delivery, and advances or minimum guarantees attributable to the Licensed
+Game. Adjusted Game Revenue excludes refunds, chargebacks, separately stated
+sales taxes or value-added taxes, and storefront or payment-processing fees.
+Ordinary development, payroll, hosting, marketing, and other business costs
+are not deductions. Revenue from all Related Releases and all members of Your
+Group is aggregated. Non-USD receipts are converted to USD using a reasonable,
+consistently applied exchange rate available when the money is received.
+
+"Consideration" means money or anything else of material value.
+
+2. General Grant
+
+Subject to this license, the Licensor grants You a worldwide, non-exclusive
+license to:
+
+a. view, inspect, evaluate, study, reproduce, and privately or publicly fork
+   the Software;
+
+b. modify the Software and create Modifications;
+
+c. use the Software and Modifications privately, internally, and for personal,
+   educational, research, evaluation, hobby, charitable, or other
+   non-commercial purposes;
+
+d. create, reproduce, modify, publicly perform, publicly display, distribute,
+   sell, license, and otherwise commercially exploit Licensed Games under
+   Sections 3 and 4; and
+
+e. distribute the Software or a Modification without Consideration under
+   Section 5.
+
+You may allow employees, contractors, publishers, distributors, hosting
+providers, and platform operators to exercise these rights solely on Your
+behalf or as needed to develop, operate, or distribute Your Licensed Game. You
+remain responsible for their compliance when they exercise rights on Your
+behalf. You may transfer this license with a Licensed Game or with substantially
+all of the business or assets responsible for that Licensed Game if the
+recipient agrees in writing to this license and You pay royalties accrued
+before the transfer. No other sublicense or transfer is granted.
+
+3. Licensed Games and Independent Content
+
+You may keep a Licensed Game's source code and Independent Content private.
+You are not required to disclose game-specific code, Modifications to the
+Software used only in a Licensed Game, art, audio, writing, data, or other
+Independent Content merely because You use the Software.
+
+You own Your Independent Content. This license does not grant the Licensor any
+ownership interest in it. You may use, export, convert, and migrate Your
+Independent Content to another engine at any time.
+
+If a release is changed so that it no longer contains or uses any Software or
+Modification, money received from that fully migrated release after the
+change is not Adjusted Game Revenue. Money received for older releases that
+still contain or use the Software remains Adjusted Game Revenue. Accrued
+royalties do not disappear when a game is migrated.
+
+4. Game Revenue Royalty
+
+Each Licensed Game receives a USD 50,000 royalty-free allowance in each
+calendar year. You owe the Licensor a royalty equal to five percent (5%) only
+of Adjusted Game Revenue above USD 50,000 for that Licensed Game in that
+calendar year:
+
+  Annual Royalty = 5% x max(0, Adjusted Game Revenue - USD 50,000)
+
+No royalty or revenue report is required for a Licensed Game that does not
+exceed USD 50,000 of Adjusted Game Revenue in a calendar year.
+
+After a Licensed Game exceeds the allowance, You must report and pay quarterly
+within 45 days after each calendar quarter ends. The amount due for a quarter
+is the cumulative annual royalty through that quarter minus royalties already
+paid for that year. You must provide a final annual statement within 45 days
+after the calendar year ends.
+
+Reports and payments must use the contact method or payment instructions the
+Licensor publicly designates with the Software or provides to You in writing.
+If no method is designated when payment becomes due, You must notify the
+repository owner through a private contact channel and retain the amount due
+until reasonable payment instructions are provided; the absence of published
+instructions does not waive the royalty.
+
+You must keep records reasonably sufficient to verify Adjusted Game Revenue
+and royalties for three years after the applicable report. No more than once
+per calendar year, the Licensor may have an independent auditor inspect those
+records on reasonable notice, during normal business hours, and subject to
+reasonable confidentiality obligations. The Licensor pays the audit cost
+unless the audit finds an underpayment greater than five percent (5%) for the
+period examined, in which case You must pay the reasonable audit cost as well
+as the underpayment.
+
+The Licensor and You may replace or modify the royalty, reporting, or other
+commercial terms through a separate written agreement.
+
+5. Free Software Redistribution; No Monetized Software Forks
+
+You may distribute the Software or a Modification only without Consideration
+and only if You:
+
+a. provide the complete corresponding source code at no charge;
+
+b. include this license and keep all copyright and attribution notices;
+
+c. identify material modifications; and
+
+d. license the distributed Software or Modification under these same terms.
+
+Without a separate written agreement from the Licensor, You may not sell,
+license, rent, paywall, or charge for access to the Software, a Modification,
+or an Engine Offering. You also may not condition access to them on buying
+support, hosting, a subscription, another product, or another service.
+
+This restriction does not prohibit charging for bona fide consulting,
+training, support, hosting, or development services when access to the
+Software or Modification remains available without charge and the fee is for
+the service rather than a disguised Software license. It also does not
+prohibit commercial Independent Content, plugins, libraries, or tools that
+interoperate with the Software but do not contain Software or a Modification.
+
+6. Contributions
+
+If You intentionally submit a contribution to the Licensor for inclusion in
+the Software, You represent that You have the right to submit it. You retain
+copyright in Your contribution, but You grant the Licensor a perpetual,
+worldwide, irrevocable, royalty-free, transferable, and sublicensable license
+to use, reproduce, modify, distribute, publicly perform, publicly display,
+commercialize, and relicense that contribution under this license or other
+terms. Material clearly marked "Not a Contribution" is excluded.
+
+To the extent Your contribution necessarily infringes a patent claim that You
+can license, You also grant the Licensor and recipients of the Software a
+perpetual, worldwide, royalty-free patent license to make, use, sell, offer for
+sale, import, and otherwise exploit that contribution as part of the Software.
+
+7. Notices and Trademarks
+
+Required notices may be included in documentation, credits, a legal-notices
+screen, or another location reasonably accessible with the Licensed Game or
+distributed Software. This license does not grant permission to use the
+Licensor's names, logos, trademarks, or product names except as necessary to
+describe the origin of the Software and preserve required notices.
+
+8. Compliance and Termination
+
+Your rights under this license terminate automatically if You violate its
+terms. If this is Your first violation and You fully correct it within 30 days
+after receiving written notice from the Licensor, Your rights are reinstated
+as of the date the violation is corrected. Repeated violations terminate Your
+rights permanently unless the Licensor agrees otherwise in writing.
+
+Sections 3, 4, 5, 6, 7, 9, 10, and 11 survive termination to the extent needed
+to give them effect. Termination does not cancel royalties or reports already
+due.
+
+9. Disclaimer of Warranty
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE SOFTWARE IS PROVIDED "AS IS" AND
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+WITHOUT LIMITATION WARRANTIES OF TITLE, NON-INFRINGEMENT, MERCHANTABILITY, OR
+FITNESS FOR A PARTICULAR PURPOSE. YOU ARE SOLELY RESPONSIBLE FOR DETERMINING
+WHETHER THE SOFTWARE AND THIS LICENSE ARE SUITABLE FOR YOUR USE.
+
+10. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR AND CONTRIBUTORS WILL NOT
+BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL, INCIDENTAL, CONSEQUENTIAL,
+EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF DATA, PROFITS, REVENUE,
+GOODWILL, OR BUSINESS INTERRUPTION, ARISING FROM OR RELATED TO THE SOFTWARE OR
+THIS LICENSE, UNDER ANY LEGAL THEORY, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGES.
+
+11. Other Rights and Versions
+
+This license does not restrict rights You may have under applicable copyright
+exceptions or limitations. No rights are granted except those stated in this
+license. The Licensor may offer the Software under additional or different
+terms, including negotiated commercial terms.
+
+The Licensor may publish new license versions, but a new version does not
+retroactively change the terms for a copy of the Software already received.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hyperfocus Editor Agent"
+  short_description: "Operate the editor with scripted JSON handoffs"
+  default_prompt: "Use $hyperfocus-editor-agent to operate the Hyperfocus Editor, verify the result, and return an explicit handoff."

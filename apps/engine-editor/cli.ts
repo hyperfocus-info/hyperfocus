@@ -1,3 +1,4 @@
 #!/usr/bin/env bun
-import "./server.ts";
+import { runEditorCli } from "./editor-cli.ts";
 
+await runEditorCli(process.argv.slice(2));

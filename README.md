@@ -46,6 +46,8 @@ PowerShell installations that block `bun.ps1` can use `bun.cmd` for the same com
 
 The editor is fully usable without AI. Its AI panel connects on demand to a local harness (default `http://127.0.0.1:8787`), renders shared UI locally, and sends typed commands to the active harness project/thread. Credentials and runtime state never move into the editor.
 
+Agents can operate the same editor surface through the typed `__hyperfocusEditorAgent` browser bridge or `hyperfocus-editor agent` CLI. Plans return explicit JSON handoffs rather than relying on hidden state. Project-local custom libraries are managed through `hyperfocus-editor deps`, a thin no-shell wrapper over Bun's add, remove, install, and dependency-list operations. See [the editor guide](apps/engine-editor/README.md) and the bundled `hyperfocus-editor-agent` skill.
+
 ## License
 
 The [Hyperfocus Source-Available Game License 2.0](LICENSE) applies to all first-party material in this repository, including the engine, editor, harness, shared packages, and all other first-party code. Materials expressly identified as third-party or governed by separate terms remain subject to their respective licenses. This is a source-available license, not an OSI-approved open-source license. The Licensor identity and royalty contact details still need to be supplied before publication; see [Licensing](docs/licensing.md).

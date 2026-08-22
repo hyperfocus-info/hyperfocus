@@ -1,14 +1,40 @@
 # Engine Editor
 
-`./editor` is the browser project editor for `@hyperfocus/engine`. It is a direct child of the engine directory and owns the repo-local project model, recovery data, asset catalog, contextual authoring tools, profiling, and browser preview workflow.
+`apps/engine-editor` is the browser project editor for `@hyperfocus/engine`. It owns the repo-local project model, recovery data, asset catalog, contextual authoring tools, profiling, and browser preview workflow.
 
-Run from the engine root:
+Run from the monorepo root:
 
 ```powershell
-bun run editor
+bun run dev:editor
 ```
 
 Open `http://127.0.0.1:8796`.
+
+## Agentic operation
+
+The editor exposes `globalThis.__hyperfocusEditorAgent`, a typed browser contract for semantic clicks, fields, checkboxes, keyboard and pointer input, drag-and-drop, file uploads, snapshots, and explicit handoffs. Every scripted plan stops on its first failure and returns current project, mode, workspace, selection, dirty state, visible controls, action results, and unresolved work.
+
+Attach the packaged driver to a Chromium remote-debugging endpoint. Omit `--plan` for a read-only snapshot:
+
+```powershell
+bun apps/engine-editor/cli.ts agent --cdp http://127.0.0.1:9222 --url http://127.0.0.1:8796 --plan plan.json --out handoff.json
+```
+
+The bundled `hyperfocus-editor-agent` skill documents the plan schema and observe-act-verify-handoff workflow. If a user-facing editor operation cannot be expressed through the protocol, the operation is not considered agent-ready; add a typed action and test rather than depending on private globals.
+
+## Custom Bun dependencies
+
+Projects with ordinary TypeScript may install their own libraries through the editor's thin Bun wrapper. The wrapper requires an existing project `package.json`, uses the project as the explicit working directory, passes package specs as argv without a shell, and reports the resulting dependency sections as JSON.
+
+```powershell
+bun apps/engine-editor/cli.ts deps list --project C:\path\to\game
+bun apps/engine-editor/cli.ts deps add zod@4 --project C:\path\to\game --exact
+bun apps/engine-editor/cli.ts deps add typescript --project C:\path\to\game --dev
+bun apps/engine-editor/cli.ts deps install --project C:\path\to\game --frozen
+bun apps/engine-editor/cli.ts deps remove zod --project C:\path\to\game
+```
+
+Optional, peer, and explicitly trusted installs use `--optional`, `--peer`, and `--trust`. Trust is never implied.
 
 ## Project workflow
 

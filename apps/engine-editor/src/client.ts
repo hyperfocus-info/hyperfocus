@@ -38,6 +38,7 @@ import {
   type ThreeHumanoidMotionController,
 } from "../../../engine/src/motion/three.ts";
 import { createEditorShell, type EditorShell } from "./editor-shell.ts";
+import { createEditorAgentBridge } from "./editor-agent-protocol.ts";
 import type { EditorComponent, EditorKeyframe, EditorProject, EditorSpriteBone, EditorTimelineTrack } from "./project.ts";
 import { encodeCanvasSequenceWebM } from "./webm-export.ts";
 import { createPlayableWorld, type PlayableWorld } from "../../../engine/src/project/runtime-2d.ts";
@@ -2719,6 +2720,10 @@ editorShell = createEditorShell({
   captureProfile: captureEditorProfile,
   log: logEvent,
 });
+globalThis.__hyperfocusEditorAgent = createEditorAgentBridge({
+  getProject: () => editorShell!.project,
+  isReady: () => editorAutomation.ready,
+});
 
 function resolvePlayableActions(project: EditorProject, bindings: ReadonlySet<string>) {
   const actions = new Set<string>();
@@ -2737,6 +2742,7 @@ void initializeKernels().finally(() => {
 });
 
 window.addEventListener("pagehide", () => {
+  globalThis.__hyperfocusEditorAgent = undefined;
   keyboard.dispose();
   stageDelegation.dispose();
   fftAudioElement?.pause();

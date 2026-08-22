@@ -2,13 +2,17 @@
   "name": "hyperfocus-editor",
   "version": "0.1.0",
   "description": "Portable local-first project editor for Hyperfocus Engine.",
-  "license": "SEE LICENSE IN ../../LICENSE",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "bin": {
     "hyperfocus-editor": "./cli.ts"
   },
   "files": [
+    "LICENSE",
     "cli.ts",
+    "editor-cli.ts",
+    "agent-driver.ts",
+    "bun-dependencies.ts",
     "server.ts",
     "server-utils.ts",
     "index.html",
@@ -25,6 +29,7 @@
     "build": "bun build.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test src",
+    "agent": "bun cli.ts agent",
     "verify": "bun verify-client.ts",
     "verify:system": "bun verify-system.ts",
     "prepublishOnly": "bun build.ts"

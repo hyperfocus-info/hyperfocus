@@ -1,5 +1,7 @@
 import type { EditorProject } from "./project.ts";
 
+/** Visual/runtime compatibility actions. Project mutation belongs in EditorCommandSession. */
+
 export type EditorAgentTarget =
   | { selector: string }
   | { editorAction: string; template?: string; componentId?: string; componentType?: string }

@@ -11,6 +11,7 @@ export type EditorAgentDriverOptions = {
   outputPath?: string;
 };
 
+/** CDP transport for visual/runtime compatibility plans; direct project commands use headless-editor.ts. */
 export async function runEditorAgentDriver(options: EditorAgentDriverOptions) {
   const target = await findEditorTarget(options.cdpUrl, options.editorUrl);
   const session = await CdpSession.connect(target.webSocketDebuggerUrl!);

@@ -1,5 +1,5 @@
-import { validatePlayableSaveProject2D } from "../../../engine/src/project/runtime-save-2d.ts";
-import { validatePlayableStoryProject2D } from "../../../engine/src/project/runtime-story-2d.ts";
+import { validatePlayableSaveProject2D } from "@hyperfocus/engine/project/runtime-save-2d";
+import { validatePlayableStoryProject2D } from "@hyperfocus/engine/project/runtime-story-2d";
 
 export const EDITOR_PROJECT_VERSION = 2;
 const PROJECT_FORMAT = "catalog-engine-editor-project" as const;
@@ -371,11 +371,12 @@ export function migrateProject(value: unknown): EditorProject {
   if (typeof value.version !== "number" || value.version > EDITOR_PROJECT_VERSION) {
     throw new Error(`Project version ${String(value.version)} is not supported by Editor ${EDITOR_PROJECT_VERSION}.`);
   }
+  const migrated = value.format !== PROJECT_FORMAT || value.version !== EDITOR_PROJECT_VERSION;
   const fallback = createDefaultProject(typeof value.name === "string" ? value.name : "Imported Project");
   const project = { ...fallback, ...(clone(value) as Partial<EditorProject>) } as EditorProject;
   project.format = PROJECT_FORMAT;
   project.version = EDITOR_PROJECT_VERSION;
-  project.updatedAt = new Date().toISOString();
+  if (migrated || typeof project.updatedAt !== "string") project.updatedAt = new Date().toISOString();
   project.settings = { ...fallback.settings, ...(isObject(value.settings) ? value.settings : {}) } as EditorProject["settings"];
   project.layout = { ...fallback.layout, ...(isObject(value.layout) ? value.layout : {}) } as EditorProject["layout"];
   project.tilemap = { ...fallback.tilemap, ...(isObject(value.tilemap) ? value.tilemap : {}) } as EditorProject["tilemap"];

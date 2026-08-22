@@ -221,51 +221,54 @@ async function main() {
 
 async function verifyAgentProtocol(session: CdpSession): Promise<Verification> {
   const evidence = await evaluate<{
-    actions: string[];
+    visualCompatibilityActions: string[];
     changed: { ok: boolean; completedActions: number; name: string; dirty: boolean; mode: string; workspace: string; controls: number };
     restored: { ok: boolean; completedActions: number; name: string };
   }>(session, `(async () => {
-    const bridge = globalThis.__hyperfocusEditorAgent;
-    const originalName = bridge.snapshot().project.name;
-    const changedHandoff = await bridge.perform({
+    const commands = globalThis.__hyperfocusEditorCommands;
+    const visualBridge = globalThis.__hyperfocusEditorAgent;
+    const originalName = commands.snapshot().project.name;
+    const changedHandoff = await commands.execute({
       requestId: 'cdp-agent-change',
-      intent: 'Rename project through the public agent action protocol',
-      actions: [
-        { type: 'click', target: { editorAction: 'settings' } },
-        { type: 'input', target: { selector: '#setting-project-name' }, value: 'Agent Protocol Acceptance' },
-        { type: 'click', target: { editorAction: 'save-settings' } }
+      intent: 'Rename project through the DOM-free editor command session',
+      commands: [
+        { type: 'project.patch', label: 'Agent protocol acceptance rename', operations: [
+          { op: 'test', path: '/name', value: originalName },
+          { op: 'replace', path: '/name', value: 'Agent Protocol Acceptance' }
+        ] }
       ]
     });
-    const restoredHandoff = await bridge.perform({
+    const visualSnapshot = visualBridge.snapshot();
+    const restoredHandoff = await commands.execute({
       requestId: 'cdp-agent-restore',
       intent: 'Restore the original project name through undo',
-      actions: [{ type: 'click', target: { editorAction: 'undo' } }]
+      commands: [{ type: 'history.undo' }]
     });
     return {
-      actions: [...bridge.listActions()],
+      visualCompatibilityActions: [...visualBridge.listActions()],
       changed: {
         ok: changedHandoff.ok,
-        completedActions: changedHandoff.completedActions,
+        completedActions: changedHandoff.completedCommands,
         name: changedHandoff.snapshot.project.name,
-        dirty: changedHandoff.snapshot.projectDirty,
-        mode: changedHandoff.snapshot.mode,
-        workspace: changedHandoff.snapshot.workspace,
-        controls: changedHandoff.snapshot.controls.length
+        dirty: changedHandoff.snapshot.dirty,
+        mode: visualSnapshot.mode,
+        workspace: visualSnapshot.workspace,
+        controls: visualSnapshot.controls.length
       },
       restored: {
         ok: restoredHandoff.ok,
-        completedActions: restoredHandoff.completedActions,
+        completedActions: restoredHandoff.completedCommands,
         name: restoredHandoff.snapshot.project.name
       },
       originalName
     };
   })()`, true);
-  assert(evidence.actions.join(",") === "click,input,check,key,pointer,drag,upload,wait", "Agent bridge did not advertise its complete public action set");
-  assert(evidence.changed.ok && evidence.changed.completedActions === 3, "Agent bridge did not complete the mutation plan");
+  assert(evidence.visualCompatibilityActions.join(",") === "click,input,check,key,pointer,drag,upload,wait", "Visual compatibility bridge did not advertise its complete action set");
+  assert(evidence.changed.ok && evidence.changed.completedActions === 1, "DOM-free command session did not complete the mutation plan");
   assert(evidence.changed.name === "Agent Protocol Acceptance" && evidence.changed.dirty, "Agent handoff did not capture the changed project state");
   assert(evidence.changed.mode === "edit" && evidence.changed.workspace.length > 0 && evidence.changed.controls > 10, "Agent handoff snapshot omitted editor context");
   assert(evidence.restored.ok && evidence.restored.completedActions === 1 && evidence.restored.name !== evidence.changed.name, "Agent bridge did not restore the project through its semantic undo action");
-  return { name: "typed agent action plans return explicit CDP handoffs", passed: true, evidence };
+  return { name: "DOM-free commands and browser UI share one authoritative session", passed: true, evidence };
 }
 
 async function removeChromeProfile(profileDir: string) {

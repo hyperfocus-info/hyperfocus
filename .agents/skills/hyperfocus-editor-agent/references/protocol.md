@@ -1,6 +1,8 @@
-# Editor agent protocol
+# Visual editor compatibility protocol
 
-The browser exposes `globalThis.__hyperfocusEditorAgent` after editor startup.
+Use this protocol only when the task requires visual controls, canvas gestures, browser downloads, runtime interaction, accessibility inspection, screenshots, or recordings. Normal project inspection and mutation should use the DOM-free command session documented in [commands.md](commands.md).
+
+The browser exposes `globalThis.__hyperfocusEditorAgent` after editor startup. This compatibility bridge performs UI actions and returns browser-context handoffs.
 
 ## API
 

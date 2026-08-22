@@ -2724,6 +2724,7 @@ globalThis.__hyperfocusEditorAgent = createEditorAgentBridge({
   getProject: () => editorShell!.project,
   isReady: () => editorAutomation.ready,
 });
+globalThis.__hyperfocusEditorCommands = editorShell.commands;
 
 function resolvePlayableActions(project: EditorProject, bindings: ReadonlySet<string>) {
   const actions = new Set<string>();
@@ -2743,6 +2744,7 @@ void initializeKernels().finally(() => {
 
 window.addEventListener("pagehide", () => {
   globalThis.__hyperfocusEditorAgent = undefined;
+  globalThis.__hyperfocusEditorCommands = undefined;
   keyboard.dispose();
   stageDelegation.dispose();
   fftAudioElement?.pause();

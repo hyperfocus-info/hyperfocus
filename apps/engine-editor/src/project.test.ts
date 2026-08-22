@@ -8,6 +8,12 @@ describe("editor project model", () => {
     expect(project.tilemap.values).toHaveLength(160);
   });
 
+  test("opening a current project does not fabricate a new modification time", () => {
+    const project = createDefaultProject("Stable open");
+    const updatedAt = project.updatedAt;
+    expect(migrateProject(JSON.parse(stableProjectJson(project))).updatedAt).toBe(updatedAt);
+  });
+
   test("tracks undo, redo, and saved state", () => {
     const history = new ProjectHistory(createDefaultProject());
     history.transact("Rename", (project) => { project.name = "Changed"; });

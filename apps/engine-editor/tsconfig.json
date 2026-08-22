@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "paths": {
+      "@hyperfocus/engine/*": ["../../engine/src/*"],
       "@hyperfocus/ai-core": ["../../packages/ai-core/src/index.ts"],
       "@hyperfocus/ui": ["../../packages/ui/src/index.ts"],
       "@hyperfocus/workspace": ["../../packages/workspace/src/index.ts"]

@@ -46,7 +46,7 @@ PowerShell installations that block `bun.ps1` can use `bun.cmd` for the same com
 
 The editor is fully usable without AI. Its AI panel connects on demand to a local harness (default `http://127.0.0.1:8787`), renders shared UI locally, and sends typed commands to the active harness project/thread. Credentials and runtime state never move into the editor.
 
-Agents can operate the same editor surface through the typed `__hyperfocusEditorAgent` browser bridge or `hyperfocus-editor agent` CLI. Plans return explicit JSON handoffs rather than relying on hidden state. Project-local custom libraries are managed through `hyperfocus-editor deps`, a thin no-shell wrapper over Bun's add, remove, install, and dependency-list operations. See [the editor guide](apps/engine-editor/README.md) and the bundled `hyperfocus-editor-agent` skill.
+Agents operate canonical projects through the DOM-free `EditorCommandSession`, either in-process with `hyperfocus-editor agent --project` or through the loopback HTTP API. The browser UI uses that same validated state/history authority; CDP is reserved for visual and runtime verification. Plans return explicit JSON handoffs rather than relying on hidden state. Project-local custom libraries are managed through `hyperfocus-editor deps`, a thin no-shell wrapper over Bun's add, remove, install, and dependency-list operations. See [the editor guide](apps/engine-editor/README.md) and the bundled `hyperfocus-editor-agent` skill.
 
 ## License
 

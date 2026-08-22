@@ -12,15 +12,22 @@ Open `http://127.0.0.1:8796`.
 
 ## Agentic operation
 
-The editor exposes `globalThis.__hyperfocusEditorAgent`, a typed browser contract for semantic clicks, fields, checkboxes, keyboard and pointer input, drag-and-drop, file uploads, snapshots, and explicit handoffs. Every scripted plan stops on its first failure and returns current project, mode, workspace, selection, dirty state, visible controls, action results, and unresolved work.
+Project automation is DOM-free. `EditorCommandSession` owns the same validated project state and history used by the browser shell, while the direct CLI and loopback API host it against the canonical filesystem pair. Agents can inspect, patch, replace, create starters, import/remove binary assets, and persist projects without starting Chromium.
 
-Attach the packaged driver to a Chromium remote-debugging endpoint. Omit `--plan` for a read-only snapshot:
+Omit `--plan` for a read-only canonical snapshot, or run a command plan and persist it through the engine's crash-safe canonical pair replacement:
 
 ```powershell
-bun apps/engine-editor/cli.ts agent --cdp http://127.0.0.1:9222 --url http://127.0.0.1:8796 --plan plan.json --out handoff.json
+bun apps/engine-editor/cli.ts agent --project C:\path\to\game --out before.json
+bun apps/engine-editor/cli.ts agent --project C:\path\to\game --plan commands.json --out handoff.json
 ```
 
-The bundled `hyperfocus-editor-agent` skill documents the plan schema and observe-act-verify-handoff workflow. If a user-facing editor operation cannot be expressed through the protocol, the operation is not considered agent-ready; add a typed action and test rather than depending on private globals.
+The local server exposes the same host through `GET /api/agent/v1/project` and `POST /api/agent/v1/commands`. The API is loopback-only, rejects cross-origin browser requests, serializes writes per project root, and uses the engine's crash-safe canonical pair replacement:
+
+```powershell
+bun apps/engine-editor/cli.ts agent --api http://127.0.0.1:8796 --project C:\path\to\game --plan commands.json
+```
+
+The browser also exposes `globalThis.__hyperfocusEditorCommands` for an attached client. The older `__hyperfocusEditorAgent` UI-action bridge and `--cdp` transport remain only for visual controls, canvas/runtime interaction, screenshots, and end-to-end verification. The bundled `hyperfocus-editor-agent` skill documents both boundaries and the explicit handoff format.
 
 ## Custom Bun dependencies
 

@@ -12,9 +12,14 @@
     "cli.ts",
     "editor-cli.ts",
     "agent-driver.ts",
+    "editor-agent-api.ts",
+    "headless-editor.ts",
     "bun-dependencies.ts",
     "server.ts",
     "server-utils.ts",
+    "src/editor-command-session.ts",
+    "src/project.ts",
+    "src/starter-projects.ts",
     "index.html",
     "styles.css",
     "dist",
@@ -35,6 +40,7 @@
     "prepublishOnly": "bun build.ts"
   },
   "dependencies": {
+    "@hyperfocus/engine": "workspace:*",
     "@hyperfocus/ai-core": "workspace:*",
     "@hyperfocus/ui": "workspace:*",
     "@hyperfocus/workspace": "workspace:*",

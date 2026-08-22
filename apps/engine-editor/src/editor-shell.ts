@@ -1,5 +1,4 @@
 import {
-  ProjectHistory,
   createDefaultProject,
   migrateProject,
   stableProjectJson,
@@ -8,6 +7,7 @@ import {
   type EditorComponent,
   type EditorProject,
 } from "./project.ts";
+import { EditorCommandSession } from "./editor-command-session.ts";
 import { createEditorPortableFiles, openEditorPortableFiles, type EditorPortableAsset } from "./portable-project.ts";
 import { collectPlayableBuildAssets } from "./playable-build-assets.ts";
 import { createStandalonePlayableHtml } from "./playable-build.ts";
@@ -23,7 +23,7 @@ import { validatePlayablePlatformers2D } from "../../../engine/src/project/runti
 import { auditNavigationProject2D } from "../../../engine/src/project/runtime-navigation-2d.ts";
 import { validatePlayableSaveProject2D } from "../../../engine/src/project/runtime-save-2d.ts";
 import { validatePlayableStoryProject2D } from "../../../engine/src/project/runtime-story-2d.ts";
-import { createEditorStarter, type EditorStarterId } from "./starter-projects.ts";
+import type { EditorStarterId } from "./starter-projects.ts";
 import { mountEditorShellView, type EditorCenterTab, type EditorMode } from "./editor-shell-view.tsx";
 import { mountEditorSourceSurface } from "./editor-source-surface.tsx";
 
@@ -55,6 +55,7 @@ export type EditorShellBridge = {
 
 export type EditorShell = {
   readonly project: EditorProject;
+  readonly commands: EditorCommandSession;
   commitRuntime(label: string): void;
   refreshSelection(): void;
   undo(): void;
@@ -79,7 +80,14 @@ type Editor3DDeclaration = { activeSceneId: string; scenes: Array<{ id: string; 
 
 export function createEditorShell(bridge: EditorShellBridge): EditorShell {
   const recovered = readRecovery();
-  const history = new ProjectHistory(recovered ?? createDefaultProject());
+  const history = new EditorCommandSession(recovered ?? createDefaultProject(), {
+    async putAsset(asset) {
+      const blob = new Blob([new Uint8Array(asset.bytes)], { type: asset.mimeType });
+      await storeAssetRecords([{ id: asset.id, blob }]);
+      bridge.previewAsset(asset.id, blob);
+    },
+    async removeAsset(assetId) { await removeAssetRecord(assetId); },
+  });
   let mode: EditorMode = "edit";
   let selectedCenterTab: EditorCenterTab = "project";
   let activeScriptPath = "";
@@ -216,7 +224,7 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
     if (action === "close-console") return setConsoleOpen(false);
     if (action === "toggle-sidebar") return toggleSidebar();
     if (action === "fullscreen") return toggleFullscreen();
-    if (action === "create-project") return createProjectFromForm();
+    if (action === "create-project") return void createProjectFromForm();
     if (action === "create-template") return void createProjectFromTemplate(target.dataset.template as EditorStarterId | undefined);
     if (action === "create-scene") return createScene();
     if (action === "create-entity") return createEntity();
@@ -412,9 +420,10 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
   function undo() { if (history.undo()) announce("Undid the last editor change."); }
   function redo() { if (history.redo()) announce("Redid the last editor change."); }
 
-  function createProjectFromForm() {
+  async function createProjectFromForm() {
     const name = required<HTMLInputElement>("#new-project-name", center).value.trim() || "Untitled Game";
-    history.replace(createEditorStarter("showcase", name).project, "Create showcase project");
+    const handoff = await history.execute({ requestId: uniqueId("ui"), intent: `Create showcase project ${name}`, commands: [{ type: "project.create-starter", starter: "showcase", name }] });
+    if (!handoff.ok) return showError(new Error(handoff.error ?? "Project creation failed."));
     history.markSaved();
     closeCenter();
     announce(`Created project ${name}.`);
@@ -424,18 +433,17 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
     if (!template) return;
     const input = center.querySelector<HTMLInputElement>("#new-project-name");
     const defaults: Record<EditorStarterId, string> = { pong: "Neon Pong", "blank-2d": "Untitled 2D Game", "3d-action": "Starter 3D World", showcase: "Dungeon Run" };
-    const starter = createEditorStarter(template, input?.value.trim() || defaults[template]);
     try {
-      if (starter.assets.length) await storeAssetRecords(starter.assets);
-      for (const asset of starter.assets) bridge.previewAsset(asset.id, asset.blob);
-      history.replace(starter.project, `Create ${template} starter`);
+      const name = input?.value.trim() || defaults[template];
+      const handoff = await history.execute({ requestId: uniqueId("ui"), intent: `Create ${template} starter ${name}`, commands: [{ type: "project.create-starter", starter: template, name }] });
+      if (!handoff.ok) throw new Error(handoff.error ?? "Starter creation failed.");
       history.markSaved();
       active3DEntityId = template === "3d-action" ? "actor" : "";
-      activeScriptPath = readProjectScripts(starter.project).activePath;
+      activeScriptPath = readProjectScripts(history.project).activePath;
       closeCenter();
       bridge.showWorkspace(template === "3d-action" ? "scene3d" : "stage");
       if (template === "pong") bridge.selectEntity("player-paddle");
-      announce(`Created ${starter.project.name}. Press Play whenever you are ready.`);
+      announce(`Created ${history.project.name}. Press Play whenever you are ready.`);
     } catch (error) {
       showError(error);
     }
@@ -890,6 +898,7 @@ export function createEditorShell(bridge: EditorShellBridge): EditorShell {
 
   return {
     get project() { return history.project; },
+    commands: history,
     commitRuntime,
     refreshSelection,
     undo,
@@ -1074,6 +1083,18 @@ async function storeAssetRecords(assets: readonly { id: string; blob: Blob }[]) 
     for (const asset of assets) store.put(asset.blob, asset.id);
     transaction.addEventListener("complete", () => resolve(), { once: true });
     transaction.addEventListener("abort", () => reject(transaction.error ?? new Error("Asset cache transaction was aborted.")), { once: true });
+    transaction.addEventListener("error", () => reject(transaction.error), { once: true });
+  });
+  database.close();
+}
+
+async function removeAssetRecord(assetId: string) {
+  const database = await openAssetDb();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction("assets", "readwrite");
+    transaction.objectStore("assets").delete(assetId);
+    transaction.addEventListener("complete", () => resolve(), { once: true });
+    transaction.addEventListener("abort", () => reject(transaction.error ?? new Error("Asset cache deletion was aborted.")), { once: true });
     transaction.addEventListener("error", () => reject(transaction.error), { once: true });
   });
   database.close();

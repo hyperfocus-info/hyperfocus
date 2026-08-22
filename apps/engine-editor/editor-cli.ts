@@ -1,10 +1,12 @@
 import { manageBunDependencies, type BunDependencyRequest, type DependencySection } from "./bun-dependencies.ts";
 import { runEditorAgentDriver } from "./agent-driver.ts";
+import { readEditorCommandPlan, runHeadlessEditorPlan, snapshotHeadlessEditorProject } from "./headless-editor.ts";
 
 export async function runEditorCli(args: string[]) {
   const command = args[0];
   if (!command || command === "serve" || command === "dev") {
-    await import("./server.ts");
+    const { startEditorServer } = await import("./server.ts");
+    startEditorServer();
     return;
   }
   if (command === "deps") {
@@ -14,15 +16,26 @@ export async function runEditorCli(args: string[]) {
   }
   if (command === "agent") {
     const values = parseOptions(args.slice(1));
-    validateValuedOptions(values, ["cdp", "url", "plan", "out"]);
-    if (values.positionals.length) throw new Error("agent accepts only --cdp, --url, --plan, and --out options.");
-    for (const name of values.values.keys()) if (!["cdp", "url", "plan", "out"].includes(name)) throw new Error(`Unknown agent option: --${name}`);
-    const result = await runEditorAgentDriver({
-      cdpUrl: value(values, "cdp") ?? "http://127.0.0.1:9222",
-      editorUrl: value(values, "url"),
-      planPath: value(values, "plan"),
-      outputPath: value(values, "out"),
-    });
+    validateValuedOptions(values, ["project", "api", "cdp", "url", "plan", "out"]);
+    if (values.positionals.length) throw new Error("agent accepts only named options.");
+    for (const name of values.values.keys()) if (!["project", "api", "cdp", "url", "plan", "out", "no-persist"].includes(name)) throw new Error(`Unknown agent option: --${name}`);
+    const projectRoot = value(values, "project");
+    const planPath = value(values, "plan");
+    const api = value(values, "api");
+    const cdp = value(values, "cdp");
+    if (cdp && (projectRoot || api)) throw new Error("Choose the direct project/API agent path or --cdp, not both.");
+    if (api && !projectRoot) throw new Error("--api requires --project.");
+    const result = cdp
+      ? await runEditorAgentDriver({ cdpUrl: cdp, editorUrl: value(values, "url"), planPath, outputPath: undefined })
+      : api
+        ? await runAgentApi({ api, projectRoot: projectRoot!, planPath, persist: !flag(values, "no-persist") })
+        : projectRoot
+          ? planPath
+            ? await runHeadlessEditorPlan({ projectRoot, plan: await readEditorCommandPlan(planPath), persist: !flag(values, "no-persist") })
+            : await snapshotHeadlessEditorProject(projectRoot)
+          : (() => { throw new Error("agent requires --project for direct operation, --api with --project, or --cdp for visual compatibility."); })();
+    const outputPath = value(values, "out");
+    if (outputPath) await Bun.write(outputPath, `${JSON.stringify(result, null, 2)}\n`);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
   }
@@ -70,7 +83,7 @@ function parseOptions(args: string[]): ParsedOptions {
     const [rawName, inline] = token.slice(2).split("=", 2);
     if (inline !== undefined) { parsed.values.set(rawName, inline); continue; }
     const next = args[index + 1];
-    if (next && !next.startsWith("--") && ["project", "cdp", "url", "plan", "out"].includes(rawName)) { parsed.values.set(rawName, next); index += 1; }
+    if (next && !next.startsWith("--") && ["project", "api", "cdp", "url", "plan", "out"].includes(rawName)) { parsed.values.set(rawName, next); index += 1; }
     else parsed.values.set(rawName, true);
   }
   return parsed;
@@ -87,6 +100,20 @@ function validateValuedOptions(options: ParsedOptions, names: readonly string[])
   for (const name of names) if (options.values.get(name) === true) throw new Error(`--${name} requires a value.`);
 }
 
+async function runAgentApi(options: { api: string; projectRoot: string; planPath?: string; persist: boolean }) {
+  const base = options.api.replace(/\/$/, "");
+  const response = options.planPath
+    ? await fetch(`${base}/api/agent/v1/commands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectRoot: options.projectRoot, plan: await readEditorCommandPlan(options.planPath), persist: options.persist }),
+    })
+    : await fetch(`${base}/api/agent/v1/project?root=${encodeURIComponent(options.projectRoot)}`);
+  const result = await response.json() as unknown;
+  if (!response.ok && response.status !== 422) throw new Error(`Editor agent API failed with HTTP ${response.status}: ${JSON.stringify(result)}`);
+  return result;
+}
+
 function helpText() {
-  return `Hyperfocus Editor\n\n  hyperfocus-editor serve\n  hyperfocus-editor deps list --project <directory>\n  hyperfocus-editor deps install --project <directory> [--frozen]\n  hyperfocus-editor deps add <package...> --project <directory> [--dev|--optional|--peer] [--exact] [--trust]\n  hyperfocus-editor deps remove <package...> --project <directory>\n  hyperfocus-editor agent [--cdp http://127.0.0.1:9222] [--url http://127.0.0.1:8796] [--plan plan.json|-] [--out handoff.json]\n`;
+  return `Hyperfocus Editor\n\n  hyperfocus-editor serve\n  hyperfocus-editor deps list --project <directory>\n  hyperfocus-editor deps install --project <directory> [--frozen]\n  hyperfocus-editor deps add <package...> --project <directory> [--dev|--optional|--peer] [--exact] [--trust]\n  hyperfocus-editor deps remove <package...> --project <directory>\n  hyperfocus-editor agent --project <directory> [--plan commands.json|-] [--no-persist] [--out handoff.json]\n  hyperfocus-editor agent --api http://127.0.0.1:8796 --project <directory> [--plan commands.json|-]\n  hyperfocus-editor agent --cdp http://127.0.0.1:9222 [--url http://127.0.0.1:8796] [--plan ui-actions.json|-]\n`;
 }

@@ -23,3 +23,10 @@ harness ───────┬─> @hyperfocus/ai-core
 
 The editor's AI connection is graceful degradation. Portable artifacts do not embed a Bun harness server, do not require network access, and do not duplicate provider credentials.
 
+## Editor command boundary
+
+`EditorCommandSession` is the DOM-free authority for editor project state, validation, history, binary-asset commands, snapshots, and explicit handoffs. The browser shell owns presentation and calls that session; it does not define a second mutation model.
+
+Agents normally use the same command session through the in-process `hyperfocus-editor agent --project` command or the editor server's loopback HTTP API. The filesystem host verifies the canonical project pair before executing a plan and uses the engine's crash-safe directory replacement when persisting it. Project writes are serialized by resolved project root.
+
+CDP and the visual compatibility bridge are outside the project command boundary. They exist for canvas gestures, runtime interaction, downloads, accessibility, screenshots, and end-to-end verification—not as the primary agent transport.

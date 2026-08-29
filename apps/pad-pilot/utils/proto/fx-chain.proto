@@ -1,0 +1,482 @@
+syntax = "proto3";
+
+package padpilot.fx;
+
+option optimize_for = LITE_RUNTIME;
+
+enum FxNodeType {
+  FX_NODE_TYPE_UNSPECIFIED = 0;
+  FX_NODE_TYPE_CONVOLVER = 1;
+  FX_NODE_TYPE_DELAY = 2;
+  FX_NODE_TYPE_REVERB = 3;
+  FX_NODE_TYPE_CHORUS = 4;
+  FX_NODE_TYPE_EQ = 5;
+  FX_NODE_TYPE_COMPRESSOR = 6;
+  FX_NODE_TYPE_TRANSIENT_SHAPER = 7;
+  FX_NODE_TYPE_NOISE_GATE = 8;
+  FX_NODE_TYPE_TAPE_SATURATION = 9;
+  FX_NODE_TYPE_BITCRUSHER = 10;
+  FX_NODE_TYPE_EXCITER = 11;
+  FX_NODE_TYPE_PHASER = 12;
+  FX_NODE_TYPE_AUTO_PAN = 13;
+  FX_NODE_TYPE_ROTARY_SPEAKER = 14;
+  FX_NODE_TYPE_STEREO_IMAGER = 15;
+  FX_NODE_TYPE_PITCH_DRIFT = 16;
+  FX_NODE_TYPE_REVERSE = 17;
+  FX_NODE_TYPE_TREMOLO = 18;
+  FX_NODE_TYPE_SATURATION = 19;
+}
+
+message NodeParamState {
+  uint32 parameter_id = 1;
+  string label = 2;
+  float value = 3;
+  float min_value = 4;
+  float max_value = 5;
+  float default_value = 6;
+  string unit = 7;
+}
+
+message CompressorBandConfig {
+  float threshold_db = 1;
+  float ratio = 2;
+}
+
+message CompressorNodeConfig {
+  float threshold_db = 1;
+  float ratio = 2;
+  float makeup_db = 3;
+  float attack_ms = 4;
+  float release_ms = 5;
+  float knee_db = 6;
+  float sidechain_hpf_hz = 7;
+  float lookahead_ms = 8;
+  bool multiband_enabled = 9;
+  CompressorBandConfig low_band = 10;
+  CompressorBandConfig mid_band = 11;
+  CompressorBandConfig high_band = 12;
+}
+
+message EqBandConfig {
+  float frequency_hz = 1;
+  float q = 2;
+  float gain_db = 3;
+  string type = 4;
+  bool enabled = 5;
+}
+
+message EqNodeConfig {
+  float low_shelf_gain_db = 1;
+  float high_shelf_gain_db = 2;
+  float master_gain_db = 3;
+  repeated EqBandConfig bands = 4;
+  float low_shelf_frequency_hz = 5;
+  float high_shelf_frequency_hz = 6;
+}
+
+message TransientShaperNodeConfig {
+  float attack = 1;
+  float sustain = 2;
+  bool soft_clip = 3;
+  float gain_db = 4;
+  float sensitivity = 5;
+}
+
+message NoiseGateNodeConfig {
+  float threshold_db = 1;
+  float range_db = 2;
+  float attack_ms = 3;
+  float hold_ms = 4;
+  float release_ms = 5;
+  bool sidechain_listen = 6;
+}
+
+message TempoSyncState {
+  bool enabled = 1;
+  uint32 division_index = 2;
+}
+
+message DelayNodeConfig {
+  float time = 1;
+  float feedback = 2;
+  float focus_mix = 3;
+  bool grain_mode = 4;
+  float grain_size = 5;
+  float grain_density = 6;
+  float grain_spray = 7;
+  float grain_pitch_shift = 8;
+  TempoSyncState time_sync = 9;
+  float low_cut_hz = 10;
+  float high_cut_hz = 11;
+  float width = 12;
+  float saturation = 13;
+  string character = 14;
+}
+
+message ReverseNodeConfig {
+  float window_ms = 1;
+  float pitch_semitones = 2;
+  float forward_mix = 3;
+  float crossfade_ms = 4;
+}
+
+message TremoloNodeConfig {
+  float rate_hz = 1;
+  float depth = 2;
+  string lfo_shape = 3;
+  float stereo_phase_offset = 4;
+  float smoothing = 5;
+  TempoSyncState rate_sync = 6;
+}
+
+message SaturationNodeConfig {
+  float drive = 1;
+  float tone = 2;
+  float bias = 3;
+  string character = 4;
+  float output_gain_db = 5;
+}
+
+message ReverbNodeConfig {
+  string mode = 1;
+  float decay = 2;
+  float size = 3;
+  float focus_mix = 4;
+  float damping = 5;
+  float pre_delay_ms = 6;
+  float modulation_speed_hz = 7;
+  float modulation_depth = 8;
+  float shimmer_feedback = 9;
+  TempoSyncState pre_delay_sync = 10;
+  TempoSyncState modulation_speed_sync = 11;
+}
+
+message ConvolverNodeConfig {
+  string ir_id = 1;
+  float blend = 2;
+  float ir_stretch = 3;
+  bool reverse = 4;
+  float start_trim = 5;
+  float end_trim = 6;
+  float high_pass_hz = 7;
+  float low_pass_hz = 8;
+  string ir_source_path = 9;
+  string ir_source_name = 10;
+}
+
+message TapeSaturationNodeConfig {
+  float drive = 1;
+  float warmth = 2;
+  float tape_speed_ips = 3;
+  float wow_flutter = 4;
+  float hysteresis = 5;
+  float bias = 6;
+}
+
+message BitcrusherNodeConfig {
+  float bits = 1;
+  float downsample = 2;
+  float jitter = 3;
+  float post_filter = 4;
+  float wet_dry = 5;
+}
+
+message ExciterNodeConfig {
+  float harmonic_drive = 1;
+  float mix = 2;
+  string frequency_band_solo = 3;
+  float odd_even_balance = 4;
+}
+
+message ChorusNodeConfig {
+  float rate_hz = 1;
+  float depth = 2;
+  uint32 voices = 3;
+  float width = 4;
+  float voice_delay_ms = 5;
+  float feedback = 6;
+  TempoSyncState rate_sync = 7;
+  TempoSyncState voice_delay_sync = 8;
+}
+
+message PhaserNodeConfig {
+  float speed_hz = 1;
+  float center_frequency_hz = 2;
+  uint32 stages = 3;
+  float resonance = 4;
+  float stereo_phase_offset = 5;
+  TempoSyncState speed_sync = 6;
+}
+
+message AutoPanNodeConfig {
+  float rate_hz = 1;
+  float amount = 2;
+  string lfo_shape = 3;
+  float phase_offset = 4;
+  float smoothing = 5;
+  TempoSyncState rate_sync = 6;
+}
+
+message RotarySpeakerNodeConfig {
+  bool fast = 1;
+  float drive = 2;
+  float horn_drum_balance = 3;
+  float mic_distance = 4;
+  float acceleration = 5;
+}
+
+message StereoImagerNodeConfig {
+  float width_percent = 1;
+  float bass_mono_crossover_hz = 2;
+  float stereo_balance = 3;
+  float pan = 4;
+}
+
+message PitchDriftNodeConfig {
+  float depth = 1;
+  float rate_hz = 2;
+  string drift_shape = 3;
+  float stereo_offset = 4;
+  float range_cents = 5;
+  TempoSyncState rate_sync = 6;
+}
+
+message NodeState {
+  uint32 id = 1;
+  FxNodeType type = 2;
+  string name = 3;
+  uint32 order = 4;
+  bool bypassed = 5;
+  repeated NodeParamState legacy_params = 6;
+  bool muted = 7;
+  bool solo = 8;
+  float mix = 9;
+  string selected_preset_id = 10;
+  oneof config {
+    CompressorNodeConfig compressor_config = 11;
+    EqNodeConfig eq_config = 12;
+    TransientShaperNodeConfig transient_shaper_config = 13;
+    NoiseGateNodeConfig noise_gate_config = 14;
+    DelayNodeConfig delay_config = 15;
+    ReverbNodeConfig reverb_config = 16;
+    ConvolverNodeConfig convolver_config = 17;
+    TapeSaturationNodeConfig tape_saturation_config = 18;
+    BitcrusherNodeConfig bitcrusher_config = 19;
+    ExciterNodeConfig exciter_config = 20;
+    ChorusNodeConfig chorus_config = 21;
+    PhaserNodeConfig phaser_config = 22;
+    AutoPanNodeConfig auto_pan_config = 23;
+    RotarySpeakerNodeConfig rotary_speaker_config = 24;
+    StereoImagerNodeConfig stereo_imager_config = 25;
+    PitchDriftNodeConfig pitch_drift_config = 26;
+    ReverseNodeConfig reverse_config = 27;
+    TremoloNodeConfig tremolo_config = 28;
+    SaturationNodeConfig saturation_config = 29;
+  }
+}
+
+message ChainState {
+  uint32 id = 1;
+  string name = 2;
+  uint32 order = 3;
+  float mix = 4;
+  bool muted = 5;
+  bool solo = 6;
+  repeated NodeState nodes = 7;
+}
+
+message MasterState {
+  float input_gain_db = 1;
+  float output_gain_db = 2;
+  float wet_dry = 3;
+  float gain_reduction_db = 4;
+}
+
+message FxChainState {
+  uint32 schema_version = 1;
+  uint64 revision = 2;
+  string selected_preset_id = 3;
+  MasterState master = 4;
+  repeated ChainState chains = 5;
+  repeated FxModulatorState modulators = 6;
+  repeated FxModulationRoute modulation_routes = 7;
+}
+
+message FxModulatorState {
+  uint32 id = 1;
+  bool enabled = 2;
+  string shape = 3;
+  float rate_hz = 4;
+  TempoSyncState rate_sync = 5;
+  float phase_offset = 6;
+}
+
+message FxModulationRoute {
+  uint32 modulator_id = 1;
+  uint32 chain_id = 2;
+  uint32 node_id = 3;
+  uint32 parameter_id = 4;
+  float depth = 5;
+  float min_value = 6;
+  float max_value = 7;
+  float base_value = 8;
+  bool enabled = 9;
+}
+
+message PresetFile {
+  string id = 1;
+  string module_id = 2;
+  string name = 3;
+  bytes state = 4;
+  uint32 schema_version = 5;
+}
+
+message ChainPresetFile {
+  string id = 1;
+  string chain_id = 2;
+  string name = 3;
+  ChainState chain = 4;
+  uint32 schema_version = 5;
+}
+
+message NodePresetFile {
+  string id = 1;
+  FxNodeType node_type = 2;
+  string name = 3;
+  NodeState node = 4;
+  uint32 schema_version = 5;
+}
+
+message MeterTap {
+  uint32 chain_id = 1;
+  uint32 node_id = 2;
+  float input_peak_db = 3;
+  float output_peak_db = 4;
+  repeated float waveform = 5;
+  float input_peak_db_left = 6;
+  float input_peak_db_right = 7;
+  float output_peak_db_left = 8;
+  float output_peak_db_right = 9;
+}
+
+message CompressorVisualizerPayload {
+  repeated float input_curve = 1;
+  repeated float gain_curve = 2;
+  bool expansion_mode = 3;
+  float low_gain_reduction_db = 4;
+  float mid_gain_reduction_db = 5;
+  float high_gain_reduction_db = 6;
+}
+
+message EqVisualizerPayload {
+  repeated float spectrum_bins = 1;
+  repeated float response_curve = 2;
+}
+
+message TransientShaperVisualizerPayload {
+  repeated float original_envelope = 1;
+  repeated float shaped_envelope = 2;
+}
+
+message NoiseGateVisualizerPayload {
+  bool gate_open = 1;
+  float signal_level_db = 2;
+  float threshold_db = 3;
+}
+
+message DelayVisualizerPayload {
+  repeated float tap_positions = 1;
+  repeated float tap_levels = 2;
+  bool grain_mode = 3;
+}
+
+message ReverbVisualizerPayload {
+  float diffusion = 1;
+  float texture = 2;
+  float shimmer = 3;
+}
+
+message ConvolverVisualizerPayload {
+  repeated float ir_waveform = 1;
+}
+
+message TapeSaturationVisualizerPayload {
+  float reel_rotation = 1;
+  float flux = 2;
+}
+
+message BitcrusherVisualizerPayload {
+  repeated float aliased_waveform = 1;
+  float stair_step_amount = 2;
+}
+
+message ExciterVisualizerPayload {
+  repeated float generated_harmonics = 1;
+}
+
+message ChorusVisualizerPayload {
+  repeated float phase_offsets = 1;
+}
+
+message PhaserVisualizerPayload {
+  repeated float comb_response = 1;
+}
+
+message AutoPanVisualizerPayload {
+  float pan_position = 1;
+}
+
+message RotarySpeakerVisualizerPayload {
+  float horn_angle = 1;
+  float drum_angle = 2;
+}
+
+message StereoImagerVisualizerPayload {
+  repeated float vectorscope_points = 1;
+}
+
+message PitchDriftVisualizerPayload {
+  repeated float drift_cents = 1;
+}
+
+message NodeVisualizerFrame {
+  uint32 chain_id = 1;
+  uint32 node_id = 2;
+  float input_peak_db = 3;
+  float output_peak_db = 4;
+  float input_peak_db_left = 5;
+  float input_peak_db_right = 6;
+  float output_peak_db_left = 7;
+  float output_peak_db_right = 8;
+  oneof payload {
+    CompressorVisualizerPayload compressor = 9;
+    EqVisualizerPayload eq = 10;
+    TransientShaperVisualizerPayload transient_shaper = 11;
+    NoiseGateVisualizerPayload noise_gate = 12;
+    DelayVisualizerPayload delay = 13;
+    ReverbVisualizerPayload reverb = 14;
+    ConvolverVisualizerPayload convolver = 15;
+    TapeSaturationVisualizerPayload tape_saturation = 16;
+    BitcrusherVisualizerPayload bitcrusher = 17;
+    ExciterVisualizerPayload exciter = 18;
+    ChorusVisualizerPayload chorus = 19;
+    PhaserVisualizerPayload phaser = 20;
+    AutoPanVisualizerPayload auto_pan = 21;
+    RotarySpeakerVisualizerPayload rotary_speaker = 22;
+    StereoImagerVisualizerPayload stereo_imager = 23;
+    PitchDriftVisualizerPayload pitch_drift = 24;
+  }
+}
+
+message VisualizerFrame {
+  uint64 sequence = 1;
+  float master_input_peak_db = 2;
+  float master_output_peak_db = 3;
+  float gain_reduction_db = 4;
+  repeated MeterTap taps = 5;
+  float master_input_peak_db_left = 6;
+  float master_input_peak_db_right = 7;
+  float master_output_peak_db_left = 8;
+  float master_output_peak_db_right = 9;
+  repeated NodeVisualizerFrame node_frames = 10;
+}

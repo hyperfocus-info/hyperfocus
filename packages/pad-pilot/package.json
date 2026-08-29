@@ -1,0 +1,29 @@
+{
+  "name": "@hyperfocus/pad-pilot",
+  "version": "0.0.1",
+  "description": "Portable PadPilot Module contracts, identities, schemas, and bounded runtime utilities.",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./automation-identity": "./src/automation-identity.ts",
+    "./bounded-file": "./src/bounded-file.ts",
+    "./bounded-stream": "./src/bounded-stream.ts",
+    "./factory-modules": "./src/factory-modules.ts",
+    "./file-import": "./src/file-import.ts",
+    "./marketplace-schema": "./src/marketplace-schema.ts",
+    "./module-identity": "./src/module-identity.ts",
+    "./semver": "./src/semver.ts",
+    "./subprocess": "./src/subprocess.ts",
+    "./update-signing": "./src/update-signing.ts"
+  },
+  "files": ["src", "LICENSE", "README.md"],
+  "scripts": {
+    "test": "bun test ./src",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
+}

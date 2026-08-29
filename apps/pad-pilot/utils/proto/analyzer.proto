@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package padpilot.analyzer;
+
+option optimize_for = LITE_RUNTIME;
+
+message AnalyzerScaleMatch {
+  uint32 root_pitch_class = 1;
+  string scale_id = 2;
+  float confidence = 3;
+}
+
+message AnalyzerNoteEvent {
+  uint32 midi_note = 1;
+  uint32 start_frame = 2;
+  uint32 end_frame = 3;
+  float intensity = 4;
+  uint32 velocity = 5;
+  float mean_frequency_hz = 6;
+  uint64 event_id = 7;
+  float confidence = 8;
+  uint32 detected_midi_note = 9;
+}
+
+message AnalyzerTakeSummary {
+  uint32 min_midi_note = 1;
+  uint32 max_midi_note = 2;
+  float duration_seconds = 3;
+  float captured_bpm = 4;
+  repeated AnalyzerScaleMatch top_matches = 5;
+  uint32 frame_count = 6;
+}
+
+message AnalyzerModuleState {
+  uint32 schema_version = 1;
+  uint64 revision = 2;
+  bool record_enabled = 3;
+  float tuning_hz = 4;
+  AnalyzerTakeSummary take_summary = 5;
+  repeated AnalyzerNoteEvent note_events = 6;
+  float detection_sensitivity = 7;
+}
+
+message AnalyzerFrame {
+  uint64 sequence = 1;
+  bool recording = 2;
+  float tuning_hz = 3;
+  float duration_seconds = 4;
+  float current_level = 5;
+  uint32 frame_count = 6;
+  uint32 min_midi_note = 7;
+  uint32 max_midi_note = 8;
+  repeated float lane_energies = 9;
+  AnalyzerScaleMatch primary_match = 10;
+  repeated AnalyzerScaleMatch alternate_matches = 11;
+  float detection_sensitivity = 12;
+}
+

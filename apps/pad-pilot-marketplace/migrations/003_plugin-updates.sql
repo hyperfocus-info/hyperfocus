@@ -1,0 +1,10 @@
+ALTER TABLE plugin_releases ADD COLUMN release_notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE plugin_releases ADD COLUMN artifact_kind TEXT NOT NULL DEFAULT 'directory_patch';
+ALTER TABLE plugin_releases ADD COLUMN artifact_path TEXT NOT NULL DEFAULT '';
+ALTER TABLE plugin_releases ADD COLUMN artifact_checksum_sha256 TEXT NOT NULL DEFAULT '';
+ALTER TABLE plugin_releases ADD COLUMN artifact_size_bytes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE plugin_releases ADD COLUMN manifest_path TEXT NOT NULL DEFAULT '';
+ALTER TABLE plugin_releases ADD COLUMN manifest_checksum_sha256 TEXT NOT NULL DEFAULT '';
+ALTER TABLE plugin_releases ADD COLUMN base_version_min TEXT;
+ALTER TABLE plugin_releases ADD COLUMN base_version_max TEXT;
+ALTER TABLE plugin_releases ADD COLUMN signature TEXT NOT NULL DEFAULT '';

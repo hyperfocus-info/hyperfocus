@@ -1,0 +1,132 @@
+.root {
+  --pp-heatmap-glow: rgba(255, 204, 84, 0.45);
+  --pp-heatmap-grid: rgba(162, 238, 173, 0.16);
+  display: flex;
+  min-height: 22rem;
+  width: 100%;
+}
+
+.viewport {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  border: 0.18rem solid rgba(196, 232, 193, 0.22);
+  border-radius: 1.6rem;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 244, 188, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(13, 20, 16, 0.96), rgba(2, 9, 6, 0.98));
+  box-shadow:
+    inset 0 0 0 0.18rem rgba(255, 255, 255, 0.04),
+    inset 0 1.8rem 3.2rem rgba(255, 255, 255, 0.03),
+    inset 0 -2.4rem 4rem rgba(0, 0, 0, 0.44),
+    0 1.4rem 3rem rgba(0, 0, 0, 0.28);
+}
+
+.viewport::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 22%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04), transparent 10%, transparent 90%, rgba(255, 255, 255, 0.04));
+  pointer-events: none;
+}
+
+.viewport::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.15) 0, rgba(0, 0, 0, 0.15) 1px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 4.5%, rgba(146, 233, 157, 0.08) 4.5%, rgba(146, 233, 157, 0.08) 4.8%);
+  mix-blend-mode: screen;
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.lanes {
+  position: absolute;
+  inset: 0;
+}
+
+.lane-button {
+  position: absolute;
+  inset-inline: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding-inline: 0.85rem;
+  border: 0;
+  background:
+    linear-gradient(90deg, rgba(203, 226, 201, 0.08), transparent 14%),
+    linear-gradient(180deg, rgba(168, 234, 174, calc(var(--pp-lane-energy) * 0.17)), rgba(168, 234, 174, 0.02));
+  box-shadow: inset 0 -1px 0 var(--pp-heatmap-grid);
+  color: rgba(216, 241, 204, 0.74);
+  cursor: crosshair;
+  outline: none;
+}
+
+.lane-button:hover,
+.lane-button:focus-visible {
+  background:
+    linear-gradient(90deg, rgba(255, 205, 95, 0.14), rgba(255, 205, 95, 0.04) 30%, transparent 60%),
+    linear-gradient(180deg, rgba(193, 245, 179, 0.2), rgba(193, 245, 179, 0.04));
+  color: rgba(255, 243, 197, 0.96);
+}
+
+.lane-label {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+.events {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.event {
+  position: absolute;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(255, 169, 45, 0.16), rgba(255, 225, 104, 0.7), rgba(137, 244, 136, 0.22));
+  box-shadow:
+    0 0 1.1rem rgba(255, 199, 74, calc(var(--pp-event-intensity) * 0.72)),
+    inset 0 0 0.6rem rgba(255, 250, 196, 0.26);
+  opacity: calc(0.28 + var(--pp-event-intensity) * 0.72);
+}
+
+.readout {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.9rem;
+  background: rgba(6, 10, 8, 0.72);
+  box-shadow: 0 0 1.4rem rgba(0, 0, 0, 0.28);
+  color: #ffd773;
+  font-family: "Consolas", "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.readout strong {
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+}
+
+.readout span {
+  font-size: 0.72rem;
+  opacity: 0.82;
+}
+
+.readout-placeholder {
+  color: rgba(255, 239, 180, 0.72);
+}

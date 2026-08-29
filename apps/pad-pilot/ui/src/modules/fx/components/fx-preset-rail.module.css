@@ -1,0 +1,125 @@
+.rail,
+.preset-list,
+.preset-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-button {
+  min-height: 28px;
+  padding: 5px 8px;
+  font-size: 0.68rem;
+}
+
+.rail {
+  width: 248px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(79, 164, 192, 0.24);
+  background:
+    linear-gradient(180deg, rgba(27, 35, 44, 0.94), rgba(7, 14, 22, 0.98)),
+    radial-gradient(circle at top left, rgba(77, 233, 255, 0.12), transparent 34%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #dff8ff;
+}
+
+.status-row strong {
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.preset-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.action-button {
+  min-width: 34px;
+  width: 34px;
+  padding: 0;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.search-combobox {
+  width: 100%;
+}
+
+.status-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
+
+.status-pill[data-state="dirty"] {
+  background: rgba(129, 45, 45, 0.56);
+  color: #ffd9c7;
+}
+
+.status-pill[data-state="clean"] {
+  background: rgba(37, 93, 76, 0.5);
+  color: #c0ffe7;
+}
+
+.preset-list {
+  min-height: 180px;
+  overflow: auto;
+}
+
+.preset-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(30, 37, 45, 0.86), rgba(12, 19, 26, 0.94));
+  color: #e7fbff;
+  cursor: pointer;
+}
+
+.preset-item.is-active {
+  border-color: rgba(77, 233, 255, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(77, 233, 255, 0.14), 0 0 16px rgba(77, 233, 255, 0.08);
+}
+
+.preset-copy small {
+  color: rgba(197, 226, 236, 0.6);
+}
+
+.preset-icons {
+  color: #70f7ff;
+}
+
+.empty-state {
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(197, 226, 236, 0.7);
+}
+
+@media (max-width: 1180px) {
+  .rail {
+    width: 100%;
+  }
+}

@@ -1,0 +1,149 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 24px;
+  align-items: center;
+}
+
+.root[data-orientation="horizontal"] {
+  min-width: 120px;
+}
+
+.track {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: stretch;
+  width: 24px;
+  min-height: 160px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(132, 177, 215, 0.28);
+  background: linear-gradient(
+    180deg,
+    rgba(9, 17, 29, 0.94),
+    rgba(6, 11, 19, 0.96)
+  );
+}
+
+.skin-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.14;
+  pointer-events: none;
+}
+
+.root[data-orientation="horizontal"] .track {
+  width: 100%;
+  min-height: 18px;
+  align-items: stretch;
+}
+
+.channels {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+}
+
+.root[data-orientation="horizontal"] .channels {
+  flex-direction: column;
+}
+
+.channel {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  justify-content: stretch;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.root[data-orientation="horizontal"] .channel {
+  align-items: stretch;
+}
+
+.fill {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    #ff5d5d 0%,
+    #f5da58 28%,
+    #49e28f 55%,
+    #35b8ff 100%
+  );
+  box-shadow: 0 0 16px rgba(53, 184, 255, 0.24);
+}
+
+.root[data-orientation="horizontal"] .fill {
+  top: 0;
+  bottom: 0;
+}
+
+.segments {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 2px;
+}
+
+.root[data-orientation="horizontal"] .segments {
+  flex-direction: row;
+}
+
+.segment {
+  flex: 1 1 auto;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.channel-label {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  z-index: 3;
+  transform: translateX(-50%);
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  color: rgba(228, 240, 255, 0.82);
+  pointer-events: none;
+}
+
+.root[data-orientation="horizontal"] .channel-label {
+  top: 50%;
+  left: 6px;
+  transform: translateY(-50%);
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: rgba(220, 235, 255, 0.78);
+}
+
+.readout {
+  font-size: 10px;
+  color: #8ee8ff;
+}

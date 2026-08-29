@@ -1,0 +1,14 @@
+diff --git a/modules/juce_audio_utils/players/juce_AudioProcessorPlayer.cpp b/modules/juce_audio_utils/players/juce_AudioProcessorPlayer.cpp
+--- a/modules/juce_audio_utils/players/juce_AudioProcessorPlayer.cpp
++++ b/modules/juce_audio_utils/players/juce_AudioProcessorPlayer.cpp
+@@ -383,6 +383,10 @@ void AudioProcessorPlayer::audioDeviceAboutToStart (AudioIODevice* const device)
+ 
+     resizeChannels();
+ 
++    // Match the plug-in wrappers: processors may emit bounded MIDI from processBlock,
++    // so reserve before the Audio Thread starts rather than on the first output event.
++    incomingMidi.ensureSize (2048);
++
+     messageCollector.reset (sampleRate);
+ 
+     currentWorkgroup.reset();

@@ -13,6 +13,11 @@ audit/
 coverage/
 apps/engine-editor/*.log
 apps/engine-editor/wasm/
+apps/pad-pilot/build/
+apps/pad-pilot/ui/dist/
+apps/pad-pilot/.padpilot-*
+apps/pad-pilot/**/*.padpilot-coordination.sqlite
+apps/pad-pilot-marketplace/data/
 packages/engine/browser/
 packages/engine/wasm/*.wat
 

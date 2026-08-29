@@ -1,20 +1,24 @@
 # Hyperfocus
 
-Hyperfocus is a local-first Bun monorepo for an engine, an engine editor, an AI development harness, and the reusable packages beneath both applications.
+Hyperfocus is a local-first Bun monorepo for an engine, editor, AI development
+harness, PadPilot VST3 platform, marketplace service, and their reusable packages.
 
 ```text
 hyperfocus/
-├── apps/
-│   ├── engine-editor/
-│   └── harness/
-├── packages/
-│   ├── ai-core/
-│   ├── desktop-runtime/
-│   ├── engine/
-│   ├── ui/
-│   └── workspace/
-├── docs/
-└── package.json
+|-- apps/
+|   |-- engine-editor/
+|   |-- harness/
+|   |-- pad-pilot/
+|   `-- pad-pilot-marketplace/
+|-- packages/
+|   |-- ai-core/
+|   |-- desktop-runtime/
+|   |-- engine/
+|   |-- pad-pilot/
+|   |-- ui/
+|   `-- workspace/
+|-- docs/
+`-- package.json
 ```
 
 The governing rule is simple: consumers install the smallest package that solves their problem, while first-party applications may compose several packages from this repository.
@@ -26,8 +30,11 @@ The governing rule is simple: consumers install the smallest package that solves
 - `@hyperfocus/workspace` defines safe project, filesystem, watch, and task interfaces without choosing a host implementation.
 - `@hyperfocus/desktop-runtime` provides framework-neutral local-server, protocol-launch, shutdown-lease, and update-check primitives.
 - `@hyperfocus/ui` owns Solid/StyleX presentation: primitives, composer, transcript, terminal surface, workbench, and source editor.
+- `@hyperfocus/pad-pilot` owns portable Module/capability identities, schemas, limits, and bounded utilities.
 - `hyperfocus-editor` is the portable editor application and future `bunx hyperfocus-editor` package.
 - `@hyperfocus/harness` owns runtime execution, credentials, SQLite persistence, terminal sessions, and agent state.
+- `@hyperfocus/pad-pilot-app` owns the JUCE VST3/standalone host, embedded Solid UI, QuickJS runtime, factory Modules, and host validation.
+- `@hyperfocus/pad-pilot-marketplace` owns independently deployable auth, billing, SQLite, uploads, catalog, and update delivery.
 
 Use the [documentation map](docs/README.md) to load only the area relevant to the task.
 Use [documentation governance](docs/documentation-governance.md) when changing docs,
@@ -43,6 +50,7 @@ Requires Bun 1.4.0 or newer.
 bun install
 bun run dev:harness
 bun run dev:editor
+bun run dev:pad-pilot
 bun run check
 ```
 
@@ -56,4 +64,12 @@ Agents operate canonical projects through the DOM-free `EditorCommandSession`, e
 
 ## License
 
-The [Hyperfocus Source-Available Game License 2.0](LICENSE) applies to all first-party material in this repository, including the engine, editor, harness, shared packages, and all other first-party code. Materials expressly identified as third-party or governed by separate terms remain subject to their respective licenses. This is a source-available license, not an OSI-approved open-source license. The Licensor identity and royalty contact details still need to be supplied before publication; see [Licensing](docs/licensing.md).
+The [Hyperfocus Source-Available Game License 2.0](LICENSE) applies to all first-party
+engine, editor, harness, shared packages, and other material governed by the root
+license. PadPilot apps and
+`@hyperfocus/pad-pilot` retain the
+[MindOverMelee Source-Available License 1.0](apps/pad-pilot/LICENSE). Third-party
+materials remain subject to their own terms; this includes separately licensed
+third-party dependencies and assets. These are source-available licenses, not
+OSI-approved open-source licenses. Licensor identity and reporting details still
+need completion before publication; see [Licensing](docs/licensing.md).

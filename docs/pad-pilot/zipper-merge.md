@@ -1,7 +1,7 @@
 # PadPilot zipper-merge audit plan
 
-Status: planning artifact. Delete or promote after architecture decisions become
-canonical docs.
+Status: first migration slice executed on 2026-08-29. This document remains the
+canonical audit ledger and proof plan for remaining zipper slices.
 
 ## Outcome
 
@@ -10,21 +10,23 @@ its VST3 realtime, persistence, Module, Preset, marketplace, and validation
 contracts. Merge documentation, skills, and UI primitives by ownership and
 behavior—not by copying duplicate trees.
 
-No migration starts until both dirty worktrees have recoverable checkpoints.
+Both source worktrees were committed before relocation. The source repository is
+kept as a recoverable archive while Hyperfocus becomes the canonical owner.
 
-## Current evidence
+## Baseline evidence
 
-- PadPilot source: `C:\Users\MindOverMelee\pad-pilot`
-  - HEAD `a9a067770b2d01e532566c1dad381ca76e676d9f`
-  - 549 working-tree entries; tracked diff spans 287 files
-  - 770 non-build/non-dependency files
-- Hyperfocus target: `C:\Users\MindOverMelee\hyperfocus`
-  - HEAD `84f9a0a6e7cf5a22d823c573d3318ac3b76f52f8`
-  - 2,362 working-tree entries across ongoing monorepo migration
-  - 2,377 non-build/non-dependency files
-- Both use `MindOverMelee Source-Available License 1.0`; Hyperfocus extends its
-  license text/tests across every first-party app and package. Copyright,
-  third-party notice, and bundled-asset provenance still need file-level review.
+This inventory records the pre-import state used to choose the first zipper
+slice. The applied state is summarized under [Decisions applied](#decisions-applied).
+
+- PadPilot source snapshot: commit `d10dae4` in
+  `C:\Users\MindOverMelee\pad-pilot`.
+- Hyperfocus pre-import snapshot: commit `97f7934` in
+  `C:\Users\MindOverMelee\hyperfocus`.
+- PadPilot uses `MindOverMelee Source-Available License 1.0`; Hyperfocus uses
+  `Hyperfocus Source-Available Game License 2.0`. The imported PadPilot apps and
+  package retain their nested license instead of being silently relicensed.
+  Copyright, third-party notice, and bundled-asset provenance still need
+  file-level review.
 - PadPilot already uses package name `@hyperfocus/pad-pilot`, but  internal imports
   expose private source paths such as `@hyperfocus/pad-pilot/ui/src/...` through
   TypeScript aliases. Hyperfocus explicitly forbids aliases masking package
@@ -292,14 +294,14 @@ recoverable archive; no compatibility facade silently owns divergent behavior.
   release tiers while retaining strongest final gate.
 - Generated protobuf and FL fixtures creating noisy history or stale artifacts.
 
-## Decisions needed before execution
+## Decisions applied
 
-1. Baseline: checkpoint and migrate exact current dirty trees, or migrate selected
-   committed revisions only?
-2. Marketplace: separate `apps/pad-pilot-marketplace`, or one
-   `apps/pad-pilot` workspace containing both native product and service?
-3. Module SDK: publishable package boundary now, or preserve app-local API during
-   relocation and extract after parity?
-
-Recommended defaults: checkpoint exact current trees; separate marketplace app;
-relocate first, then extract a publishable Module SDK from verified consumers.
+1. Exact local state was committed in both repositories; no extra tag/checkpoint.
+2. Marketplace is a separate `apps/pad-pilot-marketplace` deployment boundary.
+3. Relocation parity was proven first; portable identities, schemas, limits, and
+   bounded utilities were then extracted to `packages/pad-pilot`.
+4. Hyperfocus's combined Solid/StyleX compiler is the UI build owner. Primitive
+   conversion proceeds by behavior family; remaining branded CSS is tracked in
+   [Finish PadPilot StyleX migration](tasks/finish-stylex-migration.md).
+5. PadPilot's 1.0 license remains attached to both apps and the public package;
+   Hyperfocus root licensing and release checks explicitly route that boundary.

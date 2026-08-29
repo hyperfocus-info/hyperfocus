@@ -1,0 +1,68 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-label,
+.field-description {
+  margin: 0;
+}
+
+.field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(225, 238, 249, 0.88);
+  font-size: 0.86rem;
+}
+
+.field-description {
+  color: rgba(196, 223, 242, 0.74);
+  font-size: 0.78rem;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(89, 145, 186, 0.28);
+  background: rgba(5, 10, 18, 0.92);
+  color: #eff7ff;
+}
+
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(93, 141, 184, 0.24);
+  background: rgba(11, 19, 31, 0.92);
+}
+
+.checkbox-row input {
+  margin: 2px 0 0;
+}
+
+.checkbox-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkbox-copy strong {
+  color: #eefaff;
+}
+
+.checkbox-copy small {
+  color: rgba(196, 223, 242, 0.74);
+}

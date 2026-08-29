@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["bun-types", "node"],
+  },
+  "include": [
+    "scripts",
+    "utils",
+    "ui"
+  ],
+  "exclude": [
+    "ui/dist",
+    "build",
+    "node_modules"
+  ]
+}

@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package padpilot.recut;
+
+option optimize_for = LITE_RUNTIME;
+
+enum RecutAnalysisMode {
+  RECUT_ANALYSIS_MODE_AUTO = 0;
+  RECUT_ANALYSIS_MODE_BPM = 1;
+  RECUT_ANALYSIS_MODE_CUSTOM = 2;
+}
+
+enum RecutBpmSource {
+  RECUT_BPM_SOURCE_NONE = 0;
+  RECUT_BPM_SOURCE_METADATA = 1;
+  RECUT_BPM_SOURCE_ANALYZED = 2;
+  RECUT_BPM_SOURCE_PROJECT = 3;
+  RECUT_BPM_SOURCE_USER = 4;
+}
+
+message SliceMarker {
+  uint32 start_frame = 1;
+  uint32 end_frame = 2;
+  uint32 transient_frame = 3;
+  float confidence = 4;
+  uint32 pad_index = 5;
+  uint32 choke_group_id = 6;
+  float fade_ms = 7;
+  bool snap_exact = 8;
+}
+
+message PadAssignment {
+  uint32 pad_index = 1;
+  uint32 bank = 2;
+  string face_button = 3;
+  uint32 slice_index = 4;
+  uint32 choke_group_id = 5;
+  bool is_empty = 6;
+}
+
+message ChokeGroup {
+  uint32 id = 1;
+  string name = 2;
+  uint32 accent_hue = 3;
+}
+
+message RecutModuleState {
+  uint32 schema_version = 1;
+  uint64 revision = 2;
+  string source_path = 3;
+  string source_sha256 = 4;
+  uint32 sample_rate = 5;
+  uint32 channel_count = 6;
+  uint64 length_frames = 7;
+  float pitch_semitones = 8;
+  float gain_db = 9;
+  bool stretch_enabled = 10;
+  bool granular_enabled = 11;
+  float grain_size_ms = 12;
+  float grain_density = 13;
+  repeated SliceMarker slice_markers = 14;
+  repeated PadAssignment pad_assignments = 15;
+  repeated ChokeGroup choke_groups = 16;
+  bool loaded = 17;
+  string source_name = 18;
+  string source_content_id = 19;
+  RecutAnalysisMode analysis_mode = 20;
+  float bpm_value = 21;
+  RecutBpmSource bpm_source = 22;
+  float bpm_confidence = 23;
+  float bpm_suggested_value = 24;
+  float bpm_suggested_confidence = 25;
+  float density = 26;
+  uint64 manual_edit_revision = 27;
+  float project_bpm_snapshot = 28;
+}
+
+message RecutFrame {
+  uint64 sequence = 1;
+  bool loaded = 2;
+  float analysis_progress = 3;
+  repeated float waveform_peaks = 4;
+  repeated uint32 candidate_transients = 5;
+  uint32 active_slice_index = 6;
+  uint64 playhead_frame = 7;
+  uint32 armed_pad_index = 8;
+  bool last_snap_exact = 9;
+  repeated SliceMarker slice_markers = 10;
+  repeated PadAssignment pad_assignments = 11;
+  RecutAnalysisMode analysis_mode = 12;
+  float bpm_value = 13;
+  RecutBpmSource bpm_source = 14;
+  float bpm_confidence = 15;
+  float bpm_suggested_value = 16;
+  float bpm_suggested_confidence = 17;
+  float density = 18;
+  repeated uint32 held_pad_indices = 19;
+  repeated uint32 playing_pad_indices = 20;
+  float project_bpm = 21;
+  uint64 analysis_revision = 22;
+}

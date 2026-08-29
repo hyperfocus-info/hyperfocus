@@ -1,0 +1,41 @@
+.dropzone {
+  width: 100%;
+  min-height: 140px;
+  border: 1px dashed color-mix(in srgb, var(--pp-accent-color, #66dfff), #ffffff 72%);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #121923 0%, #0d141d 100%);
+  color: var(--pp-text-color, #dfe9fb);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.dropzone.is-dragging {
+  border-color: color-mix(in srgb, var(--pp-accent-color, #66dfff), #ffffff 40%);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--pp-accent-color, #66dfff), transparent 74%);
+}
+
+.dropzone.disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.input {
+  display: none;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 10px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, #07101a9a 72%, #06101aee 100%);
+}
+
+.hint {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--pp-text-color, #dfe9fb), #ffffff 30%);
+}

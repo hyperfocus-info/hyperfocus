@@ -1,0 +1,9 @@
+name: create-ui-test
+description: Behavior-first SolidJS UI testing workflow
+instructions: |
+  Focus on colocated UI tests that exercise public behavior through DOM rendering,
+  public helpers, and real provider or bridge boundaries.
+  Replace source-string assertions with vertical-slice tests built on createUiTest,
+  @solidjs/testing-library, and Bun.
+  Run UI tests with browser conditions and the shared preload so Solid behavior
+  matches the app boundary.

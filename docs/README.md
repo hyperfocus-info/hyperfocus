@@ -26,6 +26,9 @@ then follow its related links only when the task crosses a boundary.
 - [Engine editor guide](../apps/engine-editor/README.md): authoring workflow, automation, persistence, and builds.
 - [Harness guide](../apps/harness/README.md): shipped product behavior, local workflow, runtime shape, and testing.
 - [Harness product docs](harness/README.md): roadmap, user stories, coverage, audits, and research notes. This is intentionally separate from the shipped-behavior README.
+- [PadPilot docs](pad-pilot/README.md): VST3 architecture, Modules, factory catalog, host gates, marketplace, audits, and tasks.
+- [PadPilot app guide](../apps/pad-pilot/README.md): shipped plugin behavior and local commands.
+- [PadPilot marketplace guide](../apps/pad-pilot-marketplace/README.md): service behavior, storage, endpoints, and environment.
 
 ## Shared packages and UI
 
@@ -34,6 +37,7 @@ then follow its related links only when the task crosses a boundary.
 - [`@hyperfocus/ai-core`](../packages/ai-core/README.md): portable harness protocol and client.
 - [`@hyperfocus/workspace`](../packages/workspace/README.md): portable filesystem and task contracts.
 - [`@hyperfocus/ui`](../packages/ui/README.md): reusable Solid presentation.
+- [`@hyperfocus/pad-pilot`](../packages/pad-pilot/README.md): portable PadPilot Module contracts and bounded utilities.
 - [Desktop runtime](../packages/desktop-runtime/README.md): framework-neutral local desktop primitives.
 - [Performance evidence helper](../packages/performance/README.md): repository-only environment labels shared by benchmark reports.
 

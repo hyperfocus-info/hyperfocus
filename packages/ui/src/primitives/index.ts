@@ -14,6 +14,12 @@ export {
   type CoachmarkStep,
 } from "./coachmark-tour";
 export { Dialog } from "./dialog";
+export {
+  FloatingLayer,
+  type FloatingLayerPlacement,
+  type FloatingLayerPosition,
+  type FloatingLayerProps,
+} from "./floating-layer";
 export { installDomTooltips } from "./dom-tooltip";
 export {
   EmptyState,

@@ -1,0 +1,126 @@
+.root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  --node-padding: 4px;
+  --button-size: 34px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(104, 156, 194, 0.24);
+  background: rgba(9, 18, 29, 0.88);
+  gap: var(--node-padding);
+  padding: var(--node-padding);
+  padding-left: calc(var(--node-padding) * 2);
+}
+
+.root[aria-disabled="true"] .field {
+  opacity: 0.58;
+}
+
+.search-icon {
+  display: inline-flex;
+  color: rgba(175, 209, 235, 0.7);
+}
+
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #eef7ff;
+  outline: none;
+}
+
+.toggle {
+  min-width: var(--button-size);
+  min-height: var(--button-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(104, 156, 194, 0.28);
+  border-radius: 10px;
+  background: rgba(15, 28, 44, 0.92);
+  color: #eaf7ff;
+  cursor: pointer;
+}
+
+.root[aria-disabled="true"] .input,
+.root[aria-disabled="true"] .toggle,
+.root[aria-disabled="true"] .item,
+.toggle:disabled,
+.item:disabled {
+  cursor: not-allowed;
+}
+
+.screen-reader-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.list {
+  max-height: 220px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(93, 141, 184, 0.32);
+  background: rgba(7, 13, 22, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.32);
+}
+
+.empty {
+  padding: 10px;
+  color: rgba(200, 220, 240, 0.76);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(18, 31, 48, 0.92);
+  color: #eaf7ff;
+  cursor: pointer;
+}
+
+.item.is-active {
+  box-shadow: 0 0 18px rgba(98, 212, 255, 0.16);
+}
+
+.item-text,
+.item-meta {
+  display: flex;
+  gap: 10px;
+}
+
+.item-text {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.item-text small {
+  color: rgba(196, 223, 242, 0.74);
+}
+
+.item-meta {
+  align-items: center;
+}

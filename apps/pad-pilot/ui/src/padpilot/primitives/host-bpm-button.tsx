@@ -1,0 +1,29 @@
+import * as stylex from "@stylexjs/stylex";
+import { Clock3 } from "lucide-solid";
+import { Button } from "../../components/elements/button";
+import { host } from "../host";
+import { primitiveStyles as styles } from "./primitives.stylex";
+
+export interface HostBpmButtonProps {
+  /** Tempo value sent to the PadPilot host bridge. */
+  bpm: number;
+  /** Optional compact action label. */
+  label?: string;
+}
+
+function formatBpm(bpm: number) {
+  return `${Math.max(20, Math.min(320, Math.round(bpm)))} BPM`;
+}
+
+/** HostBpmButton locks PadPilot's host tempo cache to a generated template BPM. */
+export function HostBpmButton(props: HostBpmButtonProps) {
+  return (
+    <Button
+      class={stylex.props(styles.hostBpmButton).className}
+      icon={Clock3}
+      onClick={() => host.setTempo(props.bpm)}
+      tooltip={`${props.label ?? "Set host tempo"}: ${formatBpm(props.bpm)}`}
+      variant="secondary"
+    />
+  );
+}

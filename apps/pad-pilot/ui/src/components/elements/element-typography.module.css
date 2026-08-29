@@ -1,0 +1,4 @@
+:global(.pad-pilot-label) {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}

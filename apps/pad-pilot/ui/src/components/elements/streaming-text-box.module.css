@@ -1,0 +1,84 @@
+.root {
+  --pp-streaming-text-bg: #050505;
+  --pp-streaming-text-color: rgba(255, 255, 255, 0.82);
+  --pp-streaming-text-border: rgba(255, 255, 255, 0.12);
+  --pp-streaming-text-accent: var(--pp-accent-color, #ee1b24);
+  --pp-streaming-text-track: var(--pp-streaming-text-bg);
+  --pp-streaming-text-button-bg: var(--pp-streaming-text-bg);
+  --pp-streaming-text-button-color: var(--pp-streaming-text-color);
+  position: relative;
+  display: flex;
+  min-height: 0;
+}
+
+.viewport {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 0;
+  padding: 14px;
+  border: 1px solid var(--pp-streaming-text-border);
+  border-radius: 6px;
+  background: var(--pp-streaming-text-bg);
+  color: var(--pp-streaming-text-color);
+  overflow: auto;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  scrollbar-color: var(--pp-streaming-text-accent) var(--pp-streaming-text-track);
+  scrollbar-width: thin;
+}
+
+.viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.viewport::-webkit-scrollbar-track {
+  background: var(--pp-streaming-text-track);
+}
+
+.viewport::-webkit-scrollbar-thumb {
+  border: 2px solid var(--pp-streaming-text-track);
+  border-radius: 999px;
+  background: var(--pp-streaming-text-accent);
+}
+
+.line {
+  color: var(--pp-streaming-text-color);
+  font-size: 0.72rem;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.line::before {
+  content: "> ";
+  color: var(--pp-streaming-text-accent);
+  font-weight: 900;
+}
+
+.tools {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.tool-button {
+  --pp-accent-color: var(--pp-streaming-text-accent);
+  width: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-color: var(--pp-streaming-text-border) !important;
+  background: var(--pp-streaming-text-button-bg) !important;
+  color: var(--pp-streaming-text-button-color) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22) !important;
+  pointer-events: auto;
+}
+
+.tool-button:not([disabled]):hover,
+.tool-button:not([disabled]):focus-visible {
+  border-color: var(--pp-streaming-text-accent) !important;
+  color: var(--pp-streaming-text-accent) !important;
+}

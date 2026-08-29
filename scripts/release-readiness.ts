@@ -5,9 +5,12 @@ export const VERSIONED_MANIFESTS = [
   "package.json",
   "apps/engine-editor/package.json",
   "apps/harness/package.json",
+  "apps/pad-pilot/package.json",
+  "apps/pad-pilot-marketplace/package.json",
   "packages/ai-core/package.json",
   "packages/desktop-runtime/package.json",
   "packages/engine/package.json",
+  "packages/pad-pilot/package.json",
   "packages/ui/package.json",
   "packages/workspace/package.json",
 ] as const;

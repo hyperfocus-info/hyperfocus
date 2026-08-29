@@ -29,6 +29,19 @@ Standalone update discovery is opt-in. The framework-neutral desktop runtime pac
 
 Each package has its own manifest and exports. Future remote splitting should preserve package directories and use subtree or filtered-history publication rather than introducing cross-repository relative imports. `@hyperfocus/engine` is stored at `packages/engine` as a normal workspace package.
 
+## PadPilot
+
+`apps/pad-pilot` builds embedded browser assets, VST3, and standalone artifacts.
+Release builds use static MSVC runtime and static JUCE/SDL2/QuickJS-NG integration.
+VST publication is gated by native render/state tests, zero PadPilot warnings,
+pluginval strictness 10, Steinberg extensive validation, and measured FL Studio
+2026/21 checks. Signed staged update artifacts remain app-owned.
+
+`apps/pad-pilot-marketplace` deploys separately. It owns accounts, billing, Module
+bundles, release metadata, and update downloads; it is not embedded in plugin
+artifacts. `packages/pad-pilot` is the portable public contract package and can be
+published without either privileged app.
+
 ## Versioning
 
 The monorepo keeps one app/package version line. Branch pushes bump the checked-in

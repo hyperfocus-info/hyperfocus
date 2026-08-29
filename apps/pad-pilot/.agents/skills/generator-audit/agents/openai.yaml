@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generator Audit"
+  short_description: "Audit Generator musical intelligence and prompts"
+  default_prompt: "Use $generator-audit to audit the Generator module's tag inventory, music fundamentals, prompt handoff, and output quality."

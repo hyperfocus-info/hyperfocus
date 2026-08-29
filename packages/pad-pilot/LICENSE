@@ -1,0 +1,107 @@
+MindOverMelee Source-Available License 1.0
+
+Copyright (c) 2026 the Licensor
+
+1. Definitions
+
+"Licensor" means the copyright owner or owners of the Software.
+
+"Software" means the source code, object code, documentation, and other
+materials distributed with this license.
+
+"You" means the individual or legal entity exercising rights under this
+license.
+
+"Derivative Work" means any work based on, incorporating, translating, or
+modifying any part of the Software.
+
+"Commercial Distribution" means selling, licensing, renting, monetizing, or
+otherwise providing for compensation the Software, a Derivative Work, or any
+product, service, application, game, plugin, library, deliverable, or hosted
+offering that contains or is based on any part of the Software.
+
+2. Source-Available Permission
+
+Subject to this license, the Licensor grants You a worldwide, non-exclusive,
+royalty-free license to:
+
+a. view, inspect, evaluate, and study the Software;
+
+b. reproduce and publicly or privately fork the Software;
+
+c. modify the Software and create Derivative Works;
+
+d. submit issues, patches, and pull requests to the Licensor; and
+
+e. use the Software and Derivative Works privately or internally, and for
+   personal, educational, research, evaluation, hobby, charitable, or other
+   non-commercial purposes, provided that the use is not Commercial
+   Distribution.
+
+You may distribute the Software or a Derivative Work without charge only if
+You provide the complete corresponding source code, include this license, keep
+all copyright and attribution notices, identify material modifications, and
+license the distributed Software or Derivative Work under these same terms.
+
+3. Commercial License Required
+
+This license does not grant permission for Commercial Distribution.
+
+You must obtain a separate written commercial license from the Licensor before
+You sell, license, monetize, or include any part of the Software in another
+project, product, service, application, game, plugin, library, deliverable, or
+hosted offering that is provided for compensation.
+
+Commercial rights may be available from the repository owner. No commercial
+rights are granted until the Licensor and You enter into a separate written
+agreement.
+
+4. Contributions
+
+If You intentionally submit a contribution to the Licensor for inclusion in
+the Software, You represent that You have the right to submit it. You retain
+copyright in Your contribution, but You grant the Licensor a perpetual,
+worldwide, irrevocable, royalty-free, transferable, and sublicensable license
+to use, reproduce, modify, distribute, publicly perform, publicly display,
+commercialize, and relicense that contribution under this license or other
+terms. Material clearly marked "Not a Contribution" is excluded.
+
+5. No Trademark License
+
+This license does not grant permission to use the Licensor's names, logos,
+trademarks, or product names except as necessary to describe the origin of the
+Software and preserve required notices.
+
+6. Compliance and Termination
+
+Your rights under this license terminate automatically if You violate its
+terms. If this is Your first violation and You fully correct it within 30 days
+after receiving written notice from the Licensor, Your rights are reinstated
+as of the date the violation is corrected. Repeated violations terminate Your
+rights permanently unless the Licensor agrees otherwise in writing.
+
+Sections 3, 4, 5, 7, and 8 survive termination.
+
+7. Disclaimer of Warranty
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE SOFTWARE IS PROVIDED "AS IS" AND
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+WITHOUT LIMITATION WARRANTIES OF TITLE, NON-INFRINGEMENT, MERCHANTABILITY, OR
+FITNESS FOR A PARTICULAR PURPOSE. YOU ARE SOLELY RESPONSIBLE FOR DETERMINING
+WHETHER THE SOFTWARE IS SUITABLE FOR YOUR USE.
+
+8. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR AND CONTRIBUTORS WILL NOT
+BE LIABLE FOR ANY DIRECT, INDIRECT, SPECIAL, INCIDENTAL, CONSEQUENTIAL,
+EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF DATA, PROFITS, REVENUE,
+GOODWILL, OR BUSINESS INTERRUPTION, ARISING FROM OR RELATED TO THE SOFTWARE OR
+THIS LICENSE, UNDER ANY LEGAL THEORY, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGES.
+
+9. Other Rights
+
+This license does not restrict rights You may have under applicable copyright
+exceptions or limitations. No rights are granted except those stated in this
+license. The Licensor may offer the Software under additional or different
+terms, including commercial terms.

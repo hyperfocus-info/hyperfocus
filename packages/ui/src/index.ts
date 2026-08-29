@@ -14,6 +14,12 @@ export {
   type CoachmarkStep,
 } from "./primitives/coachmark-tour";
 export { Dialog } from "./primitives/dialog";
+export {
+  FloatingLayer,
+  type FloatingLayerPlacement,
+  type FloatingLayerPosition,
+  type FloatingLayerProps,
+} from "./primitives/floating-layer";
 export { installDomTooltips } from "./primitives/dom-tooltip";
 export {
   EmptyState,

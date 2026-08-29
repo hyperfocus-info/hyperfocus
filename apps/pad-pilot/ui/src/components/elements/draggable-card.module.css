@@ -1,0 +1,91 @@
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(87, 131, 169, 0.28);
+  background: linear-gradient(
+    180deg,
+    rgba(17, 28, 43, 0.96),
+    rgba(9, 16, 28, 0.96)
+  );
+}
+
+.card[data-variant="chain"] {
+  padding: 14px;
+}
+
+.card[data-variant="node"],
+.card[data-variant="default"] {
+  padding: 12px;
+}
+
+.card.is-dragging {
+  cursor: grabbing;
+  z-index: 12;
+}
+
+.card.is-placeholder {
+  opacity: 1;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.card.is-placeholder > * {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.card.is-placeholder::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border: 2px dashed rgba(255, 255, 255, 0.82);
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.card.is-preview {
+  width: min(100%, 360px);
+  pointer-events: none;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+.header,
+.title-row,
+.copy {
+  display: flex;
+  gap: 10px;
+}
+
+.header {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.title-row {
+  align-items: center;
+  min-width: 0;
+}
+
+.copy {
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.copy small {
+  color: rgba(196, 223, 242, 0.74);
+}
+
+.handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbe9ff;
+  cursor: grab;
+  touch-action: none;
+}

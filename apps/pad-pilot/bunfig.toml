@@ -1,0 +1,8 @@
+[install]
+production = false
+
+jsx = "react-jsx"
+jsxImportSource = "solid-js"
+
+[run]
+bun = true

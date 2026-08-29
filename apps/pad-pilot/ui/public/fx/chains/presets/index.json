@@ -1,0 +1,1842 @@
+{
+  "presets": [
+    {
+      "id": "pad_pilot_init_default",
+      "name": "Lush Foundation",
+      "file": "pad-pilot-init-default.preset",
+      "description": "Creative | broad tone, glue, and hall | full mix",
+      "category": "creative",
+      "tags": [
+        "creative",
+        "lush",
+        "glue",
+        "hall",
+        "full mix"
+      ],
+      "sources": [
+        "full mix",
+        "instrument bus"
+      ],
+      "jobs": [
+        "add broad polish",
+        "add spacious glue"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "pad_pilot_empty",
+      "name": "Blank State",
+      "file": "pad-pilot-empty.preset",
+      "description": "System | empty chain",
+      "category": "system",
+      "tags": [
+        "system",
+        "blank",
+        "empty",
+        "reset"
+      ],
+      "sources": [],
+      "jobs": [
+        "start from an empty graph"
+      ],
+      "intensity": "none"
+    },
+    {
+      "id": "utility-mix-mud-control-light",
+      "name": "Mix · Mud Control · Light",
+      "file": "utility-mix-mud-control-light.preset",
+      "description": "reduce rumble, clear low-mid mud | full mix, instrument bus",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "mix",
+        "clean",
+        "mud",
+        "low-mid"
+      ],
+      "sources": [
+        "full mix",
+        "instrument bus"
+      ],
+      "jobs": [
+        "reduce rumble",
+        "clear low-mid mud"
+      ],
+      "intensity": "light"
+    },
+    {
+      "id": "utility-mix-harsh-edge-softener-light",
+      "name": "Mix · Harsh Edge Softener · Light",
+      "file": "utility-mix-harsh-edge-softener-light.preset",
+      "description": "soften harshness, smooth brittle top end | full mix, instrument bus, vocal",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "mix",
+        "smooth",
+        "harsh",
+        "bright"
+      ],
+      "sources": [
+        "full mix",
+        "instrument bus",
+        "vocal"
+      ],
+      "jobs": [
+        "soften harshness",
+        "smooth brittle top end"
+      ],
+      "intensity": "light"
+    },
+    {
+      "id": "utility-recorded-audio-noise-gate-clean-medium",
+      "name": "Recorded Audio · Noise Gate Clean · Medium",
+      "file": "utility-recorded-audio-noise-gate-clean-medium.preset",
+      "description": "reduce room noise, clean pauses | vocal, guitar, recorded audio",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "recording",
+        "gate",
+        "noise",
+        "clean"
+      ],
+      "sources": [
+        "vocal",
+        "guitar",
+        "recorded audio"
+      ],
+      "jobs": [
+        "reduce room noise",
+        "clean pauses"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "utility-bus-peak-tamer-medium",
+      "name": "Bus · Peak Tamer · Medium",
+      "file": "utility-bus-peak-tamer-medium.preset",
+      "description": "reduce sharp peaks, preserve body | drum bus, instrument bus, full mix",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "bus",
+        "peaks",
+        "transient",
+        "control"
+      ],
+      "sources": [
+        "drum bus",
+        "instrument bus",
+        "full mix"
+      ],
+      "jobs": [
+        "reduce sharp peaks",
+        "preserve body"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "utility-mix-bus-gentle-glue-light",
+      "name": "Mix Bus · Gentle Glue · Light",
+      "file": "utility-mix-bus-gentle-glue-light.preset",
+      "description": "add bus cohesion, preserve transients | mix bus, instrument bus",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "mix-bus",
+        "glue",
+        "subtle",
+        "compression"
+      ],
+      "sources": [
+        "mix bus",
+        "instrument bus"
+      ],
+      "jobs": [
+        "add bus cohesion",
+        "preserve transients"
+      ],
+      "intensity": "light"
+    },
+    {
+      "id": "utility-drums-punch-medium",
+      "name": "Drums · Punch · Medium",
+      "file": "utility-drums-punch-medium.preset",
+      "description": "increase attack, tighten drum body | drum bus, drum loop, percussion",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "drums",
+        "punch",
+        "attack",
+        "tight"
+      ],
+      "sources": [
+        "drum bus",
+        "drum loop",
+        "percussion"
+      ],
+      "jobs": [
+        "increase attack",
+        "tighten drum body"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "utility-drums-sustain-lift-medium",
+      "name": "Drums · Sustain Lift · Medium",
+      "file": "utility-drums-sustain-lift-medium.preset",
+      "description": "increase drum sustain, add room body | drum bus, drum loop, percussion",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "drums",
+        "sustain",
+        "body",
+        "room"
+      ],
+      "sources": [
+        "drum bus",
+        "drum loop",
+        "percussion"
+      ],
+      "jobs": [
+        "increase drum sustain",
+        "add room body"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "utility-bus-parallel-density-medium",
+      "name": "Bus · Parallel Density · Medium",
+      "file": "utility-bus-parallel-density-medium.preset",
+      "description": "add parallel density, retain dry attack | drum bus, instrument bus, vocal bus",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "bus",
+        "parallel",
+        "density",
+        "compression"
+      ],
+      "sources": [
+        "drum bus",
+        "instrument bus",
+        "vocal bus"
+      ],
+      "jobs": [
+        "add parallel density",
+        "retain dry attack"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "utility-bass-mono-safe-light",
+      "name": "Bass · Mono Safe · Light",
+      "file": "utility-bass-mono-safe-light.preset",
+      "description": "center low frequencies, improve mono translation | bass, 808 bass, bass bus",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "bass",
+        "mono",
+        "translation",
+        "low-end"
+      ],
+      "sources": [
+        "bass",
+        "808 bass",
+        "bass bus"
+      ],
+      "jobs": [
+        "center low frequencies",
+        "improve mono translation"
+      ],
+      "intensity": "light"
+    },
+    {
+      "id": "utility-mix-wide-highs-only-light",
+      "name": "Mix · Wide Highs Only · Light",
+      "file": "utility-mix-wide-highs-only-light.preset",
+      "description": "increase stereo width, protect low-end center | full mix, synth bus, instrument bus",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "mix",
+        "wide",
+        "mono-bass",
+        "stereo"
+      ],
+      "sources": [
+        "full mix",
+        "synth bus",
+        "instrument bus"
+      ],
+      "jobs": [
+        "increase stereo width",
+        "protect low-end center"
+      ],
+      "intensity": "light"
+    },
+    {
+      "id": "utility-mix-center-focus-light",
+      "name": "Mix · Center Focus · Light",
+      "file": "utility-mix-center-focus-light.preset",
+      "description": "strengthen center image, reduce diffuse width | full mix, instrument bus",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "mix",
+        "center",
+        "focus",
+        "stereo"
+      ],
+      "sources": [
+        "full mix",
+        "instrument bus"
+      ],
+      "jobs": [
+        "strengthen center image",
+        "reduce diffuse width"
+      ],
+      "intensity": "light"
+    },
+    {
+      "id": "utility-mix-narrow-and-stable-medium",
+      "name": "Mix · Narrow and Stable · Medium",
+      "file": "utility-mix-narrow-and-stable-medium.preset",
+      "description": "reduce excessive width, stabilize stereo image | full mix, sample bus, synth bus",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "mix",
+        "narrow",
+        "stable",
+        "mono"
+      ],
+      "sources": [
+        "full mix",
+        "sample bus",
+        "synth bus"
+      ],
+      "jobs": [
+        "reduce excessive width",
+        "stabilize stereo image"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "utility-vocal-clean-start-light",
+      "name": "Vocal · Clean Start · Light",
+      "file": "utility-vocal-clean-start-light.preset",
+      "description": "clarify vocal, control vocal dynamics | lead vocal, backing vocal",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "vocal",
+        "clean",
+        "presence",
+        "control"
+      ],
+      "sources": [
+        "lead vocal",
+        "backing vocal"
+      ],
+      "jobs": [
+        "clarify vocal",
+        "control vocal dynamics"
+      ],
+      "intensity": "light"
+    },
+    {
+      "id": "utility-808-translation-medium",
+      "name": "808 · Translation · Medium",
+      "file": "utility-808-translation-medium.preset",
+      "description": "add audible bass harmonics, protect mono sub | 808 bass, bass, bass bus",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "808",
+        "bass",
+        "translation",
+        "harmonics"
+      ],
+      "sources": [
+        "808 bass",
+        "bass",
+        "bass bus"
+      ],
+      "jobs": [
+        "add audible bass harmonics",
+        "protect mono sub"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "utility-drum-loop-tightener-medium",
+      "name": "Drum Loop · Tightener · Medium",
+      "file": "utility-drum-loop-tightener-medium.preset",
+      "description": "shorten drum tails, tighten groove | drum loop, drum bus, percussion",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "drums",
+        "tight",
+        "gate",
+        "transient"
+      ],
+      "sources": [
+        "drum loop",
+        "drum bus",
+        "percussion"
+      ],
+      "jobs": [
+        "shorten drum tails",
+        "tighten groove"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "utility-synth-polish-light",
+      "name": "Synth · Polish · Light",
+      "file": "utility-synth-polish-light.preset",
+      "description": "smooth synth tone, add restrained width | synth, synth lead, synth pad",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "synth",
+        "polish",
+        "smooth",
+        "wide"
+      ],
+      "sources": [
+        "synth",
+        "synth lead",
+        "synth pad"
+      ],
+      "jobs": [
+        "smooth synth tone",
+        "add restrained width"
+      ],
+      "intensity": "light"
+    },
+    {
+      "id": "utility-guitar-double-medium",
+      "name": "Guitar · Double · Medium",
+      "file": "utility-guitar-double-medium.preset",
+      "description": "create double-track width, retain center definition | electric guitar, clean guitar, acoustic guitar",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "guitar",
+        "double",
+        "wide",
+        "short-delay"
+      ],
+      "sources": [
+        "electric guitar",
+        "clean guitar",
+        "acoustic guitar"
+      ],
+      "jobs": [
+        "create double-track width",
+        "retain center definition"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "utility-sample-resuscitator-medium",
+      "name": "Sample · Resuscitator · Medium",
+      "file": "utility-sample-resuscitator-medium.preset",
+      "description": "revive dull samples, add body and movement | sample, sample bus, drum loop",
+      "category": "utility",
+      "tags": [
+        "utility",
+        "sample",
+        "revive",
+        "body",
+        "texture"
+      ],
+      "sources": [
+        "sample",
+        "sample bus",
+        "drum loop"
+      ],
+      "jobs": [
+        "revive dull samples",
+        "add body and movement"
+      ],
+      "intensity": "medium"
+    },
+    {
+      "id": "curated-wide-dream",
+      "name": "Wide Dream",
+      "file": "curated-wide-dream.preset",
+      "description": "dreamy, wide, smooth | Creative chain",
+      "category": "creative",
+      "tags": [
+        "dreamy",
+        "wide",
+        "smooth"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-reverse-bloom",
+      "name": "Reverse Bloom",
+      "file": "curated-reverse-bloom.preset",
+      "description": "reverse, dreamy, experimental | Creative chain",
+      "category": "creative",
+      "tags": [
+        "reverse",
+        "dreamy",
+        "experimental"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-pulse-circuit",
+      "name": "Pulse Circuit",
+      "file": "curated-pulse-circuit.preset",
+      "description": "rhythmic, digital, motion | Creative chain",
+      "category": "creative",
+      "tags": [
+        "rhythmic",
+        "digital",
+        "motion"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-warm-glue",
+      "name": "Warm Glue",
+      "file": "curated-warm-glue.preset",
+      "description": "warm, glue, smooth | Creative chain",
+      "category": "creative",
+      "tags": [
+        "warm",
+        "glue",
+        "smooth"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-cassette-haze",
+      "name": "Cassette Haze",
+      "file": "curated-cassette-haze.preset",
+      "description": "lofi, warm, vintage | Creative chain",
+      "category": "creative",
+      "tags": [
+        "lofi",
+        "warm",
+        "vintage"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-glass-air",
+      "name": "Glass Air",
+      "file": "curated-glass-air.preset",
+      "description": "bright, wide, clean | Creative chain",
+      "category": "creative",
+      "tags": [
+        "bright",
+        "wide",
+        "clean"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-crushed-radio",
+      "name": "Crushed Radio",
+      "file": "curated-crushed-radio.preset",
+      "description": "lofi, dirty, digital | Creative chain",
+      "category": "creative",
+      "tags": [
+        "lofi",
+        "dirty",
+        "digital"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-rotary-soul",
+      "name": "Rotary Soul",
+      "file": "curated-rotary-soul.preset",
+      "description": "vintage, motion, warm | Creative chain",
+      "category": "creative",
+      "tags": [
+        "vintage",
+        "motion",
+        "warm"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-gate-snap",
+      "name": "Gate Snap",
+      "file": "curated-gate-snap.preset",
+      "description": "punchy, clean, rhythmic | Creative chain",
+      "category": "creative",
+      "tags": [
+        "punchy",
+        "clean",
+        "rhythmic"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-underwater",
+      "name": "Underwater",
+      "file": "curated-underwater.preset",
+      "description": "dark, space, smooth | Creative chain",
+      "category": "creative",
+      "tags": [
+        "dark",
+        "space",
+        "smooth"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-doppler-orbit",
+      "name": "Doppler Orbit",
+      "file": "curated-doppler-orbit.preset",
+      "description": "motion, experimental, wide | Creative chain",
+      "category": "creative",
+      "tags": [
+        "motion",
+        "experimental",
+        "wide"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-phase-mist",
+      "name": "Phase Mist",
+      "file": "curated-phase-mist.preset",
+      "description": "dreamy, motion, space | Creative chain",
+      "category": "creative",
+      "tags": [
+        "dreamy",
+        "motion",
+        "space"
+      ],
+      "sources": [],
+      "jobs": [
+        "creative sound design"
+      ],
+      "intensity": "creative"
+    },
+    {
+      "id": "curated-1950s-sun-slapback",
+      "name": "1950s · Sun Slapback",
+      "file": "curated-1950s-sun-slapback.preset",
+      "description": "rockabilly, early rock, country | lead vocal, electric guitar",
+      "category": "era",
+      "tags": [
+        "1950s",
+        "rockabilly",
+        "slapback",
+        "mono",
+        "vocal",
+        "guitar"
+      ],
+      "sources": [
+        "lead vocal",
+        "electric guitar"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1950s",
+      "genres": [
+        "rockabilly",
+        "early rock",
+        "country"
+      ],
+      "useCases": [
+        "lead vocal",
+        "electric guitar"
+      ],
+      "researchBasis": [
+        "sun-tape-delay",
+        "sun-slapback-measurement"
+      ]
+    },
+    {
+      "id": "curated-1950s-tube-radio-rhythm",
+      "name": "1950s · Tube Radio Rhythm",
+      "file": "curated-1950s-tube-radio-rhythm.preset",
+      "description": "rhythm and blues, blues, early rock | drum bus, rhythm section, full mix",
+      "category": "era",
+      "tags": [
+        "1950s",
+        "r&b",
+        "blues",
+        "warm",
+        "mono",
+        "bus"
+      ],
+      "sources": [
+        "drum bus",
+        "rhythm section",
+        "full mix"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1950s",
+      "genres": [
+        "rhythm and blues",
+        "blues",
+        "early rock"
+      ],
+      "useCases": [
+        "drum bus",
+        "rhythm section",
+        "full mix"
+      ],
+      "researchBasis": [
+        "analog-saturation",
+        "mono-era"
+      ]
+    },
+    {
+      "id": "curated-1960s-abbey-adt-vocal",
+      "name": "1960s · Abbey ADT Vocal",
+      "file": "curated-1960s-abbey-adt-vocal.preset",
+      "description": "psychedelic pop, rock, British pop | lead vocal, guitar, organ",
+      "category": "era",
+      "tags": [
+        "1960s",
+        "psychedelic",
+        "adt",
+        "double",
+        "vocal"
+      ],
+      "sources": [
+        "lead vocal",
+        "guitar",
+        "organ"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1960s",
+      "genres": [
+        "psychedelic pop",
+        "rock",
+        "British pop"
+      ],
+      "useCases": [
+        "lead vocal",
+        "guitar",
+        "organ"
+      ],
+      "researchBasis": [
+        "abbey-road-adt"
+      ]
+    },
+    {
+      "id": "curated-1960s-soul-chamber",
+      "name": "1960s · Soul Chamber",
+      "file": "curated-1960s-soul-chamber.preset",
+      "description": "soul, rhythm and blues, pop | lead vocal, backing vocals, rhythm section",
+      "category": "era",
+      "tags": [
+        "1960s",
+        "soul",
+        "r&b",
+        "chamber",
+        "vocal"
+      ],
+      "sources": [
+        "lead vocal",
+        "backing vocals",
+        "rhythm section"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1960s",
+      "genres": [
+        "soul",
+        "rhythm and blues",
+        "pop"
+      ],
+      "useCases": [
+        "lead vocal",
+        "backing vocals",
+        "rhythm section"
+      ],
+      "researchBasis": [
+        "abbey-road-chamber",
+        "analog-saturation"
+      ]
+    },
+    {
+      "id": "curated-1960s-garage-mono-crunch",
+      "name": "1960s · Garage Mono Crunch",
+      "file": "curated-1960s-garage-mono-crunch.preset",
+      "description": "garage rock, proto-punk, psychedelic rock | guitar bus, drum bus, full mix",
+      "category": "era",
+      "tags": [
+        "1960s",
+        "garage",
+        "rock",
+        "dirty",
+        "mono"
+      ],
+      "sources": [
+        "guitar bus",
+        "drum bus",
+        "full mix"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1960s",
+      "genres": [
+        "garage rock",
+        "proto-punk",
+        "psychedelic rock"
+      ],
+      "useCases": [
+        "guitar bus",
+        "drum bus",
+        "full mix"
+      ],
+      "researchBasis": [
+        "analog-saturation",
+        "mono-era"
+      ]
+    },
+    {
+      "id": "curated-1970s-dub-tape-echo",
+      "name": "1970s · Dub Tape Echo",
+      "file": "curated-1970s-dub-tape-echo.preset",
+      "description": "dub, reggae | send return, skank guitar, organ, vocal throw",
+      "category": "era",
+      "tags": [
+        "1970s",
+        "dub",
+        "reggae",
+        "tape",
+        "echo"
+      ],
+      "sources": [
+        "send return",
+        "skank guitar",
+        "organ",
+        "vocal throw"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1970s",
+      "genres": [
+        "dub",
+        "reggae"
+      ],
+      "useCases": [
+        "send return",
+        "skank guitar",
+        "organ",
+        "vocal throw"
+      ],
+      "researchBasis": [
+        "dub-delay",
+        "filtered-delay"
+      ]
+    },
+    {
+      "id": "curated-1970s-disco-plate-shine",
+      "name": "1970s · Disco Plate Shine",
+      "file": "curated-1970s-disco-plate-shine.preset",
+      "description": "disco, Philadelphia soul, funk | string bus, vocal, drum bus, full mix",
+      "category": "era",
+      "tags": [
+        "1970s",
+        "disco",
+        "plate",
+        "bright",
+        "glue"
+      ],
+      "sources": [
+        "string bus",
+        "vocal",
+        "drum bus",
+        "full mix"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1970s",
+      "genres": [
+        "disco",
+        "Philadelphia soul",
+        "funk"
+      ],
+      "useCases": [
+        "string bus",
+        "vocal",
+        "drum bus",
+        "full mix"
+      ],
+      "researchBasis": [
+        "abbey-road-plate",
+        "bus-compression"
+      ]
+    },
+    {
+      "id": "curated-1970s-eventide-studio-double",
+      "name": "1970s · Eventide Studio Double",
+      "file": "curated-1970s-eventide-studio-double.preset",
+      "description": "art rock, glam rock, progressive rock | lead vocal, electric guitar, synth",
+      "category": "era",
+      "tags": [
+        "1970s",
+        "eventide",
+        "double",
+        "glam",
+        "art-rock"
+      ],
+      "sources": [
+        "lead vocal",
+        "electric guitar",
+        "synth"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1970s",
+      "genres": [
+        "art rock",
+        "glam rock",
+        "progressive rock"
+      ],
+      "useCases": [
+        "lead vocal",
+        "electric guitar",
+        "synth"
+      ],
+      "researchBasis": [
+        "eventide-h910",
+        "eventide-h949"
+      ]
+    },
+    {
+      "id": "curated-1970s-funk-rotary-cab",
+      "name": "1970s · Funk Rotary Cab",
+      "file": "curated-1970s-funk-rotary-cab.preset",
+      "description": "funk, soul, jazz fusion | organ, electric piano, guitar",
+      "category": "era",
+      "tags": [
+        "1970s",
+        "funk",
+        "soul",
+        "rotary",
+        "keys"
+      ],
+      "sources": [
+        "organ",
+        "electric piano",
+        "guitar"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1970s",
+      "genres": [
+        "funk",
+        "soul",
+        "jazz fusion"
+      ],
+      "useCases": [
+        "organ",
+        "electric piano",
+        "guitar"
+      ],
+      "researchBasis": [
+        "rotary-production",
+        "analog-saturation"
+      ]
+    },
+    {
+      "id": "curated-1970s-analog-album-glue",
+      "name": "1970s · Analog Album Glue",
+      "file": "curated-1970s-analog-album-glue.preset",
+      "description": "classic rock, soul, singer-songwriter | mix bus, instrument bus",
+      "category": "era",
+      "tags": [
+        "1970s",
+        "analog",
+        "tape",
+        "glue",
+        "mix-bus"
+      ],
+      "sources": [
+        "mix bus",
+        "instrument bus"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1970s",
+      "genres": [
+        "classic rock",
+        "soul",
+        "singer-songwriter"
+      ],
+      "useCases": [
+        "mix bus",
+        "instrument bus"
+      ],
+      "researchBasis": [
+        "analog-saturation",
+        "bus-compression"
+      ]
+    },
+    {
+      "id": "curated-1980s-gated-arena-snare",
+      "name": "1980s · Gated Arena Snare",
+      "file": "curated-1980s-gated-arena-snare.preset",
+      "description": "pop rock, new wave, arena rock | snare, toms, drum bus",
+      "category": "era",
+      "tags": [
+        "1980s",
+        "gated",
+        "snare",
+        "drums",
+        "arena"
+      ],
+      "sources": [
+        "snare",
+        "toms",
+        "drum bus"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1980s",
+      "genres": [
+        "pop rock",
+        "new wave",
+        "arena rock"
+      ],
+      "useCases": [
+        "snare",
+        "toms",
+        "drum bus"
+      ],
+      "researchBasis": [
+        "ams-nonlinear",
+        "yamaha-gated-reverb"
+      ]
+    },
+    {
+      "id": "curated-1980s-juno-wide-pad",
+      "name": "1980s · Juno Wide Pad",
+      "file": "curated-1980s-juno-wide-pad.preset",
+      "description": "synth-pop, new wave, dream pop | synth pad, electric piano, clean guitar",
+      "category": "era",
+      "tags": [
+        "1980s",
+        "juno",
+        "synth-pop",
+        "chorus",
+        "pad"
+      ],
+      "sources": [
+        "synth pad",
+        "electric piano",
+        "clean guitar"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1980s",
+      "genres": [
+        "synth-pop",
+        "new wave",
+        "dream pop"
+      ],
+      "useCases": [
+        "synth pad",
+        "electric piano",
+        "clean guitar"
+      ],
+      "researchBasis": [
+        "roland-chorus",
+        "chorus-technical"
+      ]
+    },
+    {
+      "id": "curated-1980s-spx-vocal-rack",
+      "name": "1980s · SPX Vocal Rack",
+      "file": "curated-1980s-spx-vocal-rack.preset",
+      "description": "pop, adult contemporary, synth-pop | lead vocal, backing vocals",
+      "category": "era",
+      "tags": [
+        "1980s",
+        "spx",
+        "digital",
+        "vocal",
+        "pop"
+      ],
+      "sources": [
+        "lead vocal",
+        "backing vocals"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1980s",
+      "genres": [
+        "pop",
+        "adult contemporary",
+        "synth-pop"
+      ],
+      "useCases": [
+        "lead vocal",
+        "backing vocals"
+      ],
+      "researchBasis": [
+        "yamaha-spx90",
+        "spx-bandwidth"
+      ]
+    },
+    {
+      "id": "curated-1980s-808-electro-knock",
+      "name": "1980s · 808 Electro Knock",
+      "file": "curated-1980s-808-electro-knock.preset",
+      "description": "electro, early hip-hop, Miami bass | drum machine, drum bus",
+      "category": "era",
+      "tags": [
+        "1980s",
+        "808",
+        "electro",
+        "hip-hop",
+        "drums"
+      ],
+      "sources": [
+        "drum machine",
+        "drum bus"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1980s",
+      "genres": [
+        "electro",
+        "early hip-hop",
+        "Miami bass"
+      ],
+      "useCases": [
+        "drum machine",
+        "drum bus"
+      ],
+      "researchBasis": [
+        "roland-tr808"
+      ]
+    },
+    {
+      "id": "curated-1980s-new-wave-motion",
+      "name": "1980s · New Wave Motion",
+      "file": "curated-1980s-new-wave-motion.preset",
+      "description": "new wave, post-punk, synth-pop | guitar, synth, drum machine",
+      "category": "era",
+      "tags": [
+        "1980s",
+        "new-wave",
+        "post-punk",
+        "motion",
+        "stereo"
+      ],
+      "sources": [
+        "guitar",
+        "synth",
+        "drum machine"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1980s",
+      "genres": [
+        "new wave",
+        "post-punk",
+        "synth-pop"
+      ],
+      "useCases": [
+        "guitar",
+        "synth",
+        "drum machine"
+      ],
+      "researchBasis": [
+        "roland-chorus",
+        "yamaha-spx90"
+      ]
+    },
+    {
+      "id": "curated-1990s-boom-bap-sampler",
+      "name": "1990s · Boom Bap Sampler",
+      "file": "curated-1990s-boom-bap-sampler.preset",
+      "description": "boom bap, golden-age hip-hop | sample bus, drum bus, breakbeat",
+      "category": "era",
+      "tags": [
+        "1990s",
+        "boom-bap",
+        "hip-hop",
+        "sampler",
+        "drums"
+      ],
+      "sources": [
+        "sample bus",
+        "drum bus",
+        "breakbeat"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1990s",
+      "genres": [
+        "boom bap",
+        "golden-age hip-hop"
+      ],
+      "useCases": [
+        "sample bus",
+        "drum bus",
+        "breakbeat"
+      ],
+      "researchBasis": [
+        "sampler-resolution",
+        "analog-saturation"
+      ]
+    },
+    {
+      "id": "curated-1990s-shoegaze-wall",
+      "name": "1990s · Shoegaze Wall",
+      "file": "curated-1990s-shoegaze-wall.preset",
+      "description": "shoegaze, dream pop, alternative rock | electric guitar, synth, vocal texture",
+      "category": "era",
+      "tags": [
+        "1990s",
+        "shoegaze",
+        "guitar",
+        "wall",
+        "dreamy"
+      ],
+      "sources": [
+        "electric guitar",
+        "synth",
+        "vocal texture"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1990s",
+      "genres": [
+        "shoegaze",
+        "dream pop",
+        "alternative rock"
+      ],
+      "useCases": [
+        "electric guitar",
+        "synth",
+        "vocal texture"
+      ],
+      "researchBasis": [
+        "shoegaze-effects"
+      ]
+    },
+    {
+      "id": "curated-1990s-trip-hop-dust",
+      "name": "1990s · Trip-Hop Dust",
+      "file": "curated-1990s-trip-hop-dust.preset",
+      "description": "trip-hop, downtempo, alternative hip-hop | sample bus, drum loop, keys",
+      "category": "era",
+      "tags": [
+        "1990s",
+        "trip-hop",
+        "dusty",
+        "downtempo",
+        "samples"
+      ],
+      "sources": [
+        "sample bus",
+        "drum loop",
+        "keys"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1990s",
+      "genres": [
+        "trip-hop",
+        "downtempo",
+        "alternative hip-hop"
+      ],
+      "useCases": [
+        "sample bus",
+        "drum loop",
+        "keys"
+      ],
+      "researchBasis": [
+        "analog-saturation",
+        "vintage-effects"
+      ]
+    },
+    {
+      "id": "curated-1990s-909-warehouse-bus",
+      "name": "1990s · 909 Warehouse Bus",
+      "file": "curated-1990s-909-warehouse-bus.preset",
+      "description": "techno, house, industrial dance | drum machine, drum bus, percussion bus",
+      "category": "era",
+      "tags": [
+        "1990s",
+        "909",
+        "techno",
+        "house",
+        "drums"
+      ],
+      "sources": [
+        "drum machine",
+        "drum bus",
+        "percussion bus"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1990s",
+      "genres": [
+        "techno",
+        "house",
+        "industrial dance"
+      ],
+      "useCases": [
+        "drum machine",
+        "drum bus",
+        "percussion bus"
+      ],
+      "researchBasis": [
+        "roland-tr909",
+        "bus-compression"
+      ]
+    },
+    {
+      "id": "curated-1990s-r-b-wide-vocal",
+      "name": "1990s · R&B Wide Vocal",
+      "file": "curated-1990s-r-b-wide-vocal.preset",
+      "description": "contemporary R&B, new jack swing, pop ballad | lead vocal, backing vocals",
+      "category": "era",
+      "tags": [
+        "1990s",
+        "r&b",
+        "vocal",
+        "wide",
+        "polished"
+      ],
+      "sources": [
+        "lead vocal",
+        "backing vocals"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "1990s",
+      "genres": [
+        "contemporary R&B",
+        "new jack swing",
+        "pop ballad"
+      ],
+      "useCases": [
+        "lead vocal",
+        "backing vocals"
+      ],
+      "researchBasis": [
+        "chorus-technical",
+        "pop-vocal-chain"
+      ]
+    },
+    {
+      "id": "curated-2000s-pop-vocal-polish",
+      "name": "2000s · Pop Vocal Polish",
+      "file": "curated-2000s-pop-vocal-polish.preset",
+      "description": "pop, dance-pop, teen pop | lead vocal",
+      "category": "era",
+      "tags": [
+        "2000s",
+        "pop",
+        "vocal",
+        "bright",
+        "polished"
+      ],
+      "sources": [
+        "lead vocal"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2000s",
+      "genres": [
+        "pop",
+        "dance-pop",
+        "teen pop"
+      ],
+      "useCases": [
+        "lead vocal"
+      ],
+      "researchBasis": [
+        "pop-vocal-chain",
+        "pop-reverb"
+      ]
+    },
+    {
+      "id": "curated-2000s-french-house-crunch",
+      "name": "2000s · French House Crunch",
+      "file": "curated-2000s-french-house-crunch.preset",
+      "description": "French house, filter house, nu-disco | disco sample, drum bus, mix bus",
+      "category": "era",
+      "tags": [
+        "2000s",
+        "french-house",
+        "disco",
+        "crunch",
+        "compression"
+      ],
+      "sources": [
+        "disco sample",
+        "drum bus",
+        "mix bus"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2000s",
+      "genres": [
+        "French house",
+        "filter house",
+        "nu-disco"
+      ],
+      "useCases": [
+        "disco sample",
+        "drum bus",
+        "mix bus"
+      ],
+      "researchBasis": [
+        "analog-saturation",
+        "bus-compression"
+      ]
+    },
+    {
+      "id": "curated-2000s-indie-dance-room",
+      "name": "2000s · Indie Dance Room",
+      "file": "curated-2000s-indie-dance-room.preset",
+      "description": "indie dance, dance-punk, electroclash | drum bus, synth bus, full mix",
+      "category": "era",
+      "tags": [
+        "2000s",
+        "indie-dance",
+        "dance-punk",
+        "room",
+        "grit"
+      ],
+      "sources": [
+        "drum bus",
+        "synth bus",
+        "full mix"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2000s",
+      "genres": [
+        "indie dance",
+        "dance-punk",
+        "electroclash"
+      ],
+      "useCases": [
+        "drum bus",
+        "synth bus",
+        "full mix"
+      ],
+      "researchBasis": [
+        "analog-saturation",
+        "room-reverb"
+      ]
+    },
+    {
+      "id": "curated-2000s-trance-supersaw",
+      "name": "2000s · Trance Supersaw",
+      "file": "curated-2000s-trance-supersaw.preset",
+      "description": "trance, progressive trance, euphoric dance | supersaw, synth lead, pad",
+      "category": "era",
+      "tags": [
+        "2000s",
+        "trance",
+        "supersaw",
+        "wide",
+        "euphoric"
+      ],
+      "sources": [
+        "supersaw",
+        "synth lead",
+        "pad"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2000s",
+      "genres": [
+        "trance",
+        "progressive trance",
+        "euphoric dance"
+      ],
+      "useCases": [
+        "supersaw",
+        "synth lead",
+        "pad"
+      ],
+      "researchBasis": [
+        "chorus-technical",
+        "pop-reverb"
+      ]
+    },
+    {
+      "id": "curated-2010s-trap-808-drive",
+      "name": "2010s · Trap 808 Drive",
+      "file": "curated-2010s-trap-808-drive.preset",
+      "description": "trap, hip-hop, UK bass | 808 bass, kick, bass bus",
+      "category": "era",
+      "tags": [
+        "2010s",
+        "trap",
+        "808",
+        "bass",
+        "mono"
+      ],
+      "sources": [
+        "808 bass",
+        "kick",
+        "bass bus"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2010s",
+      "genres": [
+        "trap",
+        "hip-hop",
+        "UK bass"
+      ],
+      "useCases": [
+        "808 bass",
+        "kick",
+        "bass bus"
+      ],
+      "researchBasis": [
+        "trap-808",
+        "bass-saturation"
+      ]
+    },
+    {
+      "id": "curated-2010s-festival-edm-lift",
+      "name": "2010s · Festival EDM Lift",
+      "file": "curated-2010s-festival-edm-lift.preset",
+      "description": "EDM, big room, electro house | synth lead, supersaw, drum bus",
+      "category": "era",
+      "tags": [
+        "2010s",
+        "edm",
+        "festival",
+        "wide",
+        "bright"
+      ],
+      "sources": [
+        "synth lead",
+        "supersaw",
+        "drum bus"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2010s",
+      "genres": [
+        "EDM",
+        "big room",
+        "electro house"
+      ],
+      "useCases": [
+        "synth lead",
+        "supersaw",
+        "drum bus"
+      ],
+      "researchBasis": [
+        "chorus-technical",
+        "pop-reverb",
+        "analog-saturation"
+      ]
+    },
+    {
+      "id": "curated-2010s-vaporwave-vhs",
+      "name": "2010s · Vaporwave VHS",
+      "file": "curated-2010s-vaporwave-vhs.preset",
+      "description": "vaporwave, chillwave, lo-fi pop | sample bus, synth pad, full mix",
+      "category": "era",
+      "tags": [
+        "2010s",
+        "vaporwave",
+        "vhs",
+        "lofi",
+        "nostalgic"
+      ],
+      "sources": [
+        "sample bus",
+        "synth pad",
+        "full mix"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2010s",
+      "genres": [
+        "vaporwave",
+        "chillwave",
+        "lo-fi pop"
+      ],
+      "useCases": [
+        "sample bus",
+        "synth pad",
+        "full mix"
+      ],
+      "researchBasis": [
+        "vintage-effects",
+        "analog-saturation"
+      ]
+    },
+    {
+      "id": "curated-2020s-hyperpop-hard-clip",
+      "name": "2020s · Hyperpop Hard Clip",
+      "file": "curated-2020s-hyperpop-hard-clip.preset",
+      "description": "hyperpop, digicore, glitch pop | synth lead, drum bus, vocal effect",
+      "category": "era",
+      "tags": [
+        "2020s",
+        "hyperpop",
+        "digicore",
+        "clip",
+        "bright"
+      ],
+      "sources": [
+        "synth lead",
+        "drum bus",
+        "vocal effect"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2020s",
+      "genres": [
+        "hyperpop",
+        "digicore",
+        "glitch pop"
+      ],
+      "useCases": [
+        "synth lead",
+        "drum bus",
+        "vocal effect"
+      ],
+      "researchBasis": [
+        "analog-saturation",
+        "digital-aliasing",
+        "pop-ear-candy"
+      ]
+    },
+    {
+      "id": "curated-2020s-drill-dark-808",
+      "name": "2020s · Drill Dark 808",
+      "file": "curated-2020s-drill-dark-808.preset",
+      "description": "UK drill, Brooklyn drill, dark trap | 808 bass, drum bus, melody bus",
+      "category": "era",
+      "tags": [
+        "2020s",
+        "drill",
+        "808",
+        "dark",
+        "bass"
+      ],
+      "sources": [
+        "808 bass",
+        "drum bus",
+        "melody bus"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2020s",
+      "genres": [
+        "UK drill",
+        "Brooklyn drill",
+        "dark trap"
+      ],
+      "useCases": [
+        "808 bass",
+        "drum bus",
+        "melody bus"
+      ],
+      "researchBasis": [
+        "trap-808",
+        "bass-saturation"
+      ]
+    },
+    {
+      "id": "curated-2020s-dub-techno-chord",
+      "name": "2020s · Dub Techno Chord",
+      "file": "curated-2020s-dub-techno-chord.preset",
+      "description": "dub techno, minimal techno, ambient techno | chord stab, synth send, percussion send",
+      "category": "era",
+      "tags": [
+        "2020s",
+        "dub-techno",
+        "minimal",
+        "chord",
+        "echo"
+      ],
+      "sources": [
+        "chord stab",
+        "synth send",
+        "percussion send"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2020s",
+      "genres": [
+        "dub techno",
+        "minimal techno",
+        "ambient techno"
+      ],
+      "useCases": [
+        "chord stab",
+        "synth send",
+        "percussion send"
+      ],
+      "researchBasis": [
+        "dub-techno-effects",
+        "filtered-delay"
+      ]
+    },
+    {
+      "id": "curated-2020s-intimate-pop-vocal",
+      "name": "2020s · Intimate Pop Vocal",
+      "file": "curated-2020s-intimate-pop-vocal.preset",
+      "description": "bedroom pop, alt-pop, contemporary pop | lead vocal, close vocal",
+      "category": "era",
+      "tags": [
+        "2020s",
+        "pop",
+        "vocal",
+        "intimate",
+        "clean"
+      ],
+      "sources": [
+        "lead vocal",
+        "close vocal"
+      ],
+      "jobs": [
+        "era and genre coloration"
+      ],
+      "intensity": "creative",
+      "era": "2020s",
+      "genres": [
+        "bedroom pop",
+        "alt-pop",
+        "contemporary pop"
+      ],
+      "useCases": [
+        "lead vocal",
+        "close vocal"
+      ],
+      "researchBasis": [
+        "modern-vocal-reverb",
+        "pop-vocal-chain"
+      ]
+    }
+  ]
+}

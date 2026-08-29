@@ -1,0 +1,6 @@
+name: create-or-update-padpilot-elements
+description: PadPilot element primitive authoring workflow
+instructions: |
+  Focus on reusable element primitives under ui/src/components/elements.
+  Preserve forwarded host props, CSS Module discipline, and accessibility.
+  Add focused UI tests whenever element behavior changes.

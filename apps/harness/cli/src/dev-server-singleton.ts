@@ -8,7 +8,7 @@ type DevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell> =
   websocketShell: TWebSocketShell;
   pendingState?: TState;
   pendingHandlerRefs?: THandlerRefs;
-  pendingApplyTimer?: ReturnType<typeof setTimeout>;
+  pendingApplyTimer?: number;
   pendingApplyBackoffStep?: number;
   trackedHotReloadSnapshot?: Map<string, number>;
 };
@@ -16,28 +16,26 @@ type DevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell> =
 const DEV_HARNESS_SERVER_SINGLETON_KEY = Symbol.for("pi-harness.dev-server");
 
 export function getDevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell>() {
-  const globalState = globalThis as typeof globalThis & {
-    [DEV_HARNESS_SERVER_SINGLETON_KEY]?: DevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell>;
-  };
-
-  return globalState[DEV_HARNESS_SERVER_SINGLETON_KEY];
+  const value: unknown = Reflect.get(globalThis, DEV_HARNESS_SERVER_SINGLETON_KEY);
+  return isDevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell>(value) ? value : undefined;
 }
 
 export function setDevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell>(
   singleton: DevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell>
 ) {
-  const globalState = globalThis as typeof globalThis & {
-    [DEV_HARNESS_SERVER_SINGLETON_KEY]?: DevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell>;
-  };
-
-  globalState[DEV_HARNESS_SERVER_SINGLETON_KEY] = singleton;
+  Reflect.set(globalThis, DEV_HARNESS_SERVER_SINGLETON_KEY, singleton);
   return singleton;
 }
 
 export function clearDevHarnessServerSingleton() {
-  const globalState = globalThis as typeof globalThis & {
-    [DEV_HARNESS_SERVER_SINGLETON_KEY]?: unknown;
-  };
+  Reflect.deleteProperty(globalThis, DEV_HARNESS_SERVER_SINGLETON_KEY);
+}
 
-  delete globalState[DEV_HARNESS_SERVER_SINGLETON_KEY];
+function isDevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell>(
+  value: unknown
+): value is DevHarnessServerSingleton<TState, THandlerRefs, TServer, TWebSocketShell> {
+  return typeof value === "object" && value !== null
+    && typeof Reflect.get(value, "version") === "number"
+    && "state" in value && "handlerRefs" in value && "server" in value && "websocketShell" in value
+    && typeof Reflect.get(value, "browserOpenedOnce") === "boolean";
 }

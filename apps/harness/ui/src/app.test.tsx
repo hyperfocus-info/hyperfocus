@@ -2,11 +2,16 @@
 import { beforeEach, expect, it, mock } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createUiTest } from "./utils/tests/test-harness";
-import { clearBrowserStateForTests } from "./utils/tests/store-test-utils";
+import { clearBrowserStateForTests, seedHarnessStoreForTests } from "./utils/tests/store-test-utils";
 import { harnessStore, readBrowserUiSession } from "./harness-store";
+import { createHarnessStateFixture } from "./utils/tests/test-fixtures";
 import { clearCurrentTabItemSelectorsForTests, registerCurrentTabItemSelector } from "./lib/current-tab-item-hotkeys";
 
-const createHotkeysMock = mock(() => undefined);
+type HotkeyDefinition = { hotkey: string; callback: () => void };
+type HotkeyOptions = { enabled: boolean; ignoreInputs: boolean; preventDefault: boolean; stopPropagation: boolean };
+type HotkeySource = HotkeyDefinition[] | (() => HotkeyDefinition[]);
+
+const createHotkeysMock = mock((_hotkeys: HotkeySource, _options: () => HotkeyOptions) => undefined);
 const createHotkeySequenceMock = mock(() => undefined);
 const createHotkeySequencesMock = mock(() => undefined);
 
@@ -27,15 +32,8 @@ mock.module("./harness-websocket", () => ({
 import { App, createDefaultIdeWindowBounds, shouldCollapseTabStrip } from "./app";
 import { ideStore } from "./ide/ide-store";
 
-function getCreateHotkeysCall() {
-  type HotkeyOptions = { enabled: boolean; ignoreInputs: boolean; preventDefault: boolean; stopPropagation: boolean };
-  const calls = createHotkeysMock.mock.calls as unknown as Array<
-    [
-      Array<{ hotkey: string; callback: () => void }> | (() => Array<{ hotkey: string; callback: () => void }>),
-      () => HotkeyOptions
-    ]
-  >;
-  const call = calls.find(([hotkeys]) => {
+function getCreateHotkeysCall(): [HotkeyDefinition[], () => HotkeyOptions] {
+  const call = createHotkeysMock.mock.calls.find(([hotkeys]) => {
     const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
     return definitions.length > 1 && definitions.every((definition) => typeof definition.hotkey === "string");
   });
@@ -45,21 +43,11 @@ function getCreateHotkeysCall() {
 
   const [hotkeys, getOptions] = call;
   const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
-  return [definitions, getOptions] as [
-    Array<{ hotkey: string; callback: () => void }>,
-    () => HotkeyOptions
-  ];
+  return [definitions, getOptions];
 }
 
-function getProjectSwitcherHotkeysCall() {
-  type HotkeyOptions = { enabled: boolean; ignoreInputs: boolean; preventDefault: boolean; stopPropagation: boolean };
-  const calls = createHotkeysMock.mock.calls as unknown as Array<
-    [
-      Array<{ hotkey: string; callback: () => void }> | (() => Array<{ hotkey: string; callback: () => void }>),
-      () => HotkeyOptions
-    ]
-  >;
-  const call = calls.find(([hotkeys]) => {
+function getProjectSwitcherHotkeysCall(): [HotkeyDefinition[], () => HotkeyOptions] {
+  const call = createHotkeysMock.mock.calls.find(([hotkeys]) => {
     const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
     return definitions.length === 2 && definitions.map((definition) => definition.hotkey).join(",") === "Mod+K,Mod+Space";
   });
@@ -69,10 +57,17 @@ function getProjectSwitcherHotkeysCall() {
 
   const [hotkeys, getOptions] = call;
   const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
-  return [definitions, getOptions] as [
-    Array<{ hotkey: string; callback: () => void }>,
-    () => HotkeyOptions
-  ];
+  return [definitions, getOptions];
+}
+
+function getHotkeyCall(hotkey: string): [HotkeyDefinition[], () => HotkeyOptions] {
+  const call = createHotkeysMock.mock.calls.find(([source]) => {
+    const definitions = typeof source === "function" ? source() : source;
+    return definitions.some((definition) => definition.hotkey === hotkey);
+  });
+  if (!call) throw new Error(`Expected ${hotkey} hotkey registration`);
+  const [source, options] = call;
+  return [typeof source === "function" ? source() : source, options];
 }
 
 createUiTest("App shortcuts", () => {
@@ -271,19 +266,7 @@ createUiTest("App shortcuts", () => {
 
   it("keeps search shortcut enabled while editable controls own focus", () => {
     render(() => <App />);
-    const calls = createHotkeysMock.mock.calls as unknown as Array<
-      [
-        Array<{ hotkey: string; callback: () => void }> | (() => Array<{ hotkey: string; callback: () => void }>),
-        () => { enabled: boolean; ignoreInputs: boolean; preventDefault: boolean; stopPropagation: boolean }
-      ]
-    >;
-    const searchCall = calls.find(([hotkeys]) => {
-      const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
-      return definitions.some((definition) => definition.hotkey === "Mod+F");
-    });
-    if (!searchCall) {
-      throw new Error("Expected search hotkey registration");
-    }
+    const searchCall = getHotkeyCall("Mod+F");
 
     const textarea = document.createElement("textarea");
     document.body.append(textarea);
@@ -298,7 +281,7 @@ createUiTest("App shortcuts", () => {
     render(() => <App />);
 
     const nav = document.querySelector("[data-test-left-tab-nav]");
-    const buttons = [...(nav?.querySelectorAll("button") ?? [])] as HTMLButtonElement[];
+    const buttons: HTMLButtonElement[] = [...(nav?.querySelectorAll("button") ?? [])];
 
     expect(nav?.getAttribute("role")).toBe("tablist");
     expect(buttons[0]?.getAttribute("aria-label")).toBe("Projects");
@@ -332,18 +315,7 @@ createUiTest("App shortcuts", () => {
     Object.defineProperty(nav, "scrollWidth", { configurable: true, value: 320 });
     Object.defineProperty(nav, "clientWidth", { configurable: true, value: 320 });
     tabItems.forEach((tabItem, index) => {
-      tabItem.getBoundingClientRect = () =>
-        ({
-          top: index >= 3 ? 28 : 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          width: 0,
-          height: 0,
-          x: 0,
-          y: index >= 3 ? 28 : 0,
-          toJSON: () => undefined
-        }) as DOMRect;
+      tabItem.getBoundingClientRect = () => DOMRect.fromRect({ y: index >= 3 ? 28 : 0 });
     });
 
     expect(shouldCollapseTabStrip(nav)).toBe(true);
@@ -384,6 +356,20 @@ createUiTest("App shortcuts", () => {
     expect(readBrowserUiSession().tracePanelMode).toBe("peek");
   });
 
+  it("keeps the technical trace surface out of simple mode without losing its advanced state", () => {
+    seedHarnessStoreForTests(createHarnessStateFixture({
+      experienceMode: "simple",
+      tracePanelMode: "open",
+      tracePanelOpen: true,
+    }));
+
+    render(() => <App />);
+
+    expect(screen.queryByRole("button", { name: /Trace panel:/ })).toBeNull();
+    expect(document.querySelector("[data-test-main-panel-grid]")?.getAttribute("data-main-panel-mode")).toBe("closed");
+    expect(harnessStore.state.tracePanelMode).toBe("open");
+  });
+
   it("renders trace peek rail when session mode is peek", () => {
     harnessStore.setTracePanelMode("peek");
 
@@ -395,7 +381,7 @@ createUiTest("App shortcuts", () => {
   it("moves active tab styling when switching left tabs", async () => {
     render(() => <App />);
     const nav = document.querySelector("[data-test-left-tab-nav]");
-    const buttons = [...(nav?.querySelectorAll("button") ?? [])] as HTMLButtonElement[];
+    const buttons: HTMLButtonElement[] = [...(nav?.querySelectorAll("button") ?? [])];
     const assistantsTab = buttons[1];
     const runsTab = buttons[3];
 
@@ -478,21 +464,9 @@ createUiTest("App shortcuts", () => {
 
     expect(document.querySelector("[data-test-ide-virtual-window]")).not.toBeNull();
 
-    const calls = createHotkeysMock.mock.calls as unknown as Array<
-      [
-        Array<{ hotkey: string; callback: () => void }> | (() => Array<{ hotkey: string; callback: () => void }>),
-        () => { enabled: boolean; ignoreInputs: boolean; preventDefault: boolean; stopPropagation: boolean }
-      ]
-    >;
-    const escapeCall = calls.find(([hotkeys]) => {
-      const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
-      return definitions.some((definition) => definition.hotkey === "Escape");
-    });
-    if (!escapeCall) {
-      throw new Error("Expected IDE escape hotkey registration");
-    }
+    const escapeCall = getHotkeyCall("Escape");
     expect(escapeCall[1]().enabled).toBe(true);
-    const escapeDefinitions = typeof escapeCall[0] === "function" ? escapeCall[0]() : escapeCall[0];
+    const escapeDefinitions = escapeCall[0];
     escapeDefinitions.find((definition) => definition.hotkey === "Escape")?.callback();
 
     expect(harnessStore.state.activeSurface).toBe("chat");
@@ -504,20 +478,8 @@ createUiTest("App shortcuts", () => {
     render(() => <App />);
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
-    const calls = createHotkeysMock.mock.calls as unknown as Array<
-      [
-        Array<{ hotkey: string; callback: () => void }> | (() => Array<{ hotkey: string; callback: () => void }>),
-        () => { enabled: boolean; ignoreInputs: boolean; preventDefault: boolean; stopPropagation: boolean }
-      ]
-    >;
-    const escapeCall = calls.find(([hotkeys]) => {
-      const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
-      return definitions.some((definition) => definition.hotkey === "Escape");
-    });
-    if (!escapeCall) {
-      throw new Error("Expected IDE escape hotkey registration");
-    }
-    const escapeDefinitions = typeof escapeCall[0] === "function" ? escapeCall[0]() : escapeCall[0];
+    const escapeCall = getHotkeyCall("Escape");
+    const escapeDefinitions = escapeCall[0];
     escapeDefinitions.find((definition) => definition.hotkey === "Escape")?.callback();
 
     expect(harnessStore.state.projectSwitcherOpen).toBe(false);
@@ -530,20 +492,8 @@ createUiTest("App shortcuts", () => {
     render(() => <App />);
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
-    const calls = createHotkeysMock.mock.calls as unknown as Array<
-      [
-        Array<{ hotkey: string; callback: () => void }> | (() => Array<{ hotkey: string; callback: () => void }>),
-        () => { enabled: boolean; ignoreInputs: boolean; preventDefault: boolean; stopPropagation: boolean }
-      ]
-    >;
-    const escapeCall = calls.find(([hotkeys]) => {
-      const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
-      return definitions.some((definition) => definition.hotkey === "Escape");
-    });
-    if (!escapeCall) {
-      throw new Error("Expected IDE escape hotkey registration");
-    }
-    const escapeDefinitions = typeof escapeCall[0] === "function" ? escapeCall[0]() : escapeCall[0];
+    const escapeCall = getHotkeyCall("Escape");
+    const escapeDefinitions = escapeCall[0];
     const escape = escapeDefinitions.find((definition) => definition.hotkey === "Escape")?.callback;
 
     escape?.();

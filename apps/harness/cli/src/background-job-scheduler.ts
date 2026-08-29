@@ -1,9 +1,9 @@
-import type { BackgroundJob, BackgroundJobApprovalPolicy, BackgroundJobRun, BackgroundJobRunStatus } from "../../shared/protocol";
+import type { BackgroundJob, BackgroundJobApprovalPolicy, BackgroundJobRun, BackgroundJobRunStatus } from "@hyperfocus/ai-core/protocol";
 import { getDueScheduleAdvance } from "./background-job-schedule";
 import { assertAssistantRunnableForLaunch } from "./assistant-launch-gate";
 import { debugLog } from "./logging";
 import { classifyRunFailure, isBackoffEligibleFailureCategory } from "./run-failure-classification";
-import { WorkspaceRepository } from "./workspace-repository";
+import { type WorkspaceRepository } from "./workspace-repository";
 
 export const DEFAULT_BACKGROUND_RUN_MAX_MS = 30 * 60 * 1000;
 export const DEFAULT_BACKGROUND_RUN_NO_PROGRESS_MS = 10 * 60 * 1000;
@@ -30,85 +30,61 @@ type AssistantCongestion = {
   ratio: number;
 };
 
-export class BackgroundJobScheduler {
-  private readonly intervalMs: number;
-  private timer?: Timer;
-  private running = false;
+export function createBackgroundJobScheduler(options: BackgroundJobSchedulerOptions) {
+  const intervalMs = options.intervalMs ?? 15_000;
+  let running = false;
+  const { start, retry, stop } = createBackgroundJobSchedulerLoop(intervalMs, tick, options.onTickFailed);
+  const {
+    getRunsTimingOut,
+    resolveAssistantCongestion,
+    getActiveExclusiveAssistantRun,
+    markActiveJob,
+    markExclusiveAssistantJobBlocked,
+    markSchedulerCapacityBlocked,
+    queueDueJob,
+    resolveCongestionDelay
+  } = createBackgroundJobSchedulerInternals(options);
 
-  constructor(private readonly options: BackgroundJobSchedulerOptions) {
-    this.intervalMs = options.intervalMs ?? 15_000;
-  }
-
-  start() {
-    if (this.timer) {
+  async function tick(isStartup: boolean) {
+    if (running) {
       return;
     }
 
-    void this.tick(true).catch((error) => this.options.onTickFailed?.(error));
-    this.timer = setInterval(() => {
-      void this.tick(false).catch((error) => this.options.onTickFailed?.(error));
-    }, this.intervalMs);
-  }
-
-  async retry() {
-    if (!this.timer) {
-      this.timer = setInterval(() => {
-        void this.tick(false).catch((error) => this.options.onTickFailed?.(error));
-      }, this.intervalMs);
-    }
-
-    await this.tick(false);
-  }
-
-  stop() {
-    if (!this.timer) {
-      return;
-    }
-
-    clearInterval(this.timer);
-    this.timer = undefined;
-  }
-
-  async tick(isStartup: boolean) {
-    if (this.running) {
-      return;
-    }
-
-    this.running = true;
+    running = true;
     try {
-      if (this.options.repository.getGlobalExecutionPaused()) {
-        this.options.repository.setBackgroundSchedulerHeartbeat();
+      if (options.repository.getGlobalExecutionPaused()) {
+        options.repository.setBackgroundSchedulerHeartbeat();
         return;
       }
 
       const now = new Date();
       const nowIso = now.toISOString();
-      this.options.repository.setBackgroundSchedulerHeartbeat(now);
+      options.repository.setBackgroundSchedulerHeartbeat(now);
 
-      const timingOutRuns = this.getRunsTimingOut(now);
+      const timingOutRuns = getRunsTimingOut(now);
       if (timingOutRuns.length > 0) {
-        await this.options.onRunsTimingOut?.(timingOutRuns);
+        await options.onRunsTimingOut?.(timingOutRuns);
       }
 
-      const repairedRuns = this.options.repairActiveRuns
-        ? await this.options.repairActiveRuns(now)
-        : this.options.repository.repairInterruptedBackgroundJobRuns({
-            isRunLive: this.options.isRunLive,
+      const repairedRuns = options.repairActiveRuns
+        ? await options.repairActiveRuns(now)
+        : options.repository.repairInterruptedBackgroundJobRuns({
+            isRunLive: options.isRunLive,
             now,
             maxRunMs: DEFAULT_BACKGROUND_RUN_MAX_MS,
             noProgressMs: DEFAULT_BACKGROUND_RUN_NO_PROGRESS_MS
           });
       if (repairedRuns.length > 0) {
-        await this.options.onRunsRepaired?.(repairedRuns);
+        await options.onRunsRepaired?.(repairedRuns);
       }
 
-      const jobs = this.options.repository.loadBackgroundJobsState().jobs.filter((job) => job.status === "enabled");
-      const congestionControlEnabled = this.options.repository.getAssistantCongestionControlEnabledDefault();
-      const congestionByAssistant = congestionControlEnabled ? this.resolveAssistantCongestion(jobs) : new Map<string, AssistantCongestion>();
-      const activeRuns = this.options.repository.getActiveBackgroundJobRuns();
+      const jobs = readEnabledSchedulerJobs(options.repository);
+      const congestionControlEnabled = options.repository.getAssistantCongestionControlEnabledDefault();
+      const congestionByAssistant = congestionControlEnabled ? resolveAssistantCongestion(jobs) : new Map<string, AssistantCongestion>();
+      const activeRuns = options.repository.getActiveBackgroundJobRuns();
       let scheduledActiveRunCount = countScheduledLaunchSlots(activeRuns);
       const maxScheduledActiveRuns =
-        this.options.maxScheduledActiveRuns ?? this.options.repository.getMaxBackgroundJobsDefault();
+        options.maxScheduledActiveRuns ?? options.repository.getMaxBackgroundJobsDefault();
       debugLog("background.scheduler.tick", {
         isStartup,
         enabledJobs: jobs.length,
@@ -121,33 +97,33 @@ export class BackgroundJobScheduler {
       });
 
       for (const loadedJob of jobs) {
-        const job = this.options.repository.repairBackgroundJobReferences(loadedJob.id) ?? loadedJob;
+        const job = options.repository.repairBackgroundJobReferences(loadedJob.id) ?? loadedJob;
         if (job.status !== "enabled") {
           continue;
         }
         const advance = getDueScheduleAdvance(job.schedule, now);
-        const activeRun = this.options.repository.getActiveBackgroundJobRuns(job.id)[0];
+        const activeRun = options.repository.getActiveBackgroundJobRuns(job.id)[0];
         const congestion = congestionControlEnabled && job.assistantId ? congestionByAssistant.get(job.assistantId) : undefined;
         const congested = congestionControlEnabled ? Boolean(congestion?.congested) : false;
         const congestionRatio = congestionControlEnabled ? congestion?.ratio : undefined;
         if (activeRun) {
-          this.markActiveJob(job, activeRun, nowIso, congested, congestionRatio);
+          markActiveJob(job, activeRun, nowIso, congested, congestionRatio);
           continue;
         }
         const activeExclusiveAssistantRun = job.assistantId && job.lane === "exclusive"
-          ? this.getActiveExclusiveAssistantRun(job.assistantId, jobs)
+          ? getActiveExclusiveAssistantRun(job.assistantId, jobs)
           : undefined;
         if (activeExclusiveAssistantRun) {
-          this.markExclusiveAssistantJobBlocked(job, activeExclusiveAssistantRun, nowIso, congested, congestionRatio);
+          markExclusiveAssistantJobBlocked(job, activeExclusiveAssistantRun, nowIso, congested, congestionRatio);
           continue;
         }
 
         if (job.assistantId) {
           try {
-            assertAssistantRunnableForLaunch(this.options.repository, job.assistantId);
+            assertAssistantRunnableForLaunch(options.repository, job.assistantId);
           } catch (error) {
             const message = error instanceof Error ? error.message : "Assistant is not runnable";
-            this.options.repository.updateBackgroundJobSchedulerState(job.id, {
+            options.repository.updateBackgroundJobSchedulerState(job.id, {
               schedulerStatus: "blocked",
               schedulerDetail: message,
               blockedReason: message,
@@ -162,7 +138,7 @@ export class BackgroundJobScheduler {
         if (job.backoffUntil) {
           const backoffAt = Date.parse(job.backoffUntil);
           if (Number.isFinite(backoffAt) && backoffAt > now.getTime()) {
-            this.options.repository.updateBackgroundJobSchedulerState(job.id, {
+            options.repository.updateBackgroundJobSchedulerState(job.id, {
               schedulerStatus: "blocked",
               schedulerDetail: `Backoff until ${job.backoffUntil}`,
               blockedReason: `Failure backoff active until ${job.backoffUntil}`,
@@ -178,7 +154,7 @@ export class BackgroundJobScheduler {
         }
 
         if (!advance.due) {
-          this.options.repository.updateBackgroundJobSchedulerState(job.id, {
+          options.repository.updateBackgroundJobSchedulerState(job.id, {
             schedulerStatus: "idle",
             schedulerDetail: advance.nextRunAt ? `Next run ${advance.nextRunAt}` : undefined,
             consecutiveFailureCount: job.consecutiveFailureCount,
@@ -191,14 +167,14 @@ export class BackgroundJobScheduler {
           continue;
         }
 
-        const congestionDelay = congested ? this.resolveCongestionDelay(job, now) : undefined;
+        const congestionDelay = congested ? resolveCongestionDelay(job, now) : undefined;
         if (congestionDelay && congestionDelay.nextRunAt.getTime() > now.getTime()) {
-          this.options.repository.updateBackgroundJobSchedule(job.id, {
+          options.repository.updateBackgroundJobSchedule(job.id, {
             schedule: congestionDelay.schedule,
             nextRunAt: congestionDelay.nextRunAt.toISOString(),
             lastRunAt: job.lastRunAt
           });
-          this.options.repository.updateBackgroundJobSchedulerState(job.id, {
+          options.repository.updateBackgroundJobSchedulerState(job.id, {
             schedulerStatus: "idle",
             schedulerDetail: `Congested (${formatPercent(congestionRatio)}); scaled next run ${congestionDelay.nextRunAt.toISOString()}`,
             schedulerCongested: true,
@@ -215,29 +191,180 @@ export class BackgroundJobScheduler {
           continue;
         }
         if (maxScheduledActiveRuns > 0 && scheduledActiveRunCount >= maxScheduledActiveRuns) {
-          this.markSchedulerCapacityBlocked(job, nowIso, scheduledActiveRunCount, maxScheduledActiveRuns, congested, congestionRatio);
+          markSchedulerCapacityBlocked(job, nowIso, scheduledActiveRunCount, maxScheduledActiveRuns, congested, congestionRatio);
           continue;
         }
-        const queuedRun = this.queueDueJob({ job, advance }, isStartup, nowIso, congested, congestionRatio);
+        const queuedRun = queueDueJob({ job, advance }, isStartup, nowIso, congested, congestionRatio);
         if (queuedRun && isScheduledLaunchSlot(queuedRun)) {
           scheduledActiveRunCount += 1;
         }
       }
     } finally {
-      this.running = false;
+      running = false;
     }
   }
 
-  private getRunsTimingOut(now: Date) {
-    return this.options.repository.getActiveBackgroundJobRuns().filter((run) => {
-      if (run.status !== "running" || !this.options.isRunLive?.(run)) {
+  return { start, retry, stop, tick };
+}
+
+export type BackgroundJobScheduler = ReturnType<typeof createBackgroundJobScheduler>;
+
+function createBackgroundJobSchedulerLoop(
+  intervalMs: number,
+  tick: (isStartup: boolean) => Promise<void>,
+  onTickFailed: ((error: unknown) => void) | undefined
+) {
+  let timer: Timer | undefined;
+  const scheduleTick = () => void tick(false).catch((error) => onTickFailed?.(error));
+  function start() {
+    if (timer) return;
+    void tick(true).catch((error) => onTickFailed?.(error));
+    timer = setInterval(scheduleTick, intervalMs);
+  }
+  async function retry() {
+    timer ??= setInterval(scheduleTick, intervalMs);
+    await tick(false);
+  }
+  function stop() {
+    if (!timer) return;
+    clearInterval(timer);
+    timer = undefined;
+  }
+  return { start, retry, stop };
+}
+
+function createBackgroundJobQueuer(options: BackgroundJobSchedulerOptions) {
+  function queueDueJob(entry: DueJob, isStartup: boolean, nowIso: string, congested: boolean, congestionRatio?: number) {
+    const { job, advance } = entry;
+    options.repository.updateBackgroundJobSchedulerState(job.id, {
+      schedulerStatus: "due",
+      schedulerDetail: `Due at ${job.nextRunAt ?? advance.nextRunAt ?? nowIso}`,
+      schedulerCongested: congested,
+      schedulerCongestionRatio: congestionRatio,
+      lastSchedulerCheckAt: nowIso
+    });
+    if (options.repository.getActiveBackgroundJobRuns(job.id)[0]) {
+      return undefined;
+    }
+
+    const triggerSource = isStartup ? "startup-catchup" : "schedule";
+    debugLog("background.scheduler.queue", {
+      jobId: job.id,
+      assistantId: job.assistantId,
+      triggerSource,
+      skippedOccurrences: advance.skippedOccurrenceCount,
+      congested
+    });
+    options.repository.updateBackgroundJobSchedule(job.id, {
+      schedule: advance.nextSchedule,
+      nextRunAt: advance.nextRunAt,
+      lastRunAt: nowIso
+    });
+    const approvalPolicy = options.repository.getBackgroundJobApprovalPolicyDefault();
+    const queuedStatus = resolveQueuedStatus(job, approvalPolicy);
+    const approvalSummary =
+      queuedStatus === "awaiting-approval"
+        ? formatBackgroundApprovalSummary(job, triggerSource, approvalPolicy)
+        : undefined;
+    const queuedRun = options.repository.createBackgroundJobRun({
+      jobId: job.id,
+      projectId: job.projectId,
+      assistantId: job.assistantId,
+      automationThreadId: job.automationThreadId,
+      triggerSource,
+      status: queuedStatus,
+      riskLevel: job.riskLevel,
+      approvalStatus: resolveApprovalStatus(job, approvalPolicy),
+      skippedOccurrenceCount: advance.skippedOccurrenceCount,
+      summary: approvalSummary
+    });
+    options.repository.appendBackgroundJobRunEvent(
+      queuedRun.id,
+      queuedRun.status === "awaiting-approval" ? "awaiting-approval" : "queued",
+      queuedRun.status === "awaiting-approval" ? `Waiting for approval before launching ${job.name}` : `Queued ${job.name}`,
+      [approvalSummary, advance.skippedOccurrenceCount > 0 ? `Skipped ${advance.skippedOccurrenceCount} missed occurrence(s).` : undefined]
+        .filter(Boolean)
+        .join(" ")
+        || undefined
+    );
+    options.repository.updateBackgroundJobSchedulerState(job.id, {
+      schedulerStatus: queuedRun.status === "queued" ? "queued" : "blocked",
+      schedulerDetail: queuedRun.status === "queued" ? `Queued run ${queuedRun.id}` : `Waiting for approval ${queuedRun.id}`,
+      blockedReason: queuedRun.status === "queued" ? undefined : `Waiting for approval ${queuedRun.id}`,
+      schedulerQueuePosition: 1,
+      schedulerQueueReason: queuedRun.status === "queued" ? "Queue #1: launching now" : `Queue #1: waiting for approval ${queuedRun.id}`,
+      schedulerActiveRunId: queuedRun.id,
+      schedulerActiveRunStartedAt: queuedRun.startedAt,
+      schedulerLastProgressAt: queuedRun.lastHeartbeatAt ?? queuedRun.updatedAt,
+      schedulerCongested: congested,
+      schedulerCongestionRatio: congestionRatio,
+      lastSchedulerCheckAt: nowIso
+    });
+    const handleLaunchFailure = (error: unknown) => {
+      const failureMessage = error instanceof Error ? error.message : "Unknown background job launch failure";
+      const currentRun = options.repository.getBackgroundJobRun(queuedRun.id);
+      if (currentRun?.timedOutAt && currentRun.status !== "queued" && currentRun.status !== "running") {
+        options.repository.updateBackgroundJobSchedulerState(job.id, {
+          schedulerStatus: "blocked",
+          schedulerDetail: currentRun.failureMessage ?? failureMessage,
+          blockedReason: currentRun.failureMessage ?? failureMessage,
+          consecutiveFailureCount: options.repository.getBackgroundJob(job.id)?.consecutiveFailureCount,
+          backoffUntil: options.repository.getBackgroundJob(job.id)?.backoffUntil,
+          lastFailureCategory: options.repository.getBackgroundJob(job.id)?.lastFailureCategory,
+          schedulerCongested: congested,
+          schedulerCongestionRatio: congestionRatio,
+          lastSchedulerCheckAt: new Date().toISOString()
+        });
+        return;
+      }
+      const failureCategory = classifyRunFailure({ message: failureMessage });
+      options.repository.setBackgroundJobRunStatus(queuedRun.id, "failed", {
+        failureMessage,
+        failureCategory
+      });
+      options.repository.appendBackgroundJobRunEvent(queuedRun.id, "failed", "Background run failed", failureMessage);
+      if (isBackoffEligibleFailureCategory(failureCategory)) {
+        options.repository.recordBackgroundJobFailure(job.id, failureCategory);
+      } else {
+        options.repository.clearBackgroundJobFailureTracking(job.id);
+      }
+      options.repository.updateBackgroundJobSchedulerState(job.id, {
+        schedulerStatus: "blocked",
+        schedulerDetail: failureMessage,
+        blockedReason: failureMessage,
+        consecutiveFailureCount: options.repository.getBackgroundJob(job.id)?.consecutiveFailureCount,
+        backoffUntil: options.repository.getBackgroundJob(job.id)?.backoffUntil,
+        lastFailureCategory: options.repository.getBackgroundJob(job.id)?.lastFailureCategory,
+        schedulerCongested: congested,
+        schedulerCongestionRatio: congestionRatio,
+        lastSchedulerCheckAt: new Date().toISOString()
+      });
+    };
+    try {
+      void Promise.resolve(options.onRunQueued?.(queuedRun, job)).catch(
+        handleLaunchFailure
+      );
+    } catch (error) {
+      handleLaunchFailure(error);
+    }
+    return queuedRun;
+  }
+
+  return queueDueJob;
+}
+function createBackgroundJobSchedulerInternals(options: BackgroundJobSchedulerOptions) {
+  const queueDueJob = createBackgroundJobQueuer(options);
+
+  function getRunsTimingOut(now: Date) {
+    return options.repository.getActiveBackgroundJobRuns().filter((run) => {
+      if (run.status !== "running" || !options.isRunLive?.(run)) {
         return false;
       }
       return getRunAgeMs(run, now) >= DEFAULT_BACKGROUND_RUN_MAX_MS || getRunLastProgressAgeMs(run, now) >= DEFAULT_BACKGROUND_RUN_NO_PROGRESS_MS;
     });
   }
 
-  private resolveAssistantCongestion(jobs: BackgroundJob[]) {
+  function resolveAssistantCongestion(jobs: BackgroundJob[]) {
     const loadByAssistant = new Map<string, number>();
     for (const job of jobs) {
       if (!job.assistantId || job.lane !== "exclusive") {
@@ -247,37 +374,37 @@ export class BackgroundJobScheduler {
       if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
         continue;
       }
-      const averageDuration = this.getAverageDurationMs(job);
+      const averageDuration = getAverageDurationMs(job);
       if (!averageDuration) {
         continue;
       }
       loadByAssistant.set(job.assistantId, (loadByAssistant.get(job.assistantId) ?? 0) + averageDuration / intervalMs);
     }
-    const maxCongestion = this.options.repository.getAssistantMaxCongestionDefault();
+    const maxCongestion = options.repository.getAssistantMaxCongestionDefault();
     return new Map([...loadByAssistant.entries()].map(([assistantId, ratio]) => [assistantId, { congested: ratio > maxCongestion, ratio }]));
   }
 
-  private getAverageDurationMs(job: BackgroundJob) {
-    const durations = this.options.repository.getRecentSuccessfulBackgroundJobRunDurationsMs(job.id, 5);
+  function getAverageDurationMs(job: BackgroundJob) {
+    const durations = options.repository.getRecentSuccessfulBackgroundJobRunDurationsMs(job.id, 5);
     if (durations.length < 5) {
       return undefined;
     }
     return durations.reduce((sum, duration) => sum + duration, 0) / durations.length;
   }
 
-  private getActiveExclusiveAssistantRun(assistantId: string, jobs: BackgroundJob[]) {
+  function getActiveExclusiveAssistantRun(assistantId: string, jobs: BackgroundJob[]) {
     const jobsById = new Map(jobs.map((job) => [job.id, job]));
-    return this.options.repository
+    return options.repository
       .getActiveBackgroundJobRunsByAssistant(assistantId)
       .find((run) => jobsById.get(run.jobId)?.lane !== "concurrent");
   }
 
-  private markActiveJob(job: BackgroundJob, run: BackgroundJobRun, nowIso: string, congested: boolean, congestionRatio?: number) {
+  function markActiveJob(job: BackgroundJob, run: BackgroundJobRun, nowIso: string, congested: boolean, congestionRatio?: number) {
     const activeLeaseDetail =
       run.status === "running" && isFutureIso(run.controllerLeaseExpiresAt, nowIso)
         ? `controller lease active until ${run.controllerLeaseExpiresAt}`
         : undefined;
-    this.options.repository.updateBackgroundJobSchedulerState(job.id, {
+    options.repository.updateBackgroundJobSchedulerState(job.id, {
       schedulerStatus: run.status === "queued" ? "queued" : run.status === "running" ? "running" : "blocked",
       schedulerDetail: activeLeaseDetail ? `Blocked by ${run.status} run ${run.id}; ${activeLeaseDetail}` : `Blocked by ${run.status} run ${run.id}`,
       blockedReason: activeLeaseDetail ? `Job already has ${run.status} run ${run.id}; ${activeLeaseDetail}` : `Job already has ${run.status} run ${run.id}`,
@@ -297,13 +424,13 @@ export class BackgroundJobScheduler {
     });
   }
 
-  private markExclusiveAssistantJobBlocked(job: BackgroundJob, run: BackgroundJobRun, nowIso: string, congested: boolean, congestionRatio?: number) {
+  function markExclusiveAssistantJobBlocked(job: BackgroundJob, run: BackgroundJobRun, nowIso: string, congested: boolean, congestionRatio?: number) {
     const activeLeaseDetail =
       run.status === "running" && isFutureIso(run.controllerLeaseExpiresAt, nowIso)
         ? `; controller lease active until ${run.controllerLeaseExpiresAt}`
         : "";
     const detail = `Exclusive assistant lane waiting for ${run.status} run ${run.id}${activeLeaseDetail}`;
-    this.options.repository.updateBackgroundJobSchedulerState(job.id, {
+    options.repository.updateBackgroundJobSchedulerState(job.id, {
       schedulerStatus: "blocked",
       schedulerDetail: detail,
       blockedReason: detail,
@@ -323,7 +450,7 @@ export class BackgroundJobScheduler {
     });
   }
 
-  private markSchedulerCapacityBlocked(
+  function markSchedulerCapacityBlocked(
     job: BackgroundJob,
     nowIso: string,
     activeRunCount: number,
@@ -332,7 +459,7 @@ export class BackgroundJobScheduler {
     congestionRatio?: number
   ) {
     const detail = `Waiting for background capacity (${activeRunCount}/${maxActiveRuns} scheduled runs active)`;
-    this.options.repository.updateBackgroundJobSchedulerState(job.id, {
+    options.repository.updateBackgroundJobSchedulerState(job.id, {
       schedulerStatus: "blocked",
       schedulerDetail: detail,
       blockedReason: detail,
@@ -349,127 +476,12 @@ export class BackgroundJobScheduler {
     });
   }
 
-  private queueDueJob(entry: DueJob, isStartup: boolean, nowIso: string, congested: boolean, congestionRatio?: number) {
-    const { job, advance } = entry;
-    this.options.repository.updateBackgroundJobSchedulerState(job.id, {
-      schedulerStatus: "due",
-      schedulerDetail: `Due at ${job.nextRunAt ?? advance.nextRunAt ?? nowIso}`,
-      schedulerCongested: congested,
-      schedulerCongestionRatio: congestionRatio,
-      lastSchedulerCheckAt: nowIso
-    });
-    if (this.options.repository.getActiveBackgroundJobRuns(job.id)[0]) {
-      return undefined;
-    }
 
-    const triggerSource = isStartup ? "startup-catchup" : "schedule";
-    debugLog("background.scheduler.queue", {
-      jobId: job.id,
-      assistantId: job.assistantId,
-      triggerSource,
-      skippedOccurrences: advance.skippedOccurrenceCount,
-      congested
-    });
-    this.options.repository.updateBackgroundJobSchedule(job.id, {
-      schedule: advance.nextSchedule,
-      nextRunAt: advance.nextRunAt,
-      lastRunAt: nowIso
-    });
-    const approvalPolicy = this.options.repository.getBackgroundJobApprovalPolicyDefault();
-    const queuedStatus = resolveQueuedStatus(job, approvalPolicy);
-    const approvalSummary =
-      queuedStatus === "awaiting-approval"
-        ? formatBackgroundApprovalSummary(job, triggerSource, approvalPolicy)
-        : undefined;
-    const queuedRun = this.options.repository.createBackgroundJobRun({
-      jobId: job.id,
-      projectId: job.projectId,
-      assistantId: job.assistantId,
-      automationThreadId: job.automationThreadId,
-      triggerSource,
-      status: queuedStatus,
-      riskLevel: job.riskLevel,
-      approvalStatus: resolveApprovalStatus(job, approvalPolicy),
-      skippedOccurrenceCount: advance.skippedOccurrenceCount,
-      summary: approvalSummary
-    });
-    this.options.repository.appendBackgroundJobRunEvent(
-      queuedRun.id,
-      queuedRun.status === "awaiting-approval" ? "awaiting-approval" : "queued",
-      queuedRun.status === "awaiting-approval" ? `Waiting for approval before launching ${job.name}` : `Queued ${job.name}`,
-      [approvalSummary, advance.skippedOccurrenceCount > 0 ? `Skipped ${advance.skippedOccurrenceCount} missed occurrence(s).` : undefined]
-        .filter(Boolean)
-        .join(" ")
-        || undefined
-    );
-    this.options.repository.updateBackgroundJobSchedulerState(job.id, {
-      schedulerStatus: queuedRun.status === "queued" ? "queued" : "blocked",
-      schedulerDetail: queuedRun.status === "queued" ? `Queued run ${queuedRun.id}` : `Waiting for approval ${queuedRun.id}`,
-      blockedReason: queuedRun.status === "queued" ? undefined : `Waiting for approval ${queuedRun.id}`,
-      schedulerQueuePosition: 1,
-      schedulerQueueReason: queuedRun.status === "queued" ? "Queue #1: launching now" : `Queue #1: waiting for approval ${queuedRun.id}`,
-      schedulerActiveRunId: queuedRun.id,
-      schedulerActiveRunStartedAt: queuedRun.startedAt,
-      schedulerLastProgressAt: queuedRun.lastHeartbeatAt ?? queuedRun.updatedAt,
-      schedulerCongested: congested,
-      schedulerCongestionRatio: congestionRatio,
-      lastSchedulerCheckAt: nowIso
-    });
-    const handleLaunchFailure = (error: unknown) => {
-      const failureMessage = error instanceof Error ? error.message : "Unknown background job launch failure";
-      const currentRun = this.options.repository.getBackgroundJobRun(queuedRun.id);
-      if (currentRun?.timedOutAt && currentRun.status !== "queued" && currentRun.status !== "running") {
-        this.options.repository.updateBackgroundJobSchedulerState(job.id, {
-          schedulerStatus: "blocked",
-          schedulerDetail: currentRun.failureMessage ?? failureMessage,
-          blockedReason: currentRun.failureMessage ?? failureMessage,
-          consecutiveFailureCount: this.options.repository.getBackgroundJob(job.id)?.consecutiveFailureCount,
-          backoffUntil: this.options.repository.getBackgroundJob(job.id)?.backoffUntil,
-          lastFailureCategory: this.options.repository.getBackgroundJob(job.id)?.lastFailureCategory,
-          schedulerCongested: congested,
-          schedulerCongestionRatio: congestionRatio,
-          lastSchedulerCheckAt: new Date().toISOString()
-        });
-        return;
-      }
-      const failureCategory = classifyRunFailure({ message: failureMessage });
-      this.options.repository.setBackgroundJobRunStatus(queuedRun.id, "failed", {
-        failureMessage,
-        failureCategory
-      });
-      this.options.repository.appendBackgroundJobRunEvent(queuedRun.id, "failed", "Background run failed", failureMessage);
-      if (isBackoffEligibleFailureCategory(failureCategory)) {
-        this.options.repository.recordBackgroundJobFailure(job.id, failureCategory);
-      } else {
-        this.options.repository.clearBackgroundJobFailureTracking(job.id);
-      }
-      this.options.repository.updateBackgroundJobSchedulerState(job.id, {
-        schedulerStatus: "blocked",
-        schedulerDetail: failureMessage,
-        blockedReason: failureMessage,
-        consecutiveFailureCount: this.options.repository.getBackgroundJob(job.id)?.consecutiveFailureCount,
-        backoffUntil: this.options.repository.getBackgroundJob(job.id)?.backoffUntil,
-        lastFailureCategory: this.options.repository.getBackgroundJob(job.id)?.lastFailureCategory,
-        schedulerCongested: congested,
-        schedulerCongestionRatio: congestionRatio,
-        lastSchedulerCheckAt: new Date().toISOString()
-      });
-    };
-    try {
-      void Promise.resolve(this.options.onRunQueued?.(this.options.repository.getBackgroundJobRun(queuedRun.id)!, job)).catch(
-        handleLaunchFailure
-      );
-    } catch (error) {
-      handleLaunchFailure(error);
-    }
-    return queuedRun;
-  }
-
-  private resolveCongestionDelay(job: BackgroundJob, now: Date) {
+  function resolveCongestionDelay(job: BackgroundJob, now: Date) {
     if (job.schedule.type !== "interval" || !job.lastRunAt) {
       return undefined;
     }
-    const averageDuration = this.getAverageDurationMs(job);
+    const averageDuration = getAverageDurationMs(job);
     if (!averageDuration) {
       return undefined;
     }
@@ -490,6 +502,23 @@ export class BackgroundJobScheduler {
       }
     };
   }
+
+  return {
+    getRunsTimingOut,
+    resolveAssistantCongestion,
+    getActiveExclusiveAssistantRun,
+    markActiveJob,
+    markExclusiveAssistantJobBlocked,
+    markSchedulerCapacityBlocked,
+    queueDueJob,
+    resolveCongestionDelay
+  };
+}
+
+function readEnabledSchedulerJobs(repository: WorkspaceRepository) {
+  const jobs: BackgroundJob[] = []; let afterId: string | undefined;
+  do { const page = repository.listEnabledBackgroundJobsForScheduler(afterId); jobs.push(...page.items);
+    afterId = page.nextAfterId; } while (afterId !== undefined); return jobs;
 }
 
 function countScheduledLaunchSlots(runs: BackgroundJobRun[]) {
@@ -498,16 +527,6 @@ function countScheduledLaunchSlots(runs: BackgroundJobRun[]) {
 
 function isScheduledLaunchSlot(run: BackgroundJobRun) {
   return run.status === "queued" || run.status === "running";
-}
-
-function resolveJobNextRunAt(job: BackgroundJob) {
-  if (job.nextRunAt) {
-    return job.nextRunAt;
-  }
-  if (job.schedule.type === "interval" || job.schedule.type === "cron") {
-    return job.schedule.nextRunAt;
-  }
-  return job.schedule.consumedAt ? undefined : job.schedule.runAt;
 }
 
 function resolveScheduleIntervalMs(job: BackgroundJob, now: Date) {

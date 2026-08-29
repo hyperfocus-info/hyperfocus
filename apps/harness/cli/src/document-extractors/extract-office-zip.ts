@@ -3,9 +3,11 @@ import { posix as pathPosix } from "node:path";
 import { Readable } from "node:stream";
 import { XMLParser } from "fast-xml-parser";
 import { Entry, fromBuffer, ZipFile } from "yauzl";
+import { createResourceBudget, type ResourceBudget } from "./types";
+import type { DocumentExtractionOptions } from "./types";
 
-type XmlValue = string | number | boolean | null | XmlNode[] | XmlNode;
-type XmlNode = {
+type XmlValue = string | number | boolean | null | XmlValue[] | XmlNode;
+export type XmlNode = {
   [key: string]: XmlValue;
 };
 
@@ -18,29 +20,91 @@ const xmlParser = new XMLParser({
   trimValues: false
 });
 
-export async function readOfficeZipEntries(input: ArrayBuffer | Uint8Array | Buffer) {
-  const zipFile = await openZipBuffer(toBuffer(input));
+const defaultMaxArchiveEntries = 2048;
+const defaultMaxExpandedBytes = 32 * 1024 * 1024;
+const defaultMaxEntryBytes = 16 * 1024 * 1024;
+const defaultMaxCompressionRatio = 200;
+const defaultMaxDurationMs = 10_000;
+const defaultMaxOutputChars = 1_000_000;
+
+export type OfficeZipReadOptions = DocumentExtractionOptions & {
+  includeEntry?: (normalizedPath: string) => boolean;
+};
+
+export async function readOfficeZipEntries(
+  input: ArrayBuffer | Uint8Array | Buffer,
+  options: OfficeZipReadOptions = {}
+) {
+  const inputBuffer = toBuffer(input);
+  const maxInputBytes = options.maxInputBytes ?? 16 * 1024 * 1024;
+  if (inputBuffer.byteLength > maxInputBytes) {
+    throw new RangeError(`Office archive exceeded the ${maxInputBytes.toLocaleString("en-US")} byte input budget`);
+  }
+
+  const budget = createResourceBudget({
+    maxItems: options.maxItems ?? defaultMaxArchiveEntries,
+    maxBytes: options.maxExpandedBytes ?? defaultMaxExpandedBytes,
+    maxDurationMs: options.maxDurationMs ?? defaultMaxDurationMs,
+    signal: options.signal
+  });
+  const maxEntryBytes = options.maxEntryBytes ?? defaultMaxEntryBytes;
+  const maxCompressionRatio = options.maxCompressionRatio ?? defaultMaxCompressionRatio;
+  validatePositiveLimit(maxEntryBytes, "maxEntryBytes");
+  validatePositiveLimit(maxCompressionRatio, "maxCompressionRatio");
+
+  const zipFile = await openZipBuffer(inputBuffer);
   const entries = new Map<string, Buffer>();
 
   try {
     await new Promise<void>((resolve, reject) => {
-      zipFile.once("error", reject);
-      zipFile.once("end", resolve);
+      let settled = false;
+      const finish = (error?: unknown) => {
+        if (settled) return;
+        settled = true;
+        if (error) reject(error);
+        else resolve();
+      };
+
+      zipFile.once("error", finish);
+      zipFile.once("end", () => finish());
       zipFile.on("entry", (entry: Entry) => {
-        if (entry.fileName.endsWith("/")) {
+        try {
+          budget.consumeItems(1, "Office archive");
+        } catch (error) {
+          finish(error);
+          return;
+        }
+
+        const normalizedPath = normalizeZipPath(entry.fileName);
+        if (entry.fileName.endsWith("/") || (options.includeEntry && !options.includeEntry(normalizedPath))) {
           zipFile.readEntry();
           return;
         }
 
-        void readEntryBuffer(zipFile, entry)
+        try {
+          validateEntry(entry, normalizedPath, maxEntryBytes, maxCompressionRatio);
+          budget.consumeBytes(entry.uncompressedSize, `Office archive entry ${normalizedPath}`);
+        } catch (error) {
+          finish(error);
+          return;
+        }
+
+        void readEntryBuffer(zipFile, entry, maxEntryBytes, budget)
           .then((buffer) => {
-            entries.set(normalizeZipPath(entry.fileName), buffer);
-            zipFile.readEntry();
+            if (!settled) {
+              entries.set(normalizedPath, buffer);
+              zipFile.readEntry();
+            }
           })
-          .catch(reject);
+          .catch(finish);
       });
 
-      zipFile.readEntry();
+      try {
+        budget.check("Office archive");
+        zipFile.readEntry();
+      } catch (error) {
+        finish(error);
+      }
     });
   } finally {
     zipFile.close();
@@ -51,12 +115,12 @@ export async function readOfficeZipEntries(input: ArrayBuffer | Uint8Array | Buf
 
 export function parseXmlDocument(input: Buffer | string) {
   const xmlText = typeof input === "string" ? input : input.toString("utf8");
-  const parsed = xmlParser.parse(xmlText);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  const parsed: unknown = xmlParser.parse(xmlText);
+  if (!isXmlNode(parsed)) {
     throw new Error("XML document did not parse into an object");
   }
 
-  return parsed as XmlNode;
+  return parsed;
 }
 
 export function normalizeExtractedText(text: string) {
@@ -67,6 +131,19 @@ export function normalizeExtractedText(text: string) {
     .map((line) => line.replace(/[ \t]+$/g, ""));
   const collapsed = normalizedLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   return collapsed;
+}
+
+export function enforceExtractedTextBudget(text: string, options: DocumentExtractionOptions = {}) {
+  const maxOutputChars = options.maxOutputChars ?? defaultMaxOutputChars;
+  if (!Number.isSafeInteger(maxOutputChars) || maxOutputChars < 0) {
+    throw new RangeError("maxOutputChars must be a non-negative safe integer");
+  }
+  if (text.length > maxOutputChars) {
+    throw new RangeError(
+      `Extracted document text exceeded the ${maxOutputChars.toLocaleString("en-US")} character output budget`
+    );
+  }
+  return text;
 }
 
 export function normalizeZipPath(input: string) {
@@ -85,7 +162,8 @@ export function resolveZipPath(basePath: string, target: string) {
 
 export function toArray<T>(value: T | T[] | undefined) {
   if (value === undefined) {
-    return [] as T[];
+    const empty: T[] = [];
+    return empty;
   }
 
   return Array.isArray(value) ? value : [value];
@@ -93,15 +171,11 @@ export function toArray<T>(value: T | T[] | undefined) {
 
 export function getChildObject(node: XmlNode | undefined, key: string) {
   const value = node?.[key];
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-
-  return value as XmlNode;
+  return isXmlNode(value) ? value : undefined;
 }
 
 export function getChildObjects(node: XmlNode | undefined, key: string) {
-  return toArray(node?.[key]).filter((value): value is XmlNode => Boolean(value) && typeof value === "object" && !Array.isArray(value));
+  return toArray(node?.[key]).filter(isXmlNode);
 }
 
 export function getNodeText(node: unknown): string {
@@ -115,14 +189,14 @@ export function getNodeText(node: unknown): string {
     return node.map((entry) => getNodeText(entry)).join("");
   }
 
-  const record = node as Record<string, unknown>;
-  const directText = record["#text"];
+  if (!isRecord(node)) return "";
+  const directText = node["#text"];
   const textParts: string[] = [];
   if (typeof directText === "string" || typeof directText === "number" || typeof directText === "boolean") {
     textParts.push(String(directText));
   }
 
-  for (const [key, value] of Object.entries(record)) {
+  for (const [key, value] of Object.entries(node)) {
     if (key === "#text") {
       continue;
     }
@@ -131,6 +205,22 @@ export function getNodeText(node: unknown): string {
   }
 
   return textParts.join("");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isXmlNode(value: unknown): value is XmlNode {
+  return isRecord(value) && Object.values(value).every(isXmlValue);
+}
+
+function isXmlValue(value: unknown): value is XmlValue {
+  return value === null
+    || typeof value === "string"
+    || typeof value === "number"
+    || typeof value === "boolean"
+    || (Array.isArray(value) ? value.every(isXmlValue) : isXmlNode(value));
 }
 
 export function getAttribute(node: XmlNode | undefined, key: string) {
@@ -187,7 +277,7 @@ function openZipBuffer(buffer: Buffer) {
   });
 }
 
-function readEntryBuffer(zipFile: ZipFile, entry: Entry) {
+function readEntryBuffer(zipFile: ZipFile, entry: Entry, maxEntryBytes: number, budget: ResourceBudget) {
   return new Promise<Buffer>((resolve, reject) => {
     zipFile.openReadStream(entry, (error, stream) => {
       if (error || !stream) {
@@ -195,22 +285,70 @@ function readEntryBuffer(zipFile: ZipFile, entry: Entry) {
         return;
       }
 
-      void readStreamToBuffer(stream)
+      void readStreamToBuffer(stream, maxEntryBytes, budget, normalizeZipPath(entry.fileName))
         .then(resolve)
         .catch(reject);
     });
   });
 }
 
-function readStreamToBuffer(stream: Readable) {
+function readStreamToBuffer(stream: Readable, maxBytes: number, budget: ResourceBudget, entryPath: string) {
   return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
+    let bytes = 0;
+    let settled = false;
+    const finish = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      if (error) {
+        stream.destroy();
+        reject(error);
+      } else {
+        resolve(Buffer.concat(chunks, bytes));
+      }
+    };
+
     stream.on("data", (chunk) => {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      try {
+        budget.check(`Office archive entry ${entryPath}`);
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        bytes += buffer.byteLength;
+        if (bytes > maxBytes) {
+          throw new RangeError(
+            `Office archive entry ${entryPath} exceeded the ${maxBytes.toLocaleString("en-US")} byte entry budget`
+          );
+        }
+        chunks.push(buffer);
+      } catch (error) {
+        finish(error);
+      }
     });
-    stream.once("end", () => resolve(Buffer.concat(chunks)));
-    stream.once("error", reject);
+    stream.once("end", () => finish());
+    stream.once("error", finish);
   });
+}
+
+function validateEntry(entry: Entry, path: string, maxEntryBytes: number, maxCompressionRatio: number) {
+  if (entry.uncompressedSize > maxEntryBytes) {
+    throw new RangeError(
+      `Office archive entry ${path} exceeded the ${maxEntryBytes.toLocaleString("en-US")} byte entry budget`
+    );
+  }
+
+  const compressionRatio = entry.compressedSize === 0
+    ? entry.uncompressedSize === 0 ? 1 : Number.POSITIVE_INFINITY
+    : entry.uncompressedSize / entry.compressedSize;
+  if (compressionRatio > maxCompressionRatio) {
+    throw new RangeError(
+      `Office archive entry ${path} exceeded the ${maxCompressionRatio.toLocaleString("en-US")}:1 compression-ratio budget`
+    );
+  }
+}
+
+function validatePositiveLimit(value: number, name: string) {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive number`);
+  }
 }
 
 function toBuffer(input: ArrayBuffer | Uint8Array | Buffer) {

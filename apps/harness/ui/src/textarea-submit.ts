@@ -1,5 +1,5 @@
 export function submitOnEnter(handler: () => void) {
-  return (event: KeyboardEvent & { currentTarget: HTMLTextAreaElement; target: Element }) => {
+  return (event: KeyboardEvent) => {
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
       return;
     }

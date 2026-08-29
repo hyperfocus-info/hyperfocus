@@ -1,9 +1,9 @@
-import { hashHyperfocusAsset } from "../../../engine/src/project/index.ts";
-import { validatePlayablePlatformers2D } from "../../../engine/src/project/runtime-2d.ts";
-import { auditNavigationProject2D } from "../../../engine/src/project/runtime-navigation-2d.ts";
-import { validatePlayableSaveProject2D } from "../../../engine/src/project/runtime-save-2d.ts";
-import { auditPlayableStoryProject2D } from "../../../engine/src/project/runtime-story-2d.ts";
-import type { EditorAsset, EditorProject } from "./project.ts";
+import { hashHyperfocusAsset } from "@hyperfocus/engine/project";
+import { validatePlayablePlatformers2D } from "@hyperfocus/engine/project/runtime-2d";
+import { auditNavigationProject2D } from "@hyperfocus/engine/project/runtime-navigation-2d";
+import { validatePlayableSaveProject2D } from "@hyperfocus/engine/project/runtime-save-2d";
+import { auditPlayableStoryProject2D } from "@hyperfocus/engine/project/runtime-story-2d";
+import type { EditorAsset, EditorProject } from "@hyperfocus/engine/project";
 
 const DEFAULT_MAX_ASSETS = 5_000;
 const DEFAULT_MAX_ASSET_BYTES = 256 * 1024 * 1024;
@@ -78,6 +78,9 @@ export type PlayableBuildAssetLimits = {
   maxAssetBytes?: number;
   maxTotalBytes?: number;
   supportedBehaviorModules?: readonly string[];
+  /** The editor's loopback compiler can bundle source already stored in the
+   * portable project. File-backed CLI callers continue to use their own lane. */
+  allowEmbeddedProjectSource?: boolean;
 };
 
 /**
@@ -97,7 +100,7 @@ export async function collectPlayableBuildAssets(
   const maxTotalBytes = positiveInteger(limits.maxTotalBytes ?? DEFAULT_MAX_TOTAL_BYTES, "maxTotalBytes");
   const supportedBehaviors = new Set(limits.supportedBehaviorModules ?? DEFAULT_BUILTIN_BEHAVIORS);
   const diagnostics: PlayableBuildDiagnostic[] = [
-    ...behaviorDiagnostics(project, supportedBehaviors),
+    ...behaviorDiagnostics(project, supportedBehaviors, limits.allowEmbeddedProjectSource === true),
     ...componentAssetDiagnostics(project),
     ...platformerDiagnostics(project),
     ...saveDiagnostics(project),
@@ -260,7 +263,7 @@ export function playableAssetDataUrl(asset: PlayableBuildAsset, object: Playable
   return `${asset.dataUrlPrefix}${object.base64}`;
 }
 
-function behaviorDiagnostics(project: EditorProject, supported: ReadonlySet<string>): PlayableBuildDiagnostic[] {
+function behaviorDiagnostics(project: EditorProject, supported: ReadonlySet<string>, allowEmbeddedProjectSource: boolean): PlayableBuildDiagnostic[] {
   const diagnostics: PlayableBuildDiagnostic[] = [];
   for (const scene of project.scenes) {
     for (const entity of scene.entities) {
@@ -284,11 +287,13 @@ function behaviorDiagnostics(project: EditorProject, supported: ReadonlySet<stri
               ...location,
             });
           }
-        } else {
+        } else if (!allowEmbeddedProjectSource || !hasEmbeddedBehaviorSource(project, module, component.values.export)) {
           diagnostics.push({
             severity: "error",
             code: "UNSUPPORTED_BEHAVIOR_MODULE",
-            message: `Behavior module ${module} cannot be embedded without evaluating or bundling source; use a builtin: behavior.`,
+            message: allowEmbeddedProjectSource
+              ? `Behavior module ${module} does not resolve to a valid source file embedded in this project.`
+              : `Behavior module ${module} requires the source-bundling build lane.`,
             ...location,
           });
         }
@@ -296,6 +301,18 @@ function behaviorDiagnostics(project: EditorProject, supported: ReadonlySet<stri
     }
   }
   return diagnostics;
+}
+
+function hasEmbeddedBehaviorSource(project: EditorProject, module: string, exportName: unknown): boolean {
+  if (!module.startsWith("./") || !/^[A-Za-z_$][\w$]*$/.test(typeof exportName === "string" ? exportName : "update")) return false;
+  const scripts = project.extensions?.hyperfocusScripts;
+  if (!isRecord(scripts) || !Array.isArray(scripts.files)) return false;
+  const base = module.slice(2).replace(/\\/g, "/");
+  if (!base || base === ".." || base.startsWith("../") || base.split("/").some((part) => !part || part === "..")) return false;
+  const candidates = /\.[cm]?[jt]sx?$/i.test(base)
+    ? [base]
+    : [base, ...[".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"].map((extension) => `${base}${extension}`), ...["ts", "tsx", "js", "jsx"].map((extension) => `${base}/index.${extension}`)];
+  return scripts.files.some((file) => isRecord(file) && typeof file.path === "string" && typeof file.source === "string" && candidates.includes(file.path.replace(/^\.\//, "").replace(/\\/g, "/")));
 }
 
 function componentAssetDiagnostics(project: EditorProject): PlayableBuildDiagnostic[] {
@@ -383,7 +400,7 @@ function supportsAsset(kind: EditorAsset["kind"], mimeType: string): boolean {
   if (kind === "image") return /^(image\/(?:avif|bmp|gif|jpeg|png|svg\+xml|webp|x-icon))$/.test(mimeType);
   if (kind === "audio") return /^(audio\/(?:aac|flac|mp4|mpeg|ogg|wav|webm|x-wav))$/.test(mimeType);
   if (kind === "font") return /^(?:font\/(?:otf|ttf|woff|woff2)|application\/(?:font-woff|vnd\.ms-fontobject|x-font-opentype|x-font-ttf))$/.test(mimeType);
-  if (kind === "data") return mimeType.startsWith("text/") || /^(?:application\/(?:json|octet-stream|xml))$/.test(mimeType);
+  if (kind === "data") return mimeType.startsWith("text/") || /^(?:application\/(?:json|octet-stream|xml)|model\/gltf\+json)$/.test(mimeType);
   return false;
 }
 
@@ -423,4 +440,8 @@ function result(
 
 function errorMessage(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

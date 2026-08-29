@@ -1,5 +1,6 @@
 import {
   collectByLocalName,
+  enforceExtractedTextBudget,
   getAttribute,
   getChildObject,
   getChildObjects,
@@ -8,10 +9,18 @@ import {
   readOfficeZipEntries,
   resolveZipPath
 } from "./extract-office-zip";
-import type { DocumentExtractionResult } from "./types";
+import type { DocumentExtractionOptions, DocumentExtractionResult } from "./types";
 
-export async function extractPptxText(input: ArrayBuffer | Uint8Array | Buffer): Promise<DocumentExtractionResult> {
-  const entries = await readOfficeZipEntries(input);
+export async function extractPptxText(
+  input: ArrayBuffer | Uint8Array | Buffer,
+  options: DocumentExtractionOptions = {}
+): Promise<DocumentExtractionResult> {
+  const entries = await readOfficeZipEntries(input, {
+    ...options,
+    includeEntry: (path) => path === "ppt/presentation.xml"
+      || path === "ppt/_rels/presentation.xml.rels"
+      || path.startsWith("ppt/slides/")
+  });
   const presentationXml = entries.get("ppt/presentation.xml");
   const relationshipsXml = entries.get("ppt/_rels/presentation.xml.rels");
   if (!presentationXml || !relationshipsXml) {
@@ -56,7 +65,7 @@ export async function extractPptxText(input: ArrayBuffer | Uint8Array | Buffer):
     })
     .filter((value): value is string => Boolean(value));
 
-  const text = normalizeExtractedText(slideBlocks.join("\n\n"));
+  const text = enforceExtractedTextBudget(normalizeExtractedText(slideBlocks.join("\n\n")), options);
   if (!text) {
     return {
       status: "no-text",

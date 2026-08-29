@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { PlannerSubtask } from "../../shared/protocol";
+import type { PlannerSubtask } from "@hyperfocus/ai-core/protocol";
 import type { PiAgentAdapter, PiAgentExecutionController, PiAgentPromptRequest, PiAgentPromptResult } from "./pi-agent-adapter";
 import {
   canRunSameWorktreeTask,
@@ -8,9 +8,22 @@ import {
   sameWorktreeOwnedPathsOverlap,
   type TaskContractSettings
 } from "./pi-orchestrator";
-import { buildSubagentPrompt, executeSubagents, scheduleSubagentTasks, type SubagentResult } from "./pi-subagents";
+import {
+  buildSubagentPrompt,
+  createIndexedTaskQueue,
+  executeSubagents,
+  resolveSubagentConcurrency,
+  scheduleSubagentTasks,
+  type SubagentResult
+} from "./pi-subagents";
 import { buildSubagentEnvironmentBrief } from "./subagent-environment";
-import { WorkspaceRepository } from "./workspace-repository";
+import { createWorkspaceRepository } from "./workspace-repository";
+import {
+  classifyProviderCongestion,
+  createHarnessCapacityGovernor,
+  getHarnessManagedAgentAdapter,
+  ProviderCongestionError
+} from "./execution-runtime";
 
 type ScopedTask = {
   task: PlannerSubtask;
@@ -19,6 +32,132 @@ type ScopedTask = {
 };
 
 describe("subagent scheduler", () => {
+  test("shared capacity keeps one hundred mixed agents inside every resource cap", async () => {
+    const governor = createHarnessCapacityGovernor({
+      capacities: { subagent: 12, provider: 6, branchfs: 8, browser: 2, document: 3 }
+    });
+    await Promise.all(Array.from({ length: 100 }, (_, index) => governor.run({
+      resources: index % 5 === 0
+        ? { subagent: 1, provider: 1, branchfs: 1, browser: 1 }
+        : { subagent: 1, provider: 1, branchfs: 1 }
+    }, async () => Promise.resolve())));
+    expect(governor.snapshot()).toMatchObject({
+      used: { subagent: 0, provider: 0, branchfs: 0, browser: 0, document: 0 },
+      metrics: { requested: 100, admitted: 100, released: 100, rejected: 0 }
+    });
+    expect(() => createHarnessCapacityGovernor({ capacities: { browser: 0 } })).toThrow("positive safe integer");
+  });
+
+  test("managed adapters share provider concurrency across foreground-shaped requests", async () => {
+    const releases: Array<() => void> = [];
+    let active = 0;
+    let peak = 0;
+    const source = createPromptAdapter(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      active -= 1;
+      return { text: "ok" };
+    });
+    const governor = createHarnessCapacityGovernor({
+      capacities: { provider: 1, "provider.openai": 1 },
+      rateLimits: { "provider.openai.requests": { capacity: 100, intervalMs: 60_000 } }
+    });
+    const managed = getHarnessManagedAgentAdapter(source, { governor });
+    const first = managed.runPrompt(promptRequest("first"));
+    const second = managed.runPrompt(promptRequest("second"));
+    await waitFor(() => releases.length === 1);
+    expect(peak).toBe(1);
+    expect(governor.snapshot()).toMatchObject({ used: { provider: 1, "provider.openai": 1 }, queued: 1 });
+    releases.shift()?.();
+    await waitFor(() => releases.length === 1);
+    releases.shift()?.();
+    await Promise.all([first, second]);
+    expect(peak).toBe(1);
+    expect(governor.snapshot()).toMatchObject({ used: { provider: 0, "provider.openai": 0 }, queued: 0 });
+  });
+
+  test("managed adapters preserve congestion detail and lower only the affected provider capacity", async () => {
+    const source = createPromptAdapter(async () => {
+      throw Object.assign(new Error("HTTP 429 rate limit; retry-after=60000ms"), { status: 429, retryAfterMs: 60_000 });
+    });
+    const governor = createHarnessCapacityGovernor({
+      capacities: { provider: 4, "provider.openai": 4 },
+      rateLimits: { "provider.openai.requests": { capacity: 100, intervalMs: 60_000 } }
+    });
+    const managed = getHarnessManagedAgentAdapter(source, { governor, jitter: () => 0 });
+    await expect(managed.runPrompt(promptRequest("limited"))).rejects.toBeInstanceOf(ProviderCongestionError);
+    expect(governor.snapshot()).toMatchObject({
+      capacities: { provider: 4, "provider.openai": 2 },
+      used: { provider: 0, "provider.openai": 0 },
+      metrics: { cooldowns: 1, capacityChanges: 1 }
+    });
+    expect(classifyProviderCongestion(new Error("fetch failed: network offline"))).toEqual({
+      category: "network",
+      retryAfterMs: undefined
+    });
+  });
+
+  test("repeated congestion restores the provider's configured capacity instead of ratcheting it down", async () => {
+    const recoveryCallbacks: Array<() => void> = [];
+    const setTimer = ((callback: () => void) => {
+      recoveryCallbacks.push(callback);
+      return { unref() {} } as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+    const source = createPromptAdapter(async () => {
+      throw Object.assign(new Error("HTTP 429 rate limit"), { status: 429, retryAfterMs: 0 });
+    });
+    const governor = createHarnessCapacityGovernor({
+      capacities: { provider: 4, "provider.openai": 4 },
+      rateLimits: { "provider.openai.requests": { capacity: 100, intervalMs: 60_000 } }
+    });
+    const managed = getHarnessManagedAgentAdapter(source, { governor, jitter: () => 0, setTimer });
+    await managed.runPrompt(promptRequest("first")).catch(() => undefined);
+    await managed.runPrompt(promptRequest("second")).catch(() => undefined);
+    expect(governor.snapshot().capacities["provider.openai"]).toBe(1);
+    recoveryCallbacks.at(-1)?.();
+    expect(governor.snapshot().capacities["provider.openai"]).toBe(4);
+  });
+
+  test("indexed queue preserves fair order with one scan per unconstrained item", () => {
+    const queue = createIndexedTaskQueue(Array.from({ length: 10_000 }, (_, index) => index));
+    for (let index = 0; index < 10_000; index += 1) expect(queue.dequeue()).toBe(index);
+    expect(queue.metrics).toMatchObject({ dequeued: 10_000, slotScans: 10_000, eligibilityChecks: 0 });
+
+    const blocked = createIndexedTaskQueue(["blocked-a", "ready-a", "blocked-b", "ready-b"]);
+    expect(blocked.dequeue((value) => value.startsWith("ready"))).toBe("ready-a");
+    expect(blocked.dequeue((value) => value.startsWith("ready"))).toBe("ready-b");
+    expect(blocked.dequeue()).toBe("blocked-a");
+    expect(blocked.dequeue()).toBe("blocked-b");
+    expect(() => createIndexedTaskQueue([], { compactionThreshold: 0 })).toThrow("positive safe integer");
+  });
+
+  test("bounds configurable concurrency and keeps the default conservative", () => {
+    expect(resolveSubagentConcurrency(1)).toBe(1);
+    expect(resolveSubagentConcurrency("128")).toBe(128);
+    expect(resolveSubagentConcurrency("")).toBe(4);
+    expect(() => resolveSubagentConcurrency(0)).toThrow("1 to 256");
+    expect(() => resolveSubagentConcurrency(257)).toThrow("1 to 256");
+  });
+
+  test("reports linear queue work for one thousand unconstrained subagents", async () => {
+    const run = await scheduleSubagentTasks<number, { id: string }, never>({
+      tasks: Array.from({ length: 1_000 }, (_, index) => index),
+      maxConcurrency: 32,
+      getTaskId: (task) => String(task),
+      async executeTask(task) {
+        await Promise.resolve();
+        return { result: { id: String(task) } };
+      }
+    });
+
+    expect(run.results).toHaveLength(1_000);
+    expect(run.metrics.slotScans).toBe(1_000);
+    expect(run.metrics.eligibilityChecks).toBe(0);
+    expect(run.metrics.workerCount).toBe(32);
+    expect(run.metrics.peakActive).toBeLessThanOrEqual(32);
+  });
+
   test("builds implementation-worker prompts for isolated subagents", () => {
     const prompt = buildSubagentPrompt({
       brief: "Build the feature",
@@ -98,7 +237,7 @@ describe("subagent scheduler", () => {
   });
 
   test("same-worktree disjoint owned paths run in parallel", async () => {
-    const release = createReleaseMap(["task-a", "task-b"]);
+    const release = createReleaseMap();
     const starts: string[] = [];
     let activeCount = 0;
     let maxActiveCount = 0;
@@ -133,7 +272,7 @@ describe("subagent scheduler", () => {
   });
 
   test("planner-unspecified scope forces exclusive same-worktree execution", async () => {
-    const release = createReleaseMap(["task-a", "task-b"]);
+    const release = createReleaseMap();
     const starts: string[] = [];
 
     const run = scheduleSubagentTasks<ScopedTask, SubagentResult, never>({
@@ -166,7 +305,7 @@ describe("subagent scheduler", () => {
   });
 
   test("overlapping same-worktree tasks queue while disjoint work continues", async () => {
-    const release = createReleaseMap(["task-a", "task-b", "task-c"]);
+    const release = createReleaseMap();
     const starts: string[] = [];
 
     const run = scheduleSubagentTasks<ScopedTask, SubagentResult, never>({
@@ -204,7 +343,7 @@ describe("subagent scheduler", () => {
   });
 
   test("parallel subagents reserve turns without exceeding max budget", async () => {
-    const repository = new WorkspaceRepository(":memory:", process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(":memory:", process.cwd(), { durability: "test-fast" });
     const project = repository.addProject(process.cwd());
     const run = repository.createAgentRun(project.id, "parallel budget", "openai/gpt-5.4", project.activeThreadId, 2).activeRun!;
 
@@ -235,7 +374,7 @@ describe("subagent scheduler", () => {
   });
 
   test("settled callbacks fire before sibling work finishes", async () => {
-    const release = createReleaseMap(["task-a", "task-b"]);
+    const release = createReleaseMap();
     const settled: string[] = [];
 
     const run = scheduleSubagentTasks<ScopedTask, SubagentResult, never>({
@@ -523,7 +662,7 @@ function createResult(
   };
 }
 
-function createReleaseMap(taskIds: string[]) {
+function createReleaseMap() {
   const resolvers = new Map<string, () => void>();
   return {
     wait(taskId: string) {
@@ -579,6 +718,26 @@ function createLease(runId: string) {
 
 function pathForTest(id: string) {
   return `C:\\tmp\\${id}`;
+}
+
+function promptRequest(prompt: string): PiAgentPromptRequest {
+  return { kind: "planner", cwd: ".", modelId: "openai/test", prompt };
+}
+
+function createPromptAdapter(runPrompt: (request: PiAgentPromptRequest) => Promise<PiAgentPromptResult>): PiAgentAdapter {
+  return {
+    runPrompt,
+    async startExecution(request): Promise<PiAgentExecutionController> {
+      return {
+        result: runPrompt(request),
+        continueWithPrompt(prompt) { return runPrompt({ ...request, prompt: prompt ?? "continue" }); },
+        async abort() {},
+        dispose() {}
+      };
+    },
+    setApiKey() {},
+    hasApiKey() { return true; }
+  };
 }
 
 function createSuccessfulAdapter(text: string): PiAgentAdapter {

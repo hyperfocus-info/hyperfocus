@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { lstat, mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { BranchfsManager, testExports } from "./branchfs-manager";
+import { createBranchfsManager, testExports } from "./branchfs-manager";
 import { useGitProjectFixture } from "./test-support/git-project-fixture";
 
 setDefaultTimeout(15000);
@@ -31,7 +31,7 @@ describe("branchfs manager", () => {
     writeFileSync(path.join(rootPath, "tracked.txt"), "dirty tracked\n");
     writeFileSync(path.join(rootPath, "local-only.txt"), "local only\n");
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-dirty" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-dirty" });
     const lease = await manager.prepareExperimentLease();
 
     expect(await readText(path.join(lease.projectMountPath, "tracked.txt"))).toBe("dirty tracked\n");
@@ -44,7 +44,7 @@ describe("branchfs manager", () => {
   test("mount is an isolated git repository for agent diff commands", async () => {
     const rootPath = await fixture.createRepoClone("branchfs-git-mount");
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-git-mount" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-git-mount" });
     const lease = await manager.prepareExperimentLease();
 
     const statusBefore = Bun.spawnSync({
@@ -77,7 +77,7 @@ describe("branchfs manager", () => {
     await mkdir(path.join(rootPath, ".tmp-test-data"), { recursive: true });
     writeFileSync(path.join(rootPath, ".tmp-test-data", "cache.txt"), "ignored\n");
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-ignored" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-ignored" });
     const lease = await manager.prepareExperimentLease();
 
     expect(existsSync(path.join(lease.projectMountPath, ".tmp-test-data"))).toBe(false);
@@ -92,7 +92,7 @@ describe("branchfs manager", () => {
       writeFileSync(path.join(rootPath, name, "host.txt"), "host\n");
     }
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-passthrough" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-passthrough" });
     const lease = await manager.prepareExperimentLease();
 
     for (const name of ["node_modules", "dist", ".bun"]) {
@@ -100,6 +100,34 @@ describe("branchfs manager", () => {
     }
 
     await manager.unmountExperiment(lease);
+  });
+
+  test("mounts workspace-local dependency directories for package resolution", async () => {
+    const rootPath = await fixture.createRepoClone("branchfs-workspace-dependencies");
+    const workspacePath = path.join(rootPath, "apps", "tool");
+    const dependencyPath = path.join(workspacePath, "node_modules", "fixture-dependency");
+    writeFileSync(path.join(rootPath, ".git", "info", "exclude"), "apps/tool/node_modules/\n");
+    await mkdir(dependencyPath, { recursive: true });
+    writeFileSync(path.join(dependencyPath, "package.json"), JSON.stringify({ name: "fixture-dependency", type: "module", exports: "./index.ts" }));
+    writeFileSync(path.join(dependencyPath, "index.ts"), "export const dependencyValue = 'resolved';\n");
+    writeFileSync(path.join(workspacePath, "import.ts"), "import { dependencyValue } from 'fixture-dependency'; console.log(dependencyValue);\n");
+
+    const manager = createBranchfsManager({ rootPath, runId: "run-workspace-dependencies" });
+    const lease = await manager.prepareExperimentLease();
+
+    expect((await lstat(path.join(lease.repoMountPath, "apps", "tool", "node_modules"))).isSymbolicLink()).toBe(true);
+    const result = Bun.spawnSync({
+      cmd: [process.execPath, path.join(lease.repoMountPath, "apps", "tool", "import.ts")],
+      cwd: lease.repoMountPath,
+      stdout: "pipe",
+      stderr: "pipe"
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr.toString()).toBe("");
+    expect(result.stdout.toString().trim()).toBe("resolved");
+
+    await manager.unmountExperiment(lease);
+    expect(await readText(path.join(dependencyPath, "index.ts"))).toContain("dependencyValue");
   });
 
   test("skips generated dirty entries when inheriting branchfs dirty state", async () => {
@@ -113,7 +141,7 @@ describe("branchfs manager", () => {
     writeFileSync(path.join(rootPath, "local-only.txt"), "local only\n");
     const traces: Array<{ stage: string; message: string; detail?: string }> = [];
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-generated-dirty" }, { onTrace: (trace) => traces.push(trace) });
+    const manager = createBranchfsManager({ rootPath, runId: "run-generated-dirty" }, { onTrace: (trace) => traces.push(trace) });
     const lease = await manager.prepareExperimentLease();
 
     expect(existsSync(path.join(lease.dirtySeedPath, "node_modules"))).toBe(false);
@@ -137,7 +165,7 @@ describe("branchfs manager", () => {
     writeFileSync(path.join(rootPath, "node_modules", "postcss", "lib", "rule.d.ts"), "export {};\n");
     const traces: Array<{ stage: string; message: string; detail?: string }> = [];
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-only-generated-dirty" }, { onTrace: (trace) => traces.push(trace) });
+    const manager = createBranchfsManager({ rootPath, runId: "run-only-generated-dirty" }, { onTrace: (trace) => traces.push(trace) });
     const lease = await manager.prepareExperimentLease();
 
     expect(traces.some((trace) => trace.stage === "branchfs-inherit-dirty")).toBe(false);
@@ -167,7 +195,7 @@ describe("branchfs manager", () => {
       await rm(path.join(rootPath, name), { recursive: true, force: true });
     }
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-missing-passthrough" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-missing-passthrough" });
     const lease = await manager.prepareExperimentLease();
 
     for (const name of ["node_modules", "dist", ".bun"]) {
@@ -180,8 +208,8 @@ describe("branchfs manager", () => {
   test("prepares concurrent leases without pruning in-flight partial roots", async () => {
     const rootPath = await fixture.createRepoClone("branchfs-concurrent");
     const managers = [
-      new BranchfsManager({ rootPath, runId: "run-concurrent-a" }),
-      new BranchfsManager({ rootPath, runId: "run-concurrent-b" })
+      createBranchfsManager({ rootPath, runId: "run-concurrent-a" }),
+      createBranchfsManager({ rootPath, runId: "run-concurrent-b" })
     ];
 
     const leases = await Promise.all(managers.map((manager) => manager.prepareExperimentLease()));
@@ -196,7 +224,7 @@ describe("branchfs manager", () => {
     const rootPath = await fixture.createRepoClone("branchfs-deleted-dirty");
     await rm(path.join(rootPath, "tracked.txt"), { force: true });
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-deleted-dirty" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-deleted-dirty" });
     const lease = await manager.prepareExperimentLease();
 
     expect(existsSync(path.join(lease.projectMountPath, "tracked.txt"))).toBe(false);
@@ -270,7 +298,7 @@ describe("branchfs manager", () => {
 
   test("rejects unsafe run ids before touching branchfs roots", async () => {
     const rootPath = await fixture.createRepoClone("branchfs-unsafe-run-id");
-    const manager = new BranchfsManager({ rootPath, runId: "../outside" });
+    const manager = createBranchfsManager({ rootPath, runId: "../outside" });
 
     await expect(manager.prepareExperimentLease()).rejects.toThrow("BranchFS runId must be a single safe path segment");
     expect(existsSync(path.join(rootPath, ".local", "outside"))).toBe(false);
@@ -279,7 +307,7 @@ describe("branchfs manager", () => {
   test("reads diff and flushes experiment changes back to disk", async () => {
     const rootPath = await fixture.createRepoClone("branchfs-flush");
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-flush" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-flush" });
     const lease = await manager.prepareExperimentLease();
 
     writeFileSync(path.join(lease.projectMountPath, "tracked.txt"), "experiment update\n");
@@ -306,7 +334,7 @@ describe("branchfs manager", () => {
   test("tracks and flushes empty files", async () => {
     const rootPath = await fixture.createRepoClone("branchfs-empty-file");
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-empty-file" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-empty-file" });
     const lease = await manager.prepareExperimentLease();
 
     writeFileSync(path.join(lease.projectMountPath, "empty.txt"), "");
@@ -323,7 +351,7 @@ describe("branchfs manager", () => {
   test("flushes file to directory replacements back to disk", async () => {
     const rootPath = await fixture.createRepoClone("branchfs-file-to-dir");
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-file-to-dir" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-file-to-dir" });
     const lease = await manager.prepareExperimentLease();
 
     await rm(path.join(lease.projectMountPath, "tracked.txt"), { force: true });
@@ -341,7 +369,7 @@ describe("branchfs manager", () => {
   test("flushes directory to file replacements back to disk", async () => {
     const rootPath = await fixture.createRepoClone("branchfs-dir-to-file");
 
-    const manager = new BranchfsManager({ rootPath, runId: "run-dir-to-file" });
+    const manager = createBranchfsManager({ rootPath, runId: "run-dir-to-file" });
     const lease = await manager.prepareExperimentLease();
 
     await rm(path.join(lease.projectMountPath, "nested"), { recursive: true, force: true });

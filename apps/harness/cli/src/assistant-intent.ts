@@ -24,13 +24,21 @@ export function detectAssistantChatIntent(input: string): AssistantChatIntent {
 
   const createIntent = detectCreateIntent(sourcePrompt);
   if (createIntent) {
+    if (createIntent.purpose) {
+      return {
+        kind: "create-ready",
+        name: createIntent.name,
+        scope: createIntent.scope,
+        purpose: createIntent.purpose,
+        sourcePrompt
+      };
+    }
     return {
-      kind: createIntent.purpose ? "create-ready" : "create-needs-purpose",
+      kind: "create-needs-purpose",
       name: createIntent.name,
       scope: createIntent.scope,
-      ...(createIntent.purpose ? { purpose: createIntent.purpose } : {}),
       sourcePrompt
-    } as AssistantChatIntent;
+    };
   }
 
   return { kind: "none" };

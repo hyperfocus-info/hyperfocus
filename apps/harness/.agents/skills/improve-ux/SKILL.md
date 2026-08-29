@@ -49,7 +49,8 @@ Read `LEARNINGS.md` at the start when it exists, and update it at the end when t
 Update `LEARNINGS.md` only with reusable, evidence-backed observations:
 
 - Add learnings under `Reusable Patterns`.
-- Put project-specific observations under `Project Findings`.
+- Put project-specific observations in the project's own audit or design document,
+  not in this globally bundled skill.
 - Include screenshot paths, test names, or user-provided artifacts when they explain where the learning came from.
 - Keep each learning short enough to survive repeated future reads.
 - Do not store one-off implementation details, code snippets, or personal preference.

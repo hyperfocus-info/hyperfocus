@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { isRecoverableWorkspaceDatabaseError, purgeWorkspaceDatabase, resolveHarnessDbBackupPath } from "./dev-db-recovery";
+import { resolveHarnessTestTempRoot } from "./test-support/test-temp-root";
 
 describe("dev db recovery", () => {
   test("detects recoverable sqlite schema errors", () => {
@@ -26,7 +27,7 @@ describe("dev db recovery", () => {
   });
 
   test("purges sqlite db artifacts", async () => {
-    const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+    const tempRoot = resolveHarnessTestTempRoot();
     mkdirSync(tempRoot, { recursive: true });
     const dbPath = path.join(tempRoot, `purge-${crypto.randomUUID()}.sqlite`);
 
@@ -42,7 +43,7 @@ describe("dev db recovery", () => {
   });
 
   test("backs up sqlite db artifacts before purging", async () => {
-    const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+    const tempRoot = resolveHarnessTestTempRoot();
     mkdirSync(tempRoot, { recursive: true });
     const dbPath = path.join(tempRoot, `backup-${crypto.randomUUID()}.sqlite`);
     const backupPath = `${dbPath}.backup-test`;
@@ -66,7 +67,7 @@ describe("dev db recovery", () => {
   });
 
   test("does not purge when backup fails", async () => {
-    const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+    const tempRoot = resolveHarnessTestTempRoot();
     mkdirSync(tempRoot, { recursive: true });
     const dbPath = path.join(tempRoot, `backup-fails-${crypto.randomUUID()}.sqlite`);
     writeFileSync(dbPath, "main");
@@ -106,7 +107,7 @@ describe("dev db recovery", () => {
   });
 
   test("returns fallback path when busy db cannot be purged yet", async () => {
-    const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+    const tempRoot = resolveHarnessTestTempRoot();
     mkdirSync(tempRoot, { recursive: true });
     const dbPath = path.join(tempRoot, `busy-${crypto.randomUUID()}.sqlite`);
     const walPath = `${dbPath}-wal`;

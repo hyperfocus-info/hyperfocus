@@ -18,6 +18,18 @@ export function openIdeWindow(input: OpenIdeWindowInput = {}) {
   return undefined;
 }
 
+export function readOpenIdeWindowInput(event: Event): OpenIdeWindowInput {
+  if (!(event instanceof CustomEvent)) return {};
+  const detail: unknown = event.detail;
+  if (!detail || typeof detail !== "object") return {};
+  const projectId = Reflect.get(detail, "projectId");
+  const threadId = Reflect.get(detail, "threadId");
+  return {
+    projectId: typeof projectId === "string" ? projectId : undefined,
+    threadId: typeof threadId === "string" ? threadId : undefined
+  };
+}
+
 export function createIdeWindowUrl(input: OpenIdeWindowInput = {}) {
   if (typeof window === "undefined") {
     return "/ide";

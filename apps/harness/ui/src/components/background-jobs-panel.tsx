@@ -1,26 +1,15 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
+import { For, Show, createMemo, createSignal, type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { createRequestId, type AgentRunState, type BackgroundJob, type BackgroundJobRun, type BulkOperationAction, type BulkOperationTarget, type RunDiagnosticsWindowDays } from "../../../shared/protocol";
+import { createRequestId, type AgentRunState, type BackgroundJob, type BackgroundJobRun, type BulkOperationAction, type BulkOperationTarget, type RunDiagnosticsWindowDays } from "@hyperfocus/ai-core/protocol";
 import { formatForDisplay } from "@tanstack/solid-hotkeys";
-import {
-  type BackgroundJobEditorDraft,
-  type JobsJobStateFilter,
-  type JobsPaneJobSort,
-  type JobsPaneRunSort,
-  type JobsRunFilter,
-  type RunDiagnosticsViewState,
-  harnessStore,
-  persistMergedLocalPreferences
-} from "../harness-store";
-import { formatShortTimestamp, resolveBrowserTimezone } from "../lib/time-format";
+import { harnessStore, type JobsJobStateFilter,
+  type JobsPaneJobSort, type JobsPaneRunSort, type RunDiagnosticsViewState } from "../harness-store";
+import type { JobsRunFilter } from "../store/background-jobs-pane-state";
+import { formatShortTimestamp } from "../lib/time-format";
 import { normalizeAppHotkeyPreferences } from "../lib/app-hotkeys";
-import { registerCurrentTabItemSelector } from "../lib/current-tab-item-hotkeys";
 import type { ChatFileTarget } from "../lib/chat-file-links";
 import { openIdeWindow } from "../lib/ide-window";
-import { openProjectThreadSource } from "../source-navigation";
-import { openBackgroundJobInJobsPane } from "../background-run-navigation";
 import { toProperCase } from "../lib/utils";
-import { pushToast } from "../toast-store";
 import { ActionButton } from "./action-button";
 import { FileLinkedText, type FileLinkConfig } from "./file-linked-text";
 import { CopyTextButton } from "./primitives/copy-text-button";
@@ -43,6 +32,9 @@ import { StatusChip, type StatusChipTone } from "./primitives/status-chip";
 import { Tooltip } from "./primitives/tooltip";
 import { VirtualList } from "./primitives/virtual-list";
 import { backgroundJobsStyles as styles } from "./background-jobs.styles";
+import { BackgroundRunActions } from "./background-jobs/background-run-actions";
+import { createBackgroundJobsPanelController } from "./background-jobs/background-jobs-panel-controller";
+import { jobsPaneSegmentItems } from "./background-jobs/jobs-pane-menu";
 import { rightAlignedNumbersEnabled } from "../lib/visual-flags";
 import {
   Bell,
@@ -79,7 +71,7 @@ type ProjectChatRunEntry = {
   run: AgentRunState;
 };
 
-type RunListItem =
+export type RunListItem =
   | {
       kind: "background";
       run: BackgroundJobRun;
@@ -105,6 +97,10 @@ function toggleId(ids: string[], id: string) {
   return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];
 }
 
+function isInteractiveSelectionTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest("button,a,input,textarea,select,[role='menuitem'],[data-selection-ignore]"));
+}
+
 function mergeRangeSelection(ids: string[], visibleIds: string[], anchorId: string, targetId: string) {
   const anchorIndex = visibleIds.indexOf(anchorId);
   const targetIndex = visibleIds.indexOf(targetId);
@@ -127,11 +123,17 @@ function formatBulkActionLabel(action: BulkOperationAction) {
   }
 }
 
-export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
-  let runDetailViewport: HTMLDivElement | undefined;
-  let pendingHealthRefreshTimer: ReturnType<typeof setTimeout> | undefined;
-  let lastHealthRefreshAt = 0;
-  let lastObservedDiagnosticsRefreshVersion: number | undefined;
+function createBackgroundJobsPanelModel(props: BackgroundJobsPanelProps) {
+  const runtime: {
+    runDetailViewport?: HTMLDivElement;
+    pendingHealthRefreshTimer?: ReturnType<typeof setTimeout>;
+    lastHealthRefreshAt: number;
+    lastObservedDiagnosticsRefreshVersion?: number;
+    pendingSelectionTimer?: ReturnType<typeof setTimeout>;
+    pendingSelectionKind?: "job" | "run";
+    pendingSelectionId?: string;
+    consumedDelayedSelection: boolean;
+  } = { lastHealthRefreshAt: 0, consumedDelayedSelection: false };
   const state = harnessStore.state;
   const sendCommand = harnessStore.actions.sendCommand;
   const executionPaused = () => state.executionControl.isPaused;
@@ -195,10 +197,6 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
   const [jobSelectionAnchorId, setJobSelectionAnchorId] = createSignal<string>();
   const [runSelectionAnchorId, setRunSelectionAnchorId] = createSignal<string>();
   const [contextMenu, setContextMenu] = createSignal<{ x: number; y: number; label: string; actions: ContextMenuAction[] }>();
-  let pendingSelectionTimer: ReturnType<typeof setTimeout> | undefined;
-  let pendingSelectionKind: "job" | "run" | undefined;
-  let pendingSelectionId: string | undefined;
-  let consumedDelayedSelection = false;
   const selectedJobIdSet = createMemo(() => new Set(selectedJobIds()));
   const selectedRunIdSet = createMemo(() => new Set(selectedRunIds()));
   const selectedJobs = createMemo(() => jobs().filter((job) => selectedJobIdSet().has(job.id)));
@@ -211,14 +209,17 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
   const selectedRunItem = createMemo(() => {
     const explicitRunId = selectedRunId();
     if (explicitRunId) {
-      return runListItems().find((item) => runListItemRun(item).id === explicitRunId);
+      const backgroundRun = state.backgroundJobs.runs.find((run) => run.id === explicitRunId);
+      return runListItems().find((item) => runListItemRun(item).id === explicitRunId) ?? (backgroundRun ? { kind: "background" as const, run: backgroundRun } : undefined);
     }
     return activeSegment() === "inbox" ? runListItems()[0] : undefined;
   });
-  const selectedRun = createMemo(() => {
+  const selectedRun = createMemo(() => optionalRunListItemRun(selectedRunItem()));
+  const selectedBackgroundRun = createMemo(() => {
     const item = selectedRunItem();
-    return item ? runListItemRun(item) : undefined;
+    return item?.kind === "background" ? item.run : undefined;
   });
+  const selectedRunTitle = () => formatOptionalRunListItemTitle(selectedRunItem(), selectedJob()?.name);
   const selectedRunScrollKey = createMemo(() => {
     const item = selectedRunItem();
     const events = item?.kind === "background" ? item.run.events : [];
@@ -227,7 +228,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
   });
   const selectedJob = createMemo(() => {
     const item = selectedRunItem();
-    return jobs().find((job) => item?.kind === "background" && job.id === item.run.jobId) ?? jobs().find((job) => job.id === selectedJobId()) ?? jobs()[0];
+    return state.backgroundJobs.jobs.find((job) => item?.kind === "background" && job.id === item.run.jobId) ?? jobs().find((job) => job.id === selectedJobId()) ?? jobs()[0];
   });
   const selectedJobRuns = createMemo(() => {
     const jobId = selectedJob()?.id;
@@ -253,6 +254,23 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
       detail: event.detail
     }))
   );
+  const handleOpenBackgroundFile = (
+    project: typeof state.workspace.projects[number],
+    target: ChatFileTarget,
+  ) => {
+    openIdeWindow({ projectId: project.id, threadId: project.activeThreadId });
+    harnessStore.openIdeFile(target.path, target.line, target.column);
+  };
+  const getProjectFileLinks = (
+    project: typeof state.workspace.projects[number] | undefined,
+  ): FileLinkConfig | undefined => project ? {
+    rootPath: project.rootPath,
+    filePaths: project.filePaths ?? [],
+    onOpenFile: (target) => handleOpenBackgroundFile(project, target),
+  } : undefined;
+  const getBackgroundRunFileLinks = (projectId: string | undefined) => getProjectFileLinks(
+    projectId ? state.workspace.projects.find((project) => project.id === projectId) : undefined,
+  );
   const selectedRunFileLinks = () => {
     const item = selectedRunItem();
     return item?.kind === "background" ? getBackgroundRunFileLinks(item.run.projectId) : undefined;
@@ -266,584 +284,62 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
   const runListItemFileLinks = (item: RunListItem) =>
     item.kind === "project-chat" ? getProjectFileLinks(item.entry.project) : getBackgroundRunFileLinks(item.run.projectId);
 
-  createEffect(() => {
-    if (!showLeft()) {
-      return;
-    }
-    if (activeSegment() === "jobs") {
-      const unregister = registerCurrentTabItemSelector("jobs", (index) => {
-        const job = jobs()[index];
-        if (!job) {
-          return false;
-        }
-        openJobDetails(job);
-        return true;
-      });
-      onCleanup(unregister);
-      return;
-    }
-    if (activeSegment() === "inbox") {
-      const unregister = registerCurrentTabItemSelector("runs", (index) => {
-        const item = runListItems()[index];
-        if (!item) {
-          return false;
-        }
-        if (item.kind === "project-chat") {
-          openProjectChatRun(item.entry.run.id);
-        } else {
-          openRunDetails(item.run);
-        }
-        return true;
-      });
-      onCleanup(unregister);
-    }
-  });
-  createEffect(() => {
-    const visibleIds = new Set(jobs().map((job) => job.id));
-    setSelectedJobIds((ids) => ids.filter((id) => visibleIds.has(id)));
-    if (jobSelectionAnchorId() && !visibleIds.has(jobSelectionAnchorId()!)) {
-      setJobSelectionAnchorId(undefined);
-    }
-  });
-  createEffect(() => {
-    const visibleIds = new Set(runListItems().filter((item) => item.kind === "background").map((item) => runListItemRun(item).id));
-    setSelectedRunIds((ids) => ids.filter((id) => visibleIds.has(id)));
-    if (runSelectionAnchorId() && !visibleIds.has(runSelectionAnchorId()!)) {
-      setRunSelectionAnchorId(undefined);
-    }
-  });
-  onCleanup(() => clearPendingSelectionTimer());
 
-  function scrollRunDetailToBottom() {
-    if (runDetailViewport) {
-      runDetailViewport.scrollTop = runDetailViewport.scrollHeight;
-    }
-  }
+  return {
+    runtime, state, sendCommand, executionPaused, executionPauseReason, runFilter, variant,
+    healthRefreshThrottleMs, showLeft, showDetail, jobsPane, activeSegment, activeSearch,
+    healthWindowDays, setHealthWindowDays, headerTitle, headerHelp, selectedRunId,
+    selectedJobId, detailsRunId, diagnostics, diagnosticsRefreshVersion, jobs, filteredRuns,
+    activeProjectChatRuns, runListItems, selectedJobIds, setSelectedJobIds, selectedRunIds,
+    setSelectedRunIds, jobSelectionAnchorId, setJobSelectionAnchorId, runSelectionAnchorId,
+    setRunSelectionAnchorId, contextMenu, setContextMenu, selectedJobIdSet, selectedRunIdSet,
+    selectedJobs, selectedBackgroundRuns, selectedRunItem, selectedRun, selectedBackgroundRun,
+    selectedRunTitle, selectedRunScrollKey, selectedJob, selectedJobRuns, detailsRun,
+    detailsJob, detailsLogEntries, selectedRunFileLinks, selectedRunItemFileLinks,
+    detailsRunFileLinks, selectedJobFileLinks, runListItemFileLinks, getBackgroundRunFileLinks,
+  };
+}
 
-  function getBackgroundRunFileLinks(projectId: string | undefined): FileLinkConfig | undefined {
-    return getProjectFileLinks(projectId ? state.workspace.projects.find((project) => project.id === projectId) : undefined);
-  }
+export type BackgroundJobsPanelModel = ReturnType<typeof createBackgroundJobsPanelModel>;
 
-  function getProjectFileLinks(project: typeof state.workspace.projects[number] | undefined): FileLinkConfig | undefined {
-    return project
-      ? {
-          rootPath: project.rootPath,
-          filePaths: project.filePaths ?? [],
-          onOpenFile: (target) => handleOpenBackgroundFile(project, target)
-        }
-      : undefined;
-  }
+type BackgroundJobsPanelController = ReturnType<typeof createBackgroundJobsPanelController>;
 
-  function clearPendingSelectionTimer() {
-    if (pendingSelectionTimer) {
-      clearTimeout(pendingSelectionTimer);
-      pendingSelectionTimer = undefined;
-    }
-    if (!consumedDelayedSelection) {
-      pendingSelectionKind = undefined;
-      pendingSelectionId = undefined;
-    }
-  }
+type BackgroundJobsPanelViewProps = {
+  model: BackgroundJobsPanelModel;
+  controller: BackgroundJobsPanelController;
+  allowSegmentSwitch: boolean;
+};
 
-  function scheduleDelayedSelection(kind: "job" | "run", id: string, event: PointerEvent) {
-    if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || isInteractiveSelectionTarget(event.target)) {
-      return;
-    }
-    clearPendingSelectionTimer();
-    pendingSelectionKind = kind;
-    pendingSelectionId = id;
-    pendingSelectionTimer = setTimeout(() => {
-      pendingSelectionTimer = undefined;
-      consumedDelayedSelection = true;
-      if (kind === "job") {
-        setSelectedRunIds([]);
-        setSelectedJobIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
-        setJobSelectionAnchorId(id);
-        return;
-      }
-      setSelectedJobIds([]);
-      setSelectedRunIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
-      setRunSelectionAnchorId(id);
-    }, 250);
-  }
+export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
+  const model = createBackgroundJobsPanelModel(props);
+  const controller = createBackgroundJobsPanelController(model);
+  return <BackgroundJobsPanelView model={model} controller={controller} allowSegmentSwitch={!props.segment} />;
+}
 
-  function consumeDelayedSelection(kind: "job" | "run", id: string) {
-    if (!consumedDelayedSelection || pendingSelectionKind !== kind || pendingSelectionId !== id) {
-      return false;
-    }
-    consumedDelayedSelection = false;
-    pendingSelectionKind = undefined;
-    pendingSelectionId = undefined;
-    return true;
-  }
-
-  function isInteractiveSelectionTarget(target: EventTarget | null) {
-    return target instanceof Element && Boolean(target.closest("button,a,input,textarea,select,[role='menuitem'],[data-selection-ignore]"));
-  }
-
-  function selectJobWithMouse(job: BackgroundJob, event: MouseEvent) {
-    setSelectedRunIds([]);
-    const visibleIds = jobs().map((entry) => entry.id);
-    if (event.shiftKey) {
-      const anchorId = jobSelectionAnchorId() ?? job.id;
-      setSelectedJobIds((ids) => mergeRangeSelection(ids, visibleIds, anchorId, job.id));
-      setJobSelectionAnchorId(anchorId);
-      return;
-    }
-    if (event.ctrlKey || event.metaKey) {
-      setSelectedJobIds((ids) => toggleId(ids, job.id));
-      setJobSelectionAnchorId(job.id);
-      return;
-    }
-    setSelectedJobIds([job.id]);
-    setJobSelectionAnchorId(job.id);
-  }
-
-  function selectRunWithMouse(run: BackgroundJobRun, event: MouseEvent) {
-    setSelectedJobIds([]);
-    const visibleIds = runListItems()
-      .filter((item) => item.kind === "background")
-      .map((item) => runListItemRun(item).id);
-    if (event.shiftKey) {
-      const anchorId = runSelectionAnchorId() ?? run.id;
-      setSelectedRunIds((ids) => mergeRangeSelection(ids, visibleIds, anchorId, run.id));
-      setRunSelectionAnchorId(anchorId);
-      return;
-    }
-    if (event.ctrlKey || event.metaKey) {
-      setSelectedRunIds((ids) => toggleId(ids, run.id));
-      setRunSelectionAnchorId(run.id);
-      return;
-    }
-    setSelectedRunIds([run.id]);
-    setRunSelectionAnchorId(run.id);
-  }
-
-  function handleJobCardClick(job: BackgroundJob, event: MouseEvent) {
-    if (consumeDelayedSelection("job", job.id)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    if (event.shiftKey || event.ctrlKey || event.metaKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      selectJobWithMouse(job, event);
-      return;
-    }
-    openJobDetails(job);
-  }
-
-  function handleRunListClick(item: RunListItem, event: MouseEvent, openRunItem: () => void) {
-    const run = item.kind === "background" ? item.run : undefined;
-    if (run && consumeDelayedSelection("run", run.id)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    if (run && (event.shiftKey || event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      event.stopPropagation();
-      selectRunWithMouse(run, event);
-      return;
-    }
-    openRunItem();
-  }
-
-  function openJobBulkContextMenu(job: BackgroundJob, event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-    const selected = selectedJobIdSet().has(job.id) ? selectedJobs() : [job];
-    if (!selectedJobIdSet().has(job.id)) {
-      setSelectedRunIds([]);
-      setSelectedJobIds([job.id]);
-      setJobSelectionAnchorId(job.id);
-    }
-    setContextMenu({
-      x: event.clientX,
-      y: event.clientY,
-      label: selected.length > 1 ? "Bulk job actions" : "Job actions",
-      actions: createJobBulkActions(selected)
-    });
-  }
-
-  function openRunBulkContextMenu(item: RunListItem, event: MouseEvent) {
-    if (item.kind !== "background") {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    const selected = selectedRunIdSet().has(item.run.id) ? selectedBackgroundRuns() : [item.run];
-    if (!selectedRunIdSet().has(item.run.id)) {
-      setSelectedJobIds([]);
-      setSelectedRunIds([item.run.id]);
-      setRunSelectionAnchorId(item.run.id);
-    }
-    setContextMenu({
-      x: event.clientX,
-      y: event.clientY,
-      label: selected.length > 1 ? "Bulk run actions" : "Run actions",
-      actions: createRunBulkActions(selected)
-    });
-  }
-
-  function sendBulkOperation(action: BulkOperationAction, targets: BulkOperationTarget[]) {
-    if (targets.length === 0) {
-      return;
-    }
-    sendCommand({
-      type: "bulk-operation.apply",
-      requestId: createRequestId(),
-      payload: {
-        operationId: createRequestId(),
-        action,
-        targets
-      }
-    });
-    pushToast("Bulk action sent", `${targets.length} item${targets.length === 1 ? "" : "s"} queued for ${formatBulkActionLabel(action)}.`, "info");
-  }
-
-  function createJobBulkActions(items: BackgroundJob[]): ContextMenuAction[] {
-    const targets = items.map(jobBulkTarget);
-    return [
-      {
-        id: "run-now",
-        label: `Run now (${items.length})`,
-        disabled: executionPaused(),
-        disabledReason: executionPauseReason,
-        onSelect: () => sendBulkOperation("run-now", targets)
-      },
-      {
-        id: "pause",
-        label: `Pause (${items.length})`,
-        onSelect: () => sendBulkOperation("pause", targets)
-      },
-      {
-        id: "resume",
-        label: `Resume (${items.length})`,
-        onSelect: () => sendBulkOperation("resume", targets)
-      },
-      {
-        id: "delete",
-        label: `Delete (${items.length})`,
-        onSelect: () => sendBulkOperation("delete", targets)
-      }
-    ];
-  }
-
-  function createRunBulkActions(items: BackgroundJobRun[]): ContextMenuAction[] {
-    const targets = items.map(runBulkTarget);
-    return [
-      {
-        id: "stop",
-        label: `Stop (${items.length})`,
-        onSelect: () => sendBulkOperation("stop", targets)
-      },
-      {
-        id: "retry",
-        label: `Retry (${items.length})`,
-        disabled: executionPaused(),
-        disabledReason: executionPauseReason,
-        onSelect: () => sendBulkOperation("retry", targets)
-      },
-      {
-        id: "approve",
-        label: `Approve (${items.length})`,
-        disabled: executionPaused(),
-        disabledReason: executionPauseReason,
-        onSelect: () => sendBulkOperation("approve", targets)
-      },
-      {
-        id: "reject",
-        label: `Reject (${items.length})`,
-        onSelect: () => sendBulkOperation("reject", targets)
-      }
-    ];
-  }
-
-  function jobBulkTarget(job: BackgroundJob): BulkOperationTarget {
-    return {
-      kind: "background-job",
-      projectId: job.projectId,
-      jobId: job.id
-    };
-  }
-
-  function runBulkTarget(run: BackgroundJobRun): BulkOperationTarget {
-    return {
-      kind: "background-run",
-      projectId: run.projectId,
-      runId: run.id
-    };
-  }
-
-  function handleOpenBackgroundFile(project: typeof state.workspace.projects[number], target: ChatFileTarget) {
-    openIdeWindow({ projectId: project.id, threadId: project.activeThreadId });
-    harnessStore.openIdeFile(target.path, target.line, target.column);
-  }
-
-  function requestDiagnostics(windowDays: RunDiagnosticsWindowDays = healthWindowDays()) {
-    harnessStore.actions.startRunDiagnosticsRequest(windowDays);
-    sendCommand({
-      type: "run-diagnostics.inspect",
-      requestId: createRequestId(),
-      payload: {
-        windowDays
-      }
-    });
-    lastHealthRefreshAt = Date.now();
-  }
-
-  function scheduleHealthRefresh() {
-    if (pendingHealthRefreshTimer) {
-      return;
-    }
-    const elapsedMs = Date.now() - lastHealthRefreshAt;
-    const delayMs = Math.max(0, healthRefreshThrottleMs() - elapsedMs);
-    pendingHealthRefreshTimer = setTimeout(() => {
-      pendingHealthRefreshTimer = undefined;
-      requestDiagnostics();
-    }, delayMs);
-  }
-
-  createEffect(() => {
-    const currentRun = selectedRun();
-    if (activeSegment() === "jobs" || activeSegment() === "health") {
-      return;
-    }
-
-    if (!currentRun) {
-      harnessStore.setJobsPanePreferences({ selectedRunId: undefined, selectedNotificationId: undefined });
-      return;
-    }
-
-    if (selectedRunId() !== currentRun.id) {
-      const item = selectedRunItem();
-      harnessStore.setJobsPanePreferences({
-        selectedRunId: currentRun.id,
-        selectedJobId: item?.kind === "background" ? item.run.jobId : undefined
-      });
-    }
-  });
-
-  createEffect(() => {
-    selectedRunScrollKey();
-    if (activeSegment() === "jobs" || activeSegment() === "health" || !runDetailViewport) {
-      return;
-    }
-
-    queueMicrotask(scrollRunDetailToBottom);
-    requestAnimationFrame(scrollRunDetailToBottom);
-  });
-
-  createEffect(() => {
-    const segment = activeSegment();
-    const windowDays = healthWindowDays();
-    const reportWindowDays = state.runDiagnostics.report?.windowDays;
-    const loading = state.runDiagnostics.loading;
-    if (segment !== "health") {
-      return;
-    }
-    if (!loading && reportWindowDays !== windowDays) {
-      requestDiagnostics(windowDays);
-    }
-  });
-
-  createEffect(() => {
-    const refreshVersion = diagnosticsRefreshVersion();
-    const previousRefreshVersion = lastObservedDiagnosticsRefreshVersion;
-    lastObservedDiagnosticsRefreshVersion = refreshVersion;
-    if (
-      previousRefreshVersion === undefined ||
-      refreshVersion === previousRefreshVersion ||
-      activeSegment() !== "health" ||
-      state.runDiagnostics.loading ||
-      !state.runDiagnostics.report
-    ) {
-      return;
-    }
-    scheduleHealthRefresh();
-  });
-
-  createEffect(() => {
-    if (activeSegment() === "health" || !pendingHealthRefreshTimer) {
-      return;
-    }
-    clearTimeout(pendingHealthRefreshTimer);
-    pendingHealthRefreshTimer = undefined;
-  });
-
-  onCleanup(() => {
-    if (pendingHealthRefreshTimer) {
-      clearTimeout(pendingHealthRefreshTimer);
-    }
-  });
-
-  function handleCreateJob(kind: BackgroundJob["kind"]) {
-    const template =
-      kind === "ai-routine" ? state.backgroundJobs.templates.find((entry) => entry.id === "scheduled-task") : undefined;
-    const draft: BackgroundJobEditorDraft = {
-      source: "create",
-      projectId: state.workspace.activeProjectId ?? state.workspace.projects[0]?.id,
-      templateId: template?.id,
-      kind,
-      name: "",
-      description: "",
-      scheduleInput: "",
-      timezone: resolveBrowserTimezone(),
-      aiPrompt: template?.definition.kind === "ai-routine" ? template.definition.prompt : "",
-      aiModeId: template?.definition.kind === "ai-routine" ? template.definition.modeId : undefined,
-      aiExecutionModelId: template?.definition.kind === "ai-routine" ? template.definition.executionModelId : undefined,
-      aiReasoningStrength: template?.definition.kind === "ai-routine" ? template.definition.reasoningStrength : undefined,
-      aiFastMode: template?.definition.kind === "ai-routine" ? template.definition.fastMode : undefined,
-      aiPlanExecutionMode:
-        template?.definition.kind === "ai-routine"
-          ? template.definition.planExecutionMode ?? state.planExecutionModeDefault
-          : state.planExecutionModeDefault,
-      aiSubagentWorktreeStrategy:
-        template?.definition.kind === "ai-routine"
-          ? template.definition.subagentWorktreeStrategy ?? state.subagentWorktreeStrategyDefault
-          : state.subagentWorktreeStrategyDefault,
-      lane: "exclusive",
-      shellExecutable: "",
-      shellArgsText: "",
-      shellCwd: "",
-      shellEnvRefsText: "",
-      shellTimeoutSeconds: 600,
-      shellNetworkAccess: false
-    };
-    harnessStore.openBackgroundJobEditor(draft);
-  }
-
-  function handleEditJob(job: BackgroundJob) {
-    const draft: BackgroundJobEditorDraft = {
-      source: "edit",
-      jobId: job.id,
-      projectId: job.projectId,
-      assistantId: job.assistantId,
-      automationThreadId: job.automationThreadId,
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt,
-      lastRunAt: job.lastRunAt,
-      lastEnqueuedAt: job.lastEnqueuedAt,
-      createdFromRunId: job.createdFromRunId,
-      templateId: job.templateId,
-      status: job.status,
-      lane: job.lane ?? "exclusive",
-      kind: job.kind,
-      name: job.name,
-      description: job.description ?? "",
-      scheduleInput: job.scheduleInput,
-      timezone: job.timezone ?? resolveBrowserTimezone(),
-      aiPrompt: job.definition.kind === "ai-routine" ? job.definition.prompt : "",
-      aiModeId: job.definition.kind === "ai-routine" ? job.definition.modeId : undefined,
-      aiExecutionModelId: job.definition.kind === "ai-routine" ? job.definition.executionModelId : undefined,
-      aiReasoningStrength: job.definition.kind === "ai-routine" ? job.definition.reasoningStrength : undefined,
-      aiFastMode: job.definition.kind === "ai-routine" ? job.definition.fastMode : undefined,
-      aiPlanExecutionMode:
-        job.definition.kind === "ai-routine" ? job.definition.planExecutionMode ?? state.planExecutionModeDefault : undefined,
-      aiSubagentWorktreeStrategy:
-        job.definition.kind === "ai-routine"
-          ? job.definition.subagentWorktreeStrategy ?? state.subagentWorktreeStrategyDefault
-          : undefined,
-      shellExecutable: job.definition.kind === "shell" ? job.definition.executable : "",
-      shellArgsText: job.definition.kind === "shell" ? job.definition.args.join("\n") : "",
-      shellCwd: job.definition.kind === "shell" ? job.definition.cwd ?? "" : "",
-      shellEnvRefsText: job.definition.kind === "shell" ? (job.definition.envRefs ?? []).join("\n") : "",
-      shellTimeoutSeconds: job.definition.kind === "shell" ? job.definition.timeoutSeconds : 600,
-      shellNetworkAccess: job.definition.kind === "shell" ? Boolean(job.definition.networkAccess) : false
-    };
-    harnessStore.openBackgroundJobEditor(draft);
-  }
-
-  function openJobDetails(job: BackgroundJob) {
-    harnessStore.closeBackgroundJobDetailsDialog();
-    harnessStore.setJobsPanePreferences({ segment: "jobs", selectedJobId: job.id, selectedRunId: undefined, selectedNotificationId: undefined });
-  }
-
-  function openRunDetails(run: BackgroundJobRun) {
-    harnessStore.closeBackgroundJobDetailsDialog();
-    harnessStore.setJobsPanePreferences({ segment: "inbox", selectedRunId: run.id, selectedJobId: run.jobId, selectedNotificationId: undefined });
-  }
-
-  function openAssistantDetails(assistantId: string) {
-    const assistant = state.assistants.assistants.find((entry) => entry.id === assistantId);
-    if (assistant) {
-      harnessStore.setAssistantScopeFilter(assistant.scope === "global" ? "global" : "project");
-    }
-    harnessStore.setSelectedAssistantId(assistantId);
-    harnessStore.setActiveSurface("assistants");
-  }
-
-  function openProjectChatRun(runId: string) {
-    harnessStore.closeBackgroundJobDetailsDialog();
-    harnessStore.setJobsPanePreferences({ segment: "inbox", selectedRunId: runId, selectedJobId: undefined, selectedNotificationId: undefined });
-  }
-
-  function openRunSource(item: RunListItem) {
-    if (item.kind === "background") {
-      openBackgroundJobInJobsPane(state, item.run.jobId);
-      return;
-    }
-    openProjectThreadSource(state, item.entry.project.id, item.entry.run.threadId, "run");
-  }
-
-  async function handleToggleNotifications() {
-    if (typeof Notification === "undefined") {
-      pushToast("Notifications unavailable", "Browser does not support desktop notifications.", "error");
-      return;
-    }
-
-    if (state.backgroundJobNotificationsEnabled) {
-      harnessStore.setBackgroundJobNotificationsEnabled(false);
-      persistCurrentLocalPreferences(false);
-      return;
-    }
-
-    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-    if (permission !== "granted") {
-      pushToast("Notifications blocked", "Browser denied notification permission. Falling back to in-app toasts.", "error");
-      harnessStore.setBackgroundJobNotificationsEnabled(false);
-      persistCurrentLocalPreferences(false);
-      return;
-    }
-
-    harnessStore.setBackgroundJobNotificationsEnabled(true);
-    persistCurrentLocalPreferences(true);
-  }
-
-  function retryScheduler() {
-    sendCommand({
-      type: "background-job.scheduler.retry",
-      requestId: createRequestId()
-    });
-  }
-
-  function persistCurrentLocalPreferences(backgroundJobNotificationsEnabled: boolean) {
-    persistMergedLocalPreferences({
-      openAiApiKey: state.openAiApiKeyDraft.trim() || undefined,
-      googleApiKey: state.googleApiKeyDraft.trim() || undefined,
-      providerBrand: state.providerBrand,
-      debugEnabled: state.debugEnabled,
-      tracePanelDefaultOpen: state.tracePanelDefaultOpen,
-      subagentWorktreeStrategyDefault: state.subagentWorktreeStrategyDefault,
-      blockChatOnDirtyGitDefault: state.blockChatOnDirtyGitDefault,
-      dirtyGitChangeLimitDefault: state.dirtyGitChangeLimitDefault,
-      autoCompactContextThresholdPercentDefault: state.autoCompactContextThresholdPercentDefault,
-      planExecutionModeDefault: state.planExecutionModeDefault,
-      planExecutionDelaySecondsDefault: state.planExecutionDelaySecondsDefault,
-      correctnessIterationModeDefault: state.correctnessIterationModeDefault,
-      backgroundJobApprovalPolicyDefault: state.backgroundJobApprovalPolicyDefault,
-      assistantAutoApproveNonBlockingQuestionsDefault: state.assistantAutoApproveNonBlockingQuestionsDefault,
-      assistantCongestionControlEnabledDefault: state.assistantCongestionControlEnabledDefault,
-      assistantMaxCongestionDefault: state.assistantMaxCongestionDefault,
-      maxBackgroundJobsDefault: state.maxBackgroundJobsDefault,
-      backgroundJobNotificationsEnabled
-    });
-  }
-
+function BackgroundJobsPanelView(props: BackgroundJobsPanelViewProps) {
+  const { activeSegment, showLeft, showDetail } = props.model;
   return (
     <LeftPaneShell data-test-background-jobs-panel="" kind={activeSegment() === "jobs" ? "jobs" : activeSegment() === "inbox" ? "runs" : "health"} padding="comfortable">
+      <BackgroundJobsPanelHeader {...props} />
+      <div
+        class={[
+          stylex.attrs(styles.panelLayout).class,
+          showLeft() && showDetail() && activeSegment() !== "health" ? stylex.attrs(styles.panelLayoutSplit).class : ""
+        ].filter(Boolean).join(" ")}
+      >
+        <BackgroundJobsListPane {...props} />
+        <BackgroundJobsDetailPane {...props} />
+      </div>
+      <BackgroundJobsPanelOverlays {...props} />
+    </LeftPaneShell>
+  );
+}
+
+function BackgroundJobsPanelHeader(props: BackgroundJobsPanelViewProps) {
+  const { state, showLeft, activeSegment, activeSearch, headerTitle, headerHelp } = props.model;
+  const { handleCreateJob, handleToggleNotifications, retryScheduler } = props.controller;
+  return (
+    <>
       <Show when={showLeft()}>
         <>
           <LeftPaneHeader
@@ -905,42 +401,60 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
                   ariaLabel={activeSegment() === "jobs" ? "Filter and sort jobs" : "Filter and sort runs"}
                   tooltip={activeSegment() === "jobs" ? "Filter and sort jobs" : "Filter and sort runs"}
                   activeFilterCount={activeJobsPaneFilterCount(state, activeSegment())}
-                  items={jobsPaneMenuItems(state, activeSegment(), !props.segment)}
+                  items={jobsPaneMenuItems(state, activeSegment(), props.allowSegmentSwitch)}
                 />
               }
               onInput={(event) =>
                 harnessStore.setJobsPanePreferences(
                   activeSegment() === "jobs"
-                    ? { jobSearch: (event.target as HTMLInputElement).value }
-                    : { runSearch: (event.target as HTMLInputElement).value }
+                    ? { jobSearch: event.currentTarget.value }
+                    : { runSearch: event.currentTarget.value }
                 )
               }
             />
           </LeftPaneFilterBlock>
         </Show>
       </Show>
+    </>
+  );
+}
 
-      <div
-        class={[
-          stylex.attrs(styles.panelLayout).class,
-          showLeft() && showDetail() && activeSegment() !== "health"
-            ? stylex.attrs(styles.panelLayoutSplit).class
-            : ""
-        ].filter(Boolean).join(" ")}
-      >
-        <Show when={showLeft()}>
-          <div class={stylex.attrs(styles.paneGrid).class}>
-            <Show when={activeSegment() === "health"}>
-              <HealthView
-                diagnostics={diagnostics}
-                healthWindowDays={healthWindowDays()}
-                onSelectWindow={(windowDays) => {
-                  setHealthWindowDays(windowDays);
-                  requestDiagnostics(windowDays);
-                }}
-                onRefresh={() => requestDiagnostics()}
-              />
-            </Show>
+function BackgroundJobsListPane(props: BackgroundJobsPanelViewProps) {
+  const { showLeft, activeSegment, diagnostics, healthWindowDays, setHealthWindowDays } = props.model;
+  const { requestDiagnostics } = props.controller;
+  return (
+    <Show when={showLeft()}>
+      <div class={stylex.attrs(styles.paneGrid).class}>
+        <Show when={activeSegment() === "health"}>
+          <HealthView
+            diagnostics={diagnostics}
+            healthWindowDays={healthWindowDays()}
+            onSelectWindow={(windowDays) => {
+              setHealthWindowDays(windowDays);
+              requestDiagnostics(windowDays);
+            }}
+            onRefresh={() => requestDiagnostics()}
+          />
+        </Show>
+        <BackgroundJobsJobsList {...props} />
+        <BackgroundJobsRunsList {...props} />
+      </div>
+    </Show>
+  );
+}
+
+function BackgroundJobsJobsList(props: BackgroundJobsPanelViewProps) {
+  const {
+    state, sendCommand, activeSegment, jobs, selectedJobs, executionPaused, executionPauseReason,
+    setSelectedJobIds, setSelectedRunIds, selectedJob, selectedJobIdSet,
+    setJobSelectionAnchorId, getBackgroundRunFileLinks,
+  } = props.model;
+  const {
+    sendBulkOperation, jobBulkTarget, handleCreateJob, scheduleDelayedSelection,
+    clearPendingSelectionTimer, handleJobCardClick, openJobBulkContextMenu,
+    openAssistantDetails, handleEditJob, retryScheduler,
+  } = props.controller;
+  return (
             <Show when={activeSegment() === "jobs"}>
               <LeftPaneListSection title="Jobs" count={`${jobs().length} total`} class={stylex.attrs(styles.listSection).class}>
                 <CapacityBar jobs={jobs()} />
@@ -1086,7 +600,21 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
                 </VirtualList>
               </LeftPaneListSection>
             </Show>
+  );
+}
 
+function BackgroundJobsRunsList(props: BackgroundJobsPanelViewProps) {
+  const {
+    activeSegment, runListItems, selectedBackgroundRuns, executionPaused,
+    executionPauseReason, setSelectedRunIds, selectedRun, selectedRunIdSet,
+    runListItemFileLinks, setSelectedJobIds, setRunSelectionAnchorId,
+  } = props.model;
+  const {
+    sendBulkOperation, runBulkTarget, openRunDetails, openProjectChatRun,
+    openRunSource, handleRunListClick, scheduleDelayedSelection,
+    clearPendingSelectionTimer, openRunBulkContextMenu,
+  } = props.controller;
+  return (
             <Show when={activeSegment() === "inbox"}>
               <LeftPaneListSection title="Runs" count={`${runListItems().length} total`} class={stylex.attrs(styles.listSection).class}>
                 <Show when={selectedBackgroundRuns().length > 0}>
@@ -1146,9 +674,20 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
                 </VirtualList>
               </LeftPaneListSection>
             </Show>
-          </div>
-        </Show>
+  );
+}
 
+function BackgroundJobsDetailPane(props: BackgroundJobsPanelViewProps) {
+  const {
+    runtime, state, sendCommand, showDetail, activeSegment, selectedRun,
+    selectedJob, selectedJobRuns, selectedJobFileLinks, executionPaused,
+    executionPauseReason, selectedRunTitle, selectedBackgroundRun,
+    selectedRunItem, selectedRunItemFileLinks,
+  } = props.model;
+  const {
+    handleEditJob, openAssistantDetails, retryScheduler, scrollRunDetailToBottom,
+  } = props.controller;
+  return (
         <Show when={showDetail() && activeSegment() !== "health"}>
           <section class={stylex.attrs(styles.detailPane).class}>
             <Show when={activeSegment() === "jobs" && !selectedRun()}>
@@ -1178,7 +717,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
                             {run().status}
                           </StatusChip>
                         </div>
-                        <h2 class={stylex.attrs(styles.detailTitle).class}>{selectedRunItem() ? formatRunListItemTitle(selectedRunItem()!) : selectedJob()?.name}</h2>
+                        <h2 class={stylex.attrs(styles.detailTitle).class}>{selectedRunTitle()}</h2>
                         <div class={stylex.attrs(styles.factGrid).class}>
                           <RunFact label="Run">
                             <span class={stylex.attrs(styles.breakAll).class}>{run().id}</span>
@@ -1191,8 +730,8 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
                               variant="ghost"
                             />
                           </RunFact>
-                          <RunFact label="Trigger">{selectedRunItem()?.kind === "background" ? (run() as BackgroundJobRun).triggerSource : "project chat"}</RunFact>
-                          <RunFact label="Approval">{selectedRunItem()?.kind === "background" ? (run() as BackgroundJobRun).approvalStatus : "approved"}</RunFact>
+                          <RunFact label="Trigger">{selectedBackgroundRun()?.triggerSource ?? "project chat"}</RunFact>
+                          <RunFact label="Approval">{selectedBackgroundRun()?.approvalStatus ?? "approved"}</RunFact>
                           <Show when={formatRunListItemProgress(selectedRunItem())}>
                             {(progress) => <RunFact label="Progress">{progress()}</RunFact>}
                           </Show>
@@ -1223,27 +762,18 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
                             </ActionButton>
                           )}
                         </Show>
-                        <Show when={selectedRunItem()?.kind === "background" && run().status === "awaiting-approval"}>
-                          <ActionButton tooltip="Approve this background run" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<Play class={stylex.attrs(styles.iconMd).class} />} onClick={() => sendCommand({ type: "background-job.approve-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Approve</ActionButton>
-                          <ActionButton tooltip="Reject this background run" variant="secondary" onClick={() => sendCommand({ type: "background-job.reject-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Reject</ActionButton>
-                        </Show>
-                        <Show when={selectedRunItem()?.kind === "background" && run().status === "running"}>
-                          <ActionButton tooltip="Stop this background run" variant="secondary" icon={<Pause class={stylex.attrs(styles.iconMd).class} />} onClick={() => sendCommand({ type: "background-job.stop-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Stop</ActionButton>
-                        </Show>
-                        <Show when={selectedRunItem()?.kind === "background" && (run().status === "failed" || run().status === "cancelled")}>
-                          <ActionButton tooltip="Retry this background run" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<RefreshCcw class={stylex.attrs(styles.iconMd).class} />} onClick={() => sendCommand({ type: "background-job.retry-run", requestId: createRequestId(), payload: { projectId: (run() as BackgroundJobRun).projectId, runId: run().id } })}>Retry</ActionButton>
-                        </Show>
+                        <BackgroundRunActions run={selectedBackgroundRun()} executionPaused={executionPaused()} executionPauseReason={executionPauseReason} />
                       </div>
                     </div>
                     <VirtualList
                       viewportRef={(element) => {
-                        runDetailViewport = element;
+                        runtime.runDetailViewport = element;
                         scrollRunDetailToBottom();
                       }}
                       class={stylex.attrs(styles.detailViewport).class}
                       contentClass={stylex.attrs(styles.virtualContent).class}
                       itemClass={stylex.attrs(styles.virtualItem).class}
-                      items={selectedRunItem()?.kind === "background" ? (run() as BackgroundJobRun).events : []}
+                      items={selectedBackgroundRun()?.events ?? []}
                       getKey={(event) => event.id}
                       estimateSize={135}
                       pagination={{ kind: "reverse", initialCount: 80, batchSize: 80 }}
@@ -1274,13 +804,22 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
             </Show>
           </section>
         </Show>
-      </div>
+  );
+}
+
+function BackgroundJobsPanelOverlays(props: BackgroundJobsPanelViewProps) {
+  const {
+    detailsRunId, detailsRun, detailsJob, detailsRunFileLinks,
+    detailsLogEntries, contextMenu, setContextMenu,
+  } = props.model;
+  return (
+    <>
       <Show when={detailsRunId() && detailsRun()}>
           <Dialog
             open
             title={detailsJob()?.name ?? detailsRun()?.jobId ?? "Background run"}
             eyebrow="Execution details"
-            description={detailsRun() ? `${detailsRun()!.status} | ${formatShortTimestamp(detailsRun()!.updatedAt)}` : undefined}
+            description={formatDetailsRunDescription(detailsRun())}
             class={stylex.attrs(styles.dialogWide).class}
             contentClass={stylex.attrs(styles.dialogBody).class}
             onClose={() => harnessStore.closeBackgroundJobDetailsDialog()}
@@ -1341,7 +880,7 @@ export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
           />
         )}
       </Show>
-    </LeftPaneShell>
+    </>
   );
 }
 
@@ -1402,43 +941,41 @@ function RunListButton(props: {
   onToggleBulkSelection?: (run: BackgroundJobRun, event: MouseEvent) => void;
 }) {
   const selected = createMemo(() => props.selectedRunId === runListItemRun(props.item).id);
+  const progress = () => props.item.kind === "background" ? formatRunProgress(props.item.run) : undefined;
   const openRunItem = () =>
     props.item.kind === "project-chat"
       ? props.onOpenProjectChatRun(props.item.entry.run.id)
       : props.onOpenRun(props.item.run);
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key !== "Enter" && event.key !== " ") {
-      return;
-    }
-    event.preventDefault();
-    openRunItem();
+  const openFromEvent = (event: MouseEvent) => {
+    if (props.onClickItem) props.onClickItem(props.item, event, openRunItem);
+    else openRunItem();
   };
   return (
-    <div
+    <article
       class={[
         stylex.attrs(styles.denseCard, styles.runCard).class,
         selected() || props.selectedForBulk
           ? stylex.attrs(styles.selectedCard).class
           : runListItemBorderClass(props.item)
       ].join(" ")}
-      role="button"
-      tabIndex={0}
+      aria-label={`Run ${formatRunListItemTitle(props.item)}`}
       onPointerDown={(event) => props.onPointerDownItem?.(props.item, event)}
       onPointerUp={props.onClearPendingSelection}
       onPointerCancel={props.onClearPendingSelection}
       onPointerLeave={props.onClearPendingSelection}
-      onClick={(event) => {
-        if (props.onClickItem) {
-          props.onClickItem(props.item, event, openRunItem);
-          return;
-        }
-        openRunItem();
-      }}
+      onClick={(event) => { if (!isInteractiveSelectionTarget(event.target)) openFromEvent(event); }}
       onContextMenu={(event) => props.onContextMenuItem?.(props.item, event)}
-      onKeyDown={handleKeyDown}
     >
       <div class={stylex.attrs(styles.runCardHeader).class}>
         <div class={stylex.attrs(styles.runCardHeading).class}>
+          <ActionButton
+            tooltip="Open run details"
+            icon={<MessageSquareText class={stylex.attrs(styles.iconXs).class} />}
+            size="icon"
+            variant="ghost"
+            ariaLabel={`Open run details for ${formatRunListItemTitle(props.item)}`}
+            onClick={openFromEvent}
+          />
           <Show when={props.item.kind === "background"}>
             <ActionButton
               tooltip={props.selectedForBulk ? "Remove from bulk selection" : "Add to bulk selection"}
@@ -1474,12 +1011,12 @@ function RunListButton(props: {
         <div class={stylex.attrs(styles.lineClampThree).class}>
           <FileLinkedText text={() => formatRunListItemSummary(props.item) ?? ""} fileLinks={props.fileLinks} />
         </div>
-        <Show when={props.item.kind === "background" && formatRunProgress((props.item as { kind: "background"; run: BackgroundJobRun }).run)}>
-          {(progress) => <div class={stylex.attrs(styles.truncate).class}>{progress()}</div>}
+        <Show when={progress()}>
+          {(value) => <div class={stylex.attrs(styles.truncate).class}>{value()}</div>}
         </Show>
         <div class={stylex.attrs(styles.timeLine).class}>{formatRunListItemTime(props.item)}</div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -1663,53 +1200,22 @@ function jobsPaneMenuItems(
 ): LeftPaneSearchMenuItem[] {
   const preferences = state.jobsPanePreferences;
   const setPreferences = harnessStore.setJobsPanePreferences;
-  const jobSortOption = (label: string, value: JobsPaneJobSort, icon: JSX.Element): LeftPaneSearchMenuItem => ({
+  type MenuOption = Extract<LeftPaneSearchMenuItem, { kind: "option" }>;
+  const jobSortOption = (label: string, value: JobsPaneJobSort, icon: JSX.Element): MenuOption => ({
     kind: "option",
     label,
     icon,
     selected: preferences.jobSort === value,
     onSelect: () => setPreferences({ jobSort: value })
   });
-  const runSortOption = (label: string, value: JobsPaneRunSort, icon: JSX.Element): LeftPaneSearchMenuItem => ({
+  const runSortOption = (label: string, value: JobsPaneRunSort, icon: JSX.Element): MenuOption => ({
     kind: "option",
     label,
     icon,
     selected: (preferences.runSort ?? "urgency") === value,
     onSelect: () => setPreferences({ runSort: value })
   });
-  const segmentItems: LeftPaneSearchMenuItem[] = allowSegmentSwitch
-    ? [
-        {
-          kind: "submenu",
-          label: "View",
-          value: segment === "jobs" ? "Jobs" : segment === "inbox" ? "Runs" : "Health",
-          icon: <BriefcaseBusiness class={stylex.attrs(styles.iconSm).class} />,
-          items: [
-            {
-              kind: "option",
-              label: "Jobs",
-              icon: <BriefcaseBusiness class={stylex.attrs(styles.iconSm).class} />,
-              selected: segment === "jobs",
-              onSelect: () => setPreferences({ segment: "jobs" })
-            },
-            {
-              kind: "option",
-              label: "Runs",
-              icon: <Clock3 class={stylex.attrs(styles.iconSm).class} />,
-              selected: segment === "inbox",
-              onSelect: () => setPreferences({ segment: "inbox" })
-            },
-            {
-              kind: "option",
-              label: "Health",
-              icon: <ShieldCheck class={stylex.attrs(styles.iconSm).class} />,
-              selected: segment === "health",
-              onSelect: () => setPreferences({ segment: "health" })
-            }
-          ]
-        }
-      ]
-    : [];
+  const segmentItems = jobsPaneSegmentItems(segment, allowSegmentSwitch);
 
   if (segment === "jobs") {
     return [
@@ -1725,7 +1231,7 @@ function jobsPaneMenuItems(
           jobSortOption("Created", "created", <Calendar class={stylex.attrs(styles.iconSm).class} />),
           jobSortOption("Status", "status", <ListFilter class={stylex.attrs(styles.iconSm).class} />),
           jobSortOption("Risk", "risk", <ShieldCheck class={stylex.attrs(styles.iconSm).class} />)
-        ] as Array<Extract<LeftPaneSearchMenuItem, { kind: "option" }>>
+        ]
       },
       {
         kind: "submenu",
@@ -1789,7 +1295,7 @@ function jobsPaneMenuItems(
         value: jobStateFilterLabel(preferences.jobState ?? "all"),
         icon: <ShieldCheck class={stylex.attrs(styles.iconSm).class} />,
         active: (preferences.jobState ?? "all") !== "all",
-        items: (["all", "idle", "due", "queued", "blocked", "running", "stale", "backoff"] satisfies JobsJobStateFilter[]).map((jobState) => ({
+        items: (["all", "idle", "due", "queued", "blocked", "running", "stale", "backoff"] as const).map((jobState) => ({
           kind: "option" as const,
           label: jobStateFilterLabel(jobState),
           icon: jobStateFilterIcon(jobState),
@@ -1844,7 +1350,7 @@ function jobsPaneMenuItems(
         runSortOption("Updated", "updated", <Calendar class={stylex.attrs(styles.iconSm).class} />),
         runSortOption("Queued", "queued", <Clock3 class={stylex.attrs(styles.iconSm).class} />),
         runSortOption("Status", "status", <ListFilter class={stylex.attrs(styles.iconSm).class} />)
-      ] as Array<Extract<LeftPaneSearchMenuItem, { kind: "option" }>>
+      ]
     },
     {
       kind: "submenu",
@@ -1852,7 +1358,7 @@ function jobsPaneMenuItems(
       value: runFilterLabel(state.jobsRunFilter),
       icon: <ShieldCheck class={stylex.attrs(styles.iconSm).class} />,
       active: state.jobsRunFilter !== "all",
-      items: (["all", "approval", "input", "queued", "running", "failed", "done"] satisfies JobsRunFilter[]).map((filter) => ({
+      items: (["all", "approval", "input", "queued", "running", "failed", "done"] as const).map((filter) => ({
         kind: "option" as const,
         label: runFilterLabel(filter),
         icon: runFilterIcon(filter),
@@ -2011,12 +1517,6 @@ function matchesProjectChatRunFilter(run: AgentRunState, filter: JobsRunFilter) 
 
 function matchesJobFilters(job: BackgroundJob, state: typeof harnessStore.state) {
   const preferences = state.jobsPanePreferences;
-  if (preferences.projectId && job.projectId !== preferences.projectId) {
-    return false;
-  }
-  if (preferences.assistantId && job.assistantId !== preferences.assistantId) {
-    return false;
-  }
   if (preferences.kind && job.kind !== preferences.kind) {
     return false;
   }
@@ -2426,6 +1926,8 @@ function formatRunListItemTime(item: RunListItem) {
 function runListItemRun(item: RunListItem) {
   return item.kind === "project-chat" ? item.entry.run : item.run;
 }
+function optionalRunListItemRun(item: RunListItem | undefined) { return item ? runListItemRun(item) : undefined; }
+function formatOptionalRunListItemTitle(item: RunListItem | undefined, fallback: string | undefined) { return item ? formatRunListItemTitle(item) : fallback; }
 
 function formatRunListItemProgress(item: RunListItem | undefined) {
   if (!item) {
@@ -2436,6 +1938,9 @@ function formatRunListItemProgress(item: RunListItem | undefined) {
   }
   return formatRunProgress(item.run);
 }
+
+function formatDetailsRunDescription(run: BackgroundJobRun | undefined) { return run ? `${run.status} | ${formatShortTimestamp(run.updatedAt)}` : undefined; }
+function formatJobStatusText(status: string, schedulerDetail: string | undefined) { return `${status}${schedulerDetail ? ` - ${formatSchedulerDetail(schedulerDetail)}` : ""}`; }
 
 function formatRunSummary(run: BackgroundJobRun) {
   return run.failureMessage ?? run.summary ?? latestRunEventDetail(run) ?? `${run.triggerSource} run`;
@@ -2654,7 +2159,7 @@ function JobDetail(props: {
                   <Show when={job().schedulerStatus}>
                     {(status) => (
                       <RunFact label="Scheduler">
-                        <FileLinkedText text={`${status()}${job().schedulerDetail ? ` - ${formatSchedulerDetail(job().schedulerDetail!)}` : ""}`} fileLinks={props.fileLinks} />
+                        <FileLinkedText text={formatJobStatusText(status(), job().schedulerDetail)} fileLinks={props.fileLinks} />
                       </RunFact>
                     )}
                   </Show>

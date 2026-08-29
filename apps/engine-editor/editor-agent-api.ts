@@ -1,5 +1,5 @@
 import { runHeadlessEditorPlan, snapshotHeadlessEditorProject } from "./headless-editor.ts";
-import type { EditorCommandPlan } from "./src/editor-command-session.ts";
+import { validateCommandPlan } from "./src/editor-command-session.ts";
 import { resolve } from "node:path";
 
 const MAX_AGENT_BODY_BYTES = 32 * 1024 * 1024;
@@ -15,14 +15,19 @@ export async function handleEditorAgentApi(request: Request, enabled = true): Pr
     if (request.method === "GET" && url.pathname === "/api/agent/v1/project") {
       const projectRoot = url.searchParams.get("root");
       if (!projectRoot) return json({ error: "Query parameter root is required." }, 400);
-      return json(await enqueue(projectRoot, () => snapshotHeadlessEditorProject(projectRoot)));
+      const includeAssets = url.searchParams.get("includeAssets");
+      if (includeAssets !== null && includeAssets !== "base64") return json({ error: "includeAssets must be base64 when provided." }, 400);
+      return json(await enqueue(projectRoot, () => snapshotHeadlessEditorProject(projectRoot, { includeAssets: includeAssets === "base64" })));
     }
     if (request.method === "POST" && url.pathname === "/api/agent/v1/commands") {
-      const payload = await readJsonBody(request) as { projectRoot?: unknown; plan?: unknown; persist?: unknown };
-      if (typeof payload.projectRoot !== "string" || !payload.projectRoot.trim()) return json({ error: "projectRoot is required." }, 400);
-      if (!payload.plan || typeof payload.plan !== "object") return json({ error: "plan is required." }, 400);
-      if (payload.persist !== undefined && typeof payload.persist !== "boolean") return json({ error: "persist must be a boolean." }, 400);
-      const result = await enqueue(payload.projectRoot, () => runHeadlessEditorPlan({ projectRoot: payload.projectRoot as string, plan: payload.plan as EditorCommandPlan, persist: payload.persist as boolean | undefined }));
+      const payload = requireRecord(await readJsonBody(request), "Editor agent API request");
+      const projectRoot = payload.projectRoot;
+      const plan = payload.plan;
+      const persist = payload.persist;
+      if (typeof projectRoot !== "string" || !projectRoot.trim()) return json({ error: "projectRoot is required." }, 400);
+      validateCommandPlan(plan);
+      if (persist !== undefined && typeof persist !== "boolean") return json({ error: "persist must be a boolean." }, 400);
+      const result = await enqueue(projectRoot, () => runHeadlessEditorPlan({ projectRoot, plan, persist }));
       return json(result, result.ok ? 200 : 422);
     }
     return json({ error: "Editor agent API route not found." }, 404);
@@ -36,7 +41,7 @@ async function readJsonBody(request: Request) {
   if (Number.isFinite(declared) && declared > MAX_AGENT_BODY_BYTES) throw new Error("Editor agent API request exceeds 32 MiB.");
   const text = await request.text();
   if (new TextEncoder().encode(text).byteLength > MAX_AGENT_BODY_BYTES) throw new Error("Editor agent API request exceeds 32 MiB.");
-  try { return JSON.parse(text) as unknown; }
+  try { const value: unknown = JSON.parse(text); return value; }
   catch { throw new Error("Editor agent API request body must be valid JSON."); }
 }
 
@@ -59,7 +64,7 @@ function json(value: unknown, status = 200) {
 function enqueue<T>(projectRoot: string, task: () => Promise<T>) {
   const key = resolve(projectRoot).toLocaleLowerCase();
   const previous = projectQueues.get(key) ?? Promise.resolve();
-  let release!: () => void;
+  let release = () => {};
   const current = new Promise<void>((resolve) => { release = resolve; });
   const queued = previous.then(() => current);
   projectQueues.set(key, queued);
@@ -67,4 +72,9 @@ function enqueue<T>(projectRoot: string, task: () => Promise<T>) {
     release();
     if (projectQueues.get(key) === queued) projectQueues.delete(key);
   });
+}
+
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${label} must be an object.`);
+  return Object.fromEntries(Object.entries(value));
 }

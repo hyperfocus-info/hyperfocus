@@ -1,6 +1,7 @@
-import { createDefaultProject, validateProject, type EditorEntityData, type EditorProject } from "./project.ts";
+import { createDefaultProject, validateProject, type EditorEntityData, type EditorProject } from "@hyperfocus/engine/project";
 
-export type EditorStarterId = "pong" | "blank-2d" | "3d-action" | "showcase";
+export type EditorStarterId = "pong" | "platformer" | "blank-2d" | "3d-action" | "showcase";
+export const EDITOR_STARTER_IDS: readonly EditorStarterId[] = ["pong", "platformer", "blank-2d", "3d-action", "showcase"];
 
 export type EditorStarter = {
   project: EditorProject;
@@ -10,8 +11,69 @@ export type EditorStarter = {
 export function createEditorStarter(id: EditorStarterId, name: string): EditorStarter {
   if (id === "showcase") return { project: createDefaultProject(cleanName(name, "Dungeon Run")), assets: [] };
   if (id === "pong") return { project: createPongProject(cleanName(name, "Neon Pong")), assets: [] };
+  if (id === "platformer") return { project: createPlatformerProject(cleanName(name, "Glassline Ascent")), assets: [] };
   if (id === "blank-2d") return { project: createBlank2DProject(cleanName(name, "Untitled 2D Game")), assets: [] };
   return create3DActionProject(cleanName(name, "Starter 3D World"));
+}
+
+export function createPlatformerProject(name = "Glassline Ascent"): EditorProject {
+  const project = createDefaultProject(name);
+  project.scenes = [{
+    id: "scene-main",
+    name: "Glassline Ascent",
+    entities: [
+      pongEntity("player", "Runner", 120, 350, 32, 44, "actor", "#56f0c7", "#d7fff4", [
+        collider("player"),
+        behavior("player", "builtin:platformer", { runSpeed: 250, gravity: 1800, jumpSpeed: 650, maxFallSpeed: 900, coyoteMs: 110, jumpBufferMs: 120, jumpCutMultiplier: 0.5, groundProbe: 0.05 }),
+        { id: "player-camera", type: "camera", enabled: true, values: { follow: true, smoothing: 0.12 } },
+      ]),
+      pongEntity("moving-hazard", "Moving Hazard", 490, 350, 38, 30, "hostile", "#ff5378", "#ffd0da", [
+        collider("moving-hazard"),
+        behavior("moving-hazard", "builtin:patrol", { axis: "x", speed: 58, distance: 130 }),
+      ]),
+      pongEntity("summit", "Summit Beacon", 792, 142, 34, 58, "prop", "#f4b860", "#fff0c7", []),
+    ],
+  }];
+  project.activeSceneId = "scene-main";
+  project.assets = [];
+  project.tilemap = {
+    id: "tilemap-main",
+    name: "Glassline Course",
+    columns: 20,
+    rows: 10,
+    tileSize: 48,
+    values: Array.from({ length: 200 }, (_, index) => {
+      const column = index % 20;
+      const row = Math.floor(index / 20);
+      if (row === 9 || column === 0 || column === 19) return 1;
+      if (row === 7 && column >= 4 && column <= 8) return 1;
+      if (row === 5 && column >= 11 && column <= 15) return 1;
+      if (row === 3 && column >= 16 && column <= 18) return 1;
+      return 0;
+    }),
+    solidValues: [1],
+  };
+  project.atlas = { id: "atlas-platformer", name: "Generated Runner Shapes", frameWidth: 48, frameHeight: 48, playbackSpeed: 1, frames: [{ id: "frame-runner", name: "runner", x: 0, y: 0, width: 48, height: 48, color: "#56f0c7" }], sequence: ["frame-runner"] };
+  project.postProcessing.effects = [{ id: "crt", enabled: true, value: 0.08 }, { id: "shake", enabled: false, value: 2 }];
+  project.timeline.tracks = [];
+  project.timeline.audioTracks = [];
+  project.timeline.events = [];
+  project.production.reactiveBindings = [];
+  project.production.midiMappings = [];
+  project.production.logicGraph = { nodes: [], edges: [] };
+  project.production.annotations = [];
+  project.settings.input = [
+    { action: "move-left", bindings: ["KeyA", "ArrowLeft"] },
+    { action: "move-right", bindings: ["KeyD", "ArrowRight"] },
+    { action: "jump", bindings: ["Space", "KeyW", "ArrowUp"] },
+  ];
+  project.extensions = {
+    hyperfocusStarter: { template: "platformer", goal: "Press Play, reach the summit beacon, tune the Runner controller, then build an offline game." },
+    hyperfocusScripts: { activePath: "src/gameplay.ts", files: [{ path: "src/gameplay.ts", language: "typescript", source: PLATFORMER_SCRIPT }] },
+    hyperfocusSave: project.extensions?.hyperfocusSave,
+  };
+  validateProject(project);
+  return project;
 }
 
 export function createPongProject(name = "Neon Pong"): EditorProject {
@@ -22,6 +84,8 @@ export function createPongProject(name = "Neon Pong"): EditorProject {
     entities: [
       pongEntity("wall-top", "Top Wall", 384, 12, 768, 24, "prop", "#173442", "#4de4dc", [collider("wall-top")]),
       pongEntity("wall-bottom", "Bottom Wall", 384, 468, 768, 24, "prop", "#173442", "#4de4dc", [collider("wall-bottom")]),
+      scoreEntity("score-left", "Player Score", 338, "score.left"),
+      scoreEntity("score-right", "CPU Score", 430, "score.right"),
       pongEntity("player-paddle", "Player Paddle", 52, 240, 18, 104, "actor", "#45e4d5", "#c6fff9", [
         collider("player-paddle"),
         behavior("player-paddle", "builtin:pong-paddle", { upAction: "move-up", downAction: "move-down", speed: 360, minimumY: 64, maximumY: 416 }),
@@ -32,7 +96,13 @@ export function createPongProject(name = "Neon Pong"): EditorProject {
       ]),
       pongEntity("ball", "Ball", 384, 240, 22, 22, "actor", "#f7f2d0", "#ffffff", [
         collider("ball"),
-        behavior("ball", "builtin:pong-ball", { velocityX: 285, velocityY: 185, maximumSpeed: 520 }),
+        behavior("ball", "builtin:pong-ball", {
+          velocityX: 285,
+          velocityY: 185,
+          maximumSpeed: 520,
+          leftScoreKey: "score.left",
+          rightScoreKey: "score.right",
+        }),
       ]),
     ],
   }];
@@ -75,7 +145,7 @@ export function createPongProject(name = "Neon Pong"): EditorProject {
   project.extensions = {
     hyperfocusStarter: {
       template: "pong",
-      goal: "Press Play, move with W/S or arrows, then tune the entities and FX before building.",
+      goal: "Press Play, move with W/S or arrows, score a point, then tune the Ball behavior's public fields before building.",
     },
     hyperfocusScripts: {
       activePath: "src/gameplay.ts",
@@ -97,8 +167,11 @@ function createBlank2DProject(name: string): EditorProject {
   project.activeSceneId = "scene-main";
   project.assets = [];
   project.tilemap = { id: "tilemap-main", name: "Main Tilemap", columns: 16, rows: 10, tileSize: 48, values: new Array(160).fill(0), solidValues: [1] };
+  project.atlas.sourceAssetId = undefined;
   project.atlas.frames = [];
   project.atlas.sequence = [];
+  project.atlas.clips = [];
+  project.atlas.defaultClipId = undefined;
   project.postProcessing.effects = [];
   project.timeline.tracks = [];
   project.timeline.audioTracks = [];
@@ -131,6 +204,8 @@ function create3DActionProject(name: string): EditorStarter {
     lastModified: Date.now(),
     source: "imported" as const,
   }));
+  project.tilemap.sourceAssetId = undefined;
+  project.atlas.sourceAssetId = undefined;
   project.tilemap.values.fill(0);
   project.timeline.tracks = [];
   project.timeline.audioTracks = [];
@@ -241,6 +316,26 @@ function pongEntity(id: string, label: string, x: number, y: number, width: numb
   };
 }
 
+function scoreEntity(id: string, label: string, x: number, stateKey: string): EditorEntityData {
+  return {
+    id,
+    label,
+    x,
+    y: 54,
+    width: 72,
+    height: 48,
+    scale: 1,
+    layer: 10,
+    color: "#09131b",
+    accent: "#173442",
+    kind: "prop",
+    components: [
+      { id: `${id}-transform`, type: "transform", enabled: true, values: { x, y: 54, scale: 1 } },
+      { id: `${id}-ui`, type: "ui", enabled: true, values: { text: "0", stateKey, align: "center", fontSize: 38 } },
+    ],
+  };
+}
+
 function collider(id: string): EditorEntityData["components"][number] {
   return { id: `${id}-collider`, type: "collider", enabled: true, values: { shape: "box", solid: true } };
 }
@@ -259,20 +354,57 @@ function cleanName(value: string, fallback: string) {
   return value.trim().replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 80) || fallback;
 }
 
-const PONG_SCRIPT = `import type { PlayableBehavior2D } from "@hyperfocus/engine/project/runtime-2d";
+const PONG_SCRIPT = `import type { PlayableBehavior2D, PlayableBehaviorDefinition2D } from "@hyperfocus/engine/project/runtime-2d";
 
-// Custom behaviors use velocity-only outputs so fixed-step collision remains deterministic.
-// Attach this module from an entity's Behavior component, then use the CLI build lane.
-export const addJuice: PlayableBehavior2D = ({ actions }) => ({
-  velocityX: actions.includes("serve") ? 40 : 0,
+// Select Ball > Pong ball to tune its public fields. Create an override when you
+// want project-owned logic; behavior commands keep state changes deterministic.
+export const addJuiceDefinition = {
+  version: 1,
+  id: "pong-add-juice",
+  module: "./src/gameplay.ts",
+  exportName: "addJuice",
+  label: "Pong serve boost",
+  description: "Adds a small horizontal boost while the Serve action is held.",
+  category: "Pong",
+  fields: [{ key: "serveBoost", label: "Serve boost", type: "number", default: 40, minimum: 0, maximum: 500, unit: "px/s", group: "Movement" }],
+  events: [{ name: "pong:serve-boost", label: "Serve boost applied" }],
+} satisfies PlayableBehaviorDefinition2D;
+
+export const addJuice: PlayableBehavior2D = ({ actions, component }) => ({
+  velocityX: actions.includes("serve") ? Number(component.values.serveBoost ?? 40) : 0,
+  commands: actions.includes("serve") ? [{ type: "emit-event", name: "pong:serve-boost" }] : [],
 });
+
+Object.defineProperty(addJuice, "definition", { value: Object.freeze(addJuiceDefinition) });
 `;
 
-const BLANK_SCRIPT = `import type { PlayableBehavior2D } from "@hyperfocus/engine/project/runtime-2d";
+const BLANK_SCRIPT = `import type { PlayableBehavior2D, PlayableBehaviorDefinition2D } from "@hyperfocus/engine/project/runtime-2d";
+
+export const updateDefinition = {
+  version: 1,
+  id: "move-right",
+  module: "./src/game.ts",
+  exportName: "update",
+  label: "Move right",
+  description: "Moves while the move-right action is active.",
+  category: "Movement",
+  fields: [{ key: "speed", label: "Speed", type: "number", default: 180, minimum: 0, maximum: 2_000, unit: "px/s" }],
+} satisfies PlayableBehaviorDefinition2D;
 
 export const update: PlayableBehavior2D = ({ actions, component }) => ({
   velocityX: actions.includes("move-right") ? Number(component.values.speed ?? 180) : 0,
 });
+
+Object.defineProperty(update, "definition", { value: Object.freeze(updateDefinition) });
+`;
+
+const PLATFORMER_SCRIPT = `// The built-in platformer controller already owns deterministic movement,
+// collision, coyote time, and jump buffering. Add project-specific reactions here
+// and attach them alongside the built-in from the selected entity's inspector.
+export const summitTuning = {
+  targetEntityId: "summit",
+  celebrationEvent: "platformer:summit",
+};
 `;
 
 const THREE_D_SCRIPT = `// The 3D starter uses the portable hyperfocus3D declaration in project.json.

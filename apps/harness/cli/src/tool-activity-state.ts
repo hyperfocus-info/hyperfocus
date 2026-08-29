@@ -1,4 +1,4 @@
-import type { ExecutionToolActivity } from "../../shared/protocol";
+import type { ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
 import type { PiAgentExecutionEvent } from "./pi-agent-adapter";
 
 type ToolOwner = ExecutionToolActivity["owner"];
@@ -33,7 +33,7 @@ export function recordToolStart(activities: ExecutionToolActivity[], input: Tool
 
   const occurredAt = input.occurredAt ?? new Date().toISOString();
   const existing = activities.find((activity) => activity.toolCallId === event.toolCallId);
-  if (existing) {
+  if (existing || !acceptsToolActivityEvent(activities, input)) {
     return activities;
   }
 
@@ -52,10 +52,7 @@ export function recordToolStart(activities: ExecutionToolActivity[], input: Tool
       ...serializeRawJson(event.args, {
         activities,
         toolCallId: event.toolCallId,
-        valueKey: "rawArgsJson",
-        truncatedKey: "rawArgsTruncated",
-        redactedKey: "rawArgsRedacted",
-        omittedReasonKey: "rawArgsOmittedReason"
+        kind: "args"
       }),
       rawArgsDebugArtifactPath: input.rawArgsDebugArtifactPath,
       status: "running",
@@ -79,13 +76,10 @@ export function recordToolUpdate(activities: ExecutionToolActivity[], input: Too
     outputPreview: summarizeToolResult(event.partialResult) ?? activity.outputPreview,
     stdoutPreview: summarizeNamedOutput(event.partialResult, "stdout") ?? activity.stdoutPreview,
     stderrPreview: summarizeNamedOutput(event.partialResult, "stderr") ?? activity.stderrPreview,
-    ...serializeRawJson(event.partialResult, {
-      activities,
-      toolCallId: event.toolCallId,
-      valueKey: "rawResultJson",
-      truncatedKey: "rawResultTruncated",
-      redactedKey: "rawResultRedacted",
-      omittedReasonKey: "rawResultOmittedReason"
+      ...serializeRawJson(event.partialResult, {
+        activities,
+        toolCallId: event.toolCallId,
+        kind: "result"
     }),
     rawResultDebugArtifactPath: input.rawResultDebugArtifactPath ?? activity.rawResultDebugArtifactPath,
     rawResultStatus: "partial",
@@ -110,10 +104,7 @@ export function recordToolEnd(activities: ExecutionToolActivity[], input: ToolAc
     ...serializeRawJson(event.result, {
       activities,
       toolCallId: event.toolCallId,
-      valueKey: "rawResultJson",
-      truncatedKey: "rawResultTruncated",
-      redactedKey: "rawResultRedacted",
-      omittedReasonKey: "rawResultOmittedReason"
+      kind: "result"
     }),
     rawResultDebugArtifactPath: input.rawResultDebugArtifactPath ?? activity.rawResultDebugArtifactPath,
     rawResultStatus: "final",
@@ -129,8 +120,7 @@ export function summarizeToolArgs(value: unknown) {
     return summarizeValue(value);
   }
 
-  const record = value as Record<string, unknown>;
-  return summarizeValue(record.command ?? value);
+  return summarizeValue(Reflect.get(value, "command") ?? value);
 }
 
 export function summarizeToolResult(value: unknown) {
@@ -138,14 +128,13 @@ export function summarizeToolResult(value: unknown) {
     return summarizeValue(value);
   }
 
-  const record = value as Record<string, unknown>;
   return summarizeValue(
-    record.output ??
-      record.aggregated_output ??
-      record.stdout ??
-      record.stderr ??
-      record.error ??
-      record.message ??
+    Reflect.get(value, "output") ??
+      Reflect.get(value, "aggregated_output") ??
+      Reflect.get(value, "stdout") ??
+      Reflect.get(value, "stderr") ??
+      Reflect.get(value, "error") ??
+      Reflect.get(value, "message") ??
       value
   );
 }
@@ -228,6 +217,10 @@ function updateActivity(
 ) {
   const event = input.event;
   const occurredAt = input.occurredAt ?? new Date().toISOString();
+  const existing = activities.find((activity) => activity.toolCallId === event.toolCallId);
+  if (existing && !acceptsToolActivityEvent(activities, input)) {
+    return activities;
+  }
   const nextActivities = activities.length
     ? activities.map((activity) => (activity.toolCallId === event.toolCallId ? updater(activity, occurredAt) : activity))
     : activities;
@@ -249,12 +242,24 @@ function updateActivity(
   );
 }
 
+export function acceptsToolActivityEvent(activities: ExecutionToolActivity[], input: ToolActivityInput) {
+  const existing = activities.find((activity) => activity.toolCallId === input.event.toolCallId);
+  if (!existing) return true;
+  if (!matchesToolActivityIdentity(existing, input) || input.event.type === "tool-start") return false;
+  return existing.status === "running";
+}
+
+function matchesToolActivityIdentity(activity: ExecutionToolActivity, input: ToolActivityInput) {
+  return activity.runId === input.runId && activity.owner === input.owner && activity.subagentId === input.subagentId &&
+    activity.toolName === input.event.toolName;
+}
+
 function extractCommand(value: unknown) {
   if (!value || typeof value !== "object") {
     return undefined;
   }
 
-  const command = (value as Record<string, unknown>).command;
+  const command = Reflect.get(value, "command");
   return typeof command === "string" ? limit(command) : undefined;
 }
 
@@ -263,11 +268,12 @@ function extractExitCode(value: unknown) {
     return undefined;
   }
 
-  const record = value as Record<string, unknown>;
-  return typeof record.exitCode === "number"
-    ? record.exitCode
-    : typeof record.exit_code === "number"
-      ? record.exit_code
+  const exitCode = Reflect.get(value, "exitCode");
+  const snakeCaseExitCode = Reflect.get(value, "exit_code");
+  return typeof exitCode === "number"
+    ? exitCode
+    : typeof snakeCaseExitCode === "number"
+      ? snakeCaseExitCode
       : undefined;
 }
 
@@ -276,8 +282,7 @@ function inferTimedOut(value: unknown) {
     return typeof value === "string" && /timeout|timed out/i.test(value);
   }
 
-  const record = value as Record<string, unknown>;
-  return record.timedOut === true || record.status === "timed-out" || /timeout|timed out/i.test(summarizeValue(value) ?? "");
+  return Reflect.get(value, "timedOut") === true || Reflect.get(value, "status") === "timed-out" || /timeout|timed out/i.test(summarizeValue(value) ?? "");
 }
 
 function summarizeNamedOutput(value: unknown, key: "stdout" | "stderr") {
@@ -285,7 +290,7 @@ function summarizeNamedOutput(value: unknown, key: "stdout" | "stderr") {
     return undefined;
   }
 
-  const raw = (value as Record<string, unknown>)[key];
+  const raw = Reflect.get(value, key);
   return typeof raw === "string" ? limit(raw.replace(/\s+/g, " ").trim()) : undefined;
 }
 
@@ -299,52 +304,43 @@ function summarizeValue(value: unknown) {
   return limit(JSON.stringify(value).replace(/\s+/g, " ").trim()) || undefined;
 }
 
-type RawJsonSerializeOptions<
-  ValueKey extends "rawArgsJson" | "rawResultJson",
-  TruncatedKey extends "rawArgsTruncated" | "rawResultTruncated",
-  RedactedKey extends "rawArgsRedacted" | "rawResultRedacted",
-  OmittedReasonKey extends "rawArgsOmittedReason" | "rawResultOmittedReason"
-> = {
+type RawJsonSerializeOptions = {
   activities: ExecutionToolActivity[];
   toolCallId: string;
-  valueKey: ValueKey;
-  truncatedKey: TruncatedKey;
-  redactedKey: RedactedKey;
-  omittedReasonKey: OmittedReasonKey;
+  kind: "args" | "result";
 };
 
-function serializeRawJson<
-  ValueKey extends "rawArgsJson" | "rawResultJson",
-  TruncatedKey extends "rawArgsTruncated" | "rawResultTruncated",
-  RedactedKey extends "rawArgsRedacted" | "rawResultRedacted",
-  OmittedReasonKey extends "rawArgsOmittedReason" | "rawResultOmittedReason"
->(
-  value: unknown,
-  options: RawJsonSerializeOptions<ValueKey, TruncatedKey, RedactedKey, OmittedReasonKey>
-) {
+type RawJsonFields = Partial<Pick<ExecutionToolActivity,
+  "rawArgsJson" | "rawArgsTruncated" | "rawArgsRedacted" | "rawArgsOmittedReason" |
+  "rawResultJson" | "rawResultTruncated" | "rawResultRedacted" | "rawResultOmittedReason"
+>>;
+
+function serializeRawJson(value: unknown, options: RawJsonSerializeOptions): RawJsonFields {
   const sanitized = sanitizeRawToolPayload(value);
   const serialized = stableStringify(sanitized.value);
   if (!serialized) {
-    return {
-      [options.omittedReasonKey]: "unserializable"
-    } as Record<OmittedReasonKey, "unserializable">;
+    return rawJsonOmission(options.kind, "unserializable");
   }
 
   const truncated = serialized.length > RAW_JSON_LENGTH;
   const nextValue = truncated ? serialized.slice(0, RAW_JSON_LENGTH) : serialized;
   const currentRawBytes = getCurrentRawJsonBytes(options.activities, options.toolCallId);
   if (currentRawBytes + nextValue.length > RAW_JSON_RUN_BUDGET) {
-    return {
-      [options.omittedReasonKey]: "run-budget-exceeded",
-      [options.redactedKey]: sanitized.redacted
-    } as Record<OmittedReasonKey, "run-budget-exceeded"> & Record<RedactedKey, boolean>;
+    return rawJsonOmission(options.kind, "run-budget-exceeded", sanitized.redacted);
   }
 
-  return {
-    [options.valueKey]: nextValue,
-    [options.truncatedKey]: truncated,
-    [options.redactedKey]: sanitized.redacted
-  } as Record<ValueKey, string> & Record<TruncatedKey, boolean> & Record<RedactedKey, boolean>;
+  return options.kind === "args"
+    ? { rawArgsJson: nextValue, rawArgsTruncated: truncated, rawArgsRedacted: sanitized.redacted }
+    : { rawResultJson: nextValue, rawResultTruncated: truncated, rawResultRedacted: sanitized.redacted };
+}
+
+function rawJsonOmission(kind: "args" | "result", reason: "unserializable" | "run-budget-exceeded", redacted?: boolean): RawJsonFields {
+  if (reason === "unserializable") {
+    return kind === "args" ? { rawArgsOmittedReason: reason } : { rawResultOmittedReason: reason };
+  }
+  return kind === "args"
+    ? { rawArgsOmittedReason: reason, rawArgsRedacted: redacted ?? false }
+    : { rawResultOmittedReason: reason, rawResultRedacted: redacted ?? false };
 }
 
 function getCurrentRawJsonBytes(activities: ExecutionToolActivity[], replacingToolCallId: string) {
@@ -381,7 +377,7 @@ function sanitizeRawToolPayload(value: unknown): { value: unknown; redacted: boo
     seen.add(entry);
 
     return Object.fromEntries(
-      Object.entries(entry as Record<string, unknown>).map(([key, child]) => {
+      Object.entries(entry).map(([key, child]) => {
         if (isSensitiveKey(key)) {
           redacted = true;
           return [key, "[redacted]"];
@@ -421,7 +417,7 @@ function sortJsonValue(value: unknown): unknown {
     return value;
   }
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
+    Object.entries(value)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => [key, sortJsonValue(entry)])
   );

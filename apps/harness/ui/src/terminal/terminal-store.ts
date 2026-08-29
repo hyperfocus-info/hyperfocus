@@ -6,7 +6,7 @@ import type {
   TerminalPreferences,
   TerminalSession,
   TerminalShell
-} from "../../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { normalizeTerminalGlyphSpacing } from "./terminal-output-format";
 
 export const TERMINAL_DRAWER_STORAGE_KEY = "pi-harness:terminal-drawer:v1";
@@ -21,6 +21,7 @@ export type TerminalUiState = {
   outputVersionBySessionId: Record<string, number>;
   outputResetVersionBySessionId: Record<string, number>;
   connectedBySessionId: Record<string, boolean>;
+  transportStatusBySessionId: Record<string, "disconnected" | "connecting" | "replay-retrying" | "replay-exhausted" | "connected">;
   preferences: TerminalPreferences;
   layout?: TerminalPaneLayout;
   history: {
@@ -52,6 +53,7 @@ function createInitialTerminalState(): TerminalUiState {
     outputVersionBySessionId: {},
     outputResetVersionBySessionId: {},
     connectedBySessionId: {},
+    transportStatusBySessionId: {},
     preferences: defaultPreferences,
     history: {
       sessions: []
@@ -101,6 +103,10 @@ function createTerminalStore() {
     },
     setConnected(sessionId: string, connected: boolean) {
       setState("connectedBySessionId", sessionId, connected);
+    },
+    setTransportStatus(sessionId: string, status: TerminalUiState["transportStatusBySessionId"][string]) {
+      setState("transportStatusBySessionId", sessionId, status);
+      setState("connectedBySessionId", sessionId, status === "connected");
     },
     setSearch(open: boolean, query: string = state.searchQuery) {
       setState({ searchOpen: open, searchQuery: query });
@@ -165,10 +171,8 @@ function readDrawerState() {
     return { open: false, height: 320 };
   }
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(TERMINAL_DRAWER_STORAGE_KEY) ?? "{}") as Partial<{
-      open: boolean;
-      height: number;
-    }>;
+    const value: unknown = JSON.parse(window.localStorage.getItem(TERMINAL_DRAWER_STORAGE_KEY) ?? "{}");
+    const parsed = isRecord(value) ? value : {};
     return {
       open: parsed.open === true,
       height: typeof parsed.height === "number" ? Math.max(180, Math.min(900, parsed.height)) : Math.round(window.innerHeight * 0.32)
@@ -176,6 +180,10 @@ function readDrawerState() {
   } catch {
     return { open: false, height: Math.round(window.innerHeight * 0.32) };
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function persistDrawerState(height: number, open: boolean) {

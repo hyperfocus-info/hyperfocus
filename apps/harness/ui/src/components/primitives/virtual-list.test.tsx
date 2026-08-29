@@ -23,7 +23,7 @@ createUiTest("VirtualList", () => {
   });
 
   afterEach(() => {
-    (globalThis as typeof globalThis & { ResizeObserver?: typeof ResizeObserver }).ResizeObserver = nativeResizeObserver;
+    globalThis.ResizeObserver = nativeResizeObserver;
     window.__HARNESS_UI_TELEMETRY__ = [];
   });
 
@@ -171,34 +171,26 @@ function setMeasuredRowHeight(container: HTMLElement, height: number) {
         width: 100,
         height,
         toJSON: () => ({})
-      }) as DOMRect;
+      });
   });
 }
 
 function installFakeResizeObserver() {
+  type FakeResizeObserver = ResizeObserver & { callback: ResizeObserverCallback; target?: Element };
   const observers: FakeResizeObserver[] = [];
 
-  class FakeResizeObserver {
-    target?: Element;
-
-    constructor(readonly callback: ResizeObserverCallback) {
-      observers.push(this);
-    }
-
-    observe(target: Element) {
-      this.target = target;
-    }
-
-    unobserve() {
-      this.target = undefined;
-    }
-
-    disconnect() {
-      this.target = undefined;
-    }
+  function FakeResizeObserver(callback: ResizeObserverCallback) {
+    const observer: FakeResizeObserver = {
+      callback,
+      observe(target) { observer.target = target; },
+      unobserve() { observer.target = undefined; },
+      disconnect() { observer.target = undefined; },
+    };
+    observers.push(observer);
+    return observer;
   }
 
-  globalThis.ResizeObserver = FakeResizeObserver as typeof ResizeObserver;
+  Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, writable: true, value: FakeResizeObserver });
 
   return {
     triggerObservedRows() {
@@ -211,10 +203,13 @@ function installFakeResizeObserver() {
           [
             {
               target,
-              contentRect: target.getBoundingClientRect()
-            } as unknown as ResizeObserverEntry
+              contentRect: target.getBoundingClientRect(),
+              borderBoxSize: [],
+              contentBoxSize: [],
+              devicePixelContentBoxSize: [],
+            }
           ],
-          observer as unknown as ResizeObserver
+          observer
         );
       }
     },

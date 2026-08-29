@@ -1,4 +1,5 @@
-import type { Assistant, AssistantTodo } from "../../shared/protocol";
+import type { Assistant, AssistantTodo } from "@hyperfocus/ai-core/protocol";
+import { DEFAULT_CODING_STACK, DEFAULT_CODING_STACK_GUIDANCE } from "./prompts/coding-stack-defaults";
 
 export type AssistantTodoDraft = {
   title: string;
@@ -10,8 +11,38 @@ export type AssistantTodoDraft = {
 export type NormalizedAssistantTodoDraft = Required<Pick<AssistantTodoDraft, "title" | "workKind">> &
   Pick<AssistantTodoDraft, "description" | "workTarget">;
 
-const DEFAULT_STACK_TARGET =
-  "TypeScript Bun app with bun test, bun:sqlite when persistence is needed, SolidJS + Tailwind UI when needed, Happy DOM UI tests, and useful documentation comments for new functions and variables";
+const DEFAULT_STACK_TARGET = DEFAULT_CODING_STACK;
+
+export function readAllAssistantTodos(readPage: (cursor: string | undefined) =>
+  { items: AssistantTodo[]; nextCursor?: string }) { const todos: AssistantTodo[] = []; let cursor: string | undefined;
+  do { const page = readPage(cursor); todos.push(...page.items); cursor = page.nextCursor; } while (cursor !== undefined); return todos; }
+
+export function readActiveAssistantTodosForPrompt(readPage: (cursor: string | undefined) =>
+  { items: AssistantTodo[]; nextCursor?: string }, limit: number = 12) {
+  let selected: AssistantTodo[] = []; let cursor: string | undefined;
+  do { const page = readPage(cursor); selected = [...selected, ...page.items.filter((todo) =>
+    ["pending", "in-progress", "blocked"].includes(todo.state))].sort((left, right) =>
+      todoPromptRank(left) - todoPromptRank(right) || left.sortOrder - right.sortOrder).slice(0, limit);
+    cursor = page.nextCursor; } while (cursor !== undefined); return selected;
+}
+
+export function readAssistantTodoOperationalAggregate(readPage: (cursor: string | undefined) =>
+  { items: AssistantTodo[]; nextCursor?: string }, promptLimit: number = 12) {
+  let items: AssistantTodo[] = []; let cursor: string | undefined; let activeCount = 0; let maximumSortOrder = -1;
+  let assistantGeneratedCount = 0; let codingCount = 0;
+  do { const page = readPage(cursor); for (const todo of page.items) { maximumSortOrder = Math.max(maximumSortOrder, todo.sortOrder);
+      if (todo.source !== "user") assistantGeneratedCount += 1; if (isCodingTodoKind(todo.workKind)) codingCount += 1;
+      if (["pending", "in-progress", "blocked"].includes(todo.state)) { activeCount += 1; items.push(todo); } }
+    items = items.sort((left, right) => todoPromptRank(left) - todoPromptRank(right) || left.sortOrder - right.sortOrder)
+      .slice(0, promptLimit); cursor = page.nextCursor; } while (cursor !== undefined);
+  return { items, activeCount, nextSortOrder: maximumSortOrder + 1, assistantGeneratedCount, codingCount };
+}
+
+function todoPromptRank(todo: AssistantTodo) {
+  if (todo.state === "in-progress") return 0;
+  if (todo.state === "pending" && isCodingTodoKind(todo.workKind)) return 1;
+  return todo.state === "pending" ? 2 : 3;
+}
 
 export function inferAssistantTodoWorkKind(title: string, description?: string): AssistantTodo["workKind"] {
   const text = `${title} ${description ?? ""}`.toLowerCase();
@@ -43,23 +74,27 @@ export function assistantGoalImpliesCoding(assistant: Pick<Assistant, "descripti
 }
 
 export function resolveAssistantTodoBiasStage(input: {
-  existingTodos: Array<Pick<AssistantTodo, "source" | "workKind">>;
+  existingTodos?: Array<Pick<AssistantTodo, "source" | "workKind">>;
+  existingTodoCounts?: { assistantGeneratedCount: number; codingCount: number };
 }) {
-  const assistantGeneratedCount = input.existingTodos.filter((todo) => todo.source !== "user").length;
-  const codingCount = input.existingTodos.filter((todo) => isCodingTodoKind(todo.workKind)).length;
+  const assistantGeneratedCount = input.existingTodoCounts?.assistantGeneratedCount ??
+    input.existingTodos?.filter((todo) => todo.source !== "user").length ?? 0;
+  const codingCount = input.existingTodoCounts?.codingCount ??
+    input.existingTodos?.filter((todo) => isCodingTodoKind(todo.workKind)).length ?? 0;
   return assistantGeneratedCount <= 2 && codingCount === 0 ? "early" : "build";
 }
 
 export function applyAssistantTodoPolicy(input: {
   assistant: Pick<Assistant, "description" | "jobPrompt" | "name">;
-  existingTodos: Array<Pick<AssistantTodo, "source" | "workKind">>;
+  existingTodos?: Array<Pick<AssistantTodo, "source" | "workKind">>;
+  existingTodoCounts?: { assistantGeneratedCount: number; codingCount: number };
   drafts: AssistantTodoDraft[];
 }) {
   const normalized = input.drafts
     .map(normalizeDraft)
     .filter((todo) => todo.title.trim().length > 0);
   const codingGoal = assistantGoalImpliesCoding(input.assistant);
-  const stage = resolveAssistantTodoBiasStage({ existingTodos: input.existingTodos });
+  const stage = resolveAssistantTodoBiasStage(input);
 
   if (!codingGoal || stage === "early") {
     return normalized;
@@ -83,7 +118,7 @@ export function buildDefaultCodingTodoDraft(
   return {
     title: "Build the smallest usable TypeScript project behavior",
     description:
-      "Create or update real project files before adding more docs. Default to Bun runtime, bun test, bun:sqlite when persistence is needed, SolidJS + Tailwind when UI is needed, Happy DOM for frontend tests, and useful documentation comments for new functions and variables.",
+      `Create or update real project files before adding more docs. ${DEFAULT_CODING_STACK_GUIDANCE}`,
     workKind: "app-code",
     workTarget: target
   };

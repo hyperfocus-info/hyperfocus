@@ -2,6 +2,29 @@ import type { JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
 
+const styles = stylex.create({
+  root: {
+    borderColor: { default: "var(--border)", ":hover": "var(--ring)", ":focus": "var(--accent)" },
+    borderRadius: "0.75rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    outline: "none",
+    paddingBlock: '0.5rem',
+    paddingInline: '0.75rem',
+    backgroundColor: "var(--panel-strong)",
+    boxShadow: { default: "inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent)", ":focus": "0 0 0 2px var(--bg), 0 0 0 4px var(--ring)" },
+    color: "var(--foreground)",
+    cursor: { default: "text", ":disabled": "not-allowed" },
+    display: "flex",
+    fontSize: "0.75rem",
+    opacity: { default: 1, ":disabled": 0.5 },
+    transitionDuration: "150ms",
+    transitionProperty: "color, background-color, border-color, box-shadow",
+    height: "2.5rem",
+    width: "100%",
+  }
+});
+
 export function Input(props: JSX.IntrinsicElements["input"]) {
   return (
     <input
@@ -11,25 +34,3 @@ export function Input(props: JSX.IntrinsicElements["input"]) {
     />
   );
 }
-
-const styles = stylex.create({
-  root: {
-    backgroundColor: "rgb(255 255 255 / 0.7)",
-    borderColor: "var(--border)",
-    borderRadius: "0.75rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    boxShadow: { default: "0 1px 2px rgb(0 0 0 / 0.05)", ":focus": "0 0 0 2px var(--ring)" },
-    color: "var(--foreground)",
-    display: "flex",
-    fontSize: "0.75rem",
-    height: "2.25rem",
-    cursor: { default: "text", ":disabled": "not-allowed" },
-    opacity: { default: 1, ":disabled": 0.5 },
-    outline: "none",
-    padding: "0.5rem 0.75rem",
-    transitionProperty: "color, background-color, border-color, box-shadow",
-    transitionDuration: "150ms",
-    width: "100%"
-  }
-});

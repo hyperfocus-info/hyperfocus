@@ -1,6 +1,6 @@
 import { lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import type { BranchfsCleanupSummary } from "../../shared/protocol";
+import type { BranchfsCleanupSummary } from "@hyperfocus/ai-core/protocol";
 
 const BRANCHFS_DIRNAME = ".local/branchfs";
 const BRANCHFS_DELETING_DIRNAME = ".local/branchfs-deleting";

@@ -1,13 +1,12 @@
-export type WorkbenchLayout = {
-  sidebarSize: number;
-  inspectorSize: number;
-  bottomSize: number;
-  sidebarCollapsed: boolean;
-  inspectorCollapsed: boolean;
-  bottomCollapsed: boolean;
+export const workbenchPanelLimits = {
+  sidebar: { minimum: 180, maximum: 640, defaultSize: 260 },
+  inspector: { minimum: 220, maximum: 720, defaultSize: 300 },
+  bottom: { minimum: 120, maximum: 600, defaultSize: 220 },
 };
 
-export const defaultWorkbenchLayout: WorkbenchLayout = {
+export type WorkbenchPanelId = keyof typeof workbenchPanelLimits;
+
+export const defaultWorkbenchLayout = {
   sidebarSize: 260,
   inspectorSize: 300,
   bottomSize: 220,
@@ -16,15 +15,31 @@ export const defaultWorkbenchLayout: WorkbenchLayout = {
   bottomCollapsed: false
 };
 
-export function normalizeWorkbenchLayout(input: Partial<WorkbenchLayout>): WorkbenchLayout {
+export type WorkbenchLayout = typeof defaultWorkbenchLayout;
+
+export function normalizeWorkbenchLayout(input: Partial<WorkbenchLayout> | Record<string, unknown>): WorkbenchLayout {
   return {
-    sidebarSize: clamp(input.sidebarSize, 180, 640, defaultWorkbenchLayout.sidebarSize),
-    inspectorSize: clamp(input.inspectorSize, 220, 720, defaultWorkbenchLayout.inspectorSize),
-    bottomSize: clamp(input.bottomSize, 120, 600, defaultWorkbenchLayout.bottomSize),
+    sidebarSize: clamp(input.sidebarSize, workbenchPanelLimits.sidebar.minimum, workbenchPanelLimits.sidebar.maximum, defaultWorkbenchLayout.sidebarSize),
+    inspectorSize: clamp(input.inspectorSize, workbenchPanelLimits.inspector.minimum, workbenchPanelLimits.inspector.maximum, defaultWorkbenchLayout.inspectorSize),
+    bottomSize: clamp(input.bottomSize, workbenchPanelLimits.bottom.minimum, workbenchPanelLimits.bottom.maximum, defaultWorkbenchLayout.bottomSize),
     sidebarCollapsed: input.sidebarCollapsed === true,
     inspectorCollapsed: input.inspectorCollapsed === true,
     bottomCollapsed: input.bottomCollapsed === true
   };
+}
+
+export function resizeWorkbenchPanel(layout: WorkbenchLayout, panel: WorkbenchPanelId, size: number): WorkbenchLayout {
+  const key = `${panel}Size` as const;
+  return normalizeWorkbenchLayout({ ...layout, [key]: size });
+}
+
+export function resetWorkbenchPanel(layout: WorkbenchLayout, panel: WorkbenchPanelId): WorkbenchLayout {
+  return resizeWorkbenchPanel(layout, panel, workbenchPanelLimits[panel].defaultSize);
+}
+
+export function toggleWorkbenchPanel(layout: WorkbenchLayout, panel: WorkbenchPanelId): WorkbenchLayout {
+  const key = `${panel}Collapsed` as const;
+  return normalizeWorkbenchLayout({ ...layout, [key]: !layout[key] });
 }
 
 export function serializeWorkbenchLayout(layout: WorkbenchLayout) {
@@ -33,13 +48,16 @@ export function serializeWorkbenchLayout(layout: WorkbenchLayout) {
 
 export function parseWorkbenchLayout(input: string): WorkbenchLayout {
   const parsed: unknown = JSON.parse(input);
-  if (!parsed || typeof parsed !== "object" || !("version" in parsed) || parsed.version !== 1 || !("layout" in parsed)) {
+  if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.layout)) {
     throw new Error("Unsupported workbench layout");
   }
-  return normalizeWorkbenchLayout(parsed.layout as Partial<WorkbenchLayout>);
+  return normalizeWorkbenchLayout(parsed.layout);
 }
 
-function clamp(value: number | undefined, minimum: number, maximum: number, fallback: number) {
-  return Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value as number)) : fallback;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
+function clamp(value: unknown, minimum: number, maximum: number, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : fallback;
+}

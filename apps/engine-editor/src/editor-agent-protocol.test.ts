@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createEditorAgentBridge } from "./editor-agent-protocol.ts";
-import { createDefaultProject } from "./project.ts";
+import { createDefaultProject } from "@hyperfocus/engine/project";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -26,7 +26,9 @@ describe("editor agent protocol", () => {
     });
 
     expect(clicked).toBe(1);
-    expect((document.querySelector("#name") as HTMLInputElement).value).toBe("After");
+    const nameInput = document.querySelector("#name");
+    if (!(nameInput instanceof HTMLInputElement)) throw new TypeError("Agent test name input is missing.");
+    expect(nameInput.value).toBe("After");
     expect(handoff.ok).toBe(true);
     expect(handoff.completedActions).toBe(2);
     expect(handoff.snapshot.project.name).toBe("Agent Test");

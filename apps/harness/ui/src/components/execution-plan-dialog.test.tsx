@@ -1,7 +1,7 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
 import * as stylex from "@stylexjs/stylex";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireElement } from "../utils/tests/test-harness";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { ExecutionPlanDialog } from "./execution-plan-dialog";
 import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
@@ -81,10 +81,7 @@ createUiTest("ExecutionPlanDialog", () => {
 
     harnessStore.openExecutionPlanDialog(plan);
     const dialog = screen.getByRole("dialog", { name: "Execution plan" });
-    const backdrop = dialog.parentElement?.previousElementSibling as HTMLElement | null;
-    if (!backdrop) {
-      throw new Error("Expected execution plan backdrop");
-    }
+    const backdrop = requireElement(dialog.parentElement?.previousElementSibling);
 
     fireEvent.click(backdrop);
     expect(harnessStore.state.executionPlanDialogOpen).toBe(false);

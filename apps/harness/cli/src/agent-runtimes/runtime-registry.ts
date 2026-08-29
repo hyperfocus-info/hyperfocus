@@ -1,35 +1,75 @@
-import type { AgentId, AgentRuntimeCapability } from "../../../shared/protocol";
+import type { AgentId } from "@hyperfocus/ai-core/protocol";
 import type { AgentRuntime } from "./agent-runtime";
+import type { PiAgentAdapter } from "../pi-agent-adapter";
 
-export class AgentRuntimeRegistry {
-  constructor(private readonly runtimes: AgentRuntime[]) {}
-
-  get(agentId: AgentId) {
-    const runtime = this.runtimes.find((entry) => entry.id === agentId);
+export function createAgentRuntimeRegistry(
+  runtimes: AgentRuntime[],
+  options: { decorateAdapter?: (adapter: PiAgentAdapter) => PiAgentAdapter } = {}
+) {
+  const decorateAdapter = options.decorateAdapter;
+  const decoratedAdapters = new WeakMap<PiAgentAdapter, PiAgentAdapter>();
+  const resolvedRuntimes = decorateAdapter
+    ? runtimes.map((runtime): AgentRuntime => ({
+        ...runtime,
+        getAdapter() {
+          const source = runtime.getAdapter();
+          const existing = decoratedAdapters.get(source);
+          if (existing) return existing;
+          const decorated = decorateAdapter(source);
+          decoratedAdapters.set(source, decorated);
+          return decorated;
+        }
+      }))
+    : runtimes;
+  const get = (agentId: AgentId) => {
+    const runtime = resolvedRuntimes.find((entry) => entry.id === agentId);
     if (!runtime) {
       throw new Error(`Unknown agent runtime: ${agentId}`);
     }
 
     return runtime;
-  }
+  };
 
-  list() {
-    return [...this.runtimes];
-  }
+  const list = () => [...resolvedRuntimes];
 
-  listCapabilities() {
-    return this.runtimes.flatMap((runtime) => {
+  const listCapabilities = () =>
+    resolvedRuntimes.flatMap((runtime) => {
       const capability = runtime.getCapability();
       return capability ? [capability] : [];
     });
-  }
 
-  async refreshAll() {
-    const capabilities = await Promise.all(this.runtimes.map((runtime) => runtime.refreshCapability()));
+  const refreshAll = async () => {
+    const capabilities = await Promise.all(resolvedRuntimes.map((runtime) => runtime.refreshCapability()));
     return capabilities.sort((left, right) => left.label.localeCompare(right.label));
-  }
+  };
 
-  async refresh(agentId: AgentId) {
-    return this.get(agentId).refreshCapability();
-  }
+  const refresh = (agentId: AgentId) => get(agentId).refreshCapability();
+
+  return { get, list, listCapabilities, refreshAll, refresh };
+}
+
+export type AgentRuntimeRegistry = ReturnType<typeof createAgentRuntimeRegistry>;
+
+export function decorateAgentRuntimeRegistry(
+  registry: AgentRuntimeRegistry,
+  decorateAdapter: (adapter: PiAgentAdapter) => PiAgentAdapter
+): AgentRuntimeRegistry {
+  const decoratedRuntimes = new WeakMap<AgentRuntime, AgentRuntime>();
+  const decorateRuntime = (runtime: AgentRuntime) => {
+    const existing = decoratedRuntimes.get(runtime);
+    if (existing) return existing;
+    const decorated: AgentRuntime = {
+      ...runtime,
+      getAdapter: () => decorateAdapter(runtime.getAdapter())
+    };
+    decoratedRuntimes.set(runtime, decorated);
+    return decorated;
+  };
+  return {
+    get: (agentId) => decorateRuntime(registry.get(agentId)),
+    list: () => registry.list().map(decorateRuntime),
+    listCapabilities: () => registry.listCapabilities(),
+    refreshAll: () => registry.refreshAll(),
+    refresh: (agentId) => registry.refresh(agentId)
+  };
 }

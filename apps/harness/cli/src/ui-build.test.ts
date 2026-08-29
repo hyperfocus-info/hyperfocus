@@ -3,45 +3,43 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { buildUiBundle, createUiAssetManager, enrichUiBuildFileSystemError } from "./ui-build";
 
-class FakeClock {
-  private nextTimerId = 1;
-  private readonly timers = new Map<number, { runAt: number; callback: () => void }>();
-  nowMs = 0;
-
-  setTimeout = ((callback: TimerHandler, delay?: number) => {
-    const timerId = this.nextTimerId++;
-    this.timers.set(timerId, {
-      runAt: this.nowMs + Number(delay ?? 0),
-      callback: () => {
-        if (typeof callback !== "function") {
-          throw new Error("String timer callbacks are not supported in tests");
-        }
-
-        callback();
-      }
-    });
-    return timerId as unknown as ReturnType<typeof setTimeout>;
-  }) as unknown as typeof globalThis.setTimeout;
-
-  clearTimeout = ((timerId: ReturnType<typeof setTimeout>) => {
-    this.timers.delete(Number(timerId));
-  }) as unknown as typeof globalThis.clearTimeout;
-
-  advanceBy(durationMs: number) {
-    const targetMs = this.nowMs + durationMs;
+function createFakeClock() {
+  let nextTimerId = 1;
+  let nowMs = 0;
+  const timers = new Map<number, { runAt: number; callback: () => void }>();
+  function setTimeout(callback: () => void, delay?: number) {
+    const timerId = nextTimerId++;
+    timers.set(timerId, { runAt: nowMs + Number(delay ?? 0), callback });
+    return timerId;
+  }
+  function clearTimeout(timerId: number) {
+    timers.delete(timerId);
+  }
+  function advanceBy(durationMs: number) {
+    const targetMs = nowMs + durationMs;
     while (true) {
-      const nextTimer = [...this.timers.entries()].sort((left, right) => left[1].runAt - right[1].runAt)[0];
+      const nextTimer = [...timers.entries()].sort((left, right) => left[1].runAt - right[1].runAt)[0];
       if (!nextTimer || nextTimer[1].runAt > targetMs) {
         break;
       }
 
-      this.nowMs = nextTimer[1].runAt;
-      this.timers.delete(nextTimer[0]);
+      nowMs = nextTimer[1].runAt;
+      timers.delete(nextTimer[0]);
       nextTimer[1].callback();
     }
 
-    this.nowMs = targetMs;
+    nowMs = targetMs;
   }
+  return { setTimeout, clearTimeout, advanceBy };
+}
+
+function parseSourceMapSources(text: string) {
+  const value: unknown = JSON.parse(text);
+  if (value === null || typeof value !== "object" || !Array.isArray(Reflect.get(value, "sources"))
+    || !Reflect.get(value, "sources").every((source: unknown) => typeof source === "string")) {
+    throw new Error("UI source map has invalid sources");
+  }
+  return [...Reflect.get(value, "sources")];
 }
 
 const flushMicrotasks = () => Promise.resolve().then(() => Promise.resolve());
@@ -65,12 +63,12 @@ describe("ui build", () => {
     const uiOutDir = path.resolve(process.cwd(), "dist/ui");
     const jsPath = path.join(uiOutDir, "main.js");
     const mapPath = path.join(uiOutDir, "main.js.map");
-    const sourceMap = JSON.parse(readFileSync(mapPath, "utf8")) as { sources?: string[] };
+    const sourceMapSources = parseSourceMapSources(readFileSync(mapPath, "utf8"));
 
     expect(existsSync(jsPath)).toBe(true);
     expect(existsSync(mapPath)).toBe(true);
     expect(readFileSync(jsPath, "utf8")).toContain("//# sourceMappingURL=main.js.map");
-    expect(sourceMap.sources?.some((source) => source.includes("harness\\ui\\src\\app.tsx"))).toBe(true);
+    expect(sourceMapSources.some((source) => source.replaceAll("\\", "/").includes("harness/ui/src/app.tsx"))).toBe(true);
   });
 
   test("omits source maps in production build", async () => {
@@ -92,12 +90,13 @@ describe("ui build", () => {
     const enriched = enrichUiBuildFileSystemError(error);
 
     expect(enriched).toBeInstanceOf(Error);
-    expect((enriched as Error).message).toContain("filesystem is out of space");
-    expect((enriched as Error).message).toContain(".local/branchfs");
+    if (!(enriched instanceof Error)) throw new Error("Expected enriched UI build failure to be an Error");
+    expect(enriched.message).toContain("filesystem is out of space");
+    expect(enriched.message).toContain(".local/branchfs");
   });
 
   test("debounces watch storms and publishes live reload revision only after successful rebuild", async () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     const buildCalls: string[] = [];
     let watcherListener: ((changedPath?: string) => void) | undefined;
     let failNextBuild = false;
@@ -170,7 +169,7 @@ describe("ui build", () => {
   });
 
   test("uses independent backoff reset after each successful live reload build", async () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     const buildCalls: string[] = [];
     let watcherListener: ((changedPath?: string) => void) | undefined;
     const manager = createUiAssetManager({
@@ -232,7 +231,7 @@ describe("ui build", () => {
     watcherListener?.(path.resolve(process.cwd(), "nested/agents.md"));
     watcherListener?.(path.resolve(process.cwd(), "apps/harness/ui/src/app.test.tsx"));
     watcherListener?.(path.resolve(process.cwd(), "apps/harness/ui/src/components/chat-panel.integration.test.tsx"));
-    watcherListener?.(path.resolve(process.cwd(), "apps/harness/shared/mode-intent.test.ts"));
+    watcherListener?.(path.resolve(process.cwd(), "packages/ai-core/src/harness/mode-intent.test.ts"));
     watcherListener?.(path.resolve(process.cwd(), "apps/harness/ui/src/utils/tests/test-harness.ts"));
     await flushMicrotasks();
     expect(buildCalls).toEqual([]);
@@ -273,12 +272,12 @@ describe("ui build", () => {
     }
   });
 
-  test("watches shared source as ui dependency and ignores untracked output", async () => {
+  test("watches canonical AI core source as a UI dependency and ignores untracked output", async () => {
     const buildCalls: string[] = [];
     const watchedDirs: string[] = [];
     const listeners: Array<(changedPath?: string) => void> = [];
     const manager = createUiAssetManager({
-      isTrackedFile: (changedPath) => changedPath?.includes(path.join("harness", "shared")) === true,
+      isTrackedFile: (changedPath) => changedPath?.includes(path.join("ai-core", "src", "harness")) === true,
       async buildUiBundle() {
         buildCalls.push(`build-${buildCalls.length + 1}`);
       },
@@ -293,13 +292,13 @@ describe("ui build", () => {
 
     manager.startWatching();
     expect(watchedDirs.some((sourceDir) => sourceDir.endsWith(path.join("harness", "ui")))).toBe(true);
-    expect(watchedDirs.some((sourceDir) => sourceDir.endsWith(path.join("harness", "shared")))).toBe(true);
+    expect(watchedDirs.some((sourceDir) => sourceDir.endsWith(path.join("ai-core", "src", "harness")))).toBe(true);
 
     listeners.forEach((listener) => listener(path.resolve(process.cwd(), "dist/ui/main.js")));
     await flushMicrotasks();
     expect(buildCalls).toEqual([]);
 
-    listeners.at(1)?.(path.resolve(process.cwd(), "apps/harness/shared/protocol.ts"));
+    listeners.at(1)?.(path.resolve(process.cwd(), "packages/ai-core/src/harness/protocol.ts"));
     await flushMicrotasks();
     expect(buildCalls).toEqual(["build-1"]);
     manager.dispose();

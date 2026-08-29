@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { MemorySummary, ModeDefinition, ProjectId, ProviderBrand, WorkspaceRuleSource } from "../../shared/protocol";
+import type { ModeDefinition, ProjectId, ProviderBrand, WorkspaceRuleSource } from "@hyperfocus/ai-core/protocol";
 import type { SessionStats } from "@mariozechner/pi-coding-agent";
 import { stableStringifyJson } from "./prompt-cache-assembly";
 
@@ -24,7 +24,6 @@ export function buildWorkspaceConfigHash(input: {
   selectedModeId?: string;
   mode?: ModeDefinition;
   ruleSources?: WorkspaceRuleSource[];
-  memorySummaries?: MemorySummary[];
   memoryBankEnabledDefault: boolean;
 }) {
   const stableInput = {
@@ -45,11 +44,6 @@ export function buildWorkspaceConfigHash(input: {
       scope: source.scope,
       label: source.label,
       contentHash: hashText(source.content)
-    })),
-    memorySummaries: (input.memorySummaries ?? []).map((summary) => ({
-      scope: summary.scope,
-      label: summary.label,
-      contentHash: hashText(summary.content)
     })),
     memoryBankEnabledDefault: input.memoryBankEnabledDefault
   };

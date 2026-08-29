@@ -2,14 +2,14 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "bun:test";
-import { stylexSolidPlugin } from "../../../../../../scripts/stylex-solid-plugin";
+import { stylexSolidPlugin } from "@hyperfocus/ui/build/stylex-solid-plugin";
 
 const repoRoot = path.resolve(import.meta.dir, "../../../../../..");
 const smokeRoot = path.join(repoRoot, ".local", "virtual-list-first-paint");
 const outDir = path.join(smokeRoot, "dist");
 const fixtureEntry = path.join(smokeRoot, "main.tsx");
 const fixtureSourcePath = path.join(repoRoot, "apps", "harness", "ui", "src", "components", "primitives", "virtual-list.browser-fixture.tsx");
-const runnerPath = path.join(import.meta.dir, "virtual-list.browser-runner.mjs");
+const runnerPath = path.join(import.meta.dir, "virtual-list.browser-runner.ts");
 
 test("VirtualList renders real browser first-paint geometry before tab remounts", async () => {
   await buildFixture();

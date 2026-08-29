@@ -3,10 +3,10 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
-import { deleteDoctorDistFolder } from "./doctor-cleanup";
+import { repairDoctorArtifacts } from "./doctor-cleanup";
 
-describe("doctor cleanup", () => {
-  test("deletes dist folder before doctor health checks", async () => {
+describe("doctor repair cleanup", () => {
+  test("deletes dist folder before repaired doctor health checks", async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "harness-doctor-"));
 
     try {
@@ -14,7 +14,7 @@ describe("doctor cleanup", () => {
       await mkdir(path.join(cwd, "dist", "ui"), { recursive: true });
       await writeFile(path.join(cwd, "dist", "ui", "index.html"), "");
 
-      const result = await deleteDoctorDistFolder(cwd);
+      const result = await repairDoctorArtifacts(cwd);
 
       expect(result.deleted).toBe(true);
       expect(existsSync(path.join(cwd, "dist"))).toBe(false);
@@ -28,7 +28,7 @@ describe("doctor cleanup", () => {
 
     try {
       await writeHarnessSentinels(cwd);
-      const result = await deleteDoctorDistFolder(cwd);
+      const result = await repairDoctorArtifacts(cwd);
 
       expect(result.deleted).toBe(true);
       expect(existsSync(path.join(cwd, "dist"))).toBe(false);
@@ -44,7 +44,7 @@ describe("doctor cleanup", () => {
       await mkdir(path.join(cwd, "dist"), { recursive: true });
       await writeFile(path.join(cwd, "dist", "index.html"), "app build");
 
-      const result = await deleteDoctorDistFolder(cwd);
+      const result = await repairDoctorArtifacts(cwd);
 
       expect(result.deleted).toBe(false);
       expect(existsSync(path.join(cwd, "dist", "index.html"))).toBe(true);
@@ -70,7 +70,7 @@ describe("doctor cleanup", () => {
       await setModifiedTime(middleFile, 2);
       await setModifiedTime(newFile, 3);
 
-      const result = await deleteDoctorDistFolder(cwd, { localMaxBytes: 50 });
+      const result = await repairDoctorArtifacts(cwd, { localMaxBytes: 50 });
 
       expect(result.deleted).toBe(true);
       if (!result.deleted) {
@@ -97,7 +97,7 @@ describe("doctor cleanup", () => {
       await mkdir(path.dirname(localFile), { recursive: true });
       await writeFile(localFile, "small");
 
-      const result = await deleteDoctorDistFolder(cwd, { localMaxBytes: 50 });
+      const result = await repairDoctorArtifacts(cwd, { localMaxBytes: 50 });
 
       expect(result.deleted).toBe(true);
       if (!result.deleted) {

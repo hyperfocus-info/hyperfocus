@@ -3,7 +3,7 @@ import type {
   Assistant,
   BackgroundJob,
   BackgroundJobRun
-} from "../../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import type { ExecutionLogEntry } from "../components/primitives/execution-log";
 import {
   getSelectedAssistant,
@@ -494,12 +494,6 @@ function getThreadLiveTranscript(project: ViewProjectState, threadId: string): T
 function getVisibleJobs(state: HarnessViewState) {
   return state.backgroundJobs.jobs.filter((job) => {
     const preferences = state.jobsPanePreferences;
-    if (preferences.projectId && job.projectId !== preferences.projectId) {
-      return false;
-    }
-    if (preferences.assistantId && job.assistantId !== preferences.assistantId) {
-      return false;
-    }
     if (preferences.kind && job.kind !== preferences.kind) {
       return false;
     }

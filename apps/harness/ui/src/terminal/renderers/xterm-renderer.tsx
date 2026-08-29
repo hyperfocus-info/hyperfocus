@@ -21,7 +21,7 @@ export type XtermRendererHandle = {
   serialize: () => string;
 };
 
-export function XtermRenderer(props: {
+export type XtermRendererProps = {
   sessionId: string;
   output: string;
   outputDelta?: string;
@@ -38,7 +38,67 @@ export function XtermRenderer(props: {
   onInput?: (input: string | Uint8Array) => void;
   onReady?: (handle: XtermRendererHandle) => void;
   onResize?: (cols: number, rows: number) => void;
-}) {
+};
+
+function registerTerminalKeyboardHandler(terminal: Terminal, props: XtermRendererProps) {
+  terminal.attachCustomKeyEventHandler((event) => {
+    if (event.type === "keydown") {
+      if (event.key === "Escape" && terminalStore.state.searchOpen) {
+        consumeTerminalShortcut(event);
+        closeTerminalSearch();
+        return false;
+      }
+      const action = resolveTerminalKeyboardAction(event);
+      if (action === "toggle-search") {
+        consumeTerminalShortcut(event);
+        toggleTerminalSearch();
+        return false;
+      }
+      if (event.key === "Backspace" && props.backspaceInput) {
+        consumeTerminalShortcut(event);
+        if (!props.readOnly) sendRendererInput(props, props.backspaceInput);
+        return false;
+      }
+      if (action === "send-interrupt") {
+        consumeTerminalShortcut(event);
+        if (!props.readOnly) sendRendererInput(props, "\x03");
+        return false;
+      }
+      if (action === "copy") {
+        consumeTerminalShortcut(event);
+        const selection = terminal.getSelection();
+        if (selection) void navigator.clipboard?.writeText(selection);
+        return false;
+      }
+      if (action === "select-all") {
+        consumeTerminalShortcut(event);
+        terminal.selectAll();
+        return false;
+      }
+      if (action === "paste") {
+        if (!navigator.clipboard?.readText) return true;
+        consumeTerminalShortcut(event);
+        if (!props.readOnly) {
+          void navigator.clipboard.readText()
+            .then((text) => { if (text) sendRendererInput(props, text); })
+            .catch(() => undefined);
+        }
+        return false;
+      }
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c" && event.type === "keydown") {
+      const selection = terminal.getSelection();
+      if (props.ctrlCMode === "copy" || (props.ctrlCMode === "auto" && selection)) {
+        consumeTerminalShortcut(event);
+        if (selection) void navigator.clipboard?.writeText(selection);
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+export function XtermRenderer(props: XtermRendererProps) {
   let host: HTMLDivElement | undefined;
   let terminal: Terminal | undefined;
   let fit: FitAddon | undefined;
@@ -53,6 +113,8 @@ export function XtermRenderer(props: {
   let lastReportedRows = 0;
 
   onMount(() => {
+    const mountedHost = host;
+    if (!mountedHost) throw new Error("Xterm renderer mounted without its host element");
     const reportResize = () => {
       if (!terminal) {
         return;
@@ -83,7 +145,7 @@ export function XtermRenderer(props: {
       fontSize: 13,
       letterSpacing: 0,
       scrollback: 10000,
-      theme: readTerminalTheme(host ?? document.documentElement)
+      theme: readTerminalTheme(mountedHost)
     });
     fit = new FitAddon();
     search = new SearchAddon();
@@ -129,7 +191,7 @@ export function XtermRenderer(props: {
     } catch {
       // WebGL is an optional acceleration path; xterm continues with DOM/canvas rendering.
     }
-    terminal.open(host!);
+    terminal.open(mountedHost);
     fitTerminal();
     terminal.onData((data) => {
       if (props.readOnly) {
@@ -141,73 +203,7 @@ export function XtermRenderer(props: {
       }
       sendTerminalInput(props.sessionId, data);
     });
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (event.type === "keydown") {
-        if (event.key === "Escape" && terminalStore.state.searchOpen) {
-          consumeTerminalShortcut(event);
-          closeTerminalSearch();
-          return false;
-        }
-        const action = resolveTerminalKeyboardAction(event);
-        if (action === "toggle-search") {
-          consumeTerminalShortcut(event);
-          toggleTerminalSearch();
-          return false;
-        }
-        if (event.key === "Backspace" && props.backspaceInput) {
-          consumeTerminalShortcut(event);
-          if (!props.readOnly) {
-            sendRendererInput(props, props.backspaceInput);
-          }
-          return false;
-        }
-        if (action === "send-interrupt") {
-          consumeTerminalShortcut(event);
-          if (!props.readOnly) {
-            sendRendererInput(props, "\x03");
-          }
-          return false;
-        }
-        if (action === "copy") {
-          consumeTerminalShortcut(event);
-          const selection = terminal?.getSelection();
-          if (selection) {
-            void navigator.clipboard?.writeText(selection);
-          }
-          return false;
-        }
-        if (action === "select-all") {
-          consumeTerminalShortcut(event);
-          terminal?.selectAll();
-          return false;
-        }
-        if (action === "paste") {
-          if (!navigator.clipboard?.readText) {
-            return true;
-          }
-          consumeTerminalShortcut(event);
-          if (!props.readOnly) {
-            void navigator.clipboard.readText().then((text) => {
-              if (text) {
-                sendRendererInput(props, text);
-              }
-            }).catch(() => undefined);
-          }
-          return false;
-        }
-      }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c" && event.type === "keydown") {
-        const selection = terminal?.getSelection();
-        if (props.ctrlCMode === "copy" || (props.ctrlCMode === "auto" && selection)) {
-          consumeTerminalShortcut(event);
-          if (selection) {
-            void navigator.clipboard?.writeText(selection);
-          }
-          return false;
-        }
-      }
-      return true;
-    });
+    registerTerminalKeyboardHandler(terminal, props);
     terminal.onSelectionChange(() => {
       if (!props.copyOnSelect || !terminal) {
         return;
@@ -223,7 +219,7 @@ export function XtermRenderer(props: {
       }, 180);
     });
     const resizeObserver = new ResizeObserver(scheduleFit);
-    resizeObserver.observe(host!);
+    resizeObserver.observe(mountedHost);
     props.onReady?.({
       findNext: (query) => Boolean(search?.findNext(query)),
       findPrevious: (query) => Boolean(search?.findPrevious(query)),

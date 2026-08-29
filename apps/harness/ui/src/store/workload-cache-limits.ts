@@ -1,0 +1,2 @@
+export const BACKGROUND_JOB_CACHE_LIMIT = 512;
+export const BACKGROUND_RUN_CACHE_LIMIT = 2_048;

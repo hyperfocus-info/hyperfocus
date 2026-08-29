@@ -1,19 +1,19 @@
-import { PiSdkAgentAdapter, type PiSdkPromptWorkerRequest, type PiSdkPromptWorkerResponse } from "./pi-agent-adapter";
+import { createPiSdkAgentAdapter, type PiApiKeyProvider, type PiSdkPromptWorkerRequest, type PiSdkPromptWorkerResponse } from "./pi-agent-adapter";
 
-const workerScope = self as unknown as {
+type PromptWorkerScope = {
   onmessage: ((event: MessageEvent<PiSdkPromptWorkerRequest>) => void | Promise<void>) | null;
   postMessage(response: PiSdkPromptWorkerResponse): void;
 };
 
+const workerScope = requirePromptWorkerScope(globalThis);
+
 workerScope.onmessage = async (event: MessageEvent<PiSdkPromptWorkerRequest>) => {
   const message = event.data;
   try {
-    const adapter = new PiSdkAgentAdapter({ offloadRunPrompt: false });
+    const adapter = createPiSdkAgentAdapter({ offloadRunPrompt: false });
     adapter.setAutoCompactContextThresholdPercent(message.autoCompactContextThresholdPercent);
     for (const [provider, apiKey] of Object.entries(message.apiKeys)) {
-      if (apiKey) {
-        adapter.setApiKey(provider as keyof PiSdkPromptWorkerRequest["apiKeys"], apiKey);
-      }
+      if (apiKey && isPiApiKeyProvider(provider)) adapter.setApiKey(provider, apiKey);
     }
 
     const result = await adapter.runPrompt(message.request);
@@ -36,4 +36,19 @@ workerScope.onmessage = async (event: MessageEvent<PiSdkPromptWorkerRequest>) =>
 
 function postResponse(response: PiSdkPromptWorkerResponse) {
   workerScope.postMessage(response);
+}
+
+function requirePromptWorkerScope(value: unknown): PromptWorkerScope {
+  if (!isPromptWorkerScope(value)) throw new Error("Pi SDK prompt worker requires a worker global scope");
+  return value;
+}
+
+function isPromptWorkerScope(value: unknown): value is PromptWorkerScope {
+  return typeof value === "object" && value !== null
+    && "onmessage" in value
+    && typeof Reflect.get(value, "postMessage") === "function";
+}
+
+function isPiApiKeyProvider(value: string): value is PiApiKeyProvider {
+  return value === "openai" || value === "google" || value === "anthropic";
 }

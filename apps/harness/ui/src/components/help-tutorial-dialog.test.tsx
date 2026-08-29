@@ -25,6 +25,7 @@ createUiTest("HelpTutorialDialog", () => {
         }}
         completedTutorialIds={[]}
         dismissedTutorialIds={[]}
+        satisfiedTutorialIds={[]}
         onClose={() => undefined}
         onStartTutorial={(tutorialId) => started.push(tutorialId)}
       />
@@ -32,5 +33,29 @@ createUiTest("HelpTutorialDialog", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /Start Open a project/i }));
     expect(started).toEqual(["open-project"]);
+    expect(screen.getAllByText("Available")).toHaveLength(4);
+  });
+
+  it("distinguishes reached goals from recorded tutorial completion", async () => {
+    render(() => (
+      <HelpTutorialDialog
+        open
+        setup={{
+          launchMode: "source",
+          updatedAt: new Date().toISOString(),
+          readyRequiredCount: 2,
+          totalRequiredCount: 2,
+          checks: []
+        }}
+        completedTutorialIds={["open-project"]}
+        dismissedTutorialIds={[]}
+        satisfiedTutorialIds={["open-project", "connect-provider-runtime"]}
+        onClose={() => undefined}
+        onStartTutorial={() => undefined}
+      />
+    ));
+
+    expect(await screen.findByText("Completed")).not.toBeNull();
+    expect(screen.getByText("Goal reached")).not.toBeNull();
   });
 });

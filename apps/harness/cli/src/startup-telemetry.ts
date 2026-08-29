@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createTimerApi, type TimerApi } from "./server/runtime/timer-api";
 
 export type StartupPhaseId = "bootstrap" | "workspace" | "runtimes" | "setup" | "ui-assets" | "serve";
 
@@ -46,14 +47,66 @@ export type StartupTelemetrySink = {
   dispose: () => void;
 };
 
+const STARTUP_EVENT_KINDS: readonly StartupEventKind[] = [
+  "session-start", "phase-start", "phase-pulse", "phase-slow", "phase-complete", "retry", "complete", "failed",
+];
+
+export function parseStartupTelemetryEventJson(line: string): StartupTelemetryEvent {
+  const value: unknown = JSON.parse(line);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("Startup telemetry event must be an object");
+  const timestamp = Reflect.get(value, "timestamp");
+  const pid = Reflect.get(value, "pid");
+  const attempt = Reflect.get(value, "attempt");
+  const kind = Reflect.get(value, "kind");
+  const label = Reflect.get(value, "label");
+  const message = Reflect.get(value, "message");
+  const progressPercent = Reflect.get(value, "progressPercent");
+  const elapsedMs = Reflect.get(value, "elapsedMs");
+  const totalElapsedMs = Reflect.get(value, "totalElapsedMs");
+  const parsedKind = typeof kind === "string" ? STARTUP_EVENT_KINDS.find((candidate) => candidate === kind) : undefined;
+  if (typeof timestamp !== "string" || typeof pid !== "number" || typeof attempt !== "number"
+    || !parsedKind
+    || typeof label !== "string" || typeof message !== "string" || typeof progressPercent !== "number"
+    || typeof elapsedMs !== "number" || typeof totalElapsedMs !== "number") {
+    throw new Error("Startup telemetry event has invalid required fields");
+  }
+  const event: StartupTelemetryEvent = { timestamp, pid, attempt, kind: parsedKind, label, message, progressPercent, elapsedMs, totalElapsedMs };
+  const phaseId = Reflect.get(value, "phaseId");
+  if (phaseId !== undefined) {
+    const parsedPhaseId = typeof phaseId === "string" ? STARTUP_PHASE_IDS.find((candidate) => candidate === phaseId) : undefined;
+    if (!parsedPhaseId) throw new Error("Startup telemetry event has invalid phaseId");
+    event.phaseId = parsedPhaseId;
+  }
+  for (const field of ["etaMs", "elapsedMs", "totalElapsedMs"] as const) {
+    const fieldValue = Reflect.get(value, field);
+    if (fieldValue !== undefined && typeof fieldValue !== "number") throw new Error(`Startup telemetry event has invalid ${field}`);
+  }
+  const etaMs = Reflect.get(value, "etaMs");
+  if (typeof etaMs === "number") event.etaMs = etaMs;
+  const etaLowerBound = Reflect.get(value, "etaLowerBound");
+  if (etaLowerBound !== undefined && typeof etaLowerBound !== "boolean") throw new Error("Startup telemetry event has invalid etaLowerBound");
+  if (typeof etaLowerBound === "boolean") event.etaLowerBound = etaLowerBound;
+  for (const field of ["hint", "logPath"] as const) {
+    const fieldValue = Reflect.get(value, field);
+    if (fieldValue !== undefined && typeof fieldValue !== "string") throw new Error(`Startup telemetry event has invalid ${field}`);
+    if (typeof fieldValue === "string") event[field] = fieldValue;
+  }
+  const details = Reflect.get(value, "details");
+  if (details !== undefined) {
+    if (details === null || typeof details !== "object" || Array.isArray(details)) throw new Error("Startup telemetry event has invalid details");
+    event.details = Object.fromEntries(Object.entries(details));
+  }
+  return event;
+}
+
 type StartupTelemetryOptions = {
   serverOnly?: boolean;
   now?: () => number;
   pid?: number;
   tmpDir?: string;
   writeLine?: (line: string) => void;
-  setTimeout?: typeof globalThis.setTimeout;
-  clearTimeout?: typeof globalThis.clearTimeout;
+  setTimeout?: TimerApi["setTimeout"];
+  clearTimeout?: TimerApi["clearTimeout"];
 };
 
 type PhaseDefinition = {
@@ -73,6 +126,17 @@ type EmitEventInput = {
   includeLogPath?: boolean;
   suppressHumanLine?: boolean;
 };
+
+type StartupSessionState = {
+  attempt: number;
+  currentPhaseId: StartupPhaseId | undefined;
+  currentPhaseStartedAt: number | undefined;
+  slowMarked: boolean;
+  finalized: boolean;
+  completedPhases: Set<StartupPhaseId>;
+};
+
+type EmitStartupEvent = (input: EmitEventInput) => void;
 
 const STARTUP_LOG_DIR = "pi-harness-startup";
 const LOG_RETENTION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -119,16 +183,24 @@ const PHASES: Record<StartupPhaseId, PhaseDefinition> = {
   }
 };
 
+const STARTUP_PHASE_IDS: readonly StartupPhaseId[] = [
+  "bootstrap",
+  "workspace",
+  "runtimes",
+  "setup",
+  "ui-assets",
+  "serve"
+];
+
 export function createStartupTelemetrySession(options: StartupTelemetryOptions = {}): StartupTelemetrySink {
   const now = options.now ?? Date.now;
   const writeLine = options.writeLine ?? ((line: string) => console.log(line));
-  const scheduleTimeout = options.setTimeout ?? globalThis.setTimeout;
-  const cancelTimeout = options.clearTimeout ?? globalThis.clearTimeout;
+  const defaultTimers = createTimerApi();
+  const scheduleTimeout = options.setTimeout ?? defaultTimers.setTimeout;
+  const cancelTimeout = options.clearTimeout ?? defaultTimers.clearTimeout;
   const pid = options.pid ?? process.pid;
   const sessionStartedAt = now();
-  const includedPhases = (
-    ["bootstrap", "workspace", "runtimes", "setup", "ui-assets", "serve"] as StartupPhaseId[]
-  ).filter((phaseId) => !(options.serverOnly && phaseId === "ui-assets"));
+  const includedPhases = STARTUP_PHASE_IDS.filter((phaseId) => !(options.serverOnly && phaseId === "ui-assets"));
   const normalizedWeights = normalizeWeights(includedPhases);
   const logDir = path.join(options.tmpDir ?? os.tmpdir(), STARTUP_LOG_DIR);
   const logPath = path.join(logDir, `${formatFileTimestamp(sessionStartedAt)}-pid${pid}.jsonl`);
@@ -138,271 +210,210 @@ export function createStartupTelemetrySession(options: StartupTelemetryOptions =
   pruneStartupLogs(logDir, logPath, sessionStartedAt);
   writeLine(`startup telemetry: ${logPath}`);
 
-  let attempt = 1;
-  let currentPhaseId: StartupPhaseId | undefined;
-  let currentPhaseStartedAt: number | undefined;
-  let slowMarked = false;
-  let finalized = false;
-  const completedPhases = new Set<StartupPhaseId>();
-  let fastPulseTimer: ReturnType<typeof setTimeout> | undefined;
-  let slowPulseTimer: ReturnType<typeof setTimeout> | undefined;
-  let slowThresholdTimer: ReturnType<typeof setTimeout> | undefined;
+  const state: StartupSessionState = {
+    attempt: 1,
+    currentPhaseId: undefined,
+    currentPhaseStartedAt: undefined,
+    slowMarked: false,
+    finalized: false,
+    completedPhases: new Set<StartupPhaseId>()
+  };
+  const emitEvent = createStartupEventEmitter({
+    state,
+    now,
+    pid,
+    sessionStartedAt,
+    includedPhases,
+    normalizedWeights,
+    logPath,
+    writeLine
+  });
+  const timers = createStartupPhaseTimers({ state, emitEvent, scheduleTimeout, cancelTimeout });
+  return createStartupTelemetrySink({ state, emitEvent, timers, now, sessionStartedAt, logPath });
+}
 
-  const emitEvent = ({
-    kind,
-    message,
-    phaseId = currentPhaseId,
-    hint,
-    details,
-    elapsedMs,
-    includeLogPath = false,
-    suppressHumanLine = false
-  }: EmitEventInput) => {
-    const timestampMs = now();
-    const phaseElapsedMs = elapsedMs ?? computePhaseElapsedMs(timestampMs, phaseId, currentPhaseStartedAt);
-    const totalElapsedMs = Math.max(0, timestampMs - sessionStartedAt);
+function createStartupEventEmitter(input: {
+  state: StartupSessionState;
+  now: () => number;
+  pid: number;
+  sessionStartedAt: number;
+  includedPhases: StartupPhaseId[];
+  normalizedWeights: Map<StartupPhaseId, number>;
+  logPath: string;
+  writeLine: (line: string) => void;
+}): EmitStartupEvent {
+  return (eventInput) => {
+    const phaseId = eventInput.phaseId ?? input.state.currentPhaseId;
+    const timestampMs = input.now();
+    const phaseElapsedMs = eventInput.elapsedMs
+      ?? computePhaseElapsedMs(timestampMs, phaseId, input.state.currentPhaseStartedAt);
+    const totalElapsedMs = Math.max(0, timestampMs - input.sessionStartedAt);
     const { progressPercent, etaMs, etaLowerBound } = computeProgressSnapshot({
-      includedPhases,
-      normalizedWeights,
-      completedPhases,
-      currentPhaseId,
-      currentPhaseStartedAt,
+      includedPhases: input.includedPhases,
+      normalizedWeights: input.normalizedWeights,
+      completedPhases: input.state.completedPhases,
+      currentPhaseId: input.state.currentPhaseId,
+      currentPhaseStartedAt: input.state.currentPhaseStartedAt,
       timestampMs,
-      kind
+      kind: eventInput.kind
     });
-    const label = phaseId ? PHASES[phaseId].label : "startup";
     const event: StartupTelemetryEvent = {
       timestamp: new Date(timestampMs).toISOString(),
-      pid,
-      attempt,
-      kind,
+      pid: input.pid,
+      attempt: input.state.attempt,
+      kind: eventInput.kind,
       phaseId,
-      label,
-      message,
+      label: phaseId ? PHASES[phaseId].label : "startup",
+      message: eventInput.message,
       progressPercent,
       elapsedMs: phaseElapsedMs,
       totalElapsedMs
     };
-
-    if (etaMs !== undefined) {
-      event.etaMs = etaMs;
-    }
-    if (etaLowerBound) {
-      event.etaLowerBound = true;
-    }
-    if (hint) {
-      event.hint = hint;
-    }
-    if (details) {
-      event.details = details;
-    }
-    if (includeLogPath) {
-      event.logPath = logPath;
-    }
-
-    appendFileSync(logPath, `${JSON.stringify(event)}\n`);
-    if (!suppressHumanLine) {
-      writeLine(renderHumanLine(event));
-    }
+    if (etaMs !== undefined) event.etaMs = etaMs;
+    if (etaLowerBound) event.etaLowerBound = true;
+    if (eventInput.hint) event.hint = eventInput.hint;
+    if (eventInput.details) event.details = eventInput.details;
+    if (eventInput.includeLogPath) event.logPath = input.logPath;
+    appendFileSync(input.logPath, `${JSON.stringify(event)}\n`);
+    if (!eventInput.suppressHumanLine) input.writeLine(renderHumanLine(event));
   };
+}
 
-  const clearPhaseTimers = () => {
-    if (fastPulseTimer) {
-      cancelTimeout(fastPulseTimer);
-      fastPulseTimer = undefined;
-    }
-    if (slowPulseTimer) {
-      cancelTimeout(slowPulseTimer);
-      slowPulseTimer = undefined;
-    }
-    if (slowThresholdTimer) {
-      cancelTimeout(slowThresholdTimer);
-      slowThresholdTimer = undefined;
-    }
-  };
+function createStartupPhaseTimers(input: {
+  state: StartupSessionState;
+  emitEvent: EmitStartupEvent;
+  scheduleTimeout: TimerApi["setTimeout"];
+  cancelTimeout: TimerApi["clearTimeout"];
+}) {
+  let fastPulseTimer: number | undefined;
+  let slowPulseTimer: number | undefined;
+  let slowThresholdTimer: number | undefined;
 
-  const scheduleFastPulse = () => {
-    fastPulseTimer = scheduleTimeout(() => {
-      if (!currentPhaseId || finalized || slowMarked) {
-        return;
-      }
+  function clear() {
+    if (fastPulseTimer !== undefined) input.cancelTimeout(fastPulseTimer);
+    if (slowPulseTimer !== undefined) input.cancelTimeout(slowPulseTimer);
+    if (slowThresholdTimer !== undefined) input.cancelTimeout(slowThresholdTimer);
+    fastPulseTimer = undefined;
+    slowPulseTimer = undefined;
+    slowThresholdTimer = undefined;
+  }
 
-      emitEvent({
-        kind: "phase-pulse",
-        message: `${PHASES[currentPhaseId].label} in progress`
-      });
+  function scheduleFastPulse() {
+    fastPulseTimer = input.scheduleTimeout(() => {
+      const phaseId = input.state.currentPhaseId;
+      if (!phaseId || input.state.finalized || input.state.slowMarked) return;
+      input.emitEvent({ kind: "phase-pulse", message: `${PHASES[phaseId].label} in progress` });
       scheduleFastPulse();
     }, FAST_PULSE_MS);
-  };
+  }
 
-  const scheduleSlowPulse = () => {
-    slowPulseTimer = scheduleTimeout(() => {
-      if (!currentPhaseId || finalized) {
-        return;
-      }
-
-      emitEvent({
-        kind: "phase-pulse",
-        message: `${PHASES[currentPhaseId].label} still in progress`
-      });
+  function scheduleSlowPulse() {
+    slowPulseTimer = input.scheduleTimeout(() => {
+      const phaseId = input.state.currentPhaseId;
+      if (!phaseId || input.state.finalized) return;
+      input.emitEvent({ kind: "phase-pulse", message: `${PHASES[phaseId].label} still in progress` });
       scheduleSlowPulse();
     }, SLOW_PULSE_MS);
-  };
+  }
 
-  const schedulePhaseTimers = () => {
-    clearPhaseTimers();
-    if (!currentPhaseId || finalized) {
-      return;
-    }
-
+  function schedule() {
+    clear();
+    const phaseId = input.state.currentPhaseId;
+    if (!phaseId || input.state.finalized) return;
     scheduleFastPulse();
-    const thresholdMs = Math.max(PHASES[currentPhaseId].expectedMs, 5_000);
-    slowThresholdTimer = scheduleTimeout(() => {
-      if (!currentPhaseId || finalized || slowMarked) {
-        return;
-      }
-
-      slowMarked = true;
-      if (fastPulseTimer) {
-        cancelTimeout(fastPulseTimer);
+    const thresholdMs = Math.max(PHASES[phaseId].expectedMs, 5_000);
+    slowThresholdTimer = input.scheduleTimeout(() => {
+      const activePhaseId = input.state.currentPhaseId;
+      if (!activePhaseId || input.state.finalized || input.state.slowMarked) return;
+      input.state.slowMarked = true;
+      if (fastPulseTimer !== undefined) {
+        input.cancelTimeout(fastPulseTimer);
         fastPulseTimer = undefined;
       }
-      emitEvent({
+      input.emitEvent({
         kind: "phase-slow",
-        hint: PHASES[currentPhaseId].slowHint,
-        message: `${PHASES[currentPhaseId].label} exceeded expected startup time`,
-        details: {
-          thresholdMs
-        }
+        hint: PHASES[activePhaseId].slowHint,
+        message: `${PHASES[activePhaseId].label} exceeded expected startup time`,
+        details: { thresholdMs }
       });
       scheduleSlowPulse();
     }, thresholdMs + 1);
-  };
+  }
 
+  return { clear, schedule };
+}
+
+function createStartupTelemetrySink(input: {
+  state: StartupSessionState;
+  emitEvent: EmitStartupEvent;
+  timers: ReturnType<typeof createStartupPhaseTimers>;
+  now: () => number;
+  sessionStartedAt: number;
+  logPath: string;
+}): StartupTelemetrySink {
   return {
-    logPath,
+    logPath: input.logPath,
     sessionStart(message = "startup session created", details) {
-      if (finalized) {
-        return;
-      }
-
-      emitEvent({
-        kind: "session-start",
-        message,
-        details,
-        includeLogPath: true,
-        suppressHumanLine: true
-      });
+      if (input.state.finalized) return;
+      input.emitEvent({ kind: "session-start", message, details, includeLogPath: true, suppressHumanLine: true });
     },
     pulse(message, details) {
-      if (finalized) {
-        return;
-      }
-
-      emitEvent({
-        kind: "phase-pulse",
-        message,
-        details
-      });
+      if (input.state.finalized) return;
+      input.emitEvent({ kind: "phase-pulse", message, details });
     },
     phaseStart(phaseId, message, details) {
-      if (finalized) {
-        return;
-      }
-
-      currentPhaseId = phaseId;
-      currentPhaseStartedAt = now();
-      slowMarked = false;
-      emitEvent({
-        kind: "phase-start",
-        phaseId,
-        message,
-        details,
-        elapsedMs: 0
-      });
-      schedulePhaseTimers();
+      if (input.state.finalized) return;
+      input.state.currentPhaseId = phaseId;
+      input.state.currentPhaseStartedAt = input.now();
+      input.state.slowMarked = false;
+      input.emitEvent({ kind: "phase-start", phaseId, message, details, elapsedMs: 0 });
+      input.timers.schedule();
     },
     phaseComplete(message, details) {
-      if (finalized || !currentPhaseId) {
-        return;
-      }
-
-      const phaseId = currentPhaseId;
-      const phaseElapsedMs = computePhaseElapsedMs(now(), phaseId, currentPhaseStartedAt);
-      clearPhaseTimers();
-      completedPhases.add(phaseId);
-      currentPhaseId = undefined;
-      currentPhaseStartedAt = undefined;
-      slowMarked = false;
-      emitEvent({
-        kind: "phase-complete",
-        phaseId,
-        message,
-        details,
-        elapsedMs: phaseElapsedMs
-      });
+      const phaseId = input.state.currentPhaseId;
+      if (input.state.finalized || !phaseId) return;
+      const phaseElapsedMs = computePhaseElapsedMs(input.now(), phaseId, input.state.currentPhaseStartedAt);
+      input.timers.clear();
+      input.state.completedPhases.add(phaseId);
+      input.state.currentPhaseId = undefined;
+      input.state.currentPhaseStartedAt = undefined;
+      input.state.slowMarked = false;
+      input.emitEvent({ kind: "phase-complete", phaseId, message, details, elapsedMs: phaseElapsedMs });
     },
     retry(message, details) {
-      if (finalized) {
-        return;
-      }
-
-      emitEvent({
-        kind: "retry",
-        message,
-        details
-      });
-      clearPhaseTimers();
-      completedPhases.clear();
-      currentPhaseId = undefined;
-      currentPhaseStartedAt = undefined;
-      slowMarked = false;
-      attempt += 1;
+      if (input.state.finalized) return;
+      input.emitEvent({ kind: "retry", message, details });
+      input.timers.clear();
+      input.state.completedPhases.clear();
+      input.state.currentPhaseId = undefined;
+      input.state.currentPhaseStartedAt = undefined;
+      input.state.slowMarked = false;
+      input.state.attempt += 1;
     },
     complete(message, details) {
-      if (finalized) {
-        return;
-      }
-
-      clearPhaseTimers();
-      finalized = true;
-      const totalElapsedMs = Math.max(0, now() - sessionStartedAt);
-      emitEvent({
-        kind: "complete",
-        message: `${message} after ${formatDuration(totalElapsedMs)}`,
-        details
-      });
+      if (input.state.finalized) return;
+      input.timers.clear();
+      input.state.finalized = true;
+      const totalElapsedMs = Math.max(0, input.now() - input.sessionStartedAt);
+      input.emitEvent({ kind: "complete", message: `${message} after ${formatDuration(totalElapsedMs)}`, details });
     },
     failed(message, details) {
-      if (finalized) {
-        return;
-      }
-
-      clearPhaseTimers();
-      finalized = true;
-      const phaseId = currentPhaseId;
-      const totalElapsedMs = Math.max(0, now() - sessionStartedAt);
+      if (input.state.finalized) return;
+      input.timers.clear();
+      input.state.finalized = true;
+      const phaseId = input.state.currentPhaseId;
+      const totalElapsedMs = Math.max(0, input.now() - input.sessionStartedAt);
       const phaseLabel = phaseId ? PHASES[phaseId].label : "startup";
-      emitEvent({
+      input.emitEvent({
         kind: "failed",
         phaseId,
-        message: `${message} after ${formatDuration(totalElapsedMs)} (last phase ${phaseLabel}; log ${logPath})`,
-        details: {
-          ...details,
-          lastPhaseId: phaseId,
-          logPath
-        }
+        message: `${message} after ${formatDuration(totalElapsedMs)} (last phase ${phaseLabel}; log ${input.logPath})`,
+        details: { ...details, lastPhaseId: phaseId, logPath: input.logPath }
       });
     },
-    getAttempt() {
-      return attempt;
-    },
-    getCurrentPhaseId() {
-      return currentPhaseId;
-    },
-    dispose() {
-      clearPhaseTimers();
-    }
+    getAttempt: () => input.state.attempt,
+    getCurrentPhaseId: () => input.state.currentPhaseId,
+    dispose: input.timers.clear
   };
 }
 

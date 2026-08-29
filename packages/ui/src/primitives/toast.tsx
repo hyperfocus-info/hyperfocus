@@ -18,10 +18,6 @@ export function createToastStore() {
   };
 }
 
-export function Toaster(props: { store: ReturnType<typeof createToastStore> }) {
-  return <div {...stylex.attrs(styles.stack)} aria-live="polite" data-test-toaster=""><For each={props.store.messages()}>{(message) => <button {...stylex.attrs(styles.toast, message.tone === "danger" && styles.danger, message.tone === "warning" && styles.warning)} onClick={() => props.store.dismiss(message.id)}><strong>{message.title}</strong>{message.description && <span>{message.description}</span>}</button>}</For></div>;
-}
-
 const styles = stylex.create({
   stack: { gap: "0.5rem", display: "flex", flexDirection: "column", position: "fixed", zIndex: 1100, bottom: "1rem", maxWidth: "24rem", right: "1rem", },
   toast: { padding: "0.75rem", borderColor: tokens.border, borderRadius: tokens.radius, borderStyle: "solid", borderWidth: "1px", gap: "0.2rem", backgroundColor: tokens.panelRaised, boxShadow: tokens.shadow, color: tokens.foreground, cursor: "pointer", display: "flex", flexDirection: "column", textAlign: "start", },
@@ -29,3 +25,6 @@ const styles = stylex.create({
   warning: { borderColor: tokens.warning }
 });
 
+export function Toaster(props: { store: ReturnType<typeof createToastStore> }) {
+  return <div {...stylex.attrs(styles.stack)} aria-live="polite" data-test-toaster=""><For each={props.store.messages()}>{(message) => <button {...stylex.attrs(styles.toast, message.tone === "danger" && styles.danger, message.tone === "warning" && styles.warning)} onClick={() => props.store.dismiss(message.id)}><strong>{message.title}</strong>{message.description && <span>{message.description}</span>}</button>}</For></div>;
+}

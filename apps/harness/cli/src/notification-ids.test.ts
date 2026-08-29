@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { createLegacyTruncatedId, createStableBoundedId, MAX_BOUNDED_ID_LENGTH } from "./notification-ids";
+import {
+  createAssistantQuestionBatchNotificationId,
+  createAssistantQuestionNotificationId,
+  createLegacyTruncatedId,
+  createStableBoundedId,
+  MAX_BOUNDED_ID_LENGTH
+} from "./notification-ids";
 
 describe("stable bounded ids", () => {
   test("keeps short ids readable and unchanged", () => {
@@ -31,5 +37,14 @@ describe("stable bounded ids", () => {
     const parts = ["planning-question", "x".repeat(180), "question"];
 
     expect(createLegacyTruncatedId(parts)).toBe(parts.join(":").slice(0, MAX_BOUNDED_ID_LENGTH));
+  });
+
+  test("assistant question notification helpers share the canonical bounded identity", () => {
+    const assistantId = `assistant-${"a".repeat(100)}`;
+    const questionIds = [`question-${"b".repeat(100)}`, `question-${"c".repeat(100)}`];
+    expect(createAssistantQuestionNotificationId(assistantId, questionIds[0]!))
+      .toBe(createStableBoundedId(["assistant-question", assistantId, questionIds[0]!]));
+    expect(createAssistantQuestionBatchNotificationId(assistantId, questionIds))
+      .toBe(createAssistantQuestionBatchNotificationId(assistantId, [...questionIds].reverse()));
   });
 });

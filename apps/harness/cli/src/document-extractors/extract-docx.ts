@@ -2,14 +2,21 @@ import {
   getChildObject,
   getChildObjects,
   getNodeText,
+  enforceExtractedTextBudget,
   normalizeExtractedText,
   parseXmlDocument,
   readOfficeZipEntries
 } from "./extract-office-zip";
-import type { DocumentExtractionResult } from "./types";
+import type { DocumentExtractionOptions, DocumentExtractionResult } from "./types";
 
-export async function extractDocxText(input: ArrayBuffer | Uint8Array | Buffer): Promise<DocumentExtractionResult> {
-  const entries = await readOfficeZipEntries(input);
+export async function extractDocxText(
+  input: ArrayBuffer | Uint8Array | Buffer,
+  options: DocumentExtractionOptions = {}
+): Promise<DocumentExtractionResult> {
+  const entries = await readOfficeZipEntries(input, {
+    ...options,
+    includeEntry: (path) => path === "word/document.xml"
+  });
   const documentXml = entries.get("word/document.xml");
   if (!documentXml) {
     throw new Error("Missing word/document.xml");
@@ -36,7 +43,7 @@ export async function extractDocxText(input: ArrayBuffer | Uint8Array | Buffer):
     })
     .filter((value) => value.length > 0);
 
-  const text = normalizeExtractedText(blocks.join("\n"));
+  const text = enforceExtractedTextBudget(normalizeExtractedText(blocks.join("\n")), options);
   if (!text) {
     return {
       status: "no-text",
@@ -110,19 +117,23 @@ function readWordInlineText(node: Record<string, unknown>): string {
 
     if (Array.isArray(value)) {
       for (const entry of value) {
-        if (entry && typeof entry === "object") {
-          parts.push(readWordInlineText(entry as Record<string, unknown>));
+        if (isRecord(entry)) {
+          parts.push(readWordInlineText(entry));
         }
       }
       continue;
     }
 
-    if (value && typeof value === "object") {
-      parts.push(readWordInlineText(value as Record<string, unknown>));
+    if (isRecord(value)) {
+      parts.push(readWordInlineText(value));
     }
   }
 
   return parts.join("");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function normalizeInlineText(text: string) {

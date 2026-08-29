@@ -1,0 +1,4 @@
+interface:
+  display_name: "User Audit"
+  short_description: "Audit product goals with randomized users"
+  default_prompt: "Use $user-audit to give a replayable randomized user a concrete goal in this Hyperfocus product, use live low-cost inference for AI interactions, fix every actionable issue, and repeat until a fresh audit is clean."

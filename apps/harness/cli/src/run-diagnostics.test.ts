@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { BackgroundJobsState, RunDiagnosticsWindowDays } from "../../shared/protocol";
+import type { BackgroundJobsState, RunDiagnosticsWindowDays } from "@hyperfocus/ai-core/protocol";
 import { buildRunDiagnosticsReport } from "./run-diagnostics";
-import type { RunDiagnosticsQueryReport, WorkspaceRepository } from "./workspace-repository";
+import type { RunDiagnosticsQueryReport } from "./workspace-repository";
 
 function createRepositoryDouble(input: { queryReport: RunDiagnosticsQueryReport; backgroundJobs: BackgroundJobsState }) {
   return {
@@ -9,10 +9,11 @@ function createRepositoryDouble(input: { queryReport: RunDiagnosticsQueryReport;
       expect(windowDays).toBe(7);
       return input.queryReport;
     },
-    loadBackgroundJobsState() {
-      return input.backgroundJobs;
+    getEnabledBackgroundJobsInBackoff(now: Date) {
+      return input.backgroundJobs.jobs.filter((job) => job.status === "enabled" &&
+        new Date(job.backoffUntil ?? "").getTime() > now.getTime());
     }
-  } as unknown as WorkspaceRepository;
+  };
 }
 
 describe("run diagnostics", () => {

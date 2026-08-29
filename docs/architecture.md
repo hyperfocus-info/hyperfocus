@@ -19,7 +19,7 @@ harness ───────┬─> @hyperfocus/ai-core
 
 `@hyperfocus/ai-core` is framework-neutral. Its protocol is the canonical contract used by the harness server, harness UI, and editor client. API keys, model execution, persistence, and agent lifecycle remain harness responsibilities.
 
-`@hyperfocus/engine` does not import application or UI packages. The editor can bundle engine source at build time, but the engine package remains independently consumable.
+`@hyperfocus/engine` lives under `packages/engine` and does not import application or UI packages. The editor can bundle engine source at build time, but the engine package remains independently consumable.
 
 The editor's AI connection is graceful degradation. Portable artifacts do not embed a Bun harness server, do not require network access, and do not duplicate provider credentials.
 
@@ -28,5 +28,15 @@ The editor's AI connection is graceful degradation. Portable artifacts do not em
 `EditorCommandSession` is the DOM-free authority for editor project state, validation, history, binary-asset commands, snapshots, and explicit handoffs. The browser shell owns presentation and calls that session; it does not define a second mutation model.
 
 Agents normally use the same command session through the in-process `hyperfocus-editor agent --project` command or the editor server's loopback HTTP API. The filesystem host verifies the canonical project pair before executing a plan and uses the engine's crash-safe directory replacement when persisting it. Project writes are serialized by resolved project root.
+
+## Related
+
+- [Documentation map](README.md)
+- [Distribution](distribution.md)
+- [Documentation governance](documentation-governance.md)
+- [Application design standard](../DESIGN.md)
+- [Engine guide](../packages/engine/readme.md)
+- [Engine editor guide](../apps/engine-editor/README.md)
+- [Harness guide](../apps/harness/README.md)
 
 CDP and the visual compatibility bridge are outside the project command boundary. They exist for canvas gestures, runtime interaction, downloads, accessibility, screenshots, and end-to-end verification—not as the primary agent transport.

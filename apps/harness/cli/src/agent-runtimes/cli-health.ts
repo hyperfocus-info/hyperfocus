@@ -1,8 +1,8 @@
 import { Buffer } from "node:buffer";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { AgentId, AgentRuntimeCapability, ModelDiscoveryConfidence } from "../../../shared/protocol";
-import { CliProcessManager } from "./cli-process-manager";
+import type { AgentId, AgentRuntimeCapability, ModelDiscoveryConfidence } from "@hyperfocus/ai-core/protocol";
+import type { CliProcessManager } from "./cli-process-manager";
 
 const HEALTH_TOTAL_TIMEOUT_MS = 10_000;
 const HEALTH_IDLE_TIMEOUT_MS = 5_000;
@@ -170,9 +170,10 @@ export function extractCodexFinalText(stdout: string) {
     }
 
     try {
-      const parsed = JSON.parse(trimmed) as { type?: string; item?: { type?: string; text?: string } };
-      if (parsed.type === "item.completed" && parsed.item?.type === "agent_message" && parsed.item.text) {
-        messages.push(parsed.item.text);
+      const parsed: unknown = JSON.parse(trimmed);
+      const item = isRecord(parsed) && isRecord(parsed.item) ? parsed.item : undefined;
+      if (isRecord(parsed) && parsed.type === "item.completed" && item?.type === "agent_message" && typeof item.text === "string") {
+        messages.push(item.text);
       }
     } catch {
       continue;
@@ -272,16 +273,20 @@ async function readCopilotConfig() {
 
 function parseCopilotConfig(text: string, filename: string) {
   try {
-    const model = filename.endsWith(".json")
+      const model = filename.endsWith(".json")
       ? (() => {
-          const parsed = JSON.parse(text) as Record<string, unknown>;
-          return typeof parsed.model === "string" ? parsed.model : undefined;
+          const parsed: unknown = JSON.parse(text);
+          return isRecord(parsed) && typeof parsed.model === "string" ? parsed.model : undefined;
         })()
       : (text.match(/^\s*model\s*:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1]?.trim() ?? undefined);
     return { model };
   } catch {
     return { model: undefined };
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function uniqueStrings(values: Array<string | undefined>) {

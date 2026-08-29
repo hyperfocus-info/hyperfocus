@@ -1,6 +1,8 @@
 import {
   type BrowserActivity,
   type BrowserSession,
+  type BackgroundJob,
+  type BackgroundJobRun,
   createChatMessage,
   createEmptySession,
   createProjectId,
@@ -9,11 +11,12 @@ import {
   type AgentPlan,
   type AgentRunState,
   type AgentTrace,
+  type Assistant,
   type ExecutionPlan,
   type PreferencesState,
   type SubagentTaskState
-} from "../../../../shared/protocol";
-import { defaultProviderCapabilities } from "../../../../shared/capabilities";
+} from "@hyperfocus/ai-core/protocol";
+import { defaultProviderCapabilities } from "@hyperfocus/ai-core/capabilities";
 import { createInitialViewState, type HarnessViewState, type ViewProjectState } from "../../harness-store";
 
 export const defaultPreferencesFixture: PreferencesState = {
@@ -41,12 +44,96 @@ export const defaultPreferencesFixture: PreferencesState = {
   assistantAutoApproveNonBlockingQuestionsDefault: true,
   maxBackgroundJobsDefault: 10,
   memoryBankEnabledDefault: true,
-  memoryBankRecordRunsDefault: true,
+  memoryBankRecordRunsDefault: false,
   checkCliUpdatesDefault: true,
   attachmentsEnabled: true,
   capabilities: [...defaultProviderCapabilities],
   agentRuntimes: []
 };
+
+const backgroundWorkloadFixtureTimestamp = "2026-08-23T12:00:00.000Z";
+
+export function createBackgroundJobFixture(overrides: Partial<BackgroundJob> = {}): BackgroundJob {
+  return {
+    id: overrides.id ?? "job-1",
+    projectId: overrides.projectId ?? "project-1",
+    assistantId: overrides.assistantId,
+    automationThreadId: overrides.automationThreadId ?? "thread-automation",
+    templateId: overrides.templateId,
+    createdFromRunId: overrides.createdFromRunId,
+    kind: overrides.kind ?? "ai-routine",
+    name: overrides.name ?? "Job",
+    description: overrides.description,
+    status: overrides.status ?? "enabled",
+    riskLevel: overrides.riskLevel ?? "safe",
+    definition: overrides.definition ?? { kind: "ai-routine", prompt: "Run job" },
+    schedule: overrides.schedule ?? { type: "one-off", runAt: backgroundWorkloadFixtureTimestamp, sourceText: "manual" },
+    scheduleInput: overrides.scheduleInput ?? "manual",
+    timezone: overrides.timezone,
+    nextRunAt: overrides.nextRunAt,
+    lastRunAt: overrides.lastRunAt,
+    lastEnqueuedAt: overrides.lastEnqueuedAt,
+    createdAt: overrides.createdAt ?? backgroundWorkloadFixtureTimestamp,
+    updatedAt: overrides.updatedAt ?? backgroundWorkloadFixtureTimestamp
+  };
+}
+
+export function createBackgroundJobRunFixture(overrides: Partial<BackgroundJobRun> = {}): BackgroundJobRun {
+  return {
+    id: overrides.id ?? "job-run-1",
+    jobId: overrides.jobId ?? "job-1",
+    projectId: overrides.projectId ?? "project-1",
+    assistantId: overrides.assistantId,
+    automationThreadId: overrides.automationThreadId ?? "thread-automation",
+    triggerSource: overrides.triggerSource ?? "manual",
+    status: overrides.status ?? "succeeded",
+    riskLevel: overrides.riskLevel ?? "safe",
+    approvalStatus: overrides.approvalStatus ?? "not-needed",
+    skippedOccurrenceCount: overrides.skippedOccurrenceCount ?? 0,
+    linkedAgentRunId: overrides.linkedAgentRunId,
+    summary: overrides.summary,
+    failureMessage: overrides.failureMessage,
+    failureCategory: overrides.failureCategory,
+    queuedAt: overrides.queuedAt ?? backgroundWorkloadFixtureTimestamp,
+    startedAt: overrides.startedAt,
+    completedAt: overrides.completedAt,
+    createdAt: overrides.createdAt ?? backgroundWorkloadFixtureTimestamp,
+    updatedAt: overrides.updatedAt ?? backgroundWorkloadFixtureTimestamp,
+    events: overrides.events ?? []
+  };
+}
+
+export function createAssistantFixture(overrides: Partial<Assistant> = {}): Assistant {
+  return {
+    id: overrides.id ?? "assistant-1",
+    name: overrides.name ?? "Assistant",
+    description: overrides.description,
+    scope: overrides.scope ?? "project",
+    projectId: overrides.projectId ?? "project-1",
+    personalityPrompt: overrides.personalityPrompt ?? "Help",
+    jobPrompt: overrides.jobPrompt ?? "Work",
+    agentId: overrides.agentId ?? "pi",
+    providerBrand: overrides.providerBrand,
+    modeId: overrides.modeId,
+    executionModelId: overrides.executionModelId,
+    reasoningStrength: overrides.reasoningStrength,
+    fastMode: overrides.fastMode,
+    runState: overrides.runState ?? "active",
+    bootstrapState: overrides.bootstrapState ?? "completed",
+    bootstrapAttemptId: overrides.bootstrapAttemptId,
+    bootstrapStartedAt: overrides.bootstrapStartedAt,
+    bootstrapFinishedAt: overrides.bootstrapFinishedAt,
+    clonedFromAssistantId: overrides.clonedFromAssistantId,
+    failureStreakCount: overrides.failureStreakCount ?? 0,
+    circuitBreakerState: overrides.circuitBreakerState ?? "closed",
+    circuitBreakerReason: overrides.circuitBreakerReason,
+    deletedAt: overrides.deletedAt,
+    latestActivityAt: overrides.latestActivityAt,
+    unreadQuestionCount: overrides.unreadQuestionCount ?? 0,
+    createdAt: overrides.createdAt ?? backgroundWorkloadFixtureTimestamp,
+    updatedAt: overrides.updatedAt ?? backgroundWorkloadFixtureTimestamp
+  };
+}
 
 export function createExecutionPlanFixture(overrides: Partial<ExecutionPlan> = {}): ExecutionPlan {
   return {
@@ -130,6 +217,7 @@ export function createRunFixture(overrides: Partial<AgentRunState> = {}): AgentR
   return {
     id: overrides.id ?? "run-1",
     threadId: overrides.threadId ?? "thread-1",
+    threadRunSequence: overrides.threadRunSequence,
     status: overrides.status ?? "ready",
     latestUserPrompt: overrides.latestUserPrompt ?? "Do work",
     planningModelId: overrides.planningModelId ?? "openai/gpt-5.4",
@@ -151,7 +239,8 @@ export function createRunFixture(overrides: Partial<AgentRunState> = {}): AgentR
     retryable: overrides.retryable ?? true,
     createdAt: overrides.createdAt ?? new Date().toISOString(),
     updatedAt: overrides.updatedAt ?? new Date().toISOString(),
-    completedAt: overrides.completedAt
+    completedAt: overrides.completedAt,
+    detailState: overrides.detailState
   };
 }
 

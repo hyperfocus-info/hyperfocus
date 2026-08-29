@@ -1,0 +1,34 @@
+import type { CliSessionManager } from "../../agent-runtimes/cli-session-manager";
+import type { AgentRuntimeRegistry } from "../../agent-runtimes/runtime-registry";
+import type { AssistantManager } from "../../assistant-manager";
+import type { BackgroundJobScheduler } from "../../background-job-scheduler";
+import type { pickProjectFolder } from "../../folder-picker";
+import type { PiAgentAdapter } from "../../pi-agent-adapter";
+import type { BackgroundRunControl, HarnessConnection, HarnessServerOsAdapters, PendingBrowserApproval } from "../core/contracts";
+import type { TerminalSessionManager } from "../../terminal/terminal-session-manager";
+import type { WorkspaceRepository } from "../../workspace-repository";
+import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
+import type { PreferencesState, SetupState, TokenUsageTotals } from "@hyperfocus/ai-core/protocol";
+
+export type ServerCommandContext = {
+  ws: Bun.ServerWebSocket<HarnessConnection>;
+  runtime: WorkspaceRuntimeStore;
+  repository: WorkspaceRepository;
+  adapter: PiAgentAdapter;
+  runtimeRegistry: AgentRuntimeRegistry;
+  assistantManager: AssistantManager;
+  cliSessionManager: CliSessionManager;
+  terminalSessionManager: TerminalSessionManager;
+  pickFolder: typeof pickProjectFolder;
+  getCurrentPreferencesState: () => PreferencesState;
+  emitSetupRefresh: (requestId: string) => Promise<SetupState>;
+  pendingBrowserApprovals: Map<string, PendingBrowserApproval>;
+  connections: Set<Bun.ServerWebSocket<HarnessConnection>>;
+  backgroundRunControllers: Map<string, BackgroundRunControl>;
+  projectSearchControllers: Map<string, { requestId: string; abortController: AbortController }>;
+  ideSearchControllers: Map<string, { requestId: string; abortController: AbortController }>;
+  scheduler: BackgroundJobScheduler;
+  osAdapters: HarnessServerOsAdapters;
+  derivedProgressHeartbeatMs: number;
+  tokenUsageSession: TokenUsageTotals;
+};

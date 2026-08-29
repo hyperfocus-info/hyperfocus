@@ -10,12 +10,15 @@ import {
   type PreferencesState,
   type ServerEvent,
   type WorkspaceProjectState
-} from "../../../shared/protocol";
-import { defaultProviderCapabilities } from "../../../shared/capabilities";
+} from "@hyperfocus/ai-core/protocol";
+import { defaultProviderCapabilities } from "@hyperfocus/ai-core/capabilities";
 import {
   BROWSER_UI_SESSION_STORAGE_KEY,
+  ANTHROPIC_API_KEY_STORAGE_KEY,
   COMPOSER_FAST_MODE_STORAGE_KEY,
   COMPOSER_REASONING_STRENGTH_STORAGE_KEY,
+  GOOGLE_API_KEY_STORAGE_KEY,
+  OPENAI_API_KEY_STORAGE_KEY,
   PREFERENCES_ACTIVE_SECTION_STORAGE_KEY,
   PROJECT_SIDEBAR_PREFERENCES_STORAGE_KEY,
   THEME_PREFERENCE_STORAGE_KEY,
@@ -68,7 +71,7 @@ const defaultPreferences: PreferencesState = {
   assistantAutoApproveNonBlockingQuestionsDefault: true,
   maxBackgroundJobsDefault: 10,
   memoryBankEnabledDefault: true,
-  memoryBankRecordRunsDefault: true,
+  memoryBankRecordRunsDefault: false,
   checkCliUpdatesDefault: true,
   attachmentsEnabled: true,
   capabilities: [...defaultProviderCapabilities],
@@ -179,7 +182,7 @@ describe("harness store reducer", () => {
     expect(readBrowserUiSession().selectedModeId).toBe("implement");
   });
 
-  test("hydrates browser ui session with full latest view", () => {
+  test("hydrates browser ui session without restoring bounded workload selections", () => {
     clearBrowserUiSessionStorage();
     globalThis.localStorage?.setItem(
       BROWSER_UI_SESSION_STORAGE_KEY,
@@ -210,8 +213,8 @@ describe("harness store reducer", () => {
     expect(store.state.assistants.scopeFilter).toBe("project");
     expect(store.state.assistants.selectedAssistantId).toBe("assistant-1");
     expect(store.state.jobsPanePreferences.segment).toBe("jobs");
-    expect(store.state.jobsPanePreferences.selectedJobId).toBe("job-1");
-    expect(store.state.jobsPanePreferences.selectedRunId).toBe("run-1");
+    expect(store.state.jobsPanePreferences.selectedJobId).toBeUndefined();
+    expect(store.state.jobsPanePreferences.selectedRunId).toBeUndefined();
     expect(store.state.jobsRunFilter).toBe("failed");
   });
 
@@ -475,8 +478,8 @@ describe("harness store reducer", () => {
               supportsPlanning: true,
               supportsReview: true,
               supportsFastModeControl: true,
-              discoveredModels: ["openai/gpt-5.5", "openai/gpt-5.4-mini"],
-              activeModel: "openai/gpt-5.5",
+              discoveredModels: ["openai/gpt-5.6-sol", "openai/gpt-5.6-luna", "openai/gpt-5.4-mini"],
+              activeModel: "openai/gpt-5.6-sol",
               modelDiscoveryConfidence: "partial"
             }
           ]
@@ -491,11 +494,11 @@ describe("harness store reducer", () => {
     });
 
     expect(getExecutionModelOptionsForAgent(state, "codex-cli", "gpt")).toEqual([
-      { modelId: "openai/gpt-5.5", label: "GPT-5.5" },
-      { modelId: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini" }
+      { modelId: "openai/gpt-5.6-sol", label: "GPT-5.6 Sol" },
+      { modelId: "openai/gpt-5.6-luna", label: "GPT-5.6 Luna" }, { modelId: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini" }
     ]);
-    expect(getFallbackExecutionModelIdForAgent(state, "codex-cli", "gpt")).toBe("openai/gpt-5.5");
-    expect(getComposerControlState(state, "codex-cli", "openai/gpt-5.5")).toMatchObject({
+    expect(getFallbackExecutionModelIdForAgent(state, "codex-cli", "gpt")).toBe("openai/gpt-5.6-sol");
+    expect(getComposerControlState(state, "codex-cli", "openai/gpt-5.6-luna")).toMatchObject({
       availableStrengths: ["low", "medium", "high", "extra-high"],
       supportsFastMode: true
     });
@@ -533,6 +536,37 @@ describe("harness store reducer", () => {
     expect(nextStore.state.selectedFastMode).toBe(true);
     expect(nextStore.state.hasGlobalSelectedReasoningStrength).toBe(true);
     expect(nextStore.state.hasGlobalSelectedFastMode).toBe(true);
+  });
+
+  test("migrates legacy browser API key drafts into memory and immediately scrubs localStorage", () => {
+    globalThis.localStorage?.setItem(OPENAI_API_KEY_STORAGE_KEY, "sk-legacy-browser");
+    globalThis.localStorage?.setItem(GOOGLE_API_KEY_STORAGE_KEY, "google-legacy-browser");
+    globalThis.localStorage?.setItem(ANTHROPIC_API_KEY_STORAGE_KEY, "anthropic-legacy-browser");
+
+    const store = createHarnessStore();
+    store.hydrateLocalPreferences();
+
+    expect(store.state.openAiApiKeyDraft).toBe("sk-legacy-browser");
+    expect(store.state.googleApiKeyDraft).toBe("google-legacy-browser");
+    expect(store.state.anthropicApiKeyDraft).toBe("anthropic-legacy-browser");
+    expect(globalThis.localStorage?.getItem(OPENAI_API_KEY_STORAGE_KEY)).toBeNull();
+    expect(globalThis.localStorage?.getItem(GOOGLE_API_KEY_STORAGE_KEY)).toBeNull();
+    expect(globalThis.localStorage?.getItem(ANTHROPIC_API_KEY_STORAGE_KEY)).toBeNull();
+  });
+
+  test("never writes provider API key drafts to browser storage", () => {
+    persistMergedLocalPreferences({
+      openAiApiKey: "sk-must-not-persist",
+      googleApiKey: "google-must-not-persist",
+      anthropicApiKey: "anthropic-must-not-persist",
+      providerBrand: "gpt"
+    });
+
+    expect(globalThis.localStorage?.getItem(OPENAI_API_KEY_STORAGE_KEY)).toBeNull();
+    expect(globalThis.localStorage?.getItem(GOOGLE_API_KEY_STORAGE_KEY)).toBeNull();
+    expect(globalThis.localStorage?.getItem(ANTHROPIC_API_KEY_STORAGE_KEY)).toBeNull();
+    expect(readLocalPreferences()).toMatchObject({ providerBrand: "gpt" });
+    expect(readLocalPreferences().openAiApiKey).toBeUndefined();
   });
 
   test("persists and hydrates the last selected preferences section", () => {
@@ -1190,7 +1224,11 @@ describe("harness store reducer", () => {
         assistant: hydratedState.assistants.assistants[0]!
       }
     });
-    const withDelta = reduceServerEvent(withCreatedCard, {
+    const messageCreatedAt = new Date().toISOString();
+    const demandedState = { ...withCreatedCard, assistants: { ...withCreatedCard.assistants,
+      loadedDetailAssistantIds: [assistantId], threads: [{ id: "assistant-thread-1", assistantId, sessionId: "session-1",
+        messageCount: 0, messages: [], updatedAt: messageCreatedAt }] } };
+    const withDelta = reduceServerEvent(demandedState, {
       type: "assistant.chat.delta",
       requestId: "assistant-3",
       payload: {
@@ -1199,7 +1237,6 @@ describe("harness store reducer", () => {
         delta: "wax on"
       }
     });
-    const messageCreatedAt = new Date().toISOString();
     const withAppendedMessage = reduceServerEvent(withDelta, {
       type: "assistant.chat.message-appended",
       requestId: "assistant-4",
@@ -1218,15 +1255,7 @@ describe("harness store reducer", () => {
           assistantId,
           sessionId: "session-1",
           messageCount: 1,
-          messages: [
-            {
-              id: "message-1",
-              role: "user",
-              kind: "plain",
-              content: "Need balance help",
-              createdAt: messageCreatedAt
-            }
-          ],
+          latestMessageId: "message-1",
           updatedAt: messageCreatedAt
         }
       }
@@ -1245,7 +1274,7 @@ describe("harness store reducer", () => {
         }
       }
     });
-    const withDetail = reduceServerEvent(withQuestion, {
+    const withDetail = reduceServerEvent({ ...withQuestion, assistants: { ...withQuestion.assistants, pendingDetailRequestByAssistantId: { [assistantId]: "assistant-detail" } } }, {
       type: "assistant.detail.loaded",
       requestId: "assistant-detail",
       payload: {
@@ -1280,7 +1309,7 @@ describe("harness store reducer", () => {
     expect(getVisibleAssistants(withCreatedCard)[0]?.id).toBe(assistantId);
     expect(withDelta.assistants.streamingByAssistantId[assistantId]).toBe("wax on");
     expect(withAppendedMessage.assistants.threads[0]?.messages[0]?.content).toBe("Need balance help");
-    expect(withAppendedMessage.assistants.streamingByAssistantId[assistantId]).toBe("wax on");
+    expect(withAppendedMessage.assistants.streamingByAssistantId[assistantId]).toBe("");
     expect(withQuestion.assistants.questions[0]?.prompt).toContain("Kata");
     expect(withDetail.assistants.todos[0]?.title).toBe("Practice stance");
   });
@@ -2605,11 +2634,11 @@ describe("harness store reducer", () => {
         runId: "run-1"
       }
     });
-
-    expect(stateWithRun.workspace.projects[0]?.activeRun?.status).toBe("partial-complete");
-    expect(clearedState.workspace.projects[0]?.activeRun).toBeUndefined();
+    const foreignChildState = reduceServerEvent(stateWithRun, { type: "run.updated", requestId: "foreign-child", payload: { projectId, threadId, run: { ...stateWithRun.workspace.projects[0]!.activeRun!, toolActivities: [{ id: "foreign-tool", runId: "foreign", owner: "main", toolCallId: "call", toolName: "read", category: "other", status: "completed", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }] } } });
+    const duplicateChildState = reduceServerEvent(stateWithRun, { type: "run.updated", requestId: "duplicate-child", payload: { projectId, threadId, run: { ...stateWithRun.workspace.projects[0]!.activeRun!, browserSessions: [{ id: "browser", runId: "run-1", owner: "main", status: "idle", approvalMode: "per-tool", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), activities: [{ id: "one", toolCallId: "duplicate", toolName: "browser", kind: "click", label: "Click", status: "completed", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), replay: [], verification: [] }, { id: "two", toolCallId: "duplicate", toolName: "browser", kind: "click", label: "Click", status: "completed", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), replay: [], verification: [] }] }] } } });
+    const duplicateToolCallState = reduceServerEvent(stateWithRun, { type: "run.updated", requestId: "duplicate-tool-call", payload: { projectId, threadId, run: { ...stateWithRun.workspace.projects[0]!.activeRun!, toolActivities: [{ id: "tool-one", runId: "run-1", owner: "main", toolCallId: "duplicate", toolName: "read", category: "other", status: "completed", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, { id: "tool-two", runId: "run-1", owner: "subagent", subagentId: "subagent", toolCallId: "duplicate", toolName: "write", category: "other", status: "completed", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }] } } });
+    expect(stateWithRun.workspace.projects[0]?.activeRun?.status).toBe("partial-complete"); expect(foreignChildState).toBe(stateWithRun); expect(duplicateChildState).toBe(stateWithRun); expect(duplicateToolCallState).toBe(stateWithRun); expect(clearedState.workspace.projects[0]?.activeRun).toBeUndefined();
   });
-
   test("stores completed runs as lastRun but clears activeRun", () => {
     const initialProject = createProject();
     const initialState = createConnectedState(initialProject);
@@ -2686,7 +2715,7 @@ describe("harness store reducer", () => {
           projectId,
           threadId,
           run: {
-            id: "run-old",
+            id: "run-old", threadRunSequence: 1,
             threadId,
             status: "completed",
             latestUserPrompt: "old task",
@@ -2710,7 +2739,7 @@ describe("harness store reducer", () => {
         projectId,
         threadId,
         run: {
-          id: "run-new",
+          id: "run-new", threadRunSequence: 2,
           threadId,
           status: "planning",
           latestUserPrompt: "new task",
@@ -2741,7 +2770,7 @@ describe("harness store reducer", () => {
         projectId,
         threadId,
         run: {
-          id: "run-1",
+          id: "run-1", threadRunSequence: 1,
           threadId,
           status: "completed",
           latestUserPrompt: "existing task",
@@ -2800,7 +2829,7 @@ describe("harness store reducer", () => {
         projectId,
         threadId,
         run: {
-          id: "run-2",
+          id: "run-2", threadRunSequence: 2,
           threadId,
           status: "planning",
           latestUserPrompt: "new task",
@@ -2894,7 +2923,7 @@ describe("harness store reducer", () => {
         content: "simple task"
       }
     };
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     store.replaceStateForTests({
       ...createConnectedState(initialProject),
       blockingNonGitPreflight: {
@@ -2926,8 +2955,8 @@ describe("harness store reducer", () => {
     });
 
     expect(commands).toHaveLength(1);
-    expect((commands[0] as { type: string }).type).toBe("chat.send");
-    expect((commands[0] as { requestId: string }).requestId).not.toBe(command.requestId);
+    expect(commands[0]?.type).toBe("chat.send");
+    expect(commands[0]?.requestId).not.toBe(command.requestId);
   });
 
   test("retries blocked command after dirty git check is disabled", () => {
@@ -2943,7 +2972,7 @@ describe("harness store reducer", () => {
         content: "simple task"
       }
     };
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     store.replaceStateForTests({
       ...createConnectedState(initialProject),
       blockingNonGitPreflight: {
@@ -2974,8 +3003,8 @@ describe("harness store reducer", () => {
     });
 
     expect(commands).toHaveLength(1);
-    expect((commands[0] as { type: string }).type).toBe("chat.send");
-    expect((commands[0] as { requestId: string }).requestId).not.toBe(command.requestId);
+    expect(commands[0]?.type).toBe("chat.send");
+    expect(commands[0]?.requestId).not.toBe(command.requestId);
   });
 
   test("stores project context usage snapshots", () => {

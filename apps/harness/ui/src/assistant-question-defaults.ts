@@ -1,4 +1,4 @@
-import type { PlanningChoice } from "../../shared/protocol";
+import type { PlanningChoice } from "@hyperfocus/ai-core/protocol";
 
 export function getAssistantQuestionDefaultChoices(): PlanningChoice[] {
   return [

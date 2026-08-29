@@ -1,18 +1,19 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
-import { CodexCliRuntime } from "./codex-cli-runtime";
+import { createCodexCliRuntime } from "./codex-cli-runtime";
+import { createHarnessTestTempPath } from "../test-support/test-temp-root";
 
 const runLive = Bun.env.HARNESS_RUN_CODEX_LIVE_TESTS === "1";
 const liveTest = runLive ? test : test.skip;
 
 describe("codex sdk live", () => {
-  liveTest("returns text for a simple read-only run", async () => {
-    const runtime = new CodexCliRuntime();
+  liveTest("returns text from Luna for a simple read-only run", async () => {
+    const runtime = createCodexCliRuntime();
     const result = await runtime.getAdapter().runPrompt({
       kind: "executor",
       cwd: process.cwd(),
-      modelId: "openai/gpt-5.4",
+      modelId: "openai/gpt-5.6-luna",
       prompt: "Reply with exact text OK and nothing else.",
       readOnly: true
     });
@@ -21,7 +22,7 @@ describe("codex sdk live", () => {
   }, 120000);
 
   liveTest("preserves context across continuation on one controller", async () => {
-    const runtime = new CodexCliRuntime();
+    const runtime = createCodexCliRuntime();
     const controller = await runtime.getAdapter().startExecution({
       kind: "executor",
       cwd: process.cwd(),
@@ -44,7 +45,7 @@ describe("codex sdk live", () => {
   }, 120000);
 
   liveTest("interactive launch uses bundled executable path", async () => {
-    const runtime = new CodexCliRuntime();
+    const runtime = createCodexCliRuntime();
     const launch = runtime.buildInteractiveLaunch({
       cwd: process.cwd(),
       cols: 120,
@@ -60,7 +61,7 @@ async function runWritableHtmlSmoke(maxAttempts: number) {
   const failures: string[] = [];
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const tempRoot = path.join(process.cwd(), ".tmp-test-data", `codex-live-${crypto.randomUUID()}`);
+    const tempRoot = createHarnessTestTempPath("codex-live");
     mkdirSync(tempRoot, { recursive: true });
     writeFileSync(path.join(tempRoot, "README.md"), "start\n");
     const init = Bun.spawn({
@@ -72,7 +73,7 @@ async function runWritableHtmlSmoke(maxAttempts: number) {
     await init.exited;
 
     try {
-      const runtime = new CodexCliRuntime();
+      const runtime = createCodexCliRuntime();
       const result = await runtime.getAdapter().runPrompt({
         kind: "executor",
         cwd: tempRoot,

@@ -67,14 +67,22 @@ async function requirePackageJson(project: string) {
 }
 
 async function readDependencies(project: string) {
-  const manifest = JSON.parse(await readFile(resolve(project, "package.json"), "utf8")) as Record<string, unknown>;
-  return Object.fromEntries(sections.map((section) => {
+  const parsed: unknown = JSON.parse(await readFile(resolve(project, "package.json"), "utf8"));
+  const manifest = record(parsed);
+  if (!manifest) throw new TypeError("Project package.json must contain an object.");
+  const dependencies: BunDependencyResult["dependencies"] = { dependencies: {}, devDependencies: {}, optionalDependencies: {}, peerDependencies: {} };
+  for (const section of sections) {
     const value = manifest[section];
-    const entries = value && typeof value === "object" && !Array.isArray(value)
-      ? Object.fromEntries(Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))
+    const entries = record(value);
+    dependencies[section] = entries
+      ? Object.fromEntries(Object.entries(entries).filter((entry): entry is [string, string] => typeof entry[1] === "string").sort(([left], [right]) => left.localeCompare(right)))
       : {};
-    return [section, entries];
-  })) as Record<DependencySection, Record<string, string>>;
+  }
+  return dependencies;
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : undefined;
 }
 
 async function runBun(options: { cwd: string; argv: string[] }) {

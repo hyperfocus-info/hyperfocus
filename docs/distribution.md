@@ -14,8 +14,27 @@ Tagged GitHub releases build the same application and attach a portable archive.
 
 ## Harness
 
-The harness retains its standalone launcher packaging flow. GitHub releases attach the Windows launcher; source users can run it directly from the monorepo.
+The harness retains its standalone launcher packaging flow. GitHub releases attach a
+versioned `hyperfocus-harness-v<version>-windows-x64.zip` containing the complete
+Windows launcher directory. The tagged workflow runs the full Harness test gate,
+extracts the archive, verifies its file set, and smokes the extracted executable
+before upload. Source users can run the launcher directly from the monorepo. The
+launcher can register as the current user's `ide://` handler, reuse an existing
+loopback backend, or start a desktop-owned backend whose lifetime follows connected
+IDE tabs.
+
+Standalone update discovery is opt-in. The framework-neutral desktop runtime package supplies the version-source contract and comparison policy, while each consumer owns its release source, user prompt, download, signature verification, and installation behavior.
 
 ## Libraries
 
-Each package has its own manifest and exports. Future remote splitting should preserve package directories and use subtree or filtered-history publication rather than introducing cross-repository relative imports.
+Each package has its own manifest and exports. Future remote splitting should preserve package directories and use subtree or filtered-history publication rather than introducing cross-repository relative imports. `@hyperfocus/engine` is stored at `packages/engine` as a normal workspace package.
+
+## Versioning
+
+The monorepo keeps one app/package version line. Branch pushes bump the checked-in
+patch version by default, while tagged releases publish the version already present
+on the tag. See [Versioning](versioning.md) for the release workflow and local
+commands.
+
+Related: [documentation map](README.md), [architecture](architecture.md),
+[package testing](package-testing.md), [versioning](versioning.md), and [licensing](licensing.md).

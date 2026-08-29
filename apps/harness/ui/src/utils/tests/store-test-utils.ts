@@ -1,3 +1,4 @@
+import { type ClientCommand } from "@hyperfocus/ai-core/protocol";
 import { createInitialViewState, harnessStore, type HarnessViewState } from "../../harness-store";
 import { resetToastStoreForTests as clearToastStore } from "../../toast-store";
 
@@ -54,8 +55,18 @@ export function clearBrowserStateForTests() {
   }
 }
 
-export function captureDispatchedCommands(commands: unknown[]) {
+export function captureDispatchedCommands(commands: unknown[]): asserts commands is ClientCommand[] {
   harnessStore.actions.setCommandDispatcher((command) => {
     commands.push(command);
   });
+}
+
+export function requireCommand<TType extends ClientCommand["type"]>(commands: readonly ClientCommand[], index: number, type: TType): Extract<ClientCommand, { type: TType }> {
+  const command = commands[index];
+  if (!command || !isCommandType(command, type)) throw new Error(`Expected command ${type} at index ${index}`);
+  return command;
+}
+
+function isCommandType<TType extends ClientCommand["type"]>(command: ClientCommand, type: TType): command is Extract<ClientCommand, { type: TType }> {
+  return command.type === type;
 }

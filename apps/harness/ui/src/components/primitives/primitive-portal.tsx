@@ -1,6 +1,11 @@
 import { Show, type JSX } from "solid-js";
 import { Portal } from "solid-js/web";
 
+declare global {
+  var __padPilotDisablePortals: boolean | undefined;
+  var __padPilotHappyDomRegistered: boolean | undefined;
+}
+
 export type PrimitivePortalLayer = "dialog" | "popover" | "sheet" | "tooltip" | "tutorial";
 
 type PrimitivePortalProps = {
@@ -12,7 +17,7 @@ type PrimitivePortalProps = {
 const portalRoots = new Map<PrimitivePortalLayer, HTMLDivElement>();
 
 export function shouldBypassPortalForTests() {
-  return (globalThis as typeof globalThis & { __padPilotDisablePortals?: boolean }).__padPilotDisablePortals === true;
+  return globalThis.__padPilotDisablePortals === true;
 }
 
 export function PrimitivePortal(props: PrimitivePortalProps) {

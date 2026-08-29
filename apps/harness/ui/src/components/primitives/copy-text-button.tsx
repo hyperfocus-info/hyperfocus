@@ -20,6 +20,8 @@ type CopyTextButtonProps = {
   children?: JSX.Element;
 };
 
+const styles = stylex.create({ icon: { height: "0.875rem", width: "0.875rem" } });
+
 export function CopyTextButton(props: CopyTextButtonProps) {
   const canCopy = () => props.value.trim().length > 0;
 
@@ -54,5 +56,3 @@ export function CopyTextButton(props: CopyTextButtonProps) {
     </span>
   );
 }
-
-const styles = stylex.create({ icon: { height: "0.875rem", width: "0.875rem" } });

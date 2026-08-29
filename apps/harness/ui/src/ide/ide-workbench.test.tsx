@@ -1,16 +1,22 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it, mock } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireTextArea } from "../utils/tests/test-harness";
 import {
   captureDispatchedCommands,
   clearBrowserStateForTests,
 } from "../utils/tests/store-test-utils";
 import { harnessStore } from "../harness-store";
-import { createWorkspaceProjectState } from "../../../shared/protocol";
+import { createWorkspaceProjectState } from "@hyperfocus/ai-core/protocol";
 
-const createHotkeysMock = mock(() => undefined);
-const createHotkeySequencesMock = mock(() => undefined);
+type HotkeyDefinition = { hotkey: string; callback: () => void };
+type HotkeyOptions = { enabled: boolean; preventDefault: boolean; stopPropagation: boolean; ignoreInputs: boolean };
+type HotkeySource = HotkeyDefinition[] | (() => HotkeyDefinition[]);
+type SequenceDefinition = { sequence: string[]; callback: () => void };
+type SequenceSource = SequenceDefinition[] | (() => SequenceDefinition[]);
+
+const createHotkeysMock = mock((_hotkeys: HotkeySource, _options: () => HotkeyOptions) => undefined);
+const createHotkeySequencesMock = mock((_sequences: SequenceSource, _options: () => HotkeyOptions) => undefined);
 
 mock.module("@tanstack/solid-hotkeys", () => ({
   createHotkeys: createHotkeysMock,
@@ -21,22 +27,8 @@ mock.module("@tanstack/solid-hotkeys", () => ({
 import { IdeWorkbench, isIdeProjectSwitcherModKHotkey } from "./ide-workbench";
 import { DEFAULT_IDE_EDITOR_SETTINGS, ideStore } from "./ide-store";
 
-function getIdeHotkeyDefinitions() {
-  const calls = createHotkeysMock.mock.calls as unknown as Array<
-    [
-      (
-        | Array<{ hotkey: string; callback: () => void }>
-        | (() => Array<{ hotkey: string; callback: () => void }>)
-      ),
-      () => {
-        enabled: boolean;
-        preventDefault: boolean;
-        stopPropagation: boolean;
-        ignoreInputs: boolean;
-      },
-    ]
-  >;
-  const call = calls.find(([hotkeys]) => {
+function getIdeHotkeyDefinitions(): [HotkeyDefinition[], () => HotkeyOptions] {
+  const call = createHotkeysMock.mock.calls.find(([hotkeys]) => {
     const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
     return definitions.some(
       (definition) => definition.hotkey === "Mod+Shift+P",
@@ -46,15 +38,14 @@ function getIdeHotkeyDefinitions() {
     throw new Error("Expected IDE hotkey registration");
   }
   const [hotkeys, options] = call;
-  return [typeof hotkeys === "function" ? hotkeys() : hotkeys, options] as [
-    Array<{ hotkey: string; callback: () => void }>,
-    () => {
-      enabled: boolean;
-      preventDefault: boolean;
-      stopPropagation: boolean;
-      ignoreInputs: boolean;
-    },
-  ];
+  return [typeof hotkeys === "function" ? hotkeys() : hotkeys, options];
+}
+
+function getIdeHotkeySequenceDefinitions(index = 0): [SequenceDefinition[], () => HotkeyOptions] {
+  const call = createHotkeySequencesMock.mock.calls.at(index);
+  if (!call) throw new Error("Expected IDE hotkey sequence registration");
+  const [sequences, options] = call;
+  return [typeof sequences === "function" ? sequences() : sequences, options];
 }
 
 createUiTest("IdeWorkbench", () => {
@@ -120,22 +111,13 @@ createUiTest("IdeWorkbench", () => {
       stopPropagation: true,
     });
     expect(createHotkeySequencesMock.mock.calls.length).toBe(1);
-    const [sequences, sequenceOptions] = createHotkeySequencesMock.mock
-      .calls[0] as unknown as [
-      () => Array<{ sequence: string[]; callback: () => void }>,
-      () => {
-        enabled: boolean;
-        preventDefault: boolean;
-        stopPropagation: boolean;
-        ignoreInputs: boolean;
-      },
-    ];
-    expect(sequences().map((definition) => definition.sequence)).toEqual([
+    const [sequences, sequenceOptions] = getIdeHotkeySequenceDefinitions();
+    expect(sequences.map((definition) => definition.sequence)).toEqual([
       ["Mod+Shift+W"],
       ["Alt+Shift+W"],
     ]);
     expect(
-      sequences().every(
+      sequences.every(
         (definition) => typeof definition.callback === "function",
       ),
     ).toBe(true);
@@ -489,8 +471,9 @@ createUiTest("IdeWorkbench", () => {
     harnessStore.setActiveSurface("ide");
     captureDispatchedCommands(commands);
     ideStore.resetForTests({
-      openPaths: ["engine/browser/engine.js"],
-      activePath: "engine/browser/engine.js",
+      projectId: "project-restore",
+      openPaths: ["packages/engine/browser/engine.js"],
+      activePath: "packages/engine/browser/engine.js",
     });
 
     const rendered = render(() => <IdeWorkbench />);
@@ -498,7 +481,7 @@ createUiTest("IdeWorkbench", () => {
 
     expect(
       commands.some(
-        (command) => (command as { type?: string }).type === "ide.file.read",
+        (command) => command.type === "ide.file.read",
       ),
     ).toBe(false);
     rendered.unmount();
@@ -522,7 +505,7 @@ createUiTest("IdeWorkbench", () => {
       requestId: expect.any(String),
       payload: {
         projectId: "project-restore",
-        path: "engine/browser/engine.js",
+        path: "packages/engine/browser/engine.js",
       },
     });
   });
@@ -531,6 +514,7 @@ createUiTest("IdeWorkbench", () => {
     const commands: unknown[] = [];
     captureDispatchedCommands(commands);
     ideStore.resetForTests({
+      projectId: "project-1",
       openPaths: ["src/app.ts"],
       activePath: "src/app.ts",
       filesByPath: {
@@ -551,7 +535,7 @@ createUiTest("IdeWorkbench", () => {
     });
     render(() => <IdeWorkbench />);
 
-    const editor = screen.getByLabelText("Edit app.ts") as HTMLTextAreaElement;
+    const editor = requireTextArea(screen.getByLabelText("Edit app.ts"));
     fireEvent.input(editor, {
       target: { value: "export const ok = false;\n" },
     });
@@ -591,7 +575,7 @@ createUiTest("IdeWorkbench", () => {
     });
     render(() => <IdeWorkbench />);
 
-    const editor = screen.getByLabelText("Edit app.ts") as HTMLTextAreaElement;
+    const editor = requireTextArea(screen.getByLabelText("Edit app.ts"));
     fireEvent.input(editor, {
       target: { value: "words", selectionStart: 5, selectionEnd: 5 },
     });
@@ -770,10 +754,8 @@ createUiTest("IdeWorkbench", () => {
     render(() => <IdeWorkbench />);
     await Promise.resolve();
 
-    const sequenceCall = createHotkeySequencesMock.mock.calls.at(
-      -1,
-    ) as unknown as [() => Array<{ sequence: string[]; callback: () => void }>];
-    const altShiftCloseAll = sequenceCall[0]().find(
+    const [sequences] = getIdeHotkeySequenceDefinitions(-1);
+    const altShiftCloseAll = sequences.find(
       (definition) => definition.sequence.join(" ") === "Alt+Shift+W",
     );
     altShiftCloseAll?.callback();
@@ -785,10 +767,8 @@ createUiTest("IdeWorkbench", () => {
     const close = mock(() => undefined);
     render(() => <IdeWorkbench onRequestClose={close} />);
 
-    const sequenceCall = createHotkeySequencesMock.mock.calls.at(
-      -1,
-    ) as unknown as [() => Array<{ sequence: string[]; callback: () => void }>];
-    sequenceCall[0]()[1]?.callback();
+    const [sequences] = getIdeHotkeySequenceDefinitions(-1);
+    sequences[1]?.callback();
     await Promise.resolve();
 
     expect(close).toHaveBeenCalled();

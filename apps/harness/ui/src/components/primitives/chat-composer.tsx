@@ -28,6 +28,13 @@ type ChatComposerProps = {
   ariaActiveDescendant?: string;
 };
 
+const styles = stylex.create({
+  root: { position: "relative" },
+  textarea: { borderRadius: "0.75rem", resize: "none", paddingBottom: "3rem", paddingRight: "3.5rem", width: "100%", },
+  actions: { gap: "0.375rem", alignItems: "center", display: "flex", pointerEvents: "none", position: "absolute", bottom: "0.5rem", right: "0.5rem", },
+  controls: { position: "absolute", bottom: "0.5rem", left: "0.5rem", }
+});
+
 export function ChatComposer(props: ChatComposerProps) {
   return (
     <div data-test-chat-composer="" data-tour-id={props.dataTourId} class={cn(stylex.attrs(styles.root).class, props.class)}>
@@ -63,10 +70,3 @@ export function ChatComposer(props: ChatComposerProps) {
     </div>
   );
 }
-
-const styles = stylex.create({
-  root: { position: "relative" },
-  textarea: { borderRadius: "0.75rem", paddingBottom: "3rem", paddingRight: "3.5rem", resize: "none", width: "100%" },
-  actions: { alignItems: "center", bottom: "0.5rem", display: "flex", gap: "0.375rem", pointerEvents: "none", position: "absolute", right: "0.5rem" },
-  controls: { bottom: "0.5rem", left: "0.5rem", position: "absolute" }
-});

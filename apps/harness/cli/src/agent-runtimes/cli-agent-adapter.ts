@@ -6,7 +6,7 @@ import type {
   PiApiKeyProvider
 } from "../pi-agent-adapter";
 import { debugLog } from "../logging";
-import { CliProcessManager } from "./cli-process-manager";
+import { createCliProcessManager, type CliProcessManager } from "./cli-process-manager";
 
 export type CliCommandFactoryInput = {
   request: PiAgentPromptRequest;
@@ -31,19 +31,15 @@ type CliAgentAdapterOptions = {
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
 const DEFAULT_TOTAL_TIMEOUT_MS = 15 * 60_000;
 
-export class CliAgentAdapter implements PiAgentAdapter {
-  private readonly processManager = new CliProcessManager();
-
-  constructor(private readonly options: CliAgentAdapterOptions) {}
-
-  setApiKey(_provider: PiApiKeyProvider, _apiKey: string | undefined) {}
-
-  hasApiKey(_provider: PiApiKeyProvider) {
+export function createCliAgentAdapter(options: CliAgentAdapterOptions): PiAgentAdapter {
+  const processManager = createCliProcessManager();
+  function setApiKey(_provider: PiApiKeyProvider, _apiKey: string | undefined) {}
+  function hasApiKey(_provider: PiApiKeyProvider) {
     return false;
   }
 
-  async runPrompt(request: PiAgentPromptRequest) {
-    const controller = await this.startExecution(request);
+  async function runPrompt(request: PiAgentPromptRequest) {
+    const controller = await startExecution(request);
     try {
       return await controller.result;
     } finally {
@@ -51,61 +47,57 @@ export class CliAgentAdapter implements PiAgentAdapter {
     }
   }
 
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    return new CliExecutionController(this.processManager, this.options, request);
+  async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    return createCliExecutionController(processManager, options, request);
   }
+
+  return { setApiKey, hasApiKey, runPrompt, startExecution };
 }
 
-class CliExecutionController implements PiAgentExecutionController {
-  readonly result: Promise<PiAgentPromptResult>;
+function createCliExecutionController(
+  processManager: CliProcessManager,
+  options: CliAgentAdapterOptions,
+  request: PiAgentPromptRequest,
+): PiAgentExecutionController {
+  const abortController = new AbortController();
+  let currentExecutionAbortController = abortController;
+  let disposed = false;
 
-  private readonly abortController = new AbortController();
-  private currentExecutionAbortController = this.abortController;
-  private disposed = false;
-
-  constructor(
-    private readonly processManager: CliProcessManager,
-    private readonly options: CliAgentAdapterOptions,
-    private readonly request: PiAgentPromptRequest
-  ) {
-    this.result = this.execute(this.request.prompt);
+  function continueWithPrompt(prompt: string = "continue") {
+    return execute(prompt);
   }
 
-  continueWithPrompt(prompt: string = "continue") {
-    return this.execute(prompt);
+  async function abort() {
+    currentExecutionAbortController.abort();
   }
 
-  async abort() {
-    this.currentExecutionAbortController.abort();
+  function dispose() {
+    disposed = true;
+    abortController.abort();
   }
 
-  dispose() {
-    this.disposed = true;
-    this.abortController.abort();
-  }
-
-  private async execute(prompt: string) {
-    if (this.disposed) {
+  async function execute(prompt: string): Promise<PiAgentPromptResult> {
+    if (disposed) {
       throw new Error("Execution controller is disposed");
     }
 
     const executionAbortController = new AbortController();
-    this.currentExecutionAbortController = executionAbortController;
-    this.request.onExecutionEvent?.({ type: "session-created" });
+    currentExecutionAbortController = executionAbortController;
+    request.onExecutionEvent?.({ type: "session-created" });
 
-    const command = this.options.buildCommand({
-      request: this.request,
+    const command = options.buildCommand({
+      request,
       prompt
     });
     debugLog("cli.exec.start", {
-      label: this.options.label,
-      kind: this.request.kind
+      label: options.label,
+      kind: request.kind
     });
 
     let sawOutput = false;
     let result;
     try {
-      result = await this.processManager.runNonInteractive({
+      result = await processManager.runNonInteractive({
         cmd: command.cmd,
         cwd: command.cwd,
         env: command.env,
@@ -113,21 +105,21 @@ class CliExecutionController implements PiAgentExecutionController {
         rows: 40,
         idleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS,
         totalTimeoutMs: DEFAULT_TOTAL_TIMEOUT_MS,
-        abortSignal: mergeAbortSignals(this.request.abortSignal, executionAbortController.signal),
+        abortSignal: mergeAbortSignals(request.abortSignal, executionAbortController.signal),
         onStdout: (chunk) => {
           sawOutput = true;
-          this.request.onExecutionEvent?.({ type: "activity" });
-          command.parser?.onStdoutChunk?.(decodeChunk(chunk), (delta) => this.request.onTextDelta?.(delta));
+          request.onExecutionEvent?.({ type: "activity" });
+          command.parser?.onStdoutChunk?.(decodeChunk(chunk), (delta) => request.onTextDelta?.(delta));
         },
         onStderr: () => {
           sawOutput = true;
-          this.request.onExecutionEvent?.({ type: "activity" });
+          request.onExecutionEvent?.({ type: "activity" });
         }
       });
     } catch (error) {
       debugLog("cli.exec.error", {
-        label: this.options.label,
-        kind: this.request.kind
+        label: options.label,
+        kind: request.kind
       });
       throw error;
     }
@@ -138,24 +130,27 @@ class CliExecutionController implements PiAgentExecutionController {
 
     const text = command.parser?.getText(result.stdout, result.stderr) ?? result.stdout.trim();
     debugLog("cli.exec.done", {
-      label: this.options.label,
-      kind: this.request.kind,
+      label: options.label,
+      kind: request.kind,
       exitCode: result.exitCode,
       hangDetected: result.hangDetected,
       timedOut: result.timedOut
     });
     if (result.exitCode !== 0) {
-      throw new Error(text || result.stderr.trim() || `${this.options.label} exited with code ${result.exitCode}`);
+      throw new Error(text || result.stderr.trim() || `${options.label} exited with code ${result.exitCode}`);
     }
 
     if (!text.trim() && !sawOutput) {
-      throw new Error(`${this.options.label} returned an empty response`);
+      throw new Error(`${options.label} returned an empty response`);
     }
 
     return {
       text: text.trim()
     };
   }
+
+  const result = execute(request.prompt);
+  return { result, continueWithPrompt, abort, dispose };
 }
 
 function mergeAbortSignals(left: AbortSignal | undefined, right: AbortSignal) {

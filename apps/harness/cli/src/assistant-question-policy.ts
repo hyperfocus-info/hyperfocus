@@ -1,4 +1,5 @@
-import type { AssistantLearning, AssistantQuestion } from "../../shared/protocol";
+import { createAssistantLearningId, createAssistantLogEntryId,
+  type AssistantLearning, type AssistantQuestion } from "@hyperfocus/ai-core/protocol";
 
 export type AssistantQuestionCategory =
   | "target-selection"
@@ -8,6 +9,11 @@ export type AssistantQuestionCategory =
   | "todo-or-question-selection"
   | "recovery-or-safety"
   | "unknown";
+
+const OPERATIONAL_PROMPT_QUESTION_CATEGORIES = new Set<AssistantQuestionCategory>([
+  "schedule-or-job-selection", "todo-or-question-selection", "recovery-or-safety", "access-environment"
+]);
+const MAX_PROMPT_ANSWERED_QUESTIONS = 3;
 
 export type AssistantQuestionDecision =
   | {
@@ -35,6 +41,87 @@ export type AssistantQuestionDecision =
       reason: string;
       note: string;
     };
+
+export function createAssistantQuestionPolicyEffects(
+  assistantId: string,
+  prompt: string,
+  decision: Exclude<AssistantQuestionDecision, { kind: "ask" }>,
+  createdAt: string
+) {
+  const autoAnswered = decision.kind === "auto-answer";
+  const summary = prompt.replace(/\s+/g, " ").trim().slice(0, 120);
+  return {
+    learning: { id: createAssistantLearningId(), assistantId,
+      summary: `${autoAnswered ? "Auto-answered assistant question" : "Did not ask assistant question"}: ${summary}. ${autoAnswered ? decision.answerText : decision.note}`,
+      source: `question-policy:${decision.category}`, confidence: "high" as const, createdAt },
+    log: { id: createAssistantLogEntryId(), assistantId, level: "info" as const,
+      summary: autoAnswered ? "Question auto-answered" : "Question suppressed", detail: decision.reason,
+      detailsJson: { prompt, decision }, createdAt }
+  };
+}
+
+export function selectAssistantPromptQuestions(questions: AssistantQuestion[]) {
+  const selected: AssistantQuestion[] = []; const seenKeys = new Set<string>();
+  for (const question of questions.filter((entry) => entry.status === "answered").sort((left, right) =>
+    (right.answeredAt ?? right.askedAt).localeCompare(left.answeredAt ?? left.askedAt))) {
+    if (!question.answerText || OPERATIONAL_PROMPT_QUESTION_CATEGORIES.has(classifyAssistantQuestion(question.prompt))) continue;
+    const key = `${classifyAssistantQuestion(question.prompt)}:${normalizeQuestionText(question.prompt)}:${normalizeQuestionText(question.answerText)}`;
+    if (seenKeys.has(key)) continue; seenKeys.add(key); selected.push(question);
+    if (selected.length >= MAX_PROMPT_ANSWERED_QUESTIONS) break;
+  }
+  return selected;
+}
+
+export function readAssistantPromptQuestions(
+  readPage: (cursor: string | undefined) => { items: AssistantQuestion[]; nextCursor?: string }
+) {
+  let selected: AssistantQuestion[] = []; let cursor: string | undefined;
+  do { const page = readPage(cursor); selected = selectAssistantPromptQuestions([...selected, ...page.items]);
+    cursor = page.nextCursor; } while (cursor !== undefined);
+  return selected;
+}
+
+export function readAssistantPendingPromptQuestions(
+  readPage: (cursor: string | undefined) => { items: AssistantQuestion[]; nextCursor?: string }, limit: number = 32
+) {
+  const selected: AssistantQuestion[] = []; let cursor: string | undefined;
+  do { const page = readPage(cursor); selected.push(...page.items.filter((entry) => entry.status === "pending")
+      .slice(0, limit - selected.length)); cursor = selected.length < limit ? page.nextCursor : undefined;
+  } while (cursor !== undefined);
+  return selected;
+}
+
+export function readAssistantQuestionPolicyContext(readPage: (cursor: string | undefined) =>
+  { items: AssistantQuestion[]; nextCursor?: string }) {
+  return [...readAssistantPendingPromptQuestions(readPage), ...readAssistantPromptQuestions(readPage)];
+}
+
+export function someAssistantQuestion(readPage: (cursor: string | undefined) =>
+  { items: AssistantQuestion[]; nextCursor?: string }, predicate: (question: AssistantQuestion) => boolean) {
+  let cursor: string | undefined;
+  do { const page = readPage(cursor); if (page.items.some(predicate)) return true; cursor = page.nextCursor; }
+  while (cursor !== undefined);
+  return false;
+}
+
+export function countAssistantPendingQuestions(readPage: (cursor: string | undefined) =>
+  { items: AssistantQuestion[]; nextCursor?: string }) { let count = 0; let cursor: string | undefined;
+  do { const page = readPage(cursor); count += page.items.filter((question) => question.status === "pending").length;
+    cursor = page.nextCursor; } while (cursor !== undefined); return count; }
+
+export function visitAssistantQuestionPolicyCandidates(
+  readPage: (cursor: string | undefined) => { items: AssistantQuestion[]; nextCursor?: string },
+  visit: (question: AssistantQuestion, context: AssistantQuestion[]) => void
+) {
+  const context: AssistantQuestion[] = []; let cursor: string | undefined;
+  do { const page = readPage(cursor); context.push(...page.items.slice(0, 256 - context.length));
+    cursor = context.length < 256 ? page.nextCursor : undefined; } while (cursor !== undefined);
+  cursor = undefined;
+  do { const page = readPage(cursor); for (const question of page.items) {
+      if (question.status === "pending" || question.status === "deferred") visit(question,
+        context.filter((entry) => entry.id !== question.id)); }
+    cursor = page.nextCursor; } while (cursor !== undefined);
+}
 
 type EvaluateAssistantQuestionInput = {
   prompt: string;
@@ -180,6 +267,15 @@ export function evaluateAssistantQuestionPolicy(input: EvaluateAssistantQuestion
     reason: "Default assistant policy is async autonomy first.",
     note: `Make a reasonable assumption and keep working instead of asking: ${prompt}`
   };
+}
+
+export function resolveAssistantPolicyAnswer(decision: AssistantQuestionDecision) {
+  switch (decision.kind) {
+    case "auto-answer": return decision.answerText;
+    case "suppress":
+    case "note": return decision.note;
+    case "ask": return decision.reason;
+  }
 }
 
 export function classifyAssistantQuestion(prompt: string): AssistantQuestionCategory {

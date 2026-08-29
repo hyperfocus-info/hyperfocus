@@ -1,7 +1,7 @@
-import { createHyperfocus3DRuntime, type Hyperfocus3DSnapshot, type PortableAsset3D } from "../../../engine/src/project/runtime-3d.ts";
-import { createWebGl2Renderer3D, type WebGl2FrameStats3D } from "../../../engine/src/render/3d-webgl2.ts";
-import { SaveProfileStore, type SaveJsonValue } from "../../../engine/src/save/index.ts";
-import { IndexedDbSaveStorage } from "../../../engine/src/save/browser.ts";
+import { createHyperfocus3DRuntime, isHyperfocus3DSnapshot, type Hyperfocus3DSnapshot, type PortableAsset3D } from "@hyperfocus/engine/project/runtime-3d";
+import { createWebGl2Renderer3D, type WebGl2FrameStats3D } from "@hyperfocus/engine/render/3d-webgl2";
+import { createSaveProfileStore, type SaveJsonValue } from "@hyperfocus/engine/save";
+import { createIndexedDbSaveStorage } from "@hyperfocus/engine/save/browser";
 import { createStandaloneAudioController } from "./standalone-audio.ts";
 
 type Project3D = { id: string; settings: { input: Array<{ action: string; bindings: string[] }> }; extensions?: { hyperfocus3D?: unknown; [key: string]: unknown } };
@@ -12,10 +12,10 @@ export type Standalone3DHook = {
   diagnostics: readonly unknown[];
   renderMode?: "webgl2-3d";
   rendererStats?: WebGl2FrameStats3D;
-  snapshot?: () => Hyperfocus3DSnapshot;
+  snapshot?: () => unknown;
   save?: (slot?: string) => Promise<void>;
   load?: (slot?: string) => Promise<boolean>;
-  reset?: () => Hyperfocus3DSnapshot;
+  reset?: () => unknown;
   deleteSaveSlot?: (slot?: string) => Promise<void>;
   deleteSaveProfile?: () => Promise<void>;
   exportSaveProfile?: () => Promise<string>;
@@ -50,8 +50,8 @@ export async function bootStandalone3D(project: Project3D, assets: readonly Port
     }
     void audio.unlockAndFlush().catch((cause) => diagnostics.push({ severity: "warning", code: "audio-unlock", message: message(cause) }));
   };
-  const storage = new IndexedDbSaveStorage({ maxBytes: savePolicy.maxBytes });
-  const store = new SaveProfileStore(storage, project.id, { currentDataVersion: 0, limits: { maxBytes: savePolicy.maxBytes, maxSlots: 1 } });
+  const storage = createIndexedDbSaveStorage({ maxBytes: savePolicy.maxBytes });
+  const store = createSaveProfileStore(storage, project.id, { currentDataVersion: 0, limits: { maxBytes: savePolicy.maxBytes, maxSlots: 1 } });
   const initial = runtime.snapshot();
   const slot = (requested?: string) => {
     const value = requested ?? savePolicy.slot;
@@ -61,16 +61,14 @@ export async function bootStandalone3D(project: Project3D, assets: readonly Port
   const load = async (requested?: string) => {
     const saved = await store.loadSlot("local", slot(requested));
     if (!saved) return false;
-    const value = saved.data as unknown as { schema?: unknown; snapshot?: Hyperfocus3DSnapshot };
-    if (value?.schema !== "hyperfocus-3d-snapshot-v1" || !value.snapshot) throw new Error("Saved slot is not a Hyperfocus 3D snapshot.");
-    runtime.restore(value.snapshot);
+    runtime.restore(readSaved3DSnapshot(saved.data));
     return true;
   };
   hook.renderMode = "webgl2-3d";
   hook.assetCount = assets.length;
   hook.diagnostics = diagnostics;
   hook.snapshot = () => runtime.snapshot();
-  hook.save = async (requested) => { await store.saveSlot("local", slot(requested), { schema: "hyperfocus-3d-snapshot-v1", snapshot: runtime.snapshot() } as unknown as SaveJsonValue); };
+  hook.save = async (requested) => { await store.saveSlot("local", slot(requested), create3DSaveData(runtime.snapshot())); };
   hook.load = load;
   hook.reset = () => runtime.restore(initial);
   hook.deleteSaveSlot = async (requested) => { await store.deleteSlot("local", slot(requested)); };
@@ -114,3 +112,23 @@ export async function bootStandalone3D(project: Project3D, assets: readonly Port
 }
 
 function message(value: unknown) { return value instanceof Error ? value.message : String(value); }
+
+function readSaved3DSnapshot(data: SaveJsonValue): Hyperfocus3DSnapshot {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) throw new Error("Saved slot is not a Hyperfocus 3D snapshot.");
+  const schema = Reflect.get(data, "schema");
+  const snapshot = Reflect.get(data, "snapshot");
+  if (schema !== "hyperfocus-3d-snapshot-v1" || !isHyperfocus3DSnapshot(snapshot)) throw new Error("Saved slot is not a Hyperfocus 3D snapshot.");
+  return snapshot;
+}
+
+function create3DSaveData(snapshot: Hyperfocus3DSnapshot): SaveJsonValue {
+  return {
+    schema: "hyperfocus-3d-snapshot-v1",
+    snapshot: {
+      version: snapshot.version,
+      sceneId: snapshot.sceneId,
+      tick: snapshot.tick,
+      entities: snapshot.entities.map((entity) => ({ id: entity.id, position: [...entity.position], rotationY: entity.rotationY })),
+    },
+  };
+}

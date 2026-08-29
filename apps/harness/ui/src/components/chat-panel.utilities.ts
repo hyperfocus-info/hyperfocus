@@ -12,16 +12,16 @@ export const chatUtilityStyles = stylex.create({
     "position": "absolute"
   },
   agentWaitingDot: {
-    "animationName": waitingBreathe,
+    "borderRadius": "999px",
     "animationDuration": "3.6s",
     "animationIterationCount": "infinite",
+    "animationName": waitingBreathe,
     "animationTimingFunction": "cubic-bezier(.45, 0, .55, 1)",
     "backgroundColor": "var(--muted)",
     "opacity": 0.72,
-    "borderRadius": "999px",
-    "width": ".3rem",
+    "transform": "scale(1)",
     "height": ".3rem",
-    "transform": "scale(1)"
+    "width": ".3rem",
   },
   agentWaitingDot2: {
     "animationDelay": ".5s"
@@ -30,15 +30,15 @@ export const chatUtilityStyles = stylex.create({
     "animationDelay": "1s"
   },
   agentWaitingDots: {
-    "display": "flex",
+    "gap": ".25rem",
     "alignItems": "center",
-    "gap": ".25rem"
+    "display": "flex",
   },
   animateSpin: {
-    "animationName": spin,
     "animationDuration": "1s",
     "animationIterationCount": "infinite",
-    "animationTimingFunction": "linear"
+    "animationName": spin,
+    "animationTimingFunction": "linear",
   },
   bgVariableAccent: {
     "backgroundColor": "var(--accent)"
@@ -356,9 +356,9 @@ export const chatUtilityStyles = stylex.create({
   },
   lineClamp3: {
     "overflow": "hidden",
-    "display": "-webkit-box",
+    "WebkitBoxOrient": "vertical",
     "WebkitLineClamp": "3",
-    "WebkitBoxOrient": "vertical"
+    "display": "-webkit-box",
   },
   maxH64: {
     "maxHeight": "16rem"
@@ -469,15 +469,15 @@ export const chatUtilityStyles = stylex.create({
     "padding": ".8rem"
   },
   panelShell: {
-    "position": "relative",
-    "overflow": "auto",
     "borderColor": "var(--border)",
+    "borderRadius": ".75rem",
     "borderStyle": "solid",
     "borderWidth": "1px",
-    "backgroundColor": "var(--panel)",
+    "overflow": "auto",
     "backdropFilter": "blur(12px)",
-    "borderRadius": ".75rem",
-    "boxShadow": "0 8px 24px #0f172a0f"
+    "backgroundColor": "var(--panel)",
+    "boxShadow": "0 8px 24px #0f172a0f",
+    "position": "relative",
   },
   pb2: {
     "paddingBottom": "0.5rem"
@@ -591,14 +591,14 @@ export const chatUtilityStyles = stylex.create({
     }
   },
   spaceY2: {
+    "gap": ".5rem",
     "display": "flex",
     "flexDirection": "column",
-    "gap": ".5rem"
   },
   spaceY3: {
+    "gap": ".75rem",
     "display": "flex",
     "flexDirection": "column",
-    "gap": ".75rem"
   },
   textVariableAccent: {
     "color": "var(--accent)"
@@ -720,14 +720,14 @@ export const chatUtilityStyles = stylex.create({
     "letterSpacing": "var(--tracking-normal)"
   },
   transition: {
+    "transitionDuration": "150ms",
     "transitionProperty": "color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter, display, pointer-events",
     "transitionTimingFunction": "cubic-bezier(0.4, 0, 0.2, 1)",
-    "transitionDuration": "150ms"
   },
   transitionWidth: {
+    "transitionDuration": "150ms",
     "transitionProperty": "width",
     "transitionTimingFunction": "cubic-bezier(0.4, 0, 0.2, 1)",
-    "transitionDuration": "150ms"
   },
   truncate: {
     "overflow": "hidden",

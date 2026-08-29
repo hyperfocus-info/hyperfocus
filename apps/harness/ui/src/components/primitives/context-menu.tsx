@@ -22,6 +22,29 @@ type ContextMenuProps = {
   onClose: () => void;
 };
 
+const styles = stylex.create({
+  surface: {
+    padding: "0.375rem",
+    borderColor: "var(--border)",
+    borderRadius: "0.75rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    gap: "0.25rem",
+    backgroundColor: "var(--panel-strong)",
+    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+    color: "var(--foreground)",
+    display: "flex",
+    flexDirection: "column",
+    fontSize: "0.75rem",
+    position: "fixed",
+    zIndex: 150,
+    width: "13rem",
+  },
+  action: { paddingInline: "0.5rem", justifyContent: "space-between", textAlign: "left", height: "2rem", width: "100%", },
+  disabled: { opacity: 0.5 },
+  shortcut: { color: "var(--muted)", fontSize: "0.62rem" }
+});
+
 export function ContextMenu(props: ContextMenuProps) {
   let surfaceRef: HTMLDivElement | undefined;
 
@@ -31,7 +54,7 @@ export function ContextMenu(props: ContextMenuProps) {
     }
 
     const closeOnPointer = (event: PointerEvent) => {
-      if (surfaceRef?.contains(event.target as Node)) {
+      if (event.target instanceof Node && surfaceRef?.contains(event.target)) {
         return;
       }
       props.onClose();
@@ -96,26 +119,3 @@ export function ContextMenu(props: ContextMenuProps) {
     </PrimitivePortal>
   );
 }
-
-const styles = stylex.create({
-  surface: {
-    backgroundColor: "var(--panel-strong)",
-    borderColor: "var(--border)",
-    borderRadius: "0.75rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
-    color: "var(--foreground)",
-    display: "flex",
-    flexDirection: "column",
-    fontSize: "0.75rem",
-    gap: "0.25rem",
-    padding: "0.375rem",
-    position: "fixed",
-    width: "13rem",
-    zIndex: 150
-  },
-  action: { height: "2rem", justifyContent: "space-between", paddingInline: "0.5rem", textAlign: "left", width: "100%" },
-  disabled: { opacity: 0.5 },
-  shortcut: { color: "var(--muted)", fontSize: "0.62rem" }
-});

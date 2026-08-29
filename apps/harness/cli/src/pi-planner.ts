@@ -1,9 +1,9 @@
 import { ZodError, type ZodIssue } from "zod";
 import {
   plannerTurnResultSchema,
+  providerModelIdSchema,
   type ChatMessage,
   type ComposerReasoningStrength,
-  type MemorySummary,
   type ModeDefinition,
   type ProjectContextUsage,
   type PlannerTurnResult,
@@ -12,8 +12,8 @@ import {
   type ProviderModelId,
   type RunPromptStats,
   type WorkspaceRuleSource
-} from "../../shared/protocol";
-import type { PiAgentAdapter } from "./pi-agent-adapter";
+} from "@hyperfocus/ai-core/protocol";
+import type { PiAgentAdapter, PiAgentPromptRequest } from "./pi-agent-adapter";
 import { buildPromptAttachmentContext } from "./chat-attachment-prompt";
 import { resolveSubagentModelId } from "./subagent-defaults";
 import { buildWorkspacePathGuidance, normalizeWorkspaceRelativePaths } from "./workspace-path-intent";
@@ -21,6 +21,7 @@ import { assembleDeterministicPrompt } from "./deterministic-prompt";
 import type { PromptCacheIdentity } from "./prompt-cache";
 import type { GeminiCachedAttachmentContext } from "./gemini-cached-contents";
 import { buildGitRepositoryPromptContext } from "./git-context";
+import { DEFAULT_CODING_STACK_GUIDANCE } from "./prompts/coding-stack-defaults";
 
 export const GPT_DEFAULT_PLANNING_MODEL_ID = "openai/gpt-5.4";
 export const GPT_DEFAULT_EXECUTION_MODEL_ID = "openai/gpt-5.4";
@@ -31,6 +32,22 @@ export const GEMINI_DEFAULT_SUBAGENT_MODEL_ID = "google/gemini-2.5-flash-lite";
 export const CLAUDE_DEFAULT_PLANNING_MODEL_ID = "anthropic/claude-opus-4-6";
 export const CLAUDE_DEFAULT_EXECUTION_MODEL_ID = "anthropic/claude-sonnet-4-6";
 export const CLAUDE_DEFAULT_SUBAGENT_MODEL_ID = "anthropic/claude-haiku-4-5";
+
+type PromptContextUsage = Awaited<ReturnType<PiAgentAdapter["runPrompt"]>>["contextUsage"];
+
+function createPlannerContextUsage(contextUsage: PromptContextUsage, modelId: ProviderModelId): ProjectContextUsage | undefined {
+  return contextUsage ? {
+    sourceKind: "planner",
+    sourceLabel: "planner",
+    modelId,
+    tokens: contextUsage.tokens,
+    contextWindow: contextUsage.contextWindow,
+    usagePercent: contextUsage.usagePercent,
+    totalProcessedTokens: contextUsage.sessionStats.tokens.total,
+    cachedInputTokens: contextUsage.cachedInputTokens,
+    updatedAt: new Date().toISOString()
+  } : undefined;
+}
 
 export async function planTask(
   adapter: PiAgentAdapter,
@@ -43,7 +60,7 @@ export async function planTask(
     executionModelId?: ProviderModelId;
     mode?: ModeDefinition;
     ruleSources?: WorkspaceRuleSource[];
-    memorySummaries?: MemorySummary[];
+    memorySearch?: PiAgentPromptRequest["memorySearch"];
     priorQuestions?: PlanningQuestion[];
     reasoningStrength?: ComposerReasoningStrength;
     fastMode?: boolean;
@@ -97,7 +114,7 @@ export async function planTask(
         "- Every enum field must use one of the exact schema literals shown.",
         "- Same-worktree parallel work requires contracts with non-overlapping ownedPaths.",
         "- For greenfield apps, use prerequisites for shared scaffold/setup, then split subagents by concrete files or folders.",
-        "- For greenfield coding projects when the user did not specify a stack, default to TypeScript, Bun runtime/package/test runner, bun test, bunx tsc --noEmit, bun:sqlite when backend persistence is needed, SolidJS + Tailwind when frontend UI is needed, Happy DOM for frontend/component tests, and useful documentation comments for new functions and variables.",
+        `- ${DEFAULT_CODING_STACK_GUIDANCE}`,
         "- Frontend/component test contracts should use Bun plus Happy DOM with the createUiTest-style setup from harness/ui/src/utils/tests/test-harness.ts.",
         "- Greenfield UI plans should create shared primitives before feature components, routes, screens, or workflows.",
         "- Recommended scripts for generated TypeScript Bun projects are dev=\"bun --hot src/server.ts\", start=\"bun src/server.ts\", test=\"bun test\", typecheck=\"bunx tsc --noEmit\", and build:ui=\"bun run scripts/build-ui.ts\" only when the matching backend/UI surface exists.",
@@ -120,12 +137,6 @@ export async function planTask(
       : "",
     options.ruleSources && options.ruleSources.length > 0
       ? ["Rule sources:", ...options.ruleSources.map((rule) => `[${rule.scope}] ${rule.label}: ${rule.content}`)].join("\n")
-      : "",
-    options.memorySummaries && options.memorySummaries.length > 0
-      ? [
-          "Memory summaries:",
-          ...options.memorySummaries.map((memory) => `[${memory.scope}] ${memory.label}: ${memory.content}`)
-        ].join("\n")
       : "",
         buildGitRepositoryPromptContext(options.cwd),
         workspacePathGuidance ?? ""
@@ -161,7 +172,8 @@ export async function planTask(
     reasoningStrength: options.reasoningStrength,
     fastMode: options.fastMode,
     abortSignal: options.abortSignal,
-    readOnly: true
+    readOnly: true,
+    memorySearch: options.memorySearch
   });
 
   let rawPayload: unknown;
@@ -179,19 +191,7 @@ export async function planTask(
     return {
       plannerResult: parsed,
       promptStats,
-      contextUsage: result.contextUsage
-        ? {
-            sourceKind: "planner",
-            sourceLabel: "planner",
-            modelId: planningModelId,
-            tokens: result.contextUsage.tokens,
-            contextWindow: result.contextUsage.contextWindow,
-            usagePercent: result.contextUsage.usagePercent,
-            totalProcessedTokens: result.contextUsage.sessionStats.tokens.total,
-            cachedInputTokens: result.contextUsage.cachedInputTokens,
-            updatedAt: new Date().toISOString()
-          }
-        : undefined
+      contextUsage: createPlannerContextUsage(result.contextUsage, planningModelId)
     };
   } catch (error) {
     if (error instanceof ZodError) {
@@ -207,7 +207,8 @@ export async function planTask(
         reasoningStrength: options.reasoningStrength,
         fastMode: options.fastMode,
         abortSignal: options.abortSignal,
-        readOnly: true
+        readOnly: true,
+        memorySearch: options.memorySearch
       });
 
       try {
@@ -216,19 +217,7 @@ export async function planTask(
         return {
           plannerResult: parsed,
           promptStats: createPromptStats(buildPlannerRepairPrompt(prompt, rawPayload, error), attachmentContext.transcript, normalizedLatestUserPrompt),
-          contextUsage: repairResult.contextUsage
-            ? {
-                sourceKind: "planner",
-                sourceLabel: "planner",
-                modelId: planningModelId,
-                tokens: repairResult.contextUsage.tokens,
-                contextWindow: repairResult.contextUsage.contextWindow,
-                usagePercent: repairResult.contextUsage.usagePercent,
-                totalProcessedTokens: repairResult.contextUsage.sessionStats.tokens.total,
-                cachedInputTokens: repairResult.contextUsage.cachedInputTokens,
-                updatedAt: new Date().toISOString()
-              }
-            : undefined
+          contextUsage: createPlannerContextUsage(repairResult.contextUsage, planningModelId)
         };
       } catch (repairError) {
         if (repairError instanceof ZodError) {
@@ -416,8 +405,8 @@ export const testExports = {
 
 function normalizePlannerPayload(input: unknown) {
   const normalized = normalizePlannerPrerequisites(normalizePlannerVerificationScopes(input));
-  if (normalized && typeof normalized === "object" && !Array.isArray(normalized)) {
-    const payload = normalized as Record<string, unknown>;
+  if (isUnknownRecord(normalized)) {
+    const payload = normalized;
     if (payload.type === "question") {
       const questions = Array.isArray(payload.questions)
         ? payload.questions
@@ -463,11 +452,11 @@ function createPromptStats(prompt: string, transcript: string, latestTask: strin
 }
 
 function normalizePlannerPrerequisites(input: unknown): unknown {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+  if (!isUnknownRecord(input)) {
     return input;
   }
 
-  const payload = input as Record<string, unknown>;
+  const payload = input;
   if (!Array.isArray(payload.prerequisites)) {
     return input;
   }
@@ -475,11 +464,11 @@ function normalizePlannerPrerequisites(input: unknown): unknown {
   return {
     ...payload,
     prerequisites: payload.prerequisites.map((prerequisite) => {
-      if (!prerequisite || typeof prerequisite !== "object" || Array.isArray(prerequisite)) {
+      if (!isUnknownRecord(prerequisite)) {
         return prerequisite;
       }
 
-      const prerequisiteRecord = prerequisite as Record<string, unknown>;
+      const prerequisiteRecord = prerequisite;
       return {
         ...prerequisiteRecord,
         owner: normalizePlannerPrerequisiteOwner(prerequisiteRecord.owner),
@@ -507,11 +496,11 @@ function normalizePlannerPrerequisiteOwner(value: unknown): unknown {
 }
 
 function normalizePlannerVerificationScopes(input: unknown): unknown {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+  if (!isUnknownRecord(input)) {
     return input;
   }
 
-  const payload = input as Record<string, unknown>;
+  const payload = input;
   if (!Array.isArray(payload.contracts)) {
     return input;
   }
@@ -519,11 +508,11 @@ function normalizePlannerVerificationScopes(input: unknown): unknown {
   return {
     ...payload,
     contracts: payload.contracts.map((contract) => {
-      if (!contract || typeof contract !== "object" || Array.isArray(contract)) {
+      if (!isUnknownRecord(contract)) {
         return contract;
       }
 
-      const contractRecord = contract as Record<string, unknown>;
+      const contractRecord = contract;
       return {
         ...contractRecord,
         verificationScope: normalizePlannerVerificationScope(contractRecord.verificationScope)
@@ -590,6 +579,10 @@ function normalizePlannerPathValue(value: string, cwd: string) {
   return normalizeWorkspaceRelativePaths(value, cwd);
 }
 
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function getDefaultPlanningModelId(providerBrand: ProviderBrand): ProviderModelId {
   if (providerBrand === "gemini") {
     return GEMINI_DEFAULT_PLANNING_MODEL_ID;
@@ -614,10 +607,9 @@ export function getDefaultSubagentModelId(
   providerBrand: ProviderBrand,
   executionModelId?: ProviderModelId | string
 ): ProviderModelId {
-  return resolveSubagentModelId({
+  return providerModelIdSchema.parse(resolveSubagentModelId({
     agentId: "pi",
     providerBrand,
     executionModelId
-  }) as ProviderModelId;
+  }));
 }
-

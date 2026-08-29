@@ -1,32 +1,33 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentRuntime } from "./agent-runtime";
-import { CliSessionManager } from "./cli-session-manager";
-import { WorkspaceRepository } from "../workspace-repository";
-import { WorkspaceRuntimeStore } from "../workspace-runtime-store";
-import { PiSdkAgentAdapter } from "../pi-agent-adapter";
+import { createCliSessionManager } from "./cli-session-manager";
+import { createWorkspaceRepository } from "../workspace-repository";
+import { createWorkspaceRuntimeStore } from "../workspace-runtime-store";
+import { createPiSdkAgentAdapter } from "../pi-agent-adapter";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { buildCliCapability } from "./cli-health";
+import { resolveHarnessTestTempRoot } from "../test-support/test-temp-root";
 
 function createRuntimeStore() {
-  const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+  const tempRoot = resolveHarnessTestTempRoot();
   mkdirSync(tempRoot, { recursive: true });
   const projectRoot = path.join(tempRoot, `cli-session-${crypto.randomUUID()}`);
   mkdirSync(projectRoot, { recursive: true });
-  const repository = new WorkspaceRepository(path.join(tempRoot, `cli-session-${crypto.randomUUID()}.sqlite`), process.cwd());
+  const repository = createWorkspaceRepository(path.join(tempRoot, `cli-session-${crypto.randomUUID()}.sqlite`), process.cwd());
   const project = repository.addProject(projectRoot);
   return {
     repository,
-    runtimeStore: new WorkspaceRuntimeStore(repository.loadWorkspace()),
+    runtimeStore: createWorkspaceRuntimeStore(repository.loadWorkspace()),
     project
   };
 }
 
-const runtime = {
+const runtime: AgentRuntime = {
   id: "codex-cli",
   label: "Codex CLI",
   getAdapter() {
-    return new PiSdkAgentAdapter();
+    return createPiSdkAgentAdapter();
   },
   getCapability() {
     return buildCliCapability({
@@ -67,12 +68,12 @@ const runtime = {
       cmd: [process.execPath, "-e", "setTimeout(() => {}, 30000)"]
     };
   }
-} satisfies AgentRuntime;
+};
 
 describe("CLI session manager", () => {
   test("enforces thread ownership and stores captured context", async () => {
     const { runtimeStore, project } = createRuntimeStore();
-    const manager = new CliSessionManager({
+    const manager = createCliSessionManager({
       runtimeStore,
       onSessionStarted() {},
       onSessionUpdated() {},
@@ -135,7 +136,7 @@ describe("CLI session manager", () => {
   test("invalidates unused attach tokens when control client closes", async () => {
     const { runtimeStore, project } = createRuntimeStore();
     let issuedToken = "";
-    const manager = new CliSessionManager({
+    const manager = createCliSessionManager({
       runtimeStore,
       onSessionStarted() {},
       onSessionUpdated() {},
@@ -170,7 +171,7 @@ describe("CLI session manager", () => {
   test("coalesces hot-output metadata updates", async () => {
     const { runtimeStore, project } = createRuntimeStore();
     const updated: unknown[] = [];
-    const manager = new CliSessionManager({
+    const manager = createCliSessionManager({
       runtimeStore,
       onSessionStarted() {},
       onSessionUpdated(input) {
@@ -179,7 +180,7 @@ describe("CLI session manager", () => {
       onSessionExited() {},
       onAttachReady() {}
     });
-    const hotRuntime = {
+    const hotRuntime: AgentRuntime = {
       ...runtime,
       buildInteractiveLaunch() {
         return {
@@ -190,7 +191,7 @@ describe("CLI session manager", () => {
           ]
         };
       }
-    } satisfies AgentRuntime;
+    };
 
     const session = await manager.startSession({
       requestId: "req-hot-start",

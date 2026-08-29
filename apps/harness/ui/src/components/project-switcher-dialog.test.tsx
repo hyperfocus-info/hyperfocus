@@ -7,7 +7,7 @@ import {
   getProjectSwitcherAutocompleteSuffix,
   shouldSearchProjects
 } from "./project-switcher-dialog";
-import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
+import { captureDispatchedCommands, clearBrowserStateForTests, requireCommand, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
 import { createHarnessStateFixture, createRunFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
 
 createUiTest("ProjectSwitcherDialog", () => {
@@ -109,15 +109,14 @@ createUiTest("ProjectSwitcherDialog", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ProjectSwitcherDialog />);
     const input = screen.getByRole("textbox");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(commands).toHaveLength(1);
-    expect((commands[0] as { type: string }).type).toBe("project.activate");
-    expect((commands[0] as { payload: { projectId: string } }).payload.projectId).toBe(otherProject.id);
+    expect(requireCommand(commands, 0, "project.activate").payload.projectId).toBe(otherProject.id);
   });
 
   it("computes prefix autocomplete suffix only for strict path-prefix matches", async () => {
@@ -144,13 +143,12 @@ createUiTest("ProjectSwitcherDialog", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ProjectSwitcherDialog />);
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
 
     expect(commands).toHaveLength(1);
-    expect((commands[0] as { type: string }).type).toBe("project.add");
-    expect((commands[0] as { payload: { rootPath: string } }).payload.rootPath).toBe("C:\\repo-three");
+    expect(requireCommand(commands, 0, "project.add").payload.rootPath).toBe("C:\\repo-three");
   });
 
   it("creates exact absolute paths through project.create", async () => {
@@ -162,13 +160,12 @@ createUiTest("ProjectSwitcherDialog", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ProjectSwitcherDialog />);
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
 
     expect(commands).toHaveLength(1);
-    expect((commands[0] as { type: string }).type).toBe("project.create");
-    expect((commands[0] as { payload: { rootPath: string } }).payload.rootPath).toBe("C:\\new-repo");
+    expect(requireCommand(commands, 0, "project.create").payload.rootPath).toBe("C:\\new-repo");
   });
 
   it("activates exact already-open paths instead of adding again", async () => {
@@ -189,13 +186,12 @@ createUiTest("ProjectSwitcherDialog", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ProjectSwitcherDialog />);
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
 
     expect(commands).toHaveLength(1);
-    expect((commands[0] as { type: string }).type).toBe("project.activate");
-    expect((commands[0] as { payload: { projectId: string } }).payload.projectId).toBe(activeProject.id);
+    expect(requireCommand(commands, 0, "project.activate").payload.projectId).toBe(activeProject.id);
   });
 
   it("keeps browse folder wired through typed command", async () => {
@@ -206,11 +202,11 @@ createUiTest("ProjectSwitcherDialog", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ProjectSwitcherDialog />);
     fireEvent.click(screen.getByRole("button", { name: "Browse for project folder" }));
 
     expect(commands).toHaveLength(1);
-    expect((commands[0] as { type: string }).type).toBe("project.browse");
+    expect(requireCommand(commands, 0, "project.browse").type).toBe("project.browse");
   });
 });

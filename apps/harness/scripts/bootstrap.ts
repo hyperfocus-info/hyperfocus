@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { CliUsageError, parseCliOptions } from "../cli/src/cli-options";
+import { isCliUsageError, parseCliOptions } from "../cli/src/cli-options";
 
 const HELP = `Usage: bun run bootstrap [--server-only] [--open|--no-open] [--skip-browser-check] [--help]`;
 
@@ -14,7 +14,7 @@ try {
     conflicts: [["--open", "--no-open"]]
   });
 } catch (error) {
-  if (error instanceof CliUsageError) {
+  if (isCliUsageError(error)) {
     console.error(error.message);
     process.exit(2);
   }

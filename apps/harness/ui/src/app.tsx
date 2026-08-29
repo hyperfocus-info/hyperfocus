@@ -3,7 +3,7 @@ import { createHotkeys, formatForDisplay } from "@tanstack/solid-hotkeys";
 import type { CreateHotkeyDefinition } from "@tanstack/solid-hotkeys";
 import * as stylex from "@stylexjs/stylex";
 import { Bot, BriefcaseBusiness, Clock3, Cog, ExternalLink, FolderKanban, Maximize2, Menu, Minimize2, Pause, Play, PanelsTopLeft, Workflow, CircleQuestionMark, X } from "lucide-solid";
-import { createRequestId } from "../../shared/protocol";
+import { createRequestId } from "@hyperfocus/ai-core/protocol";
 import { AssistantEditorDialog } from "./components/assistant-editor-dialog";
 import { AssistantsPanel } from "./components/assistants-panel";
 import { BackgroundJobEditorDialog } from "./components/background-job-editor-dialog";
@@ -14,11 +14,11 @@ import { ExecutionPlanDialog } from "./components/execution-plan-dialog";
 import { HelpTutorialDialog } from "./components/help-tutorial-dialog";
 import { NotificationInbox } from "./components/notification-inbox";
 import { PreferenceSectionNav, PreferencesPanel } from "./components/preferences-modal";
-import { ProjectSidebar } from "./components/project-sidebar";
+import { ProjectSidebar } from "./components/project-sidebar/project-sidebar";
 import { ProjectSwitcherDialog } from "./components/project-switcher-dialog";
 import { Toaster } from "./components/toaster";
 import { TracePanel, TracePeekRail } from "./components/trace-panel";
-import { getTutorialDefinition } from "./components/tutorial-definitions";
+import { getTutorialDefinition, tutorialDefinitions } from "./components/tutorial-definitions";
 import { TutorialOverlay } from "./components/tutorial-overlay";
 import { ActionButton } from "./components/action-button";
 import { LeftPaneShell } from "./components/primitives/left-pane";
@@ -31,149 +31,116 @@ import { ideStore } from "./ide/ide-store";
 import { resolveBrowserTimezone } from "./lib/time-format";
 import { appHotkeySettings, currentTabItemHotkeyIds, normalizeAppHotkeyPreferences, type AppHotkeyId } from "./lib/app-hotkeys";
 import { selectCurrentTabItem } from "./lib/current-tab-item-hotkeys";
-import { createIdeWindowUrl, IDE_POP_IN_EVENT, OPEN_IDE_WINDOW_EVENT, type OpenIdeWindowInput } from "./lib/ide-window";
+import { createIdeWindowUrl, IDE_POP_IN_EVENT, OPEN_IDE_WINDOW_EVENT, readOpenIdeWindowInput, type OpenIdeWindowInput } from "./lib/ide-window";
 import { createCurrentToastSourceNavigation } from "./source-navigation";
 import { TerminalDrawer } from "./terminal/terminal-drawer";
 import { toggleTerminalSearch } from "./terminal/terminal-search-actions";
 import { terminalStore } from "./terminal/terminal-store";
 import { reportUiError, setDefaultToastSourceResolver } from "./toast-store";
+import { isTutorialGoalSatisfied } from "./lib/tutorial-progress";
+import { styles } from "./app/app.styles";
+import {
+  createDefaultIdeWindowBounds,
+  persistIdeWindowState,
+  readPersistedIdeWindowState,
+  type IdeWindowBounds,
+} from "./app/ide-window-state";
+import { leftPaneTabs } from "./app/left-pane-tabs";
+import {
+  isProjectSwitcherInputFocused,
+  isResizeObserverLoopError,
+  measureTabStripMinimumWidth,
+  shouldCollapseTabStrip,
+} from "./app/layout-measurement";
 
-type IdeWindowBounds = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
+export { createDefaultIdeWindowBounds } from "./app/ide-window-state";
+export { shouldCollapseTabStrip } from "./app/layout-measurement";
 
-const IDE_WINDOW_STORAGE_KEY = "pi-harness:ide-window-state:v1";
-
-export function App() {
-  let connection: ReturnType<typeof connectHarnessWebSocket> | undefined;
-  const persistedIdeWindow = readPersistedIdeWindowState();
-  const [sidebarOpen, setSidebarOpen] = createSignal(false);
-  const [ideWindowOpen, setIdeWindowOpen] = createSignal(persistedIdeWindow.open);
-  const [ideWindowMaximized, setIdeWindowMaximized] = createSignal(persistedIdeWindow.maximized);
-  const [ideWindowBounds, setIdeWindowBounds] = createSignal<IdeWindowBounds>(persistedIdeWindow.bounds);
-
-  const openIdeVirtualWindow = () => {
-    setIdeWindowOpen(true);
+function createIdeWindowController() {
+  const persisted = readPersistedIdeWindowState();
+  const [open, setOpen] = createSignal(persisted.open);
+  const [maximized, setMaximized] = createSignal(persisted.maximized);
+  const [bounds, setBounds] = createSignal<IdeWindowBounds>(persisted.bounds);
+  const openVirtualWindow = () => {
+    setOpen(true);
     harnessStore.setActiveSurface("ide");
   };
-  const popOutIdeWindow = () => {
+  const closeVirtualWindow = () => {
+    setOpen(false);
+    setMaximized(false);
+    if (harnessStore.state.activeSurface === "ide") harnessStore.setActiveSurface("chat");
+  };
+  const popOutWindow = () => {
     const projectId = harnessStore.state.workspace.activeProjectId ?? undefined;
     const child = window.open(createIdeWindowUrl({ projectId }), "pi-harness-ide", "popup=yes,width=1280,height=860");
     child?.focus();
-    closeIdeVirtualWindow();
+    closeVirtualWindow();
   };
-  const closeIdeVirtualWindow = () => {
-    setIdeWindowOpen(false);
-    setIdeWindowMaximized(false);
-    if (harnessStore.state.activeSurface === "ide") {
-      harnessStore.setActiveSurface("chat");
-    }
-  };
+  createEffect(() => {
+    persistIdeWindowState({ open: open(), maximized: maximized(), bounds: bounds() });
+  });
+  return { open, setOpen, maximized, setMaximized, bounds, setBounds, openVirtualWindow, closeVirtualWindow, popOutWindow };
+}
 
+function registerAppHotkeys(options: { openIde: () => void; closeIde: () => void }) {
   const appHotkeys = (): CreateHotkeyDefinition[] => {
     const hotkeys = normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
     return appHotkeySettings.filter((setting) => setting.id !== "focusCurrentSearch" && setting.scope !== "ide").flatMap((setting) =>
       hotkeys[setting.id].map((hotkey) => ({
-        hotkey: hotkey as CreateHotkeyDefinition["hotkey"],
-        callback: () => handleAppHotkey(setting.id, { openIde: openIdeVirtualWindow }),
-        options: {
-          meta: {
-            name: setting.label,
-            description: setting.description
-          }
-        }
+        hotkey,
+        callback: () => handleAppHotkey(setting.id, { openIde: options.openIde }),
+        options: { meta: { name: setting.label, description: setting.description } }
       }))
     );
   };
   const projectSwitcherHotkeys = (): CreateHotkeyDefinition[] => {
     const hotkeys = normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
     return hotkeys.openProjectSwitcher.map((hotkey) => ({
-      hotkey: hotkey as CreateHotkeyDefinition["hotkey"],
+      hotkey,
       callback: () => handleAppHotkey("openProjectSwitcher"),
       options: {
-        conflictBehavior: "allow",
-        meta: {
-          name: "Project switcher",
-          description: "Open projects and active threads."
-        }
+        conflictBehavior: "allow" as const,
+        meta: { name: "Project switcher", description: "Open projects and active threads." }
       }
     }));
   };
   const searchHotkeys = (): CreateHotkeyDefinition[] => {
     const hotkeys = normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
     return hotkeys.focusCurrentSearch.map((hotkey) => ({
-      hotkey: hotkey as CreateHotkeyDefinition["hotkey"],
+      hotkey,
       callback: () => focusCurrentTabSearch(),
       options: {
-        conflictBehavior: "allow",
-        meta: {
-          name: "Focus search",
-          description: "Focus search for the current sidepanel"
-        }
+        conflictBehavior: "allow" as const,
+        meta: { name: "Focus search", description: "Focus search for the current sidepanel" }
       }
     }));
   };
-
-  createHotkeys(
-    appHotkeys,
-    () => ({
-      enabled: harnessStore.state.activeSurface !== "ide" && !harnessStore.state.projectSwitcherOpen && !isProjectSwitcherInputFocused(),
-      ignoreInputs: false,
-      preventDefault: true,
-      stopPropagation: true
-    })
-  );
-  createHotkeys(
-    projectSwitcherHotkeys,
-    () => ({
-      enabled: harnessStore.state.activeSurface === "ide" && !harnessStore.state.projectSwitcherOpen && !isProjectSwitcherInputFocused(),
-      ignoreInputs: false,
-      preventDefault: true,
-      stopPropagation: true
-    })
-  );
-
-  createEffect(() => {
-    persistIdeWindowState({
-      open: ideWindowOpen(),
-      maximized: ideWindowMaximized(),
-      bounds: ideWindowBounds()
-    });
+  const standardOptions = () => ({
+    enabled: harnessStore.state.activeSurface !== "ide" && !harnessStore.state.projectSwitcherOpen && !isProjectSwitcherInputFocused(),
+    ignoreInputs: false,
+    preventDefault: true,
+    stopPropagation: true
   });
+  createHotkeys(appHotkeys, standardOptions);
+  createHotkeys(projectSwitcherHotkeys, () => ({
+    enabled: harnessStore.state.activeSurface === "ide" && !harnessStore.state.projectSwitcherOpen && !isProjectSwitcherInputFocused(),
+    ignoreInputs: false,
+    preventDefault: true,
+    stopPropagation: true
+  }));
+  createHotkeys(searchHotkeys, standardOptions);
   createHotkeys(
-    searchHotkeys,
-    () => ({
-      enabled: harnessStore.state.activeSurface !== "ide" && !harnessStore.state.projectSwitcherOpen && !isProjectSwitcherInputFocused(),
-      ignoreInputs: false,
-      preventDefault: true,
-      stopPropagation: true
-    })
-  );
-  createHotkeys(
-    () => [
-      {
-        hotkey: "Escape",
-        callback: () => {
-          if (harnessStore.state.projectSwitcherOpen) {
-            harnessStore.closeProjectSwitcher();
-            return;
-          }
-          if (closeIdeOverlay()) {
-            return;
-          }
-          closeIdeVirtualWindow();
-        },
-        options: {
-          meta: {
-            name: "Close IDE",
-            description: "Close the IDE window"
-          }
+    () => [{
+      hotkey: "Escape",
+      callback: () => {
+        if (harnessStore.state.projectSwitcherOpen) {
+          harnessStore.closeProjectSwitcher();
+          return;
         }
-      }
-    ],
+        if (!closeIdeOverlay()) options.closeIde();
+      },
+      options: { meta: { name: "Close IDE", description: "Close the IDE window" } }
+    }],
     () => ({
       enabled: harnessStore.state.activeSurface === "ide",
       ignoreInputs: false,
@@ -181,7 +148,10 @@ export function App() {
       stopPropagation: true
     })
   );
+}
 
+function registerAppLifecycle(options: { openIde: () => void; ideWindowOpen: () => boolean }) {
+  let connection: ReturnType<typeof connectHarnessWebSocket> | undefined;
   onMount(() => {
     harnessStore.hydrateLocalPreferences();
     harnessStore.actions.hydrateBrowserUiSession();
@@ -192,15 +162,14 @@ export function App() {
     if (window.location.pathname === "/ide") {
       harnessStore.setActiveSurface("ide");
       applyIdeRouteSelection();
-    } else if (ideWindowOpen()) {
+    } else if (options.ideWindowOpen()) {
       harnessStore.setActiveSurface("ide");
     }
     const onOpenIdeWindow = (event: Event) => {
-      const detail = event instanceof CustomEvent ? event.detail as OpenIdeWindowInput : {};
-      openIdeVirtualWindow();
+      const detail = readOpenIdeWindowInput(event);
+      options.openIde();
       applyIdeSelection(detail);
     };
-
     const onWindowError = (event: ErrorEvent) => {
       if (isResizeObserverLoopError(event.message)) {
         event.preventDefault();
@@ -213,12 +182,10 @@ export function App() {
       console.error("Unhandled promise rejection", event.reason);
       reportUiError(event.reason, "Unhandled promise rejection", { rethrow: "never" });
     };
-
     window.addEventListener("error", onWindowError);
     window.addEventListener("unhandledrejection", onUnhandledRejection);
     window.addEventListener(OPEN_IDE_WINDOW_EVENT, onOpenIdeWindow);
     window.addEventListener(IDE_POP_IN_EVENT, onOpenIdeWindow);
-
     onCleanup(() => {
       setDefaultToastSourceResolver(undefined);
       window.removeEventListener("error", onWindowError);
@@ -227,34 +194,34 @@ export function App() {
       window.removeEventListener(IDE_POP_IN_EVENT, onOpenIdeWindow);
     });
   });
-
   onCleanup(() => {
     harnessStore.actions.setCommandDispatcher(undefined);
     connection?.dispose();
   });
+}
 
+function createAppViewModel() {
   const state = harnessStore.state;
   const activeLeftTab = createMemo(() => state.activeLeftTab);
   const activeLeftTabDefinition = createMemo(() => leftPaneTabs.find((tab) => tab.id === activeLeftTab()) ?? leftPaneTabs[0]);
-  const isIdeFullPage = () => window.location.pathname === "/ide";
+  const tracePanelMode = createMemo(() => state.experienceMode === "simple" ? "closed" : state.tracePanelMode);
   const mainPanelGridStyle = () => ({
     "--left-panel-size": `${state.mainPanelSizes.left}fr`,
     "--center-panel-size": `${state.mainPanelSizes.center}fr`,
     "--right-panel-size": `${state.mainPanelSizes.right}fr`
   });
   const startPanelResize = (divider: "left" | "right", event: PointerEvent) => {
-    if (window.innerWidth < 1024) {
-      return;
-    }
-
+    if (window.innerWidth < 1180) return;
     event.preventDefault();
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLElement)) return;
+    target.setPointerCapture?.(event.pointerId);
     const startX = event.clientX;
     const startSizes = { ...state.mainPanelSizes };
-    const total = state.tracePanelMode === "open"
+    const total = tracePanelMode() === "open"
       ? startSizes.left + startSizes.center + startSizes.right
       : startSizes.left + startSizes.center;
     const pixelsPerFr = Math.max(80, window.innerWidth / total);
-
     const onPointerMove = (moveEvent: PointerEvent) => {
       const deltaFr = (moveEvent.clientX - startX) / pixelsPerFr;
       const nextSizes: MainPanelSizes = { ...startSizes };
@@ -267,40 +234,93 @@ export function App() {
       }
       harnessStore.setMainPanelSizes(nextSizes);
     };
-
-    const onPointerUp = () => {
+    const onPointerUp = (endEvent: PointerEvent) => {
+      if (endEvent.pointerId !== event.pointerId) return;
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      if (target.hasPointerCapture?.(event.pointerId)) target.releasePointerCapture(event.pointerId);
     };
-
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
+    window.addEventListener("pointercancel", onPointerUp, { once: true });
   };
-  const executionControlTooltip = () => {
-    if (!state.executionControl.isPaused) {
-      return "Pause new executions";
+  const resizePanelFromKeyboard = (divider: "left" | "right", direction: -1 | 1, largeStep: boolean) => {
+    const step = largeStep ? 0.5 : 0.1;
+    const nextSizes: MainPanelSizes = { ...state.mainPanelSizes };
+    if (divider === "left") {
+      nextSizes.left += direction * step;
+      nextSizes.center -= direction * step;
+    } else {
+      nextSizes.center += direction * step;
+      nextSizes.right -= direction * step;
     }
-
-    return `Resume new executions | queued ${state.executionControl.deferredPlanningQuestionCount} planner, ${state.executionControl.deferredAssistantQuestionCount} assistant, ${state.executionControl.deferredBrowserApprovalCount} browser`;
+    harnessStore.setMainPanelSizes(nextSizes);
   };
-  if (isIdeFullPage()) {
-    const popInIdeWindow = () => {
-      const opener = window.opener as Window | null;
-      if (opener && !opener.closed) {
-        opener.dispatchEvent(new CustomEvent(IDE_POP_IN_EVENT, { detail: { projectId: harnessStore.state.workspace.activeProjectId ?? undefined } }));
-        opener.focus();
-        window.close();
-        return;
-      }
-      window.location.href = "/";
-    };
-    return (
-      <main data-test-ide-page="" {...stylex.attrs(styles.idePage)}>
-        <IdeWorkbench windowMode="popped-out" onToggleWindowMode={popInIdeWindow} />
-        <Toaster />
-      </main>
-    );
+  const executionControlTooltip = () => !state.executionControl.isPaused
+    ? "Pause new executions"
+    : `Resume new executions | queued ${state.executionControl.deferredPlanningQuestionCount} planner, ${state.executionControl.deferredAssistantQuestionCount} assistant, ${state.executionControl.deferredBrowserApprovalCount} browser`;
+  return { state, activeLeftTab, activeLeftTabDefinition, tracePanelMode, mainPanelGridStyle, startPanelResize, resizePanelFromKeyboard, executionControlTooltip };
+}
+
+function IdeFullPage() {
+  const popInIdeWindow = () => {
+    const opener = window.opener;
+    if (opener && !opener.closed) {
+      opener.dispatchEvent(new CustomEvent(IDE_POP_IN_EVENT, { detail: { projectId: harnessStore.state.workspace.activeProjectId ?? undefined } }));
+      opener.focus();
+      window.close();
+      return;
+    }
+    window.location.href = "/";
+  };
+  return (
+    <main data-test-ide-page="" {...stylex.attrs(styles.idePage)}>
+      <IdeWorkbench windowMode="popped-out" onToggleWindowMode={popInIdeWindow} />
+      <Toaster />
+    </main>
+  );
+}
+
+function advanceActiveTutorial(state: typeof harnessStore.state) {
+  const tutorial = getTutorialDefinition(state.activeTutorialId);
+  if (!tutorial) return;
+  if (state.activeTutorialStepIndex >= tutorial.steps.length - 1) {
+    harnessStore.finishTutorial(tutorial.id);
+    return;
   }
+  harnessStore.setActiveTutorialStepIndex(state.activeTutorialStepIndex + 1);
+}
+
+export function App() {
+  const [sidebarOpen, setSidebarOpen] = createSignal(false);
+  const ideWindow = createIdeWindowController();
+  const {
+    open: ideWindowOpen,
+    maximized: ideWindowMaximized,
+    setMaximized: setIdeWindowMaximized,
+    bounds: ideWindowBounds,
+    setBounds: setIdeWindowBounds,
+    openVirtualWindow: openIdeVirtualWindow,
+    closeVirtualWindow: closeIdeVirtualWindow,
+    popOutWindow: popOutIdeWindow
+  } = ideWindow;
+
+  registerAppHotkeys({ openIde: openIdeVirtualWindow, closeIde: closeIdeVirtualWindow });
+
+  registerAppLifecycle({ openIde: openIdeVirtualWindow, ideWindowOpen });
+
+  const {
+    state,
+    activeLeftTab,
+    activeLeftTabDefinition,
+    tracePanelMode,
+    mainPanelGridStyle,
+    startPanelResize,
+    resizePanelFromKeyboard,
+    executionControlTooltip
+  } = createAppViewModel();
+  if (window.location.pathname === "/ide") return <IdeFullPage />;
 
   return (
     <main data-test-app-shell="" {...stylex.attrs(styles.appShell)}>
@@ -365,26 +385,28 @@ export function App() {
               onClick={() => harnessStore.openHelpDialog()}
             >
             </ActionButton>
-            <ActionButton
-              tooltip={withPrimaryHotkey(`Trace panel: ${state.tracePanelMode}. Click to cycle closed, peek, open.`, "toggleTracePanel")}
-              icon={<PanelsTopLeft {...stylex.attrs(styles.icon16)} />}
-              variant="secondary"
-              dataTourId="trace-panel-toggle"
-              onClick={() => harnessStore.toggleTracePanel()}
-            >
-              <span {...stylex.attrs(styles.traceButtonLabel)}>{state.tracePanelMode === "closed" ? "Trace" : state.tracePanelMode}</span>
-            </ActionButton>
+            <Show when={state.experienceMode === "advanced"}>
+              <ActionButton
+                tooltip={withPrimaryHotkey(`Trace panel: ${state.tracePanelMode}. Click to cycle closed, peek, open.`, "toggleTracePanel")}
+                icon={<PanelsTopLeft {...stylex.attrs(styles.icon16)} />}
+                variant="secondary"
+                dataTourId="trace-panel-toggle"
+                onClick={() => harnessStore.toggleTracePanel()}
+              >
+                <span {...stylex.attrs(styles.traceButtonLabel)}>{state.tracePanelMode === "closed" ? "Trace" : state.tracePanelMode}</span>
+              </ActionButton>
+            </Show>
           </div>
         </header>
 
         <div
           data-test-main-panel-grid=""
-          data-main-panel-mode={state.tracePanelMode}
+          data-main-panel-mode={tracePanelMode()}
           {...stylex.attrs(
             styles.mainPanelGrid,
-            state.tracePanelMode === "open" && styles.mainPanelOpen,
-            state.tracePanelMode === "peek" && styles.mainPanelPeek,
-            state.tracePanelMode === "closed" && styles.mainPanelClosed
+            tracePanelMode() === "open" && styles.mainPanelOpen,
+            tracePanelMode() === "peek" && styles.mainPanelPeek,
+            tracePanelMode() === "closed" && styles.mainPanelClosed
           )}
           style={mainPanelGridStyle()}
         >
@@ -393,7 +415,7 @@ export function App() {
               <TabbedLeftPane />
             </div>
           </div>
-          <PanelResizeHandle label="Resize left and center panels" onPointerDown={(event) => startPanelResize("left", event)} />
+          <PanelResizeHandle label="Resize left and center panels" value={state.mainPanelSizes.left} onPointerDown={(event) => startPanelResize("left", event)} onKeyboardResize={(direction, largeStep) => resizePanelFromKeyboard("left", direction, largeStep)} onReset={() => harnessStore.resetMainPanelSizes()} />
           <div {...stylex.attrs(styles.mainPanelSurface)}>
             <Show
               when={activeLeftTab() === "jobs" || activeLeftTab() === "runs"}
@@ -413,13 +435,13 @@ export function App() {
               <BackgroundJobsPanel variant="detail" segment={activeLeftTab() === "jobs" ? "jobs" : "runs"} />
             </Show>
           </div>
-          <Show when={state.tracePanelMode !== "closed"}>
+          <Show when={tracePanelMode() !== "closed"}>
             <>
-              <Show when={state.tracePanelMode === "open"} fallback={<div {...stylex.attrs(styles.desktopOnly)} />}>
-                <PanelResizeHandle label="Resize center and trace panels" onPointerDown={(event) => startPanelResize("right", event)} />
+              <Show when={tracePanelMode() === "open"} fallback={<div {...stylex.attrs(styles.desktopOnly)} />}>
+                <PanelResizeHandle label="Resize center and trace panels" value={state.mainPanelSizes.right} onPointerDown={(event) => startPanelResize("right", event)} onKeyboardResize={(direction, largeStep) => resizePanelFromKeyboard("right", direction, largeStep)} onReset={() => harnessStore.resetMainPanelSizes()} />
               </Show>
               <div {...stylex.attrs(styles.shrinkablePanel)}>
-                <Show when={state.tracePanelMode === "open"} fallback={<TracePeekRail />}>
+                <Show when={tracePanelMode() === "open"} fallback={<TracePeekRail />}>
                   <TracePanel />
                 </Show>
               </div>
@@ -433,26 +455,20 @@ export function App() {
         setup={state.setup}
         completedTutorialIds={state.completedTutorialIds}
         dismissedTutorialIds={state.dismissedTutorialIds}
+        satisfiedTutorialIds={tutorialDefinitions
+          .filter((tutorial) => isTutorialGoalSatisfied(tutorial.id, state))
+          .map((tutorial) => tutorial.id)}
         onClose={() => harnessStore.closeHelpDialog()}
         onStartTutorial={(tutorialId) => harnessStore.startTutorial(tutorialId)}
       />
       <TutorialOverlay
         tutorialId={state.activeTutorialId}
         stepIndex={state.activeTutorialStepIndex}
+        completionSatisfied={Boolean(
+          state.activeTutorialId && isTutorialGoalSatisfied(state.activeTutorialId, state)
+        )}
         onBack={() => harnessStore.setActiveTutorialStepIndex(state.activeTutorialStepIndex - 1)}
-        onNext={() => {
-          const tutorial = getTutorialDefinition(state.activeTutorialId);
-          if (!tutorial) {
-            return;
-          }
-
-          if (state.activeTutorialStepIndex >= tutorial.steps.length - 1) {
-            harnessStore.finishTutorial(tutorial.id);
-            return;
-          }
-
-          harnessStore.setActiveTutorialStepIndex(state.activeTutorialStepIndex + 1);
-        }}
+        onNext={() => advanceActiveTutorial(state)}
         onClose={() => harnessStore.dismissTutorial()}
       />
       <AssistantEditorDialog />
@@ -473,62 +489,6 @@ export function App() {
       <Toaster />
     </main>
   );
-}
-
-export function createDefaultIdeWindowBounds(): IdeWindowBounds {
-  const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
-  const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
-  const width = Math.min(1120, Math.max(240, viewportWidth - (viewportWidth < 640 ? 16 : 160)));
-  const height = Math.min(720, Math.max(320, viewportHeight - (viewportWidth < 640 ? 16 : 140)));
-  return {
-    x: viewportWidth < 640 ? 8 : 72,
-    y: viewportWidth < 640 ? 8 : 64,
-    width,
-    height
-  };
-}
-
-function readPersistedIdeWindowState() {
-  const fallback = { open: false, maximized: false, bounds: createDefaultIdeWindowBounds() };
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(IDE_WINDOW_STORAGE_KEY) ?? "{}");
-    return {
-      open: typeof parsed.open === "boolean" ? parsed.open : fallback.open,
-      maximized: typeof parsed.maximized === "boolean" ? parsed.maximized : fallback.maximized,
-      bounds: normalizeIdeWindowBounds(parsed.bounds, fallback.bounds)
-    };
-  } catch {
-    return fallback;
-  }
-}
-
-function persistIdeWindowState(state: { open: boolean; maximized: boolean; bounds: IdeWindowBounds }) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(IDE_WINDOW_STORAGE_KEY, JSON.stringify(state));
-}
-
-function normalizeIdeWindowBounds(value: unknown, fallback: IdeWindowBounds): IdeWindowBounds {
-  if (!value || typeof value !== "object") {
-    return fallback;
-  }
-  const bounds = value as Partial<IdeWindowBounds>;
-  const maximumWidth = Math.max(240, window.innerWidth - 16);
-  const maximumHeight = Math.max(320, window.innerHeight - 16);
-  return {
-    x: clampWindowNumber(bounds.x, 8, Math.max(8, window.innerWidth - 160), fallback.x),
-    y: clampWindowNumber(bounds.y, 8, Math.max(8, window.innerHeight - 80), fallback.y),
-    width: clampWindowNumber(bounds.width, Math.min(640, maximumWidth), maximumWidth, fallback.width),
-    height: clampWindowNumber(bounds.height, Math.min(420, maximumHeight), maximumHeight, fallback.height)
-  };
-}
-
-function clampWindowNumber(value: unknown, min: number, max: number, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 }
 
 function IdeVirtualWindow(props: {
@@ -870,7 +830,7 @@ function focusCurrentTabSearch() {
   input?.select();
 }
 
-function PanelResizeHandle(props: { label: string; onPointerDown: (event: PointerEvent) => void }) {
+function PanelResizeHandle(props: { label: string; value: number; onPointerDown: (event: PointerEvent) => void; onKeyboardResize: (direction: -1 | 1, largeStep: boolean) => void; onReset: () => void }) {
   return (
     <Button
       tooltip={props.label}
@@ -879,57 +839,27 @@ function PanelResizeHandle(props: { label: string; onPointerDown: (event: Pointe
       size="icon"
       class={stylex.attrs(styles.panelResizeHandle).class}
       data-test-panel-resize-handle=""
+      role="separator"
       aria-label={props.label}
+      aria-orientation="vertical"
+      aria-valuemin={0.75}
+      aria-valuemax={5}
+      aria-valuenow={props.value}
       onPointerDown={props.onPointerDown}
+      onDblClick={props.onReset}
+      onKeyDown={(event) => {
+        if (event.key === "Home" || event.key === "End") {
+          event.preventDefault();
+          props.onReset();
+          return;
+        }
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        props.onKeyboardResize(event.key === "ArrowLeft" ? -1 : 1, event.shiftKey);
+      }}
     />
   );
 }
-
-type LeftPaneTabDefinition = {
-  id: HarnessLeftTab;
-  label: string;
-  tooltip: string;
-  icon: Component<{ class?: string }>;
-  hotkeyId?: AppHotkeyId;
-};
-
-const leftPaneTabs: LeftPaneTabDefinition[] = [
-  {
-    id: "projects",
-    label: "Projects",
-    tooltip: "Show project roots and threads",
-    icon: FolderKanban,
-    hotkeyId: "openProjects"
-  },
-  {
-    id: "assistants",
-    label: "Assistants",
-    tooltip: "Show assistant roster",
-    icon: Bot,
-    hotkeyId: "openAssistants"
-  },
-  {
-    id: "jobs",
-    label: "Jobs",
-    tooltip: "Show scheduled background jobs",
-    icon: BriefcaseBusiness,
-    hotkeyId: "openJobs"
-  },
-  {
-    id: "runs",
-    label: "Runs",
-    tooltip: "Show active run info",
-    icon: Clock3,
-    hotkeyId: "openRuns"
-  },
-  {
-    id: "preferences",
-    label: "Settings",
-    tooltip: "Show workspace settings",
-    icon: Cog,
-    hotkeyId: "openPreferences"
-  },
-];
 
 function formatHotkeyHint(hotkey: string) {
   return formatForDisplay(hotkey)
@@ -1036,324 +966,3 @@ function TabbedLeftPane(props: { compact?: boolean; onNavigate?: () => void } = 
     </div>
   );
 }
-
-export function shouldCollapseTabStrip(navElement: HTMLElement) {
-  const tabItems = Array.from(navElement.children);
-  const firstTabTop = tabItems[0]?.getBoundingClientRect().top ?? 0;
-  const hasWrappedTabs = tabItems.some((tabItem) => tabItem.getBoundingClientRect().top > firstTabTop + 1);
-
-  return hasWrappedTabs || navElement.scrollWidth > navElement.clientWidth + 1;
-}
-
-/** Measures the expanded tab strip without depending on legacy descendant classes. */
-function measureTabStripMinimumWidth(navElement: HTMLElement) {
-  const tabWidths = Array.from(navElement.children).reduce((total, tabItem) => total + tabItem.getBoundingClientRect().width, 0);
-  const computedStyle = window.getComputedStyle(navElement);
-  const gap = Number.parseFloat(computedStyle.columnGap || computedStyle.gap) || 0;
-  const padding = (Number.parseFloat(computedStyle.paddingLeft) || 0) + (Number.parseFloat(computedStyle.paddingRight) || 0);
-  return tabWidths + Math.max(0, navElement.children.length - 1) * gap + padding;
-}
-
-function isProjectSwitcherInputFocused() {
-  const activeElement = document.activeElement;
-  return activeElement instanceof HTMLElement && activeElement.dataset.projectSwitcherInput === "true";
-}
-
-function isResizeObserverLoopError(message: string) {
-  return message === "ResizeObserver loop completed with undelivered notifications." || message === "ResizeObserver loop limit exceeded";
-}
-
-const styles = stylex.create({
-  idePage: {
-    backgroundColor: "var(--background)",
-    height: "100vh",
-    minHeight: 0,
-    overflow: "hidden"
-  },
-  appShell: {
-    height: "100vh",
-    overflow: { default: "auto", "@media (min-width: 1024px)": "hidden" },
-    padding: { default: "0.5rem", "@media (min-width: 768px)": "0.75rem" },
-    position: "relative",
-    width: "100vw"
-  },
-  appBackground: {
-    backgroundImage: "var(--app-background-grid)",
-    backgroundSize: "56px 56px",
-    inset: 0,
-    maskImage: "linear-gradient(#0000008c, #0000 70%)",
-    pointerEvents: "none",
-    position: "absolute"
-  },
-  appContent: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.75rem",
-    height: "100%",
-    marginInline: "auto",
-    minHeight: 0
-  },
-  commandBar: {
-    alignItems: { default: null, "@media (min-width: 768px)": "center" },
-    backdropFilter: "blur(12px)",
-    backgroundColor: "var(--panel)",
-    borderColor: "#0f766e85 var(--border) var(--border)",
-    borderRadius: "0.75rem",
-    borderStyle: "solid",
-    borderWidth: "3px 1px 1px",
-    boxShadow: "0 8px 24px #0f172a0f",
-    display: "flex",
-    flexDirection: { default: "column", "@media (min-width: 768px)": "row" },
-    gap: "0.5rem",
-    justifyContent: { default: null, "@media (min-width: 768px)": "space-between" },
-    overflow: "visible",
-    padding: "0.5rem 0.75rem",
-    position: "relative"
-  },
-  headerIdentity: { alignItems: "center", display: "flex", gap: "0.75rem", minWidth: 0 },
-  mobileOnly: { display: { default: "block", "@media (min-width: 1024px)": "none" } },
-  mobileMenuButton: {
-    alignItems: "center",
-    backgroundColor: "var(--row)",
-    borderColor: "var(--border)",
-    borderRadius: "0.5rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    color: "var(--foreground)",
-    display: "inline-flex",
-    height: "2.25rem",
-    justifyContent: "center",
-    width: "2.25rem"
-  },
-  fullViewportHeight: { height: "100dvh" },
-  minWidthZero: { minWidth: 0 },
-  workspaceLabel: {
-    alignItems: "center",
-    color: "var(--muted)",
-    display: "flex",
-    fontSize: "0.585rem",
-    fontWeight: 600,
-    gap: "0.5rem",
-    letterSpacing: "0.16em",
-    minWidth: 0,
-    textTransform: "uppercase"
-  },
-  truncate: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  mobileSurfaceLabel: {
-    alignItems: "center",
-    backgroundColor: "var(--row)",
-    borderColor: "var(--border)",
-    borderRadius: "0.375rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    color: "var(--foreground)",
-    display: { default: "inline-flex", "@media (min-width: 1024px)": "none" },
-    fontSize: "0.625rem",
-    fontWeight: 600,
-    gap: "0.375rem",
-    marginTop: "0.25rem",
-    maxWidth: "100%",
-    padding: "0.25rem 0.5rem"
-  },
-  headerActions: { alignItems: "center", display: "flex", flexWrap: "wrap", gap: "0.5rem" },
-  icon14: { height: "0.875rem", width: "0.875rem" },
-  icon16: { height: "1rem", width: "1rem" },
-  executionControl: {
-    borderColor: "var(--border)",
-    borderRadius: "0.5rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    boxShadow: "none"
-  },
-  executionRunning: {
-    backgroundImage: {
-      default: "linear-gradient(180deg, color-mix(in srgb, var(--warning) 13%, var(--panel) 87%), color-mix(in srgb, var(--warning) 20%, var(--panel) 80%))",
-      ":hover": "linear-gradient(180deg, color-mix(in srgb, var(--warning) 24%, var(--panel) 76%), color-mix(in srgb, var(--warning) 30%, var(--panel) 70%))"
-    },
-    borderColor: "var(--warning)",
-    color: "var(--warning-strong)"
-  },
-  executionPaused: {
-    backgroundImage: {
-      default: "linear-gradient(180deg, color-mix(in srgb, var(--success) 13%, var(--panel) 87%), color-mix(in srgb, var(--success) 20%, var(--panel) 80%))",
-      ":hover": "linear-gradient(180deg, color-mix(in srgb, var(--success) 20%, var(--panel) 80%), color-mix(in srgb, var(--success) 28%, var(--panel) 72%))"
-    },
-    borderColor: "var(--success)",
-    color: "var(--success-strong)"
-  },
-  traceButtonLabel: { display: { default: "none", "@media (min-width: 640px)": "inline" } },
-  mainPanelGrid: {
-    display: "grid",
-    flex: "1",
-    gap: { default: "1rem", "@media (min-width: 1024px)": "0.5rem" },
-    gridAutoRows: { default: "min-content", "@media (min-width: 1024px)": "minmax(0, 1fr)" },
-    minHeight: 0
-  },
-  mainPanelOpen: {
-    gridTemplateColumns: { default: null, "@media (min-width: 1024px)": "minmax(0,var(--left-panel-size)) 0.35rem minmax(0,var(--center-panel-size)) 0.35rem minmax(0,var(--right-panel-size))" }
-  },
-  mainPanelPeek: {
-    gridTemplateColumns: { default: null, "@media (min-width: 1024px)": "minmax(0,var(--left-panel-size)) 0.35rem minmax(0,var(--center-panel-size)) 0.35rem 12rem" }
-  },
-  mainPanelClosed: {
-    gridTemplateColumns: { default: null, "@media (min-width: 1024px)": "minmax(0,var(--left-panel-size)) 0.35rem minmax(0,var(--center-panel-size))" }
-  },
-  desktopSidebar: {
-    display: { default: "none", "@media (min-width: 1024px)": "block" },
-    minHeight: 0,
-    minWidth: 0
-  },
-  desktopOnly: { display: { default: "none", "@media (min-width: 1024px)": "block" } },
-  fullHeight: { height: "100%" },
-  mainPanelSurface: {
-    minHeight: 0,
-    minWidth: 0,
-    overflow: { default: "visible", "@media (min-width: 1024px)": "hidden" }
-  },
-  shrinkablePanel: { minHeight: 0, minWidth: 0 },
-  ideWindow: {
-    backgroundColor: "var(--panel-strong)",
-    borderColor: "var(--border)",
-    borderRadius: "0.5rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
-    display: "flex",
-    flexDirection: "column",
-    minHeight: 0,
-    overflow: "hidden",
-    position: "fixed",
-    zIndex: 80
-  },
-  ideWindowRestored: {
-    bottom: { default: null, "@media (max-width: 639px)": "0.5rem !important" },
-    height: { default: null, "@media (max-width: 639px)": "auto !important" },
-    left: { default: null, "@media (max-width: 639px)": "0.5rem !important" },
-    right: { default: null, "@media (max-width: 639px)": "0.5rem !important" },
-    top: { default: null, "@media (max-width: 639px)": "0.5rem !important" },
-    width: { default: null, "@media (max-width: 639px)": "auto !important" }
-  },
-  ideTitlebar: {
-    alignItems: "center",
-    backgroundColor: { default: "var(--ide-surface)", ":hover": "var(--ide-row)" },
-    borderBottomColor: "var(--ide-border)",
-    borderBottomStyle: "solid",
-    borderBottomWidth: "1px",
-    cursor: "default",
-    display: "flex",
-    flexShrink: 0,
-    gap: "0.75rem",
-    height: "2rem",
-    justifyContent: "space-between",
-    paddingInline: "0.75rem",
-    textAlign: "left",
-    userSelect: "none"
-  },
-  ideTitle: {
-    color: "var(--ide-text)",
-    fontSize: "0.68rem",
-    fontWeight: 600,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap"
-  },
-  ideWindowControls: { alignItems: "center", display: "flex", gap: "0.25rem" },
-  ideWindowControl: {
-    borderRadius: "0.35rem",
-    color: { default: "var(--ide-muted)", ":hover": "var(--ide-text)" },
-    height: "1.35rem !important",
-    width: "1.35rem !important"
-  },
-  ideWindowBody: { flex: "1", minHeight: 0 },
-  ideResizeTrigger: {
-    bottom: 0,
-    display: { default: "inline-flex", "@media (max-width: 639px)": "none" },
-    height: "1rem",
-    position: "absolute",
-    right: 0,
-    width: "1rem"
-  },
-  ideResizeHandle: {
-    cursor: "nwse-resize",
-    height: "1rem !important",
-    minHeight: 0,
-    padding: 0,
-    width: "1rem !important"
-  },
-  panelResizeTrigger: {
-    display: { default: "none", "@media (min-width: 1024px)": "block" },
-    height: "100%",
-    minHeight: 0
-  },
-  panelResizeHandle: {
-    backgroundColor: { default: "transparent", ":hover": "var(--border)" },
-    borderRadius: "9999px",
-    boxShadow: { default: "none", ":focus-visible": "0 0 0 2px var(--ring)" },
-    cursor: "col-resize",
-    height: "100% !important",
-    outline: { default: null, ":focus-visible": "none" },
-    padding: 0,
-    transitionDuration: "150ms",
-    transitionProperty: "background-color, box-shadow",
-    width: "100% !important"
-  },
-  leftTabbedPane: {
-    containerType: "inline-size",
-    display: "flex",
-    flexDirection: "column",
-    gap: 0,
-    height: "100%",
-    minHeight: 0
-  },
-  surfaceTabStrip: {
-    alignItems: "flex-end",
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "0.25rem",
-    marginBottom: 0,
-    paddingInline: { default: "1rem", "@media (min-width: 1024px)": "1.25rem" },
-    position: "relative",
-    zIndex: 2
-  },
-  surfaceTabStripCollapsed: { paddingInline: "0.75rem" },
-  surfaceTab: {
-    backgroundColor: {
-      default: "transparent",
-      ':is([aria-selected="true"]):hover': "transparent",
-      ':is([aria-selected="false"]):hover': "var(--panel-strong)"
-    },
-    borderBottomColor: {
-      default: "transparent",
-      ':is([aria-selected="true"])': "var(--accent)"
-    },
-    borderBottomStyle: "solid",
-    borderBottomWidth: "2px",
-    borderRadius: "0 !important",
-    boxShadow: "none !important",
-    color: {
-      default: "var(--muted)",
-      ':is([aria-selected="true"])': "var(--accent-strong)",
-      ':is([aria-selected="false"]):hover': "var(--foreground)"
-    },
-    fontSize: "0.66rem",
-    gap: "0.35rem",
-    height: "2.25rem !important",
-    minHeight: "2.25rem !important",
-    paddingInline: "0.625rem !important",
-    position: "relative"
-  },
-  surfaceTabCollapsed: {
-    justifyContent: "center",
-    paddingInline: "0 !important",
-    width: "2.25rem !important"
-  },
-  surfaceTabLabel: { minWidth: 0 },
-  hidden: { display: "none" },
-  leftPaneBody: {
-    borderBottomLeftRadius: "0.75rem",
-    borderBottomRightRadius: "0.75rem",
-    flex: "1",
-    minHeight: 0,
-    overflow: "hidden"
-  }
-});

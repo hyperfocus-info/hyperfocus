@@ -11,42 +11,59 @@ type StatusChipProps = {
   children: JSX.Element;
 } & JSX.HTMLAttributes<HTMLSpanElement>;
 
+const styles = stylex.create({
+  root: {
+    borderColor: "var(--border)",
+    borderRadius: "9999px",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    gap: "0.375rem",
+    paddingInline: "0.55rem",
+    alignItems: "center",
+    display: "inline-flex",
+    fontSize: "0.65rem",
+    fontWeight: 700,
+    lineHeight: 1,
+    whiteSpace: "nowrap",
+    minHeight: "1.5rem",
+  },
+  neutral: { borderColor: "var(--border)", backgroundColor: "var(--panel-strong)", color: "var(--foreground)", },
+  success: { borderColor: "color-mix(in srgb, var(--success) 62%, var(--border) 38%)", backgroundColor: "color-mix(in srgb, var(--success) 13%, var(--panel-strong) 87%)", color: "var(--success-strong)", },
+  warning: { borderColor: "color-mix(in srgb, var(--warning) 62%, var(--border) 38%)", backgroundColor: "color-mix(in srgb, var(--warning) 14%, var(--panel-strong) 86%)", color: "var(--warning-strong)", },
+  danger: { borderColor: "color-mix(in srgb, var(--danger) 58%, var(--border) 42%)", backgroundColor: "color-mix(in srgb, var(--danger) 12%, var(--panel-strong) 88%)", color: "var(--danger-strong)", },
+  info: { borderColor: "color-mix(in srgb, var(--info) 58%, var(--border) 42%)", backgroundColor: "color-mix(in srgb, var(--info) 12%, var(--panel-strong) 88%)", color: "var(--info-strong)", },
+  accent: { borderColor: "var(--accent)", backgroundColor: "color-mix(in srgb, var(--accent) 14%, var(--panel-strong) 86%)", color: "var(--accent-strong)", },
+  dot: { borderRadius: "9999px", backgroundColor: "currentColor", height: "0.375rem", width: "0.375rem", }
+});
+
 export function StatusChip(props: StatusChipProps) {
   const [local, rest] = splitProps(props, ["tone", "dot", "class", "children"]);
   const tone = () => local.tone ?? "neutral";
+  const toneStyle = () => {
+    switch (tone()) {
+      case "success":
+        return styles.success;
+      case "warning":
+        return styles.warning;
+      case "danger":
+        return styles.danger;
+      case "info":
+        return styles.info;
+      case "accent":
+        return styles.accent;
+      default:
+        return styles.neutral;
+    }
+  };
 
   return (
     <span
       {...rest}
       data-test-status-chip=""
-      class={cn(stylex.attrs(styles.root, styles[tone()]).class, local.class)}
+      class={cn(stylex.attrs(styles.root, toneStyle()).class, local.class)}
     >
       {local.dot ? <span {...stylex.attrs(styles.dot)} /> : null}
       {local.children}
     </span>
   );
 }
-
-const styles = stylex.create({
-  root: {
-    alignItems: "center",
-    borderColor: "var(--border)",
-    borderRadius: "9999px",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    display: "inline-flex",
-    fontSize: "0.625rem",
-    fontWeight: 600,
-    gap: "0.375rem",
-    lineHeight: "1rem",
-    padding: "0.125rem 0.5rem",
-    whiteSpace: "nowrap"
-  },
-  neutral: { backgroundColor: "var(--panel-strong)", color: "var(--muted)" },
-  success: { backgroundColor: "rgb(236 253 245 / 0.8)", borderColor: "rgb(110 231 183)", color: "rgb(6 95 70)" },
-  warning: { backgroundColor: "rgb(255 251 235 / 0.8)", borderColor: "rgb(252 211 77)", color: "rgb(146 64 14)" },
-  danger: { backgroundColor: "rgb(255 241 242 / 0.8)", borderColor: "rgb(253 164 175)", color: "rgb(159 18 57)" },
-  info: { backgroundColor: "rgb(240 249 255 / 0.8)", borderColor: "rgb(125 211 252)", color: "rgb(3 105 161)" },
-  accent: { backgroundColor: "color-mix(in srgb, var(--accent) 14%, transparent)", borderColor: "var(--accent)", color: "var(--accent-strong)" },
-  dot: { backgroundColor: "currentColor", borderRadius: "9999px", height: "0.375rem", width: "0.375rem" }
-});

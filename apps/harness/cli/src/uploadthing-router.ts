@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { detectSupportedChatAttachment, isSupportedChatAttachment, MAX_CHAT_ATTACHMENT_COUNT } from "../../shared/chat-attachments";
-import type { ChatAttachment } from "../../shared/protocol";
+import { detectSupportedChatAttachment, isSupportedChatAttachment, MAX_CHAT_ATTACHMENT_COUNT } from "@hyperfocus/ai-core/chat-attachments";
 import type { WorkspaceRepository } from "./workspace-repository";
-import { UploadThingError, createUploadthing, type FileRouter } from "uploadthing/server";
+import { UploadThingError, createUploadthing } from "uploadthing/server";
 
 const f = createUploadthing();
 
@@ -70,7 +69,7 @@ export function createHarnessUploadRouter(repository: WorkspaceRepository) {
             key: file.key,
             url: file.ufsUrl,
             uploadedAt: metadata.uploadedAt
-          } satisfies ChatAttachment;
+          };
           repository.saveChatAttachmentUpload({
             projectId: metadata.projectId,
             threadId: metadata.threadId,
@@ -84,7 +83,7 @@ export function createHarnessUploadRouter(repository: WorkspaceRepository) {
           url: file.ufsUrl
         };
       })
-  } satisfies FileRouter;
+  };
 }
 
 export type HarnessUploadRouter = ReturnType<typeof createHarnessUploadRouter>;

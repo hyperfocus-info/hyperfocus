@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { planTask, testExports } from "./pi-planner";
 import type { PiAgentAdapter, PiAgentExecutionController, PiAgentPromptRequest } from "./pi-agent-adapter";
+import { DEFAULT_CODING_STACK_GUIDANCE } from "./prompts/coding-stack-defaults";
 
 describe("pi planner payload parsing", () => {
   const buildReadyPayload = (overrides: Record<string, unknown> = {}) => ({
@@ -171,8 +172,14 @@ describe("pi planner payload parsing", () => {
 
   test("planner prompt includes default TypeScript Bun stack and Happy DOM frontend test guidance", async () => {
     let prompt = "";
+    let capturedRequest: PiAgentPromptRequest | undefined;
+    const memorySearch: NonNullable<PiAgentPromptRequest["memorySearch"]> = async () => ({
+      text: "## repo-fact | Prior decision\nOnly returned on request.",
+      count: 1
+    });
     const adapter: PiAgentAdapter = {
       async runPrompt(request) {
+        capturedRequest = request;
         prompt = request.prompt;
         return {
           text: JSON.stringify({
@@ -199,14 +206,19 @@ describe("pi planner payload parsing", () => {
       cwd: "C:\\repo\\context",
       messages: [],
       latestUserPrompt: "Create a new web app",
-      providerBrand: "gpt"
+      providerBrand: "gpt",
+      memorySearch
     });
 
-    expect(prompt).toContain("default to TypeScript, Bun runtime/package/test runner, bun test");
-    expect(prompt).toContain("Happy DOM for frontend/component tests");
+    expect(prompt).toContain(DEFAULT_CODING_STACK_GUIDANCE);
+    expect(prompt).toContain("SolidJS + StyleX");
+    expect(prompt).not.toContain("SolidJS + Tailwind");
     expect(prompt).toContain("documentation comments for new functions and variables");
     expect(prompt).toContain("createUiTest-style setup from harness/ui/src/utils/tests/test-harness.ts");
     expect(prompt).toContain("Git repository state:");
+    expect(prompt).not.toContain("Prior decision");
+    expect(prompt).not.toContain("Memory summaries:");
+    expect(capturedRequest?.memorySearch).toBe(memorySearch);
   });
 
   test("normalizes planner prerequisite owner aliases before schema validation", () => {

@@ -1,6 +1,6 @@
-import type { ProviderCapability } from "./protocol";
+import { providerCapabilitySchema } from "./protocol/conversation";
 
-export const defaultProviderCapabilities: ProviderCapability[] = [
+export const defaultProviderCapabilities = providerCapabilitySchema.array().parse([
   {
     providerBrand: "gpt",
     label: "GPT",
@@ -8,6 +8,36 @@ export const defaultProviderCapabilities: ProviderCapability[] = [
     defaultExecutionModelId: "openai/gpt-5.4",
     defaultSubagentModelId: "openai/gpt-5.4-nano",
     models: [
+      {
+        modelId: "openai/gpt-5.6-sol",
+        providerBrand: "gpt",
+        label: "GPT-5.6 Sol",
+        tags: ["tools", "vision", "long-context", "expensive"],
+        contextWindow: 1050000,
+        summary: "Flagship GPT-5.6 model for complex planning and implementation work.",
+        supportedReasoningStrengths: ["low", "medium", "high", "extra-high"],
+        supportsFastMode: true
+      },
+      {
+        modelId: "openai/gpt-5.6-terra",
+        providerBrand: "gpt",
+        label: "GPT-5.6 Terra",
+        tags: ["tools", "vision", "long-context"],
+        contextWindow: 1050000,
+        summary: "Balanced GPT-5.6 model for strong results at lower cost.",
+        supportedReasoningStrengths: ["low", "medium", "high", "extra-high"],
+        supportsFastMode: true
+      },
+      {
+        modelId: "openai/gpt-5.6-luna",
+        providerBrand: "gpt",
+        label: "GPT-5.6 Luna",
+        tags: ["tools", "vision", "long-context", "fast"],
+        contextWindow: 1050000,
+        summary: "Efficient GPT-5.6 model for cost-sensitive, high-volume work.",
+        supportedReasoningStrengths: ["low", "medium", "high", "extra-high"],
+        supportsFastMode: true
+      },
       {
         modelId: "openai/gpt-5.5",
         providerBrand: "gpt",
@@ -128,4 +158,4 @@ export const defaultProviderCapabilities: ProviderCapability[] = [
       }
     ]
   }
-];
+]);

@@ -7,12 +7,12 @@ export async function runEditorCli(args: string[]) {
   if (!command || command === "serve" || command === "dev") {
     const { startEditorServer } = await import("./server.ts");
     startEditorServer();
-    return;
+    return 0;
   }
   if (command === "deps") {
     const result = await manageBunDependencies(parseDependencyArgs(args.slice(1)));
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    return;
+    return 0;
   }
   if (command === "agent") {
     const values = parseOptions(args.slice(1));
@@ -37,18 +37,22 @@ export async function runEditorCli(args: string[]) {
     const outputPath = value(values, "out");
     if (outputPath) await Bun.write(outputPath, `${JSON.stringify(result, null, 2)}\n`);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    return;
+    return isFailedAgentResult(result) ? 1 : 0;
   }
   if (command === "help" || command === "--help" || command === "-h") {
     process.stdout.write(helpText());
-    return;
+    return 0;
   }
   throw new Error(`Unknown hyperfocus-editor command: ${command}\n\n${helpText()}`);
 }
 
+function isFailedAgentResult(result: unknown) {
+  return typeof result === "object" && result !== null && "ok" in result && result.ok === false;
+}
+
 export function parseDependencyArgs(args: string[]): BunDependencyRequest {
-  const command = args[0] as BunDependencyRequest["command"] | undefined;
-  if (!command || !["list", "install", "add", "remove"].includes(command)) throw new Error("deps requires one of: list, install, add, remove.");
+  const command = args[0];
+  if (!isDependencyCommand(command)) throw new Error("deps requires one of: list, install, add, remove.");
   const values = parseOptions(args.slice(1));
   validateValuedOptions(values, ["project"]);
   const allowed = new Set(["project", "frozen", "dev", "optional", "peer", "exact", "trust"]);
@@ -109,9 +113,13 @@ async function runAgentApi(options: { api: string; projectRoot: string; planPath
       body: JSON.stringify({ projectRoot: options.projectRoot, plan: await readEditorCommandPlan(options.planPath), persist: options.persist }),
     })
     : await fetch(`${base}/api/agent/v1/project?root=${encodeURIComponent(options.projectRoot)}`);
-  const result = await response.json() as unknown;
+  const result: unknown = await response.json();
   if (!response.ok && response.status !== 422) throw new Error(`Editor agent API failed with HTTP ${response.status}: ${JSON.stringify(result)}`);
   return result;
+}
+
+function isDependencyCommand(value: unknown): value is BunDependencyRequest["command"] {
+  return value === "list" || value === "install" || value === "add" || value === "remove";
 }
 
 function helpText() {

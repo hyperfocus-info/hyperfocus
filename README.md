@@ -9,9 +9,10 @@ hyperfocus/
 │   └── harness/
 ├── packages/
 │   ├── ai-core/
+│   ├── desktop-runtime/
+│   ├── engine/
 │   ├── ui/
 │   └── workspace/
-├── engine/
 ├── docs/
 └── package.json
 ```
@@ -23,15 +24,20 @@ The governing rule is simple: consumers install the smallest package that solves
 - `@hyperfocus/engine` is the browser/game/server engine and remains editor-independent.
 - `@hyperfocus/ai-core` owns framework-neutral, zod-validated harness contracts and its WebSocket client.
 - `@hyperfocus/workspace` defines safe project, filesystem, watch, and task interfaces without choosing a host implementation.
+- `@hyperfocus/desktop-runtime` provides framework-neutral local-server, protocol-launch, shutdown-lease, and update-check primitives.
 - `@hyperfocus/ui` owns Solid/StyleX presentation: primitives, composer, transcript, terminal surface, workbench, and source editor.
 - `hyperfocus-editor` is the portable editor application and future `bunx hyperfocus-editor` package.
 - `@hyperfocus/harness` owns runtime execution, credentials, SQLite persistence, terminal sessions, and agent state.
 
-Read [Architecture](docs/architecture.md), [Distribution](docs/distribution.md), and [Migration status](docs/migration/status.md) before changing boundaries.
+Use the [documentation map](docs/README.md) to load only the area relevant to the task.
+Use [documentation governance](docs/documentation-governance.md) when changing docs,
+story inventories, coverage routes, or README ownership.
+Read [Architecture](docs/architecture.md), [Distribution](docs/distribution.md), and
+[Migration status](docs/migration/status.md) when changing package or release boundaries.
 
 ## Development
 
-Requires Bun 1.3.14 or newer.
+Requires Bun 1.4.0 or newer.
 
 ```powershell
 bun install

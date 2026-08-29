@@ -10,20 +10,21 @@ import type {
   BackgroundRunStatusNotification,
   ClientCommand,
   PlanningQuestionNotification
-} from "../../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { createUiTest } from "../utils/tests/test-harness";
 import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
-import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
-import { createEmptyAssistantsState, createEmptyBackgroundJobsState, harnessStore, type JobsRunFilter } from "../harness-store";
+import { createHarnessStateFixture, createRunFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
+import type { JobsRunFilter } from "../store/background-jobs-pane-state";
+import { createEmptyAssistantsState, createEmptyBackgroundJobsState, harnessStore } from "../harness-store";
 import { getAssistantQuestionDefaultChoices } from "../assistant-question-defaults";
 import {
   NotificationInbox,
   activateProjectThreadFromInbox,
   createAssistantJobBootstrapCommandFromInbox,
   openAssistantQuestionNotificationFromInbox,
-  openAssistantJobNotificationFromInbox,
   openBackgroundRunNotificationFromInbox,
-  openCliUpdateNotificationFromInbox
+  openCliUpdateNotificationFromInbox,
+  isCachedBrowserApprovalTerminal
 } from "./notification-inbox";
 import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 
@@ -74,6 +75,18 @@ function backgroundRunStatusNotification(
     summary: "Exit code 0",
     severity: "info",
     ...overrides
+  };
+}
+
+function createBackgroundJob(overrides: Partial<BackgroundJob> = {}): BackgroundJob {
+  const now = isoNow();
+  return {
+    id: "bg-job-1", projectId: "project-1", automationThreadId: "thread-1", kind: "ai-routine",
+    name: "Release scan", status: "enabled", riskLevel: "safe",
+    definition: { kind: "ai-routine", prompt: "Scan releases", planExecutionMode: "immediate",
+      subagentWorktreeStrategy: "same-worktree" },
+    schedule: { type: "one-off", runAt: now, sourceText: "manual" }, scheduleInput: "manual",
+    createdAt: now, updatedAt: now, ...overrides
   };
 }
 
@@ -162,6 +175,23 @@ createUiTest("NotificationInbox", () => {
     expect(Array.from(document.querySelectorAll("div")).some((element) => unreadClasses.every((className) => (element.getAttribute("class") ?? "").split(/\s+/).includes(className)))).toBe(false);
   });
 
+  it("recognizes a cached terminal last-run browser approval as unavailable", () => {
+    const notification = {
+      id: "browser-approval:stale", kind: "browser-approval", interactive: true,
+      createdAt: isoNow(), projectId: "project-1", threadId: "thread-1", runId: "run-stopped",
+      sessionId: "session-1", toolCallId: "tool-1", label: "Open page"
+    } as const;
+    const project = createViewProjectFixture({ id: "project-1", activeThreadId: "thread-1",
+      lastRun: createRunFixture({ id: "run-stopped", status: "stopped" }) });
+    seedHarnessStoreForTests(createHarnessStateFixture({ workspace: {
+      activeProjectId: project.id, projects: [project]
+    }, notifications: { ...createHarnessStateFixture().notifications, items: [notification], unreadCount: 1,
+      interactiveUnreadCount: 1 } }));
+
+    expect(isCachedBrowserApprovalTerminal(harnessStore.state, notification)).toBe(true);
+    expect(isCachedBrowserApprovalTerminal(harnessStore.state, { ...notification, runId: "uncached" })).toBe(false);
+  });
+
   it("defines three assistant question default answers with one recommendation", () => {
     const choices = getAssistantQuestionDefaultChoices();
 
@@ -198,7 +228,7 @@ createUiTest("NotificationInbox", () => {
               unreadQuestionCount: 1,
               createdAt: isoNow(),
               updatedAt: isoNow()
-            } satisfies Assistant
+            }
           ]
         },
         notifications: {
@@ -338,104 +368,6 @@ createUiTest("activateProjectThreadFromInbox", () => {
   });
 });
 
-createUiTest("openAssistantJobNotificationFromInbox", () => {
-  beforeEach(() => {
-    clearBrowserStateForTests();
-  });
-
-  it("opens assistant log tab for assistant-owned background notifications", () => {
-    const now = isoNow();
-    const assistant: Assistant = {
-      id: "assistant-1",
-      name: "Release watcher",
-      scope: "project",
-      projectId: "project-1",
-      description: "Watch releases",
-      personalityPrompt: "Be concise.",
-      jobPrompt: "Scan releases.",
-      agentId: "pi",
-      runState: "active",
-      bootstrapState: "completed",
-      failureStreakCount: 0,
-      circuitBreakerState: "closed",
-      latestActivityAt: now,
-      unreadQuestionCount: 0,
-      createdAt: now,
-      updatedAt: now
-    };
-    const job: BackgroundJob = {
-      id: "bg-job-1",
-      projectId: "project-1",
-      assistantId: "assistant-1",
-      automationThreadId: "thread-1",
-      kind: "ai-routine",
-      name: "Release scan",
-      status: "enabled",
-      riskLevel: "safe",
-      definition: {
-        kind: "ai-routine",
-        prompt: "Scan releases",
-        planExecutionMode: "immediate",
-        subagentWorktreeStrategy: "same-worktree"
-      },
-      schedule: { type: "one-off", runAt: now, sourceText: "manual" },
-      scheduleInput: "manual",
-      createdAt: now,
-      updatedAt: now
-    };
-    const run: BackgroundJobRun = {
-      id: "bg-run-1",
-      jobId: "bg-job-1",
-      projectId: "project-1",
-      assistantId: "assistant-1",
-      automationThreadId: "thread-1",
-      triggerSource: "manual",
-      status: "succeeded",
-      riskLevel: "safe",
-      approvalStatus: "not-needed",
-      skippedOccurrenceCount: 0,
-      summary: "Done",
-      queuedAt: now,
-      createdAt: now,
-      updatedAt: now,
-      events: []
-    };
-    const notification = backgroundRunStatusNotification();
-
-    seedHarnessStoreForTests(
-      createHarnessStateFixture({
-        workspace: {
-          activeProjectId: "project-1",
-          projects: [createViewProjectFixture({ id: "project-1", activeThreadId: "thread-1" })]
-        },
-        assistants: {
-          ...createEmptyAssistantsState(),
-          assistants: [assistant]
-        },
-        backgroundJobs: {
-          ...createEmptyBackgroundJobsState(),
-          jobs: [job],
-          runs: [run]
-        }
-      })
-    );
-
-    expect(openAssistantJobNotificationFromInbox(harnessStore.state, notification)).toBe(true);
-    expect(harnessStore.state.activeSurface).toBe("assistants");
-    expect(harnessStore.state.assistants.selectedAssistantId).toBe("assistant-1");
-    expect(harnessStore.state.assistants.selectedTab).toBe("log");
-    expect(harnessStore.state.assistants.scopeFilter).toBe("project");
-  });
-
-  it("leaves generic background notifications on the jobs path", () => {
-    seedHarnessStoreForTests(createHarnessStateFixture());
-
-    expect(openAssistantJobNotificationFromInbox(harnessStore.state, backgroundRunStatusNotification())).toBe(false);
-    expect(harnessStore.state.activeSurface).toBe("chat");
-    expect(harnessStore.state.assistants.selectedTab).toBe("chat");
-  });
-});
-
 createUiTest("openAssistantQuestionNotificationFromInbox", () => {
   beforeEach(() => {
     clearBrowserStateForTests();
@@ -464,7 +396,7 @@ createUiTest("openAssistantQuestionNotificationFromInbox", () => {
               unreadQuestionCount: 1,
               createdAt: now,
               updatedAt: now
-            } satisfies Assistant
+            }
           ]
         }
       })
@@ -566,6 +498,30 @@ createUiTest("openBackgroundRunNotificationFromInbox", () => {
     expect(harnessStore.state.backgroundJobDetailsRunId).toBeUndefined();
   });
 
+  it("fetches an older notification run that is outside the bounded snapshot", () => {
+    const commands: ClientCommand[] = [];
+    const notification = backgroundRunStatusNotification({ backgroundRunId: "older-run", jobId: "older-job" });
+    const job = createBackgroundJob({ id: notification.jobId });
+    const run = createBackgroundRun({ id: notification.backgroundRunId, jobId: notification.jobId });
+    seedHarnessStoreForTests(createHarnessStateFixture({ backgroundJobs: createEmptyBackgroundJobsState() }));
+    captureDispatchedCommands(commands);
+
+    expect(openBackgroundRunNotificationFromInbox(harnessStore.state, notification)).toBe(true);
+    const pending = harnessStore.state.pendingBackgroundJobSource;
+    expect(pending).toMatchObject({ kind: "run", projectId: notification.projectId,
+      runId: notification.backgroundRunId, jobId: notification.jobId });
+    if (!pending) throw new Error("Expected an owned background source request");
+    expect(commands).toEqual([{ type: "background-job.source.open", requestId: pending.requestId,
+      payload: { kind: "run", projectId: notification.projectId, runId: notification.backgroundRunId } }]);
+    expect(harnessStore.state.activeSurface).toBe("chat");
+
+    harnessStore.applyServerEvent({ type: "background-job.source.loaded", requestId: pending.requestId,
+      payload: { kind: "run", job, run } });
+    expect(harnessStore.state.activeSurface).toBe("background-jobs");
+    expect(harnessStore.state.jobsPanePreferences).toMatchObject({ segment: "inbox",
+      selectedRunId: run.id, selectedJobId: job.id });
+  });
+
   it("switches run notification clicks to the selected run status filter", () => {
     const cases: Array<[BackgroundJobRun["status"], BackgroundJobRun["approvalStatus"], JobsRunFilter]> = [
       ["awaiting-approval", "pending", "approval"],
@@ -616,26 +572,7 @@ createUiTest("openBackgroundRunNotificationFromInbox", () => {
       createdAt: now,
       updatedAt: now
     };
-    const job: BackgroundJob = {
-      id: "bg-job-1",
-      projectId: "project-1",
-      assistantId: "assistant-1",
-      automationThreadId: "thread-1",
-      kind: "ai-routine",
-      name: "Release scan",
-      status: "enabled",
-      riskLevel: "safe",
-      definition: {
-        kind: "ai-routine",
-        prompt: "Scan releases",
-        planExecutionMode: "immediate",
-        subagentWorktreeStrategy: "same-worktree"
-      },
-      schedule: { type: "one-off", runAt: now, sourceText: "manual" },
-      scheduleInput: "manual",
-      createdAt: now,
-      updatedAt: now
-    };
+    const job = createBackgroundJob({ assistantId: "assistant-1" });
     const run: BackgroundJobRun = {
       id: "bg-run-1",
       jobId: "bg-job-1",

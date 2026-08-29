@@ -2,7 +2,7 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { ArrowDown, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, LoaderCircle, Logs, Terminal } from "lucide-solid";
-import type { ExecutionToolActivity } from "../../../shared/protocol";
+import type { ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
 import type { TimelineToolBlock } from "../lib/chat-timeline-model";
 import { formatShortTimestamp } from "../lib/time-format";
 import {
@@ -25,6 +25,79 @@ type StreamedToolBlockProps = {
   selectedActivityId?: string;
   onSelectedActivityIdChange?: (activityId?: string) => void;
 };
+
+const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
+
+const styles = stylex.create({
+  root: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "1rem", borderStyle: "solid", borderWidth: "1px", backgroundColor: "rgb(255 255 255 / 0.55)", },
+  header: { gap: "0.75rem", alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", },
+  heading: { gap: "0.5rem", alignItems: "center", color: "var(--muted)", display: "flex", fontSize: "0.585rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", minWidth: 0, },
+  icon: { height: "0.875rem", width: "0.875rem" },
+  truncate: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  actions: { gap: "0.5rem", alignItems: "center", display: "flex", flexShrink: 0, },
+  activityList: { gap: "0.25rem", display: "flex", flexDirection: "column", },
+  activityListExpanded: { overflowY: "visible" },
+  activityListCollapsed: { maxHeight: "10rem", overflowY: "auto", paddingRight: "0.25rem" },
+  activityRow: { borderRadius: "0.5rem",
+ gap: "0.5rem",
+ paddingBlock: '0.375rem',
+ paddingInline: '0.5rem',
+ alignItems: "start",
+ backgroundColor: { default: "transparent", ":hover": "rgb(255 255 255 / 0.8)" },
+ color: "var(--foreground)",
+ display: "grid",
+ fontSize: "0.65rem",
+ gridTemplateColumns: "auto minmax(0, 1fr) auto auto",
+ textAlign: "left",
+ width: "100%", },
+  activityDescription: { borderRadius: "0.5rem", outline: { default: "none", ":focus-visible": "none" }, boxShadow: { default: "none", ":focus-visible": "0 0 0 2px var(--ring)" }, cursor: "pointer", minWidth: 0, },
+  activityIdentity: { gap: "0.25rem", alignItems: "center", display: "flex", minWidth: 0, },
+  activityOwner: { overflow: "hidden", fontWeight: 600, textOverflow: "ellipsis", whiteSpace: "nowrap", },
+  muted: { color: "var(--muted)" },
+  activityToolName: { overflow: "hidden", color: "var(--muted)", textOverflow: "ellipsis", whiteSpace: "nowrap", },
+  invocationDescription: { overflow: "hidden", color: "var(--muted)", display: "block", fontSize: "0.62rem", lineHeight: "1rem", textOverflow: "ellipsis", whiteSpace: "nowrap", },
+  toolCallSnippet: { borderColor: "var(--border)",
+ borderRadius: "0.5rem",
+ borderStyle: "solid",
+ borderWidth: "1px",
+ overflow: "hidden",
+ paddingBlock: '0.32rem',
+ paddingInline: '0.45rem',
+ WebkitBoxOrient: "vertical",
+ WebkitLineClamp: 3,
+ backgroundColor: "var(--panel-strong)",
+ color: "var(--foreground)",
+ display: "-webkit-box",
+ fontSize: "0.62rem",
+ letterSpacing: 0,
+ lineHeight: 1.45,
+ overflowWrap: "anywhere",
+ marginTop: "0.25rem",
+ maxWidth: "100%", },
+  activityStatus: { color: "var(--accent-strong)", flexShrink: 0, letterSpacing: "0.12em", textTransform: "uppercase" },
+  detailButton: { flexShrink: 0, height: "1.75rem", width: "1.75rem", },
+  footer: { gap: "0.75rem", alignItems: "center", color: "var(--muted)", display: "flex", fontSize: "0.575rem", justifyContent: "space-between", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: "0.5rem", },
+  dialog: { maxWidth: "64rem" },
+  dialogContent: { maxHeight: "85vh" },
+  dialogBody: { gap: "0.75rem", display: "flex", flexDirection: "column", fontSize: "0.75rem", },
+  dialogSummary: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", gap: "0.75rem", alignItems: "start", backgroundColor: "rgb(255 255 255 / 0.7)", display: "flex", flexWrap: "wrap", justifyContent: "space-between", },
+  dialogSummaryCopy: { color: "var(--muted)",
+ flexBasis: '0%',
+ flexGrow: '1',
+ flexShrink: '1',
+ lineHeight: "1.25rem",
+ minWidth: 0, },
+  detailBlock: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", backgroundColor: "rgb(255 255 255 / 0.7)", },
+  detailHeader: { gap: "0.75rem", alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", },
+  detailTitle: { color: "var(--muted)", fontSize: "0.58rem", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase" },
+  detailValue: { overflow: "visible", fontSize: "0.7rem", lineHeight: "1.25rem", overflowWrap: "break-word", whiteSpace: "pre-wrap", },
+  monospace: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" },
+  danger: { color: "rgb(190 18 60)" },
+  foreground: { color: "var(--foreground)" },
+  spinning: { animationDuration: "1s", animationIterationCount: "infinite", animationName: spin, animationTimingFunction: "linear", },
+  success: { color: "rgb(5 150 105)" },
+  failure: { color: "rgb(225 29 72)" }
+});
 
 export function StreamedToolBlock(props: StreamedToolBlockProps) {
   let scroller: HTMLDivElement | undefined;
@@ -266,43 +339,3 @@ function ToolActivityStatusIcon(props: { status: ExecutionToolActivity["status"]
       return <CircleAlert {...stylex.attrs(styles.icon, styles.failure)} aria-label="Tool failed" />;
   }
 }
-
-const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
-
-const styles = stylex.create({
-  root: { backgroundColor: "rgb(255 255 255 / 0.55)", borderColor: "var(--border)", borderRadius: "1rem", borderStyle: "solid", borderWidth: "1px", padding: "0.75rem" },
-  header: { alignItems: "center", display: "flex", gap: "0.75rem", justifyContent: "space-between", marginBottom: "0.5rem" },
-  heading: { alignItems: "center", color: "var(--muted)", display: "flex", fontSize: "0.585rem", fontWeight: 600, gap: "0.5rem", letterSpacing: "0.18em", minWidth: 0, textTransform: "uppercase" },
-  icon: { height: "0.875rem", width: "0.875rem" },
-  truncate: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  actions: { alignItems: "center", display: "flex", flexShrink: 0, gap: "0.5rem" },
-  activityList: { display: "flex", flexDirection: "column", gap: "0.25rem" },
-  activityListExpanded: { overflowY: "visible" },
-  activityListCollapsed: { maxHeight: "10rem", overflowY: "auto", paddingRight: "0.25rem" },
-  activityRow: { alignItems: "start", borderRadius: "0.5rem", color: "var(--foreground)", display: "grid", fontSize: "0.65rem", gap: "0.5rem", gridTemplateColumns: "auto minmax(0, 1fr) auto auto", padding: "0.375rem 0.5rem", textAlign: "left", width: "100%", backgroundColor: { default: "transparent", ":hover": "rgb(255 255 255 / 0.8)" } },
-  activityDescription: { borderRadius: "0.5rem", boxShadow: { default: "none", ":focus-visible": "0 0 0 2px var(--ring)" }, cursor: "pointer", minWidth: 0, outline: { default: "none", ":focus-visible": "none" } },
-  activityIdentity: { alignItems: "center", display: "flex", gap: "0.25rem", minWidth: 0 },
-  activityOwner: { fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  muted: { color: "var(--muted)" },
-  activityToolName: { color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  invocationDescription: { color: "var(--muted)", display: "block", fontSize: "0.62rem", lineHeight: "1rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  toolCallSnippet: { WebkitBoxOrient: "vertical", WebkitLineClamp: 3, backgroundColor: "var(--panel-strong)", borderColor: "var(--border)", borderRadius: "0.5rem", borderStyle: "solid", borderWidth: "1px", color: "var(--foreground)", display: "-webkit-box", fontSize: "0.62rem", letterSpacing: 0, lineHeight: 1.45, marginTop: "0.25rem", maxWidth: "100%", overflow: "hidden", overflowWrap: "anywhere", padding: "0.32rem 0.45rem" },
-  activityStatus: { color: "var(--accent-strong)", flexShrink: 0, letterSpacing: "0.12em", textTransform: "uppercase" },
-  detailButton: { height: "1.75rem", flexShrink: 0, width: "1.75rem" },
-  footer: { alignItems: "center", color: "var(--muted)", display: "flex", fontSize: "0.575rem", gap: "0.75rem", justifyContent: "space-between", letterSpacing: "0.12em", marginTop: "0.5rem", textTransform: "uppercase" },
-  dialog: { maxWidth: "64rem" },
-  dialogContent: { maxHeight: "85vh" },
-  dialogBody: { display: "flex", flexDirection: "column", fontSize: "0.75rem", gap: "0.75rem" },
-  dialogSummary: { alignItems: "start", backgroundColor: "rgb(255 255 255 / 0.7)", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", display: "flex", flexWrap: "wrap", gap: "0.75rem", justifyContent: "space-between", padding: "0.75rem" },
-  dialogSummaryCopy: { color: "var(--muted)", flex: "1 1 0%", lineHeight: "1.25rem", minWidth: 0 },
-  detailBlock: { backgroundColor: "rgb(255 255 255 / 0.7)", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", padding: "0.75rem" },
-  detailHeader: { alignItems: "center", display: "flex", gap: "0.75rem", justifyContent: "space-between", marginBottom: "0.5rem" },
-  detailTitle: { color: "var(--muted)", fontSize: "0.58rem", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase" },
-  detailValue: { fontSize: "0.7rem", lineHeight: "1.25rem", overflow: "visible", overflowWrap: "break-word", whiteSpace: "pre-wrap" },
-  monospace: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" },
-  danger: { color: "rgb(190 18 60)" },
-  foreground: { color: "var(--foreground)" },
-  spinning: { animationName: spin, animationDuration: "1s", animationIterationCount: "infinite", animationTimingFunction: "linear" },
-  success: { color: "rgb(5 150 105)" },
-  failure: { color: "rgb(225 29 72)" }
-});

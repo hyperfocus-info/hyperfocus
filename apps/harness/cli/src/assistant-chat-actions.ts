@@ -5,14 +5,18 @@ import type {
   AssistantTodo,
   BackgroundJob,
   ProjectId
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { detectAssistantChatIntent } from "./assistant-intent";
+import type { WorkspaceRepository } from "./workspace-repository";
 
 export type AssistantActionIntentDraft = {
   actionKind: AssistantActionKind;
   sourcePrompt: string;
   assistantSelector?: string;
   candidateAssistantIds?: string[];
+  candidateJobIds?: string[];
+  candidateQuestionIds?: string[];
+  candidateTodoIds?: string[];
   scheduleText?: string;
   jobPrompt?: string;
   jobId?: string;
@@ -47,13 +51,17 @@ type ParsedAction = AssistantActionIntentDraft & {
   requiresExistingTarget?: boolean;
 };
 
+export function inspectAssistantChatAction(content: string, priorIntent?: AssistantActionIntentDraft) {
+  return mergePriorIntent(parseAssistantAction(content.trim()), priorIntent, content.trim());
+}
+
 export function resolveAssistantChatAction(input: ResolveAssistantChatActionInput): AssistantChatActionResolution {
   const sourcePrompt = input.content.trim();
   if (!sourcePrompt || sourcePrompt.includes("```")) {
     return { kind: "none" };
   }
 
-  const parsed = mergePriorIntent(parseAssistantAction(sourcePrompt), input.priorIntent, sourcePrompt);
+  const parsed = inspectAssistantChatAction(sourcePrompt, input.priorIntent);
   if (!parsed) {
     return { kind: "none" };
   }
@@ -81,7 +89,7 @@ export function resolveAssistantChatAction(input: ResolveAssistantChatActionInpu
         id: `assistant-action:${assistant.id}`,
         label: assistant.scope === "global" ? `${assistant.name} (global)` : assistant.name,
         description: assistant.scope === "global" ? "Use the global assistant." : "Use the project assistant.",
-        answerText: assistant.name,
+        answerText: assistant.id,
         recommended: index === 0
       }))
     };
@@ -209,13 +217,13 @@ function completeAction(
     if (jobs.length > 1) {
       return {
         kind: "clarify",
-        intent: parsed,
+        intent: { ...parsed, candidateJobIds: jobs.slice(0, 8).map((job) => job.id) },
         prompt: `Which ${assistant.name} job should run now?`,
         choices: jobs.slice(0, 3).map((job, index) => ({
           id: `assistant-action-job:${job.id}`,
           label: job.name,
           description: job.description || "Run this assistant-owned job.",
-          answerText: job.name,
+          answerText: job.id,
           recommended: index === 0
         }))
       };
@@ -227,7 +235,8 @@ function completeAction(
     if (pending.length === 1) {
       return { kind: "execute", action: { ...parsed, questionId: pending[0]!.id } };
     }
-    return clarify(parsed, `Which ${assistant.name} question should be answered?`, "Answer question", "Name or paste the question id.");
+    return clarify({ ...parsed, candidateQuestionIds: pending.slice(0, 8).map((question) => question.id) },
+      `Which ${assistant.name} question should be answered?`, "Answer question", "Name or paste the question id.");
   }
   if (parsed.actionKind === "update-todo" && parsed.todoId && !input.todos.some((todo) => todo.assistantId === assistant.id && todo.id === parsed.todoId)) {
     const needle = parsed.todoId.toLowerCase();
@@ -237,7 +246,8 @@ function completeAction(
     if (matches.length === 1) {
       return { kind: "execute", action: { ...parsed, todoId: matches[0]!.id } };
     }
-    return clarify(parsed, `Which ${assistant.name} todo should be updated?`, "Update todo", "Name the todo more exactly.");
+    return clarify({ ...parsed, candidateTodoIds: matches.slice(0, 8).map((todo) => todo.id) },
+      `Which ${assistant.name} todo should be updated?`, "Update todo", "Name the todo more exactly.");
   }
   return { kind: "execute", action: parsed };
 }
@@ -339,6 +349,123 @@ function normalizeSelector(input: string | undefined) {
 }
 
 function toAssistantActionIntentDraft(action: ParsedAction | AssistantActionIntentDraft): AssistantActionIntentDraft {
-  const { requiresExistingTarget: _requiresExistingTarget, createName: _createName, createScope: _createScope, ...draft } = action as ParsedAction;
-  return draft;
+  return {
+    actionKind: action.actionKind,
+    sourcePrompt: action.sourcePrompt,
+    assistantSelector: action.assistantSelector,
+    candidateAssistantIds: action.candidateAssistantIds,
+    candidateJobIds: action.candidateJobIds,
+    candidateQuestionIds: action.candidateQuestionIds,
+    candidateTodoIds: action.candidateTodoIds,
+    scheduleText: action.scheduleText,
+    jobPrompt: action.jobPrompt,
+    jobId: action.jobId,
+    questionId: action.questionId,
+    todoId: action.todoId,
+    answerText: action.answerText
+  };
+}
+
+export function resolvePersistedAssistantChatAction(input: { content: string; projectId: ProjectId;
+  repository: WorkspaceRepository; priorIntent?: AssistantActionIntentDraft }) {
+  let priorIntent = resolvePriorAssistantSelection(input.repository, input.projectId, input.content, input.priorIntent);
+  let parsed = inspectAssistantChatAction(input.content, priorIntent);
+  if (!parsed?.assistantSelector) return resolveAssistantChatAction({ ...input, assistants: [], jobs: [], questions: [], todos: [] });
+  const assistants = findPersistedAssistantCandidates(input.repository, input.projectId, parsed.assistantSelector);
+  const assistant = assistants.length === 1 ? assistants[0] : undefined;
+  if (assistant) {
+    priorIntent = resolvePriorOwnedSelection(input.repository, assistant.id, input.content, priorIntent);
+    parsed = inspectAssistantChatAction(input.content, priorIntent)!;
+  }
+  return resolveAssistantChatAction({ content: input.content, projectId: input.projectId, assistants,
+    jobs: assistant && parsed.actionKind === "run-job" ? readRunnableJobs(input.repository, assistant.id) : [],
+    questions: assistant && parsed.actionKind === "answer-question" ? readPendingQuestions(input.repository, assistant.id) : [],
+    todos: assistant && parsed.actionKind === "update-todo" && parsed.todoId
+      ? readMatchingTodos(input.repository, assistant.id, parsed.todoId) : [], priorIntent });
+}
+
+function resolvePriorAssistantSelection(repository: WorkspaceRepository, projectId: ProjectId, reply: string,
+  prior: AssistantActionIntentDraft | undefined) {
+  if (!prior?.candidateAssistantIds?.length) return prior;
+  const selected = selectCandidate(reply, prior.candidateAssistantIds.map((id) => repository.getAssistant(id))
+    .filter((assistant): assistant is Assistant => Boolean(assistant && (assistant.scope === "global" || assistant.projectId === projectId))),
+    (assistant) => [assistant.id, assistant.name, assistant.scope === "global" ? `${assistant.name} (global)` : assistant.name]);
+  return selected ? { ...prior, assistantSelector: selected.id, candidateAssistantIds: undefined } : prior;
+}
+
+function resolvePriorOwnedSelection(repository: WorkspaceRepository, assistantId: string, reply: string,
+  prior: AssistantActionIntentDraft | undefined) {
+  if (!prior) return prior;
+  if (prior.candidateJobIds?.length) {
+    const selected = selectCandidate(reply, prior.candidateJobIds.map((id) => repository.getBackgroundJob(id))
+      .filter((job): job is BackgroundJob => Boolean(job && job.assistantId === assistantId)), (job) => [job.id, job.name]);
+    if (selected) return { ...prior, jobId: selected.id, candidateJobIds: undefined };
+  }
+  if (prior.candidateQuestionIds?.length) {
+    const selected = selectCandidate(reply, prior.candidateQuestionIds.map((id) => repository.getAssistantQuestion(id))
+      .filter((question): question is AssistantQuestion => question?.assistantId === assistantId),
+      (question) => [question.id, question.prompt]);
+    if (selected) return { ...prior, questionId: selected.id, candidateQuestionIds: undefined };
+  }
+  if (prior.candidateTodoIds?.length) {
+    const candidates = prior.candidateTodoIds.flatMap((id) => {
+      try { return [repository.getAssistantTodoForAssistant(assistantId, id)]; } catch { return []; }
+    });
+    const selected = selectCandidate(reply, candidates, (todo) => [todo.id, todo.title]);
+    if (selected) return { ...prior, todoId: selected.id, candidateTodoIds: undefined };
+  }
+  return prior;
+}
+
+function selectCandidate<T>(reply: string, candidates: T[], aliases: (candidate: T) => string[]) {
+  const normalized = normalizeSelector(reply)?.toLowerCase();
+  if (!normalized) return undefined;
+  const matches = candidates.filter((candidate) => aliases(candidate).some((alias) => alias.toLowerCase() === normalized));
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function findPersistedAssistantCandidates(repository: WorkspaceRepository, projectId: ProjectId, selector: string) {
+  const byId = repository.getAssistant(selector);
+  if (byId && (byId.scope === "global" || byId.projectId === projectId)) return [byId];
+  const normalized = selector.toLowerCase(); let projectExact: Assistant | undefined;
+  let globalExact: Assistant | undefined; const fuzzy: Assistant[] = [];
+  forEachPersistedAssistant(repository, (assistant) => {
+    if (assistant.scope !== "global" && assistant.projectId !== projectId) return;
+    const name = assistant.name.toLowerCase();
+    if (name === normalized) { if (assistant.scope === "project") projectExact ??= assistant; else globalExact ??= assistant; }
+    else if (name.includes(normalized) && fuzzy.length < 4) fuzzy.push(assistant);
+  });
+  return projectExact ? [projectExact] : globalExact ? [globalExact] : fuzzy;
+}
+
+function forEachPersistedAssistant(repository: WorkspaceRepository, visit: (assistant: Assistant) => void) {
+  let afterId: string | undefined;
+  do { const page = repository.listAssistantMaintenancePage({ afterId });
+    for (const assistant of page.items) visit(assistant); afterId = page.nextCursor; } while (afterId !== undefined);
+}
+
+function readRunnableJobs(repository: WorkspaceRepository, assistantId: string) {
+  const matches: BackgroundJob[] = []; let cursor: string | undefined;
+  do { const page = repository.listAssistantBackgroundJobs({ assistantId, cursor, limit: 32 });
+    matches.push(...page.items.filter((job) => job.status !== "disabled").slice(0, 4 - matches.length));
+    cursor = matches.length < 4 ? page.nextCursor : undefined; } while (cursor !== undefined);
+  return matches;
+}
+
+function readPendingQuestions(repository: WorkspaceRepository, assistantId: string) {
+  const matches: AssistantQuestion[] = []; let cursor: string | undefined;
+  do { const page = repository.listAssistantQuestions({ assistantId, cursor, limit: 32 });
+    matches.push(...page.items.filter((question) => question.status === "pending").slice(0, 2 - matches.length));
+    cursor = matches.length < 2 ? page.nextCursor : undefined; } while (cursor !== undefined);
+  return matches;
+}
+
+function readMatchingTodos(repository: WorkspaceRepository, assistantId: string, selector: string) {
+  const normalized = selector.toLowerCase(); const matches: AssistantTodo[] = []; let cursor: string | undefined;
+  do { const page = repository.listAssistantTodos({ assistantId, cursor, limit: 32 });
+    const exact = page.items.find((todo) => todo.id === selector); if (exact) return [exact];
+    matches.push(...page.items.filter((todo) => todo.state !== "completed" && todo.title.toLowerCase().includes(normalized))
+      .slice(0, 2 - matches.length)); cursor = matches.length < 2 ? page.nextCursor : undefined;
+  } while (cursor !== undefined);
+  return matches;
 }

@@ -35,10 +35,14 @@ export function UiStateProviders(props: { children: JSX.Element }) {
   });
 
   return (
-    <HarnessStoreContext.Provider value={harnessStore}>
+    <HarnessStoreProvider store={harnessStore}>
       <ToastStoreContext.Provider value={toastStore}>{props.children}</ToastStoreContext.Provider>
-    </HarnessStoreContext.Provider>
+    </HarnessStoreProvider>
   );
+}
+
+export function HarnessStoreProvider(props: { store: HarnessStoreApi; children: JSX.Element }) {
+  return <HarnessStoreContext.Provider value={props.store}>{props.children}</HarnessStoreContext.Provider>;
 }
 
 export function useHarnessStore() {

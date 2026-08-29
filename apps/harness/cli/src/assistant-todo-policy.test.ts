@@ -1,17 +1,29 @@
 import { expect, test } from "bun:test";
-import type { Assistant, AssistantTodo } from "../../shared/protocol";
+import type {  AssistantTodo } from "@hyperfocus/ai-core/protocol";
 import {
   applyAssistantTodoPolicy,
   assistantGoalImpliesCoding,
   inferAssistantTodoWorkKind,
+  readActiveAssistantTodosForPrompt,
   resolveAssistantTodoBiasStage
 } from "./assistant-todo-policy";
+
+test("active prompt todo scan retains priority items beyond presentation bounds", () => {
+  const make = (index: number, state: AssistantTodo["state"]): AssistantTodo => ({ id: `todo-${index}`,
+    assistantId: "assistant-1", title: `Todo ${index}`, state, sortOrder: index, source: "assistant",
+    workKind: "research", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  const pages = [[...Array.from({ length: 8192 }, (_, index) => make(index, "pending"))],
+    [make(8192, "in-progress")]];
+  const selected = readActiveAssistantTodosForPrompt((cursor) => ({ items: pages[cursor ? 1 : 0] ?? [],
+    nextCursor: cursor ? undefined : "next" }));
+  expect(selected).toHaveLength(12); expect(selected[0]?.id).toBe("todo-8192");
+});
 
 const assistant = {
   name: "Builder",
   description: "Build a project",
   jobPrompt: "Build a TypeScript app and improve product behavior."
-} satisfies Pick<Assistant, "name" | "description" | "jobPrompt">;
+};
 
 function todo(workKind: AssistantTodo["workKind"], source: AssistantTodo["source"] = "assistant") {
   return { workKind, source };

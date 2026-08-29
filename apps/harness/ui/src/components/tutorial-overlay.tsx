@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, type Accessor } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { getTutorialDefinition } from "./tutorial-definitions";
 import { PrimitivePortal } from "./primitives/primitive-portal";
@@ -8,6 +8,7 @@ import { tutorialOverlayStyles as styles } from "./tutorial-overlay.styles";
 type TutorialOverlayProps = {
   tutorialId?: string;
   stepIndex: number;
+  completionSatisfied: boolean;
   onBack: () => void;
   onNext: () => void;
   onClose: () => void;
@@ -31,18 +32,101 @@ type Particle = {
 
 const BOUNCE_CLASSES = (stylex.attrs(styles.targetBounce).class ?? "").split(/\s+/).filter(Boolean);
 
+type TutorialStep = NonNullable<ReturnType<typeof getTutorialDefinition>>["steps"][number];
+
+function TutorialPanel(props: {
+  step: Accessor<TutorialStep | undefined>;
+  stepIndex: number;
+  finalStep: Accessor<boolean>;
+  targetPresent: Accessor<boolean>;
+  targetInteracted: Accessor<boolean>;
+  completionSatisfied: boolean;
+  canAdvance: Accessor<boolean>;
+  onBack: () => void;
+  onNext: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Show when={props.step()}>
+      {(step) => (
+        <>
+          <div {...stylex.attrs(styles.backdrop)} />
+          <div {...stylex.attrs(styles.panel)}>
+            <div {...stylex.attrs(styles.eyebrow)}>Guided tutorial</div>
+            <div {...stylex.attrs(styles.title)}>{step().title}</div>
+            <div {...stylex.attrs(styles.body)}>{step().body}</div>
+            <Show when={!props.targetPresent()}>
+              <div {...stylex.attrs(styles.fallback)}>{step().fallback}</div>
+            </Show>
+            <Show when={props.targetPresent() && !props.targetInteracted() && !props.finalStep()}>
+              <div {...stylex.attrs(styles.requirement)}>Use the highlighted control to unlock the next step.</div>
+            </Show>
+            <Show when={props.finalStep() && !props.completionSatisfied}>
+              <div {...stylex.attrs(styles.requirement)}>Complete the tutorial goal in the workspace to unlock Finish.</div>
+            </Show>
+            <div {...stylex.attrs(styles.actions)}>
+              <Tooltip content={props.stepIndex === 0 ? "Already at the first tutorial step" : "Go to previous tutorial step"}>
+                <span {...stylex.attrs(styles.tooltipTrigger)}>
+                  <button
+                    {...stylex.attrs(styles.button, styles.buttonSecondary)}
+                    type="button"
+                    onClick={props.onBack}
+                    disabled={props.stepIndex === 0}
+                  >
+                    Back
+                  </button>
+                </span>
+              </Tooltip>
+              <button
+                {...stylex.attrs(styles.button)}
+                type="button"
+                onClick={props.onNext}
+                disabled={!props.canAdvance()}
+              >
+                {props.finalStep() ? "Finish" : "Next"}
+              </button>
+              <button {...stylex.attrs(styles.button, styles.buttonSecondary)} type="button" onClick={props.onClose}>
+                Skip
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </Show>
+  );
+}
+
 export function TutorialOverlay(props: TutorialOverlayProps) {
   let canvasRef: HTMLCanvasElement | undefined;
   let animationFrame = 0;
   let retryTimer: number | undefined;
   let bounceTimer: number | undefined;
   let bounceTarget: HTMLElement | undefined;
+  let targetElement: HTMLElement | undefined;
   const [targetRect, setTargetRect] = createSignal<RectSnapshot>();
   const [targetPresent, setTargetPresent] = createSignal(false);
+  const [targetInteracted, setTargetInteracted] = createSignal(false);
   const [stepStartedAt, setStepStartedAt] = createSignal(Date.now());
   const [particles, setParticles] = createSignal<Particle[]>([]);
   const tutorial = createMemo(() => getTutorialDefinition(props.tutorialId));
   const currentStep = createMemo(() => tutorial()?.steps[props.stepIndex]);
+  const finalStep = createMemo(() => props.stepIndex >= (tutorial()?.steps.length ?? 1) - 1);
+  const canAdvance = createMemo(() =>
+    isTutorialStepAdvanceAllowed({
+      finalStep: finalStep(),
+      targetPresent: targetPresent(),
+      targetInteracted: targetInteracted(),
+      completionSatisfied: props.completionSatisfied
+    })
+  );
+
+  onMount(() => {
+    const dismissFromEscape = (event: KeyboardEvent) => {
+      dismissTutorialFromEscape(event, Boolean(props.tutorialId && currentStep()), props.onClose);
+    };
+    window.addEventListener("keydown", dismissFromEscape, true);
+    onCleanup(() => window.removeEventListener("keydown", dismissFromEscape, true));
+  });
 
   const cleanupBounce = () => {
     if (bounceTimer !== undefined) {
@@ -58,6 +142,7 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
   const syncTarget = () => {
     const step = currentStep();
     if (!step) {
+      targetElement = undefined;
       setTargetPresent(false);
       setTargetRect(undefined);
       return;
@@ -65,12 +150,14 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
 
     const element = document.querySelector<HTMLElement>(`[data-tour-id="${step.targetId}"]`);
     if (!element) {
+      targetElement = undefined;
       setTargetPresent(false);
       setTargetRect(undefined);
       return;
     }
 
     const rect = element.getBoundingClientRect();
+    targetElement = element;
     setTargetPresent(true);
     setTargetRect({
       x: rect.left,
@@ -84,20 +171,42 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
     props.tutorialId;
     props.stepIndex;
     setParticles([]);
+    setTargetInteracted(false);
     setStepStartedAt(Date.now());
     cleanupBounce();
     syncTarget();
+    let disposed = false;
+    queueMicrotask(() => {
+      if (!disposed) {
+        syncTarget();
+      }
+    });
 
     if (retryTimer !== undefined) {
       window.clearInterval(retryTimer);
     }
 
     retryTimer = window.setInterval(syncTarget, 250);
+    const recordTargetInteraction = (event: Event) => {
+      if (targetElement && event.target instanceof Node && targetElement.contains(event.target)) {
+        setTargetInteracted(true);
+      }
+    };
+    const recordTargetKeyInteraction = (event: KeyboardEvent) => {
+      if (event.key === "Enter" || event.key === " ") {
+        recordTargetInteraction(event);
+      }
+    };
+    document.addEventListener("click", recordTargetInteraction, true);
+    document.addEventListener("keydown", recordTargetKeyInteraction, true);
     onCleanup(() => {
+      disposed = true;
       if (retryTimer !== undefined) {
         window.clearInterval(retryTimer);
       }
       cleanupBounce();
+      document.removeEventListener("click", recordTargetInteraction, true);
+      document.removeEventListener("keydown", recordTargetKeyInteraction, true);
     });
   });
 
@@ -160,52 +269,44 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
     });
   });
 
-  const content = (
-    <Show when={props.tutorialId && currentStep()}>
-      <div {...stylex.attrs(styles.shell)}>
-        <canvas ref={canvasRef} {...stylex.attrs(styles.canvas)} />
-        <div {...stylex.attrs(styles.backdrop)} />
-        <div {...stylex.attrs(styles.panel)}>
-          <div {...stylex.attrs(styles.eyebrow)}>
-            Guided tutorial
-          </div>
-          <div {...stylex.attrs(styles.title)}>{currentStep()!.title}</div>
-          <div {...stylex.attrs(styles.body)}>{currentStep()!.body}</div>
-          <Show when={!targetPresent()}>
-            <div {...stylex.attrs(styles.fallback)}>
-              {currentStep()!.fallback}
-            </div>
-          </Show>
-          <div {...stylex.attrs(styles.actions)}>
-            <Tooltip content={props.stepIndex === 0 ? "Already at the first tutorial step" : "Go to previous tutorial step"}>
-              <span {...stylex.attrs(styles.tooltipTrigger)}>
-                <button
-                  {...stylex.attrs(styles.button, styles.buttonSecondary)}
-                  type="button"
-                  onClick={props.onBack}
-                  disabled={props.stepIndex === 0}
-                >
-                  Back
-                </button>
-              </span>
-            </Tooltip>
-            <button {...stylex.attrs(styles.button)} type="button" onClick={props.onNext}>
-              {props.stepIndex >= (tutorial()?.steps.length ?? 1) - 1 ? "Finish" : "Next"}
-            </button>
-            <button {...stylex.attrs(styles.button, styles.buttonSecondary)} type="button" onClick={props.onClose}>
-              Skip
-            </button>
-          </div>
-        </div>
-      </div>
-    </Show>
-  );
-
   return (
     <PrimitivePortal active={Boolean(props.tutorialId && currentStep())} layer="tutorial">
-      {content}
+      <div {...stylex.attrs(styles.shell)}>
+        <canvas ref={canvasRef} {...stylex.attrs(styles.canvas)} />
+        <TutorialPanel
+          step={currentStep}
+          stepIndex={props.stepIndex}
+          finalStep={finalStep}
+          targetPresent={targetPresent}
+          targetInteracted={targetInteracted}
+          completionSatisfied={props.completionSatisfied}
+          canAdvance={canAdvance}
+          onBack={props.onBack}
+          onNext={props.onNext}
+          onClose={props.onClose}
+        />
+      </div>
     </PrimitivePortal>
   );
+}
+
+export function dismissTutorialFromEscape(event: KeyboardEvent, active: boolean, onClose: () => void) {
+  if (!active || event.key !== "Escape") return false;
+  event.preventDefault();
+  event.stopPropagation();
+  onClose();
+  return true;
+}
+
+export function isTutorialStepAdvanceAllowed(input: {
+  finalStep: boolean;
+  targetPresent: boolean;
+  targetInteracted: boolean;
+  completionSatisfied: boolean;
+}) {
+  return input.finalStep
+    ? input.completionSatisfied
+    : input.targetPresent && input.targetInteracted;
 }
 
 function resizeCanvas(canvas: HTMLCanvasElement | undefined) {

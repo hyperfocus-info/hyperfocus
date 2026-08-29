@@ -1,6 +1,7 @@
 import { Show, createEffect } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { createRequestId } from "../../../shared/protocol";
+import { createRequestId } from "@hyperfocus/ai-core/protocol";
+import { requestCliAttach } from "../terminal/terminal-transport";
 import { getActiveProject, harnessStore } from "../harness-store";
 import { sendCliSessionInput } from "../harness-websocket";
 import { ActionButton } from "./action-button";
@@ -33,15 +34,8 @@ export function CliSessionPanel() {
       return;
     }
 
-    sendCommand({
-      type: "cli-session.attach",
-      requestId: createRequestId(),
-      payload: {
-        projectId: project.id,
-        threadId: project.activeThreadId,
-        sessionId: session.id
-      }
-    });
+    requestCliAttach(sendCommand, { requestId: createRequestId(), projectId: project.id,
+      threadId: project.activeThreadId, sessionId: session.id });
   };
 
   const handleStop = () => {

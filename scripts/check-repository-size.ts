@@ -8,7 +8,7 @@ export function findRepositoryPolicyViolations(entries: readonly { path: string;
   for (const entry of entries) {
     const normalized = entry.path.replaceAll("\\", "/");
     if (entry.size > MAX_GIT_FILE_BYTES) violations.push(`${normalized} is ${entry.size} bytes (limit ${MAX_GIT_FILE_BYTES})`);
-    if (/^engine\/examples\/[^/]+\/assets\/source\//i.test(normalized)) violations.push(`${normalized} is a licensed source asset and must stay out of Git`);
+    if (/^packages\/engine\/examples\/[^/]+\/assets\/source\//i.test(normalized)) violations.push(`${normalized} is a licensed source asset and must stay out of Git`);
   }
   return violations;
 }

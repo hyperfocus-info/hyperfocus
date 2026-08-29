@@ -5,6 +5,56 @@ import { cn } from "../../lib/utils";
 import { isTopOverlay, registerFocusReturn, registerOverlay, restoreOverlayFocus, trapFocusInOverlay } from "./overlay-stack";
 import { PrimitivePortal } from "./primitive-portal";
 
+const styles = stylex.create({
+  trigger: { cursor: { default: "pointer", ":disabled": "not-allowed" } },
+  backdrop: {
+    inset: 0,
+    backdropFilter: "blur(4px)",
+    backgroundColor: "rgb(0 0 0 / 0.45)",
+    position: "fixed",
+    zIndex: 70,
+  },
+  surface: {
+    padding: "0.75rem",
+    borderColor: "var(--border)",
+    borderStyle: "solid",
+    insetBlock: 0,
+    overflow: "hidden",
+    backgroundColor: "var(--panel)",
+    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+    display: "flex",
+    flexDirection: "column",
+    position: "fixed",
+    zIndex: 71,
+    borderBottomWidth: '0',
+    borderLeftWidth: '0',
+    borderRightWidth: '1px',
+    borderTopWidth: '0',
+    height: "100dvh",
+    left: 0,
+    maxWidth: "24rem",
+    width: "88vw",
+  },
+  header: { gap: "0.75rem", alignItems: "center", display: "flex", flexShrink: 0, justifyContent: "space-between", marginBottom: "0.75rem", },
+  title: { color: "var(--muted)", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase" },
+  close: {
+    borderRadius: "0.5rem",
+    borderWidth: 0,
+    alignItems: "center",
+    backgroundColor: { default: "transparent", ":hover": "var(--panel-strong)" },
+    color: "var(--foreground)",
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    display: "inline-flex",
+    justifyContent: "center",
+    transitionDuration: "150ms",
+    transitionProperty: "background-color, color",
+    height: "2.25rem",
+    width: "2.25rem",
+  },
+  icon: { height: "1rem", width: "1rem" },
+  body: { flex: "1", overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0, }
+});
+
 export function SheetRoot(props: { open: boolean; onOpenChange: (open: boolean) => void; children: JSX.Element }) {
   return <div data-test-sheet-root="">{props.children}</div>;
 }
@@ -103,50 +153,3 @@ export function SheetContent(props: {
     </PrimitivePortal>
   );
 }
-
-const styles = stylex.create({
-  trigger: { cursor: { default: "pointer", ":disabled": "not-allowed" } },
-  backdrop: {
-    backdropFilter: "blur(4px)",
-    backgroundColor: "rgb(0 0 0 / 0.45)",
-    inset: 0,
-    position: "fixed",
-    zIndex: 70
-  },
-  surface: {
-    backgroundColor: "var(--panel)",
-    borderColor: "var(--border)",
-    borderStyle: "solid",
-    borderWidth: "0 1px 0 0",
-    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
-    display: "flex",
-    flexDirection: "column",
-    height: "100dvh",
-    insetBlock: 0,
-    left: 0,
-    maxWidth: "24rem",
-    overflow: "hidden",
-    padding: "0.75rem",
-    position: "fixed",
-    width: "88vw",
-    zIndex: 71
-  },
-  header: { alignItems: "center", display: "flex", flexShrink: 0, gap: "0.75rem", justifyContent: "space-between", marginBottom: "0.75rem" },
-  title: { color: "var(--muted)", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase" },
-  close: {
-    alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": "var(--panel-strong)" },
-    borderWidth: 0,
-    borderRadius: "0.5rem",
-    color: "var(--foreground)",
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
-    display: "inline-flex",
-    height: "2.25rem",
-    justifyContent: "center",
-    transitionProperty: "background-color, color",
-    transitionDuration: "150ms",
-    width: "2.25rem"
-  },
-  icon: { height: "1rem", width: "1rem" },
-  body: { display: "flex", flex: "1", flexDirection: "column", minHeight: 0, overflow: "hidden" }
-});

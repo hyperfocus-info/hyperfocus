@@ -1,14 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { createHyperfocusProjectFiles, decodeHyperfocusProject } from "../../../engine/src/project/index.ts";
-import { createStandalonePlayableHtml } from "./playable-build.ts";
-import { createDefaultProject } from "./project.ts";
+import { createHyperfocusProjectFiles, decodeHyperfocusProject } from "@hyperfocus/engine/project";
+import { createDefaultProject, createStandalonePlayableHtml } from "@hyperfocus/engine/project";
 
 describe("standalone playable HTML", () => {
   test("embeds the exact portable pair in one deterministic offline document", async () => {
     const project = createDefaultProject("Offline & Portable");
     const files = await createHyperfocusProjectFiles(project, []);
     const html = createStandalonePlayableHtml({ project, ...files, runtimeSource: "globalThis.runtimeBooted=true;" });
-    const payload = JSON.parse(html.match(/id="hyperfocus-project-pair">([^<]+)<\/script>/)?.[1] ?? "") as { projectJson: string; assetsArchive: string };
+    const parsed: unknown = JSON.parse(html.match(/id="hyperfocus-project-pair">([^<]+)<\/script>/)?.[1] ?? "");
+    if (!parsed || typeof parsed !== "object") throw new TypeError("Standalone project pair payload is missing.");
+    const projectJson = Reflect.get(parsed, "projectJson");
+    const assetsArchive = Reflect.get(parsed, "assetsArchive");
+    if (typeof projectJson !== "string" || typeof assetsArchive !== "string") throw new TypeError("Standalone project pair payload is invalid.");
+    const payload = { projectJson, assetsArchive };
     expect(new Uint8Array(Buffer.from(payload.projectJson, "base64"))).toEqual(files.projectJson);
     expect(new Uint8Array(Buffer.from(payload.assetsArchive, "base64"))).toEqual(files.assetsArchive);
     expect(decodeHyperfocusProject(Buffer.from(payload.projectJson, "base64"))).toEqual(project);
@@ -25,6 +29,19 @@ describe("standalone playable HTML", () => {
     expect(html).not.toContain("<title></title><script>bad()");
     expect(html).not.toContain("globalThis.x='</script>'");
     expect(html).toContain("globalThis.x='<\\/script>'");
+  });
+
+  test("executes a compiled project behavior registry before the offline runtime", async () => {
+    const project = createDefaultProject("Custom source");
+    const files = await createHyperfocusProjectFiles(project, []);
+    const html = createStandalonePlayableHtml({
+      project,
+      ...files,
+      projectBehaviorSource: "globalThis.__hyperfocusProjectBehaviors={custom(){}};",
+      runtimeSource: "globalThis.runtimeSawBehaviors=Boolean(globalThis.__hyperfocusProjectBehaviors);",
+    });
+    expect(html.indexOf("__hyperfocusProjectBehaviors={custom"))
+      .toBeLessThan(html.indexOf("runtimeSawBehaviors"));
   });
 
   test("fails closed when the editor build omitted its runtime payload", async () => {

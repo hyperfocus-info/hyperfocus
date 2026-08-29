@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import type { PiAgentPromptRequest } from "../pi-agent-adapter";
-import { CodexSdkAdapter, testExports } from "./codex-sdk-adapter";
+import { createCodexSdkAdapter, testExports } from "./codex-sdk-adapter";
 
 type FakeThreadRun = {
   events: unknown[];
@@ -9,17 +9,14 @@ type FakeThreadRun = {
   error?: Error;
 };
 
-class FakeThread {
-  readonly runCalls: Array<{ input: unknown; signal?: AbortSignal }> = [];
-
-  constructor(private readonly runs: FakeThreadRun[]) {}
-
-  async runStreamed(input: unknown, options: { signal?: AbortSignal } = {}) {
-    this.runCalls.push({
+function createFakeThread(runs: FakeThreadRun[]) {
+  const runCalls: Array<{ input: unknown; signal?: AbortSignal }> = [];
+  async function runStreamed(input: unknown, options: { signal?: AbortSignal } = {}) {
+    runCalls.push({
       input,
       signal: options.signal
     });
-    const nextRun = this.runs.shift();
+    const nextRun = runs.shift();
     if (!nextRun) {
       throw new Error("No fake run configured");
     }
@@ -27,10 +24,11 @@ class FakeThread {
       throw nextRun.error;
     }
 
-    if (nextRun.onSignal && options.signal) {
+    const signal = options.signal;
+    if (nextRun.onSignal && signal) {
       return {
         events: (async function* () {
-          await nextRun.onSignal?.(options.signal!);
+          await nextRun.onSignal?.(signal);
         })()
       };
     }
@@ -43,17 +41,16 @@ class FakeThread {
       })()
     };
   }
+  return { runCalls, runStreamed };
 }
 
-class FakeCodexClient {
-  readonly startThreadCalls: Array<Record<string, unknown>> = [];
-
-  constructor(private readonly thread: FakeThread) {}
-
-  startThread(options: Record<string, unknown> = {}) {
-    this.startThreadCalls.push(options);
-    return this.thread;
+function createFakeCodexClient(thread: ReturnType<typeof createFakeThread>) {
+  const startThreadCalls: Array<Record<string, unknown>> = [];
+  function startThread(options: Record<string, unknown> = {}) {
+    startThreadCalls.push(options);
+    return thread;
   }
+  return { startThreadCalls, startThread };
 }
 
 function createRequest(overrides: Partial<PiAgentPromptRequest> = {}): PiAgentPromptRequest {
@@ -69,7 +66,7 @@ function createRequest(overrides: Partial<PiAgentPromptRequest> = {}): PiAgentPr
 
 describe("codex sdk adapter", () => {
   test("maps request options into sdk thread options", async () => {
-    const thread = new FakeThread([
+    const thread = createFakeThread([
       {
         events: [
           { type: "thread.started", thread_id: "thread-1" },
@@ -79,8 +76,8 @@ describe("codex sdk adapter", () => {
         ]
       }
     ]);
-    const client = new FakeCodexClient(thread);
-    const adapter = new CodexSdkAdapter({
+    const client = createFakeCodexClient(thread);
+    const adapter = createCodexSdkAdapter({
       executablePath: "C:\\codex\\codex.exe",
       createClient() {
         return client;
@@ -126,7 +123,7 @@ describe("codex sdk adapter", () => {
   });
 
   test("maps reasoning, web search, and network into sdk thread options", async () => {
-    const thread = new FakeThread([
+    const thread = createFakeThread([
       {
         events: [
           { type: "item.completed", item: { id: "msg-1", type: "agent_message", text: "done" } },
@@ -134,8 +131,8 @@ describe("codex sdk adapter", () => {
         ]
       }
     ]);
-    const client = new FakeCodexClient(thread);
-    const adapter = new CodexSdkAdapter({
+    const client = createFakeCodexClient(thread);
+    const adapter = createCodexSdkAdapter({
       executablePath: "C:\\codex\\codex.exe",
       createClient() {
         return client;
@@ -163,7 +160,7 @@ describe("codex sdk adapter", () => {
   });
 
   test("streams appended agent-message deltas and tool events", async () => {
-    const thread = new FakeThread([
+    const thread = createFakeThread([
       {
         events: [
           { type: "thread.started", thread_id: "thread-1" },
@@ -200,10 +197,10 @@ describe("codex sdk adapter", () => {
         ]
       }
     ]);
-    const client = new FakeCodexClient(thread);
+    const client = createFakeCodexClient(thread);
     const deltas: string[] = [];
     const events: string[] = [];
-    const adapter = new CodexSdkAdapter({
+    const adapter = createCodexSdkAdapter({
       executablePath: "C:\\codex\\codex.exe",
       createClient() {
         return client;
@@ -230,7 +227,7 @@ describe("codex sdk adapter", () => {
   });
 
   test("reuses the same thread for continuation", async () => {
-    const thread = new FakeThread([
+    const thread = createFakeThread([
       {
         events: [
           { type: "item.completed", item: { id: "msg-1", type: "agent_message", text: "first" } },
@@ -244,8 +241,8 @@ describe("codex sdk adapter", () => {
         ]
       }
     ]);
-    const client = new FakeCodexClient(thread);
-    const adapter = new CodexSdkAdapter({
+    const client = createFakeCodexClient(thread);
+    const adapter = createCodexSdkAdapter({
       executablePath: "C:\\codex\\codex.exe",
       createClient() {
         return client;
@@ -264,7 +261,7 @@ describe("codex sdk adapter", () => {
   });
 
   test("aborts an in-flight streamed turn", async () => {
-    const thread = new FakeThread([
+    const thread = createFakeThread([
       {
         events: [],
         onSignal(signal) {
@@ -278,8 +275,8 @@ describe("codex sdk adapter", () => {
         }
       }
     ]);
-    const client = new FakeCodexClient(thread);
-    const adapter = new CodexSdkAdapter({
+    const client = createFakeCodexClient(thread);
+    const adapter = createCodexSdkAdapter({
       executablePath: "C:\\codex\\codex.exe",
       createClient() {
         return client;
@@ -294,13 +291,13 @@ describe("codex sdk adapter", () => {
   });
 
   test("does not abort completed turn during automatic disposal", async () => {
-    const thread = new FakeThread([
+    const thread = createFakeThread([
       {
         events: [{ type: "item.completed", item: { id: "msg-1", type: "agent_message", text: "done" } }]
       }
     ]);
-    const client = new FakeCodexClient(thread);
-    const adapter = new CodexSdkAdapter({
+    const client = createFakeCodexClient(thread);
+    const adapter = createCodexSdkAdapter({
       executablePath: "C:\\codex\\codex.exe",
       createClient() {
         return client;
@@ -314,13 +311,13 @@ describe("codex sdk adapter", () => {
   });
 
   test("fails on turn failure events", async () => {
-    const thread = new FakeThread([
+    const thread = createFakeThread([
       {
         events: [{ type: "turn.failed", error: { message: "bad turn" } }]
       }
     ]);
-    const client = new FakeCodexClient(thread);
-    const adapter = new CodexSdkAdapter({
+    const client = createFakeCodexClient(thread);
+    const adapter = createCodexSdkAdapter({
       executablePath: "C:\\codex\\codex.exe",
       createClient() {
         return client;
@@ -344,15 +341,19 @@ describe("codex sdk adapter", () => {
     );
 
     expect(Array.isArray(imageInput.input)).toBe(true);
-    const inputEntries = imageInput.input as Array<{ type: string; path?: string; text?: string }>;
+    if (!Array.isArray(imageInput.input)) throw new Error("Expected materialized SDK input entries");
+    const inputEntries = imageInput.input;
     expect(inputEntries[0]).toEqual({
       type: "text",
       text: "Inspect repo"
     });
-    expect(inputEntries[1]?.type).toBe("local_image");
-    expect(existsSync(inputEntries[1]?.path ?? "")).toBe(true);
+    const localImage = inputEntries[1];
+    if (localImage === null || typeof localImage !== "object") throw new Error("Expected local image SDK input");
+    const localImagePath = Reflect.get(localImage, "path");
+    expect(Reflect.get(localImage, "type")).toBe("local_image");
+    expect(existsSync(typeof localImagePath === "string" ? localImagePath : "")).toBe(true);
 
-    const imagePath = inputEntries[1]?.path ?? "";
+    const imagePath = typeof localImagePath === "string" ? localImagePath : "";
     await imageInput.cleanup();
     expect(existsSync(imagePath)).toBe(false);
   });

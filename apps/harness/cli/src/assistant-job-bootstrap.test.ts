@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createAssistantId, type Assistant } from "../../shared/protocol";
+import { createAssistantId, type Assistant } from "@hyperfocus/ai-core/protocol";
 import { buildAssistantJobBootstrapJobs } from "./assistant-job-bootstrap";
 
 function assistantFixture(overrides: Partial<Assistant> = {}): Assistant {
@@ -53,6 +53,8 @@ test("default job prompts push research toward skills, scripts, todos, and imple
   expect(prompts[0]).toContain("smallest usable app behavior");
   expect(prompts[0]).toContain("TypeScript, Bun runtime, bun test");
   expect(prompts[0]).toContain("Bun + Happy DOM");
+  expect(prompts.every((prompt) => prompt.includes("SolidJS + StyleX"))).toBe(true);
+  expect(prompts.some((prompt) => prompt.includes("Tailwind"))).toBe(false);
   expect(prompts.every((prompt) => prompt.includes("documentation comments for new functions and variables"))).toBe(true);
   expect(prompts[1]).toContain("Clear stale completed or obsolete todos");
   expect(prompts[1]).toContain("TypeScript-script todos");

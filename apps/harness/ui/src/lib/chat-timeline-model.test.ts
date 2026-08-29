@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { ChatMessage, ExecutionToolActivity } from "../../../shared/protocol";
+import type { ChatMessage, ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
 import { buildChatTimelineRows } from "./chat-timeline-model";
 
 const message = (id: string, role: ChatMessage["role"], content: string, createdAt: string): ChatMessage => ({

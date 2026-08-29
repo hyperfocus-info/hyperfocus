@@ -9,7 +9,10 @@ export function syncBundledSkillsToGlobalRoot(options: {
 } = {}) {
   const sourceRoot = options.sourceRoot ?? process.cwd();
   const globalSkillsRoot = options.globalSkillsRoot ?? resolveGlobalSkillsRoot();
-  const sourceSkillsRoot = path.join(sourceRoot, ".agents", "skills");
+  const harnessSkillsRoot = path.join(sourceRoot, "apps", "harness", ".agents", "skills");
+  const sourceSkillsRoot = existsSync(harnessSkillsRoot)
+    ? harnessSkillsRoot
+    : path.join(sourceRoot, ".agents", "skills");
   if (!existsSync(sourceSkillsRoot)) {
     return [];
   }

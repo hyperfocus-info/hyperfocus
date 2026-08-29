@@ -19,7 +19,7 @@ export type DoctorCleanupResult =
 
 const HARNESS_SENTINELS = ["package.json", "apps/harness/cli/src/index.ts", "apps/harness/ui/index.html"];
 
-export async function deleteDoctorDistFolder(
+export async function repairDoctorArtifacts(
   rootPath = resolveHarnessRoot(),
   options: { localMaxBytes?: number } = {}
 ): Promise<DoctorCleanupResult> {

@@ -1,0 +1,17 @@
+{
+  "name": "@hyperfocus/desktop-runtime",
+  "version": "0.0.1",
+  "description": "Reusable deep-link, client-lease, and opt-in update primitives for browser-backed desktop apps.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["src", "README.md"],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json",
+    "test": "bun test"
+  }
+}

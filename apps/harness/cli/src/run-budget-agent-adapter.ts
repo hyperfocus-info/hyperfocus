@@ -1,4 +1,4 @@
-import type { ProjectId, RunRuntimeBudget } from "../../shared/protocol";
+import type { ProjectId, RunRuntimeBudget } from "@hyperfocus/ai-core/protocol";
 import type {
   PiAgentAdapter,
   PiAgentExecutionController,
@@ -8,58 +8,54 @@ import type {
 } from "./pi-agent-adapter";
 import type { WorkspaceRepository } from "./workspace-repository";
 
-export class RunBudgetAgentAdapter implements PiAgentAdapter {
-  constructor(
-    private readonly inner: PiAgentAdapter,
-    private readonly repository: WorkspaceRepository,
-    private readonly projectId: ProjectId,
-    private readonly runId: string
-  ) {}
-
-  setApiKey(provider: PiApiKeyProvider, apiKey: string | undefined) {
-    this.inner.setApiKey(provider, apiKey);
+export function createRunBudgetAgentAdapter(
+  inner: PiAgentAdapter,
+  repository: WorkspaceRepository,
+  projectId: ProjectId,
+  runId: string,
+): PiAgentAdapter {
+  function setApiKey(provider: PiApiKeyProvider, apiKey: string | undefined) {
+    inner.setApiKey(provider, apiKey);
   }
 
-  hasApiKey(provider: PiApiKeyProvider) {
-    return this.inner.hasApiKey(provider);
+  function hasApiKey(provider: PiApiKeyProvider) {
+    return inner.hasApiKey(provider);
   }
 
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    const budget = this.repository.reserveAgentRunTurn(this.projectId, this.runId);
-    return this.inner.runPrompt(withRuntimeBudgetPrompt(request, budget));
+  async function runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    const budget = repository.reserveAgentRunTurn(projectId, runId);
+    return inner.runPrompt(withRuntimeBudgetPrompt(request, budget));
   }
 
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    const budget = this.repository.reserveAgentRunTurn(this.projectId, this.runId);
-    const controller = await this.inner.startExecution(withRuntimeBudgetPrompt(request, budget));
-    return new RunBudgetExecutionController(controller, this.repository, this.projectId, this.runId);
+  async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    const budget = repository.reserveAgentRunTurn(projectId, runId);
+    const controller = await inner.startExecution(withRuntimeBudgetPrompt(request, budget));
+    return createRunBudgetExecutionController(controller, repository, projectId, runId);
   }
+
+  return { setApiKey, hasApiKey, runPrompt, startExecution };
 }
 
-class RunBudgetExecutionController implements PiAgentExecutionController {
-  readonly result: Promise<PiAgentPromptResult>;
-
-  constructor(
-    private readonly inner: PiAgentExecutionController,
-    private readonly repository: WorkspaceRepository,
-    private readonly projectId: ProjectId,
-    private readonly runId: string
-  ) {
-    this.result = inner.result;
+function createRunBudgetExecutionController(
+  inner: PiAgentExecutionController,
+  repository: WorkspaceRepository,
+  projectId: ProjectId,
+  runId: string,
+): PiAgentExecutionController {
+  function continueWithPrompt(prompt?: string) {
+    const budget = repository.reserveAgentRunTurn(projectId, runId);
+    return inner.continueWithPrompt(appendRuntimeBudgetSection(prompt ?? "continue", budget));
   }
 
-  continueWithPrompt(prompt?: string) {
-    const budget = this.repository.reserveAgentRunTurn(this.projectId, this.runId);
-    return this.inner.continueWithPrompt(appendRuntimeBudgetSection(prompt ?? "continue", budget));
+  function abort() {
+    return inner.abort();
   }
 
-  abort() {
-    return this.inner.abort();
+  function dispose() {
+    inner.dispose();
   }
 
-  dispose() {
-    this.inner.dispose();
-  }
+  return { result: inner.result, continueWithPrompt, abort, dispose };
 }
 
 function withRuntimeBudgetPrompt(request: PiAgentPromptRequest, budget: RunRuntimeBudget | undefined): PiAgentPromptRequest {

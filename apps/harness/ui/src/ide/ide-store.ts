@@ -1,5 +1,5 @@
-import { createStore, reconcile } from "solid-js/store";
-import { createRequestId, type ClientCommand, type IdeFileRead, type IdeFileTreeEntry, type IdeGitChange, type IdeSearchResult, type ServerEvent } from "../../../shared/protocol";
+import { createStore, reconcile, type SetStoreFunction } from "solid-js/store";
+import { createRequestId, type ClientCommand, type IdeFileRead, type IdeFileTreeEntry, type IdeGitChange, type IdeSearchResult, type ServerEvent } from "@hyperfocus/ai-core/protocol";
 import { harnessStore } from "../harness-store";
 import { pushToast } from "../toast-store";
 
@@ -25,7 +25,13 @@ export type IdeEditorFile = IdeFileRead & {
   cursorColumn?: number;
 };
 
+type PendingFileRequest = {
+  requestId: string;
+  revision: number;
+};
+
 export type IdeUiState = {
+  projectId?: string;
   activityView: IdeActivityView;
   sidebarOpen: boolean;
   sidebarWidth: number;
@@ -41,12 +47,16 @@ export type IdeUiState = {
   treeTruncated: boolean;
   expandedFolderPaths: string[];
   loadingFolderPaths: string[];
+  treePendingRequestIds: Record<string, string>;
   openPaths: string[];
   activePath?: string;
   filesByPath: Record<string, IdeEditorFile>;
   dirtyPaths: string[];
   savingPaths: string[];
   pendingReadPath?: string;
+  pendingReadRequests: Record<string, PendingFileRequest>;
+  pendingWriteRequests: Record<string, PendingFileRequest>;
+  fileRevisionsByPath: Record<string, number>;
   searchQuery: string;
   replaceQuery: string;
   regexSearch: boolean;
@@ -57,6 +67,7 @@ export type IdeUiState = {
   searchResults: IdeSearchResult[];
   searchTruncated: boolean;
   gitLoading: boolean;
+  gitPendingRequestId?: string;
   gitBranch?: string;
   gitIsRepository: boolean;
   gitChanges: IdeGitChange[];
@@ -88,10 +99,14 @@ const initialState: IdeUiState = {
   treeTruncated: false,
   expandedFolderPaths: [],
   loadingFolderPaths: [],
+  treePendingRequestIds: {},
   openPaths: [],
   filesByPath: {},
   dirtyPaths: [],
   savingPaths: [],
+  pendingReadRequests: {},
+  pendingWriteRequests: {},
+  fileRevisionsByPath: {},
   searchQuery: "",
   replaceQuery: "",
   regexSearch: false,
@@ -106,122 +121,198 @@ const initialState: IdeUiState = {
   editorSettings: { ...DEFAULT_IDE_EDITOR_SETTINGS }
 };
 
-function createIdeStore() {
-  const [state, setState] = createStore<IdeUiState>({ ...initialState, ...readPersistedIdeState() });
+function createEmptyProjectState(projectId?: string): Partial<IdeUiState> {
+  return {
+    projectId,
+    treeLoading: false,
+    treeError: undefined,
+    treeRootPath: undefined,
+    treeEntries: [],
+    treeTruncated: false,
+    expandedFolderPaths: [],
+    loadingFolderPaths: [],
+    treePendingRequestIds: {},
+    openPaths: [],
+    activePath: undefined,
+    filesByPath: {},
+    dirtyPaths: [],
+    savingPaths: [],
+    pendingReadPath: undefined,
+    pendingReadRequests: {},
+    pendingWriteRequests: {},
+    fileRevisionsByPath: {},
+    searchLoading: false,
+    searchPendingRequestId: undefined,
+    searchResults: [],
+    searchTruncated: false,
+    gitLoading: false,
+    gitPendingRequestId: undefined,
+    gitBranch: undefined,
+    gitIsRepository: false,
+    gitChanges: []
+  };
+}
 
-  const activeProjectId = () => harnessStore.state.workspace.activeProjectId ?? harnessStore.state.workspace.projects[0]?.id;
+function withoutRecordKey<T>(record: Record<string, T>, key: string) {
+  return Object.fromEntries(Object.entries(record).filter(([candidate]) => candidate !== key));
+}
 
-  function send(command: ClientCommand) {
-    return harnessStore.actions.sendCommand(command);
-  }
-
-  function loadProject(projectId = activeProjectId()) {
-    if (!projectId) {
+function applyIdeServerEvent(options: {
+  state: IdeUiState;
+  setState: SetStoreFunction<IdeUiState>;
+  event: ServerEvent;
+  onRootTreeLoaded: (projectId: string) => void;
+}) {
+  const { state, setState, event } = options;
+  switch (event.type) {
+    case "ide.fileTree.listed": {
+      const requestedPath = event.payload.requestedPath ?? "";
+      if (event.payload.projectId !== state.projectId || state.treePendingRequestIds[requestedPath] !== event.requestId) {
+        return;
+      }
+      const treePendingRequestIds = withoutRecordKey(state.treePendingRequestIds, requestedPath);
+      if (event.payload.requestedPath) {
+        const requestedFolderPath = event.payload.requestedPath;
+        setState({
+          treeEntries: [
+            ...state.treeEntries.filter((entry) => entry.parentPath !== requestedFolderPath),
+            ...event.payload.entries
+          ],
+          loadingFolderPaths: state.loadingFolderPaths.filter((path) => path !== requestedFolderPath),
+          treePendingRequestIds,
+          treeTruncated: state.treeTruncated || event.payload.truncated,
+          treeError: undefined
+        });
+        return;
+      }
       setState({
         treeLoading: false,
-        treeEntries: [],
-        treeError: "Open a project to browse files.",
-        gitLoading: false,
-        gitChanges: [],
-        gitBranch: undefined,
-        gitIsRepository: false
+        treeRootPath: event.payload.rootPath,
+        treeEntries: [...state.treeEntries.filter((entry) => entry.parentPath), ...event.payload.entries],
+        treePendingRequestIds,
+        treeTruncated: event.payload.truncated,
+        treeError: undefined
       });
+      options.onRootTreeLoaded(event.payload.projectId);
       return;
     }
-    setState({ treeLoading: true, treeError: undefined, gitLoading: true });
-    send({ type: "ide.fileTree.list", requestId: createRequestId(), payload: { projectId } });
-    send({ type: "ide.git.status", requestId: createRequestId(), payload: { projectId } });
-    const activePath = state.activePath;
-    if (activePath && !state.filesByPath[activePath] && state.pendingReadPath !== activePath) {
-      setState({ pendingReadPath: activePath });
-      send({ type: "ide.file.read", requestId: createRequestId(), payload: { projectId, path: activePath } });
-    }
-  }
-
-  function loadFolder(path: string, projectId = activeProjectId()) {
-    if (!projectId || state.loadingFolderPaths.includes(path)) {
-      return;
-    }
-    setState({ loadingFolderPaths: [...state.loadingFolderPaths, path] });
-    send({ type: "ide.fileTree.list", requestId: createRequestId(), payload: { projectId, rootPath: path } });
-  }
-
-  function openFile(path: string, line?: number, column?: number) {
-    const projectId = activeProjectId();
-    if (!projectId) {
-      pushToast("No active project", "Open a project before opening files.", "error");
-      return;
-    }
-    const normalizedPath = path.replace(/\\/g, "/");
-    setState({
-      pendingReadPath: normalizedPath,
-      activePath: normalizedPath,
-      openPaths: state.openPaths.includes(normalizedPath) ? state.openPaths : [...state.openPaths, normalizedPath]
-    });
-    if (line) {
-      setCursor(line, column ?? 1);
-    }
-    persistIdeStateSoon(state);
-    send({ type: "ide.file.read", requestId: createRequestId(), payload: { projectId, path: normalizedPath } });
-  }
-
-  function runSearch() {
-    const projectId = activeProjectId();
-    const query = state.searchQuery.trim();
-    if (!projectId || !query) {
-      setState({ searchLoading: false, searchPendingRequestId: undefined, searchResults: [], searchTruncated: false });
-      return;
-    }
-    if (state.searchPendingRequestId) {
-      send({
-        type: "ide.search.cancel",
-        requestId: createRequestId(),
-        payload: { projectId, searchRequestId: state.searchPendingRequestId }
-      });
-    }
-    const requestId = createRequestId();
-    setState({ searchLoading: true, searchPendingRequestId: requestId });
-    send({
-      type: "ide.search.run",
-      requestId,
-      payload: {
-        projectId,
-        query,
-        regex: state.regexSearch,
-        caseSensitive: state.caseSensitiveSearch,
-        wholeWord: state.wholeWordSearch
+    case "ide.file.read": {
+      const pendingRead = state.pendingReadRequests[event.payload.path];
+      if (event.payload.projectId !== state.projectId || pendingRead?.requestId !== event.requestId) return;
+      const pendingReadRequests = withoutRecordKey(state.pendingReadRequests, event.payload.path);
+      if ((state.fileRevisionsByPath[event.payload.path] ?? 0) !== pendingRead.revision) {
+        setState({
+          pendingReadRequests,
+          pendingReadPath: state.pendingReadPath === event.payload.path ? undefined : state.pendingReadPath
+        });
+        return;
       }
+      const file = {
+        ...event.payload,
+        contentLines: event.payload.content?.split(/\r\n|\r|\n/) ?? [
+          event.payload.isBinary ? "Binary file preview is unavailable." : "File is too large for read-only preview."
+        ]
+      };
+      setState("filesByPath", event.payload.path, file);
+      setState({
+        pendingReadRequests,
+        pendingReadPath: state.pendingReadPath === event.payload.path ? undefined : state.pendingReadPath
+      });
+      persistIdeStateSoon(state);
+      return;
+    }
+    case "ide.file.written": {
+      const pendingWrite = state.pendingWriteRequests[event.payload.path];
+      if (event.payload.projectId !== state.projectId || pendingWrite?.requestId !== event.requestId) return;
+      const pendingWriteRequests = withoutRecordKey(state.pendingWriteRequests, event.payload.path);
+      const savingPaths = state.savingPaths.filter((path) => path !== event.payload.path);
+      if ((state.fileRevisionsByPath[event.payload.path] ?? 0) !== pendingWrite.revision) {
+        setState({ pendingWriteRequests, savingPaths });
+        return;
+      }
+      const file = {
+        ...event.payload,
+        contentLines: event.payload.content?.split(/\r\n|\r|\n/) ?? [
+          event.payload.isBinary ? "Binary file preview is unavailable." : "File is too large for editable preview."
+        ]
+      };
+      setState("filesByPath", event.payload.path, file);
+      setState({
+        pendingWriteRequests,
+        dirtyPaths: state.dirtyPaths.filter((path) => path !== event.payload.path),
+        savingPaths
+      });
+      pushToast("File saved", event.payload.path);
+      return;
+    }
+    case "ide.search.results":
+      if (event.payload.projectId !== state.projectId || event.requestId !== state.searchPendingRequestId) return;
+      setState({
+        searchLoading: false,
+        searchPendingRequestId: undefined,
+        searchResults: event.payload.results,
+        searchTruncated: event.payload.truncated
+      });
+      return;
+    case "ide.search.cancelled":
+      if (event.payload.projectId === state.projectId && state.searchPendingRequestId === event.payload.searchRequestId) {
+        setState({ searchLoading: false, searchPendingRequestId: undefined });
+      }
+      return;
+    case "ide.git.status":
+      if (event.payload.projectId !== state.projectId || event.requestId !== state.gitPendingRequestId) return;
+      setState({
+        gitLoading: false,
+        gitPendingRequestId: undefined,
+        gitBranch: event.payload.branch,
+        gitIsRepository: event.payload.isRepository,
+        gitChanges: event.payload.changes
+      });
+      return;
+    case "command.rejected":
+      if (!event.payload.message.startsWith("IDE ") || !event.requestId) return;
+      applyIdeCommandRejection(state, setState, event.requestId);
+      return;
+  }
+}
+
+function applyIdeCommandRejection(state: IdeUiState, setState: SetStoreFunction<IdeUiState>, requestId: string) {
+  const treeEntry = Object.entries(state.treePendingRequestIds).find(([, pendingId]) => pendingId === requestId);
+  if (treeEntry) {
+    const requestedPath = treeEntry[0];
+    setState({
+      treeLoading: requestedPath ? state.treeLoading : false,
+      loadingFolderPaths: state.loadingFolderPaths.filter((path) => path !== requestedPath),
+      treePendingRequestIds: withoutRecordKey(state.treePendingRequestIds, requestedPath)
     });
   }
-
-  function saveFile(path = state.activePath) {
-    const projectId = activeProjectId();
-    if (!projectId || !path) {
-      pushToast("No active file", "Open a file before saving.", "error");
-      return;
-    }
-    const file = state.filesByPath[path];
-    if (!file || file.isBinary || file.tooLarge || typeof file.content !== "string") {
-      pushToast("File cannot be saved", "Binary and oversized files are not editable.", "error");
-      return;
-    }
-    setState({ savingPaths: state.savingPaths.includes(path) ? state.savingPaths : [...state.savingPaths, path] });
-    send({ type: "ide.file.write", requestId: createRequestId(), payload: { projectId, path, content: file.content } });
+  const readEntry = Object.entries(state.pendingReadRequests).find(([, pending]) => pending.requestId === requestId);
+  if (readEntry) {
+    setState({
+      pendingReadPath: state.pendingReadPath === readEntry[0] ? undefined : state.pendingReadPath,
+      pendingReadRequests: withoutRecordKey(state.pendingReadRequests, readEntry[0])
+    });
   }
-
-  function setCursor(line: number, column: number) {
-    if (!state.activePath) {
-      return;
-    }
-    setState("filesByPath", state.activePath, (file) => file ? { ...file, cursorLine: line, cursorColumn: column } : file);
+  const writeEntry = Object.entries(state.pendingWriteRequests).find(([, pending]) => pending.requestId === requestId);
+  if (writeEntry) {
+    setState({
+      savingPaths: state.savingPaths.filter((path) => path !== writeEntry[0]),
+      pendingWriteRequests: withoutRecordKey(state.pendingWriteRequests, writeEntry[0])
+    });
   }
+  if (state.searchPendingRequestId === requestId) setState({ searchLoading: false, searchPendingRequestId: undefined });
+  if (state.gitPendingRequestId === requestId) setState({ gitLoading: false, gitPendingRequestId: undefined });
+}
 
+function createIdeStateActions(options: {
+  state: IdeUiState;
+  setState: SetStoreFunction<IdeUiState>;
+  activeProjectId: () => string | undefined;
+  loadFolder: (path: string, projectId?: string) => void;
+  setCursor: (line: number, column: number) => void;
+}) {
+  const { state, setState, activeProjectId, loadFolder, setCursor } = options;
   return {
-    state,
-    loadProject,
-    openFile,
-    runSearch,
-    saveFile,
     setActivityView(activityView: IdeActivityView) {
       setState({ activityView });
       persistIdeStateSoon(state);
@@ -267,19 +358,20 @@ function createIdeStore() {
     },
     updateFileContent(path: string, content: string) {
       const file = state.filesByPath[path];
-      if (!file) {
-        return;
-      }
-      setState("filesByPath", path, {
-        ...file,
-        content,
-        contentLines: content.split(/\r\n|\r|\n/),
-        lineCount: content.split(/\r\n|\r|\n/).length
+      if (!file) return;
+      const contentLines = content.split(/\r\n|\r|\n/);
+      setState("filesByPath", path, { ...file, content, contentLines, lineCount: contentLines.length });
+      setState({
+        dirtyPaths: state.dirtyPaths.includes(path) ? state.dirtyPaths : [...state.dirtyPaths, path],
+        fileRevisionsByPath: { ...state.fileRevisionsByPath, [path]: (state.fileRevisionsByPath[path] ?? 0) + 1 }
       });
-      setState({ dirtyPaths: state.dirtyPaths.includes(path) ? state.dirtyPaths : [...state.dirtyPaths, path] });
     },
     setEditorSetting<K extends keyof IdeEditorSettings>(key: K, value: IdeEditorSettings[K]) {
       setState("editorSettings", key, value);
+      persistIdeStateSoon(state);
+    },
+    resetEditorSettings() {
+      setState({ editorSettings: { ...DEFAULT_IDE_EDITOR_SETTINGS } });
       persistIdeStateSoon(state);
     },
     setActivePath(activePath: string | undefined) {
@@ -291,7 +383,9 @@ function createIdeStore() {
       if (state.expandedFolderPaths.includes(path)) {
         const descendants = state.treeEntries.filter((entry) => entry.path.startsWith(`${path}/`)).map((entry) => entry.path);
         setState({
-          expandedFolderPaths: state.expandedFolderPaths.filter((entryPath) => entryPath !== path && !descendants.includes(entryPath))
+          expandedFolderPaths: state.expandedFolderPaths.filter(
+            (entryPath) => entryPath !== path && !descendants.includes(entryPath)
+          )
         });
         persistIdeStateSoon(state);
         return;
@@ -305,6 +399,7 @@ function createIdeStore() {
       persistIdeStateSoon(state);
     },
     loadExpandedFolders(projectId = activeProjectId()) {
+      if (!projectId || projectId !== state.projectId) return;
       for (const folderPath of state.expandedFolderPaths) {
         if (!state.treeEntries.some((entry) => entry.parentPath === folderPath)) {
           loadFolder(folderPath, projectId);
@@ -326,96 +421,178 @@ function createIdeStore() {
       setState({ openPaths: [path], activePath: path });
       persistIdeStateSoon(state);
     },
-    setCursor,
-    applyServerEvent(event: ServerEvent) {
-      switch (event.type) {
-        case "ide.fileTree.listed":
-          if (event.payload.requestedPath) {
-            const requestedPath = event.payload.requestedPath;
-            setState({
-              treeEntries: [
-                ...state.treeEntries.filter((entry) => entry.parentPath !== requestedPath),
-                ...event.payload.entries
-              ],
-              loadingFolderPaths: state.loadingFolderPaths.filter((path) => path !== requestedPath),
-              treeTruncated: state.treeTruncated || event.payload.truncated,
-              treeError: undefined
-            });
-            return;
-          }
-          setState({
-            treeLoading: false,
-            treeRootPath: event.payload.rootPath,
-            treeEntries: [
-              ...state.treeEntries.filter((entry) => entry.parentPath),
-              ...event.payload.entries
-            ],
-            treeTruncated: event.payload.truncated,
-            treeError: undefined
-          });
-          queueMicrotask(() => ideStore.loadExpandedFolders(event.payload.projectId));
-          return;
-        case "ide.file.read": {
-          const file = {
-            ...event.payload,
-            contentLines: event.payload.content?.split(/\r\n|\r|\n/) ?? [
-              event.payload.isBinary ? "Binary file preview is unavailable." : "File is too large for read-only preview."
-            ]
-          };
-          setState("filesByPath", event.payload.path, file);
-          setState({
-            pendingReadPath: state.pendingReadPath === event.payload.path ? undefined : state.pendingReadPath,
-            activePath: event.payload.path,
-            openPaths: state.openPaths.includes(event.payload.path) ? state.openPaths : [...state.openPaths, event.payload.path]
-          });
-          persistIdeStateSoon(state);
-          return;
+    setCursor
+  };
+}
+
+function createIdeStore() {
+  const [state, setState] = createStore<IdeUiState>({ ...initialState, ...readPersistedIdeState() });
+
+  const activeProjectId = () => harnessStore.state.workspace.activeProjectId ?? harnessStore.state.workspace.projects[0]?.id;
+
+  function send(command: ClientCommand) {
+    return harnessStore.actions.sendCommand(command);
+  }
+
+  function activateProjectState(projectId: string) {
+    if (state.projectId === projectId) return;
+    setState(createEmptyProjectState(projectId));
+    persistIdeStateSoon(state);
+  }
+
+  function loadProject(projectId = activeProjectId()) {
+    if (!projectId) {
+      setState({
+        ...createEmptyProjectState(),
+        treeError: "Open a project to browse files.",
+      });
+      return;
+    }
+    activateProjectState(projectId);
+    const treeRequestId = createRequestId();
+    const gitRequestId = createRequestId();
+    setState({
+      treeLoading: true,
+      treeError: undefined,
+      treePendingRequestIds: { ...state.treePendingRequestIds, "": treeRequestId },
+      gitLoading: true,
+      gitPendingRequestId: gitRequestId
+    });
+    send({ type: "ide.fileTree.list", requestId: treeRequestId, payload: { projectId } });
+    send({ type: "ide.git.status", requestId: gitRequestId, payload: { projectId } });
+    const activePath = state.activePath;
+    if (activePath && !state.filesByPath[activePath] && !state.pendingReadRequests[activePath]) {
+      const requestId = createRequestId();
+      setState({
+        pendingReadPath: activePath,
+        pendingReadRequests: {
+          ...state.pendingReadRequests,
+          [activePath]: { requestId, revision: state.fileRevisionsByPath[activePath] ?? 0 }
         }
-        case "ide.file.written": {
-          const file = {
-            ...event.payload,
-            contentLines: event.payload.content?.split(/\r\n|\r|\n/) ?? [
-              event.payload.isBinary ? "Binary file preview is unavailable." : "File is too large for editable preview."
-            ]
-          };
-          setState("filesByPath", event.payload.path, file);
-          setState({
-            dirtyPaths: state.dirtyPaths.filter((path) => path !== event.payload.path),
-            savingPaths: state.savingPaths.filter((path) => path !== event.payload.path)
-          });
-          pushToast("File saved", event.payload.path);
-          return;
-        }
-        case "ide.search.results":
-          if (state.searchPendingRequestId && event.requestId !== state.searchPendingRequestId) {
-            return;
-          }
-          setState({
-            searchLoading: false,
-            searchPendingRequestId: undefined,
-            searchResults: event.payload.results,
-            searchTruncated: event.payload.truncated
-          });
-          return;
-        case "ide.search.cancelled":
-          if (state.searchPendingRequestId === event.payload.searchRequestId) {
-            setState({ searchLoading: false, searchPendingRequestId: undefined });
-          }
-          return;
-        case "ide.git.status":
-          setState({
-            gitLoading: false,
-            gitBranch: event.payload.branch,
-            gitIsRepository: event.payload.isRepository,
-            gitChanges: event.payload.changes
-          });
-          return;
-        case "command.rejected":
-          if (event.payload.message.startsWith("IDE ")) {
-            setState({ treeLoading: false, searchLoading: false, gitLoading: false, pendingReadPath: undefined, savingPaths: [] });
-          }
-          return;
+      });
+      send({ type: "ide.file.read", requestId, payload: { projectId, path: activePath } });
+    }
+  }
+
+  function loadFolder(path: string, projectId = activeProjectId()) {
+    if (!projectId || state.loadingFolderPaths.includes(path)) {
+      return;
+    }
+    activateProjectState(projectId);
+    const requestId = createRequestId();
+    setState({
+      loadingFolderPaths: [...state.loadingFolderPaths, path],
+      treePendingRequestIds: { ...state.treePendingRequestIds, [path]: requestId }
+    });
+    send({ type: "ide.fileTree.list", requestId, payload: { projectId, rootPath: path } });
+  }
+
+  function openFile(path: string, line?: number, column?: number) {
+    const projectId = activeProjectId();
+    if (!projectId) {
+      pushToast("No active project", "Open a project before opening files.", "error");
+      return;
+    }
+    activateProjectState(projectId);
+    const normalizedPath = path.replace(/\\/g, "/");
+    const requestId = createRequestId();
+    setState({
+      pendingReadPath: normalizedPath,
+      pendingReadRequests: {
+        ...state.pendingReadRequests,
+        [normalizedPath]: { requestId, revision: state.fileRevisionsByPath[normalizedPath] ?? 0 }
+      },
+      activePath: normalizedPath,
+      openPaths: state.openPaths.includes(normalizedPath) ? state.openPaths : [...state.openPaths, normalizedPath]
+    });
+    if (line) {
+      setCursor(line, column ?? 1);
+    }
+    persistIdeStateSoon(state);
+    send({ type: "ide.file.read", requestId, payload: { projectId, path: normalizedPath } });
+  }
+
+  function runSearch() {
+    const projectId = activeProjectId();
+    const query = state.searchQuery.trim();
+    if (!projectId || !query) {
+      setState({ searchLoading: false, searchPendingRequestId: undefined, searchResults: [], searchTruncated: false });
+      return;
+    }
+    activateProjectState(projectId);
+    if (state.searchPendingRequestId) {
+      send({
+        type: "ide.search.cancel",
+        requestId: createRequestId(),
+        payload: { projectId, searchRequestId: state.searchPendingRequestId }
+      });
+    }
+    const requestId = createRequestId();
+    setState({ searchLoading: true, searchPendingRequestId: requestId });
+    send({
+      type: "ide.search.run",
+      requestId,
+      payload: {
+        projectId,
+        query,
+        regex: state.regexSearch,
+        caseSensitive: state.caseSensitiveSearch,
+        wholeWord: state.wholeWordSearch
       }
+    });
+  }
+
+  function saveFile(path = state.activePath) {
+    const projectId = activeProjectId();
+    if (!projectId || !path) {
+      pushToast("No active file", "Open a file before saving.", "error");
+      return;
+    }
+    const file = state.filesByPath[path];
+    if (!file || file.isBinary || file.tooLarge || typeof file.content !== "string") {
+      pushToast("File cannot be saved", "Binary and oversized files are not editable.", "error");
+      return;
+    }
+    if (file.projectId !== projectId || state.projectId !== projectId) {
+      pushToast("File project changed", "Reopen the file in the active project before saving.", "error");
+      return;
+    }
+    const requestId = createRequestId();
+    setState({
+      savingPaths: state.savingPaths.includes(path) ? state.savingPaths : [...state.savingPaths, path],
+      pendingWriteRequests: {
+        ...state.pendingWriteRequests,
+        [path]: { requestId, revision: state.fileRevisionsByPath[path] ?? 0 }
+      }
+    });
+    send({ type: "ide.file.write", requestId, payload: { projectId, path, content: file.content } });
+  }
+
+  function setCursor(line: number, column: number) {
+    if (!state.activePath) {
+      return;
+    }
+    setState("filesByPath", state.activePath, (file) => file ? { ...file, cursorLine: line, cursorColumn: column } : file);
+  }
+
+  const stateActions = createIdeStateActions({ state, setState, activeProjectId, loadFolder, setCursor });
+
+  return {
+    state,
+    loadProject,
+    openFile,
+    runSearch,
+    saveFile,
+    ...stateActions,
+    applyServerEvent(event: ServerEvent) {
+      applyIdeServerEvent({
+        state,
+        setState,
+        event,
+        onRootTreeLoaded: (projectId) => queueMicrotask(() => {
+          if (ideStore.state.projectId === projectId) ideStore.loadExpandedFolders(projectId);
+        })
+      });
     },
     resetForTests(overrides: Partial<IdeUiState> = {}) {
       setState(reconcile({ ...initialState, ...overrides }));
@@ -432,6 +609,7 @@ function readPersistedIdeState(): Partial<IdeUiState> {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(IDE_STATE_STORAGE_KEY) ?? "{}");
     return {
+      projectId: typeof parsed.projectId === "string" ? parsed.projectId : undefined,
       activityView: isIdeActivityView(parsed.activityView) ? parsed.activityView : initialState.activityView,
       sidebarOpen: typeof parsed.sidebarOpen === "boolean" ? parsed.sidebarOpen : initialState.sidebarOpen,
       sidebarWidth: clampNumber(parsed.sidebarWidth, 220, 420, initialState.sidebarWidth),
@@ -452,6 +630,7 @@ function persistIdeStateSoon(state: IdeUiState) {
   }
   queueMicrotask(() => {
     window.localStorage.setItem(IDE_STATE_STORAGE_KEY, JSON.stringify({
+      projectId: state.projectId,
       activityView: state.activityView,
       sidebarOpen: state.sidebarOpen,
       sidebarWidth: state.sidebarWidth,
@@ -465,7 +644,7 @@ function persistIdeStateSoon(state: IdeUiState) {
 }
 
 function parseIdeEditorSettings(value: unknown): IdeEditorSettings {
-  const parsed = value && typeof value === "object" ? value as Partial<IdeEditorSettings> : {};
+  const parsed = isRecord(value) ? value : {};
   return {
     autoSave: parsed.autoSave === "afterDelay" || parsed.autoSave === "onFocusChange" ? parsed.autoSave : "off",
     wordWrap: parsed.wordWrap === "on" ? "on" : "off",
@@ -475,6 +654,10 @@ function parseIdeEditorSettings(value: unknown): IdeEditorSettings {
     breadcrumbsEnabled: typeof parsed.breadcrumbsEnabled === "boolean" ? parsed.breadcrumbsEnabled : true,
     bracketPairColorization: typeof parsed.bracketPairColorization === "boolean" ? parsed.bracketPairColorization : true
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number) {

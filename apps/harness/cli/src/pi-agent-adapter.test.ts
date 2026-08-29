@@ -4,15 +4,15 @@ import {
   buildPiAutoCompactionSettings,
   clampAutoCompactContextThresholdPercent,
   mapReasoningStrengthToThinkingLevel,
-  PiSdkAgentAdapter,
+  createPiSdkAgentAdapter,
   testExports,
-  type PiSdkPromptWorkerRequest,
-  type PiSdkPromptWorkerResponse
+  type PiPromptWorker,
+  type PiSdkPromptWorkerRequest
 } from "./pi-agent-adapter";
 
 describe("pi sdk adapter", () => {
   test("rejects unsupported provider model ids before invoking pi", async () => {
-    const adapter = new PiSdkAgentAdapter();
+    const adapter = createPiSdkAgentAdapter();
 
     await expect(
       adapter.runPrompt({
@@ -25,7 +25,7 @@ describe("pi sdk adapter", () => {
   });
 
   test("stores Anthropic runtime API key", () => {
-    const adapter = new PiSdkAgentAdapter();
+    const adapter = createPiSdkAgentAdapter();
 
     expect(adapter.hasApiKey("anthropic")).toBe(false);
     adapter.setApiKey("anthropic", " sk-ant-test ");
@@ -37,35 +37,27 @@ describe("pi sdk adapter", () => {
   test("offloads cloneable runPrompt requests to a worker", async () => {
     let posted: PiSdkPromptWorkerRequest | undefined;
     let terminated = false;
-    const worker: {
-      onmessage: ((event: MessageEvent<PiSdkPromptWorkerResponse>) => void) | null;
-      onerror: null;
-      onmessageerror: null;
-      postMessage(payload: PiSdkPromptWorkerRequest): void;
-      terminate(): void;
-    } = {
-      onmessage: null as ((event: MessageEvent<PiSdkPromptWorkerResponse>) => void) | null,
+    const worker: PiPromptWorker = {
+      onmessage: null,
       onerror: null,
       onmessageerror: null,
       postMessage(payload: PiSdkPromptWorkerRequest) {
         posted = payload;
         queueMicrotask(() => {
-          worker.onmessage?.({
-            data: {
+          worker.onmessage?.(new MessageEvent("message", { data: {
               id: payload.id,
               ok: true,
               result: {
                 text: "worker result"
               }
-            }
-          } as MessageEvent<PiSdkPromptWorkerResponse>);
+            } }));
         });
       },
       terminate() {
         terminated = true;
       }
     };
-    const adapter = new PiSdkAgentAdapter({ createPromptWorker: () => worker as unknown as Worker });
+    const adapter = createPiSdkAgentAdapter({ createPromptWorker: () => worker });
     adapter.setApiKey("openai", "sk-worker-test");
 
     const result = await adapter.runPrompt({
@@ -83,7 +75,7 @@ describe("pi sdk adapter", () => {
 
   test("keeps callback-based runPrompt requests in process", async () => {
     let workerCreated = false;
-    const adapter = new PiSdkAgentAdapter({
+    const adapter = createPiSdkAgentAdapter({
       createPromptWorker: () => {
         workerCreated = true;
         throw new Error("worker should not start");
@@ -132,5 +124,26 @@ describe("pi sdk adapter", () => {
         SettingsManager.inMemory()
       )
     ).resolves.toBeDefined();
+  });
+
+  test("registers pull-based project note search only when a callback is supplied", async () => {
+    const loader = await testExports.createPiResourceLoader(
+      {
+        kind: "planner",
+        cwd: process.cwd(),
+        modelId: "openai/gpt-5.5",
+        prompt: "test",
+        memorySearch: async () => ({ text: "No matching notes.", count: 0 })
+      },
+      SettingsManager.inMemory()
+    );
+
+    const memoryTool = loader
+      .getExtensions()
+      .extensions
+      .map((extension) => extension.tools.get("memory_search"))
+      .find(Boolean);
+    expect(memoryTool?.definition.name).toBe("memory_search");
+    expect(memoryTool?.definition.description).toContain("not loaded unless this tool is called");
   });
 });

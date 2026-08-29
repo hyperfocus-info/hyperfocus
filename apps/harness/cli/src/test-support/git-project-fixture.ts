@@ -2,6 +2,7 @@ import { afterAll, beforeAll } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { copyFile, lstat, mkdir, readdir, readlink, rm, symlink } from "node:fs/promises";
 import path from "node:path";
+import { createHarnessTestTempPath, isRunnerOwnedHarnessTestPath } from "./test-temp-root";
 
 type SeededGitProjectFixtureOptions = {
   fixtureName: string;
@@ -22,7 +23,7 @@ type SeededGitProjectFixture = {
 };
 
 export function useGitProjectFixture(options: SeededGitProjectFixtureOptions): SeededGitProjectFixture {
-  const fixtureRoot = path.join(process.cwd(), ".tmp-test-data", `fx-${crypto.randomUUID()}`);
+  const fixtureRoot = createHarnessTestTempPath(`fx-${options.fixtureName}`);
   const templateRoot = path.join(fixtureRoot, "tpl");
 
   beforeAll(async () => {
@@ -32,41 +33,56 @@ export function useGitProjectFixture(options: SeededGitProjectFixtureOptions): S
   });
 
   afterAll(async () => {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    // Server and terminal subprocesses can briefly retain their fixture cwd on
+    // Windows. The parent runner removes its whole temp root after this test
+    // process exits, when those handles are guaranteed to be released.
+    if (isRunnerOwnedHarnessTestPath(fixtureRoot)) {
+      return;
+    }
+    const maxAttempts = process.platform === "win32" ? 12 : 8;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         await rm(fixtureRoot, { recursive: true, force: true });
         return;
       } catch (error) {
-        if (!(error instanceof Error) || !("code" in error) || error.code !== "EBUSY") {
+        if (!isRetryableFsError(error)) {
           throw error;
         }
-        if (attempt === 4) {
-          return;
+        if (attempt === maxAttempts - 1) {
+          throw new Error(`Could not remove Git fixture ${fixtureRoot} after ${maxAttempts} attempts`, { cause: error });
         }
-        await Bun.sleep(100);
+        await Bun.sleep(Math.min(100 * 2 ** attempt, 1_000));
       }
     }
   });
 
   return {
     async createRepoClone(name: string) {
-      const targetRoot = path.join(fixtureRoot, `repo-${crypto.randomUUID()}`);
+      const targetRoot = path.join(fixtureRoot, `r-${shortName(name)}-${shortId()}`);
       await copyRecursiveRobust(templateRoot, targetRoot);
       return targetRoot;
     },
     createTempDir(name: string) {
-      const targetRoot = path.join(fixtureRoot, `dir-${crypto.randomUUID()}`);
+      const targetRoot = path.join(fixtureRoot, `d-${shortName(name)}-${shortId()}`);
       mkdirSync(targetRoot, { recursive: true });
       return targetRoot;
     },
     createTempPath(name: string) {
       const extension = path.extname(name);
-      return path.join(fixtureRoot, `file-${crypto.randomUUID()}${extension}`);
+      return path.join(fixtureRoot, `p-${shortName(path.basename(name, extension))}-${shortId()}${extension}`);
     },
     getTemplateRoot() {
       return templateRoot;
     }
   };
+}
+
+function shortName(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 12) || "test";
+}
+
+function shortId() {
+  return crypto.randomUUID().slice(0, 8);
 }
 
 function seedBunProject(rootPath: string, options: SeededGitProjectFixtureOptions) {
@@ -107,9 +123,14 @@ function initializeGitRepo(rootPath: string) {
 }
 
 function runSync(command: string[], cwd: string) {
+  const ceilingDirectory = path.dirname(cwd);
   const proc = Bun.spawnSync({
     cmd: command,
     cwd,
+    env: {
+      ...process.env,
+      GIT_CEILING_DIRECTORIES: ceilingDirectory
+    },
     stdout: "pipe",
     stderr: "pipe"
   });
@@ -158,4 +179,8 @@ async function withFsRetry<T>(operation: () => Promise<T>) {
     }
   }
   throw new Error("unreachable");
+}
+
+function isRetryableFsError(error: unknown) {
+  return error instanceof Error && "code" in error && ["EBUSY", "EPERM", "EACCES", "ENOTEMPTY"].includes(String(error.code));
 }

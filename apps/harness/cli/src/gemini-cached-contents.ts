@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { GoogleGenAI } from "@google/genai";
-import type { ChatAttachment, ChatMessage, ProjectId } from "../../shared/protocol";
+import {
+  MAX_CHAT_ATTACHMENT_DOCUMENT_BYTES,
+  MAX_CHAT_ATTACHMENT_TEXT_BYTES
+} from "@hyperfocus/ai-core/chat-attachments";
+import type { ChatAttachment, ChatMessage, ProjectId } from "@hyperfocus/ai-core/protocol";
+import { readBoundedResponseBody } from "./bounded-output-buffer";
 import { extractDocumentText } from "./document-extractors";
 import type { WorkspaceRepository } from "./workspace-repository";
 import { stableStringifyJson } from "./prompt-cache-assembly";
@@ -112,10 +117,16 @@ async function buildCachedContents(attachments: ChatAttachment[]) {
       throw new Error(`Attachment ${attachment.name} fetch failed: HTTP ${response.status}`);
     }
 
+    const body = await readBoundedResponseBody(response, {
+      maxBytes: attachment.kind === "document"
+        ? MAX_CHAT_ATTACHMENT_DOCUMENT_BYTES
+        : MAX_CHAT_ATTACHMENT_TEXT_BYTES,
+      label: `Attachment ${attachment.name}`
+    });
     const text =
       attachment.kind === "document"
-        ? await extractCachedDocumentText(attachment, await response.arrayBuffer())
-        : (await response.text()).trim();
+        ? await extractCachedDocumentText(attachment, body)
+        : body.toString("utf8").trim();
     if (!text.trim()) {
       continue;
     }
@@ -131,7 +142,7 @@ async function buildCachedContents(attachments: ChatAttachment[]) {
   return parts.length > 0 ? [{ role: "user", parts }] : [];
 }
 
-async function extractCachedDocumentText(attachment: ChatAttachment, body: ArrayBuffer) {
+async function extractCachedDocumentText(attachment: ChatAttachment, body: ArrayBuffer | Uint8Array) {
   const result = await extractDocumentText(attachment, body);
   return result.status === "ok" ? result.text.trim() : "";
 }

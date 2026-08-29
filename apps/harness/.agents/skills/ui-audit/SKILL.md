@@ -9,7 +9,8 @@ description: Deep screenshot-backed UI/UX audit workflow for apps, sites, dashbo
 
 Audit the real interface, not an imagined one. Build visual ground truth first, inspect screenshots before judging, then produce evidence-backed findings and a concrete polish plan.
 
-Keep this skill generic. Put project-specific findings and durable observations in `LEARNINGS.md`, not in these instructions.
+Keep this skill generic. Put project-specific findings in the project's audit artifact;
+keep only durable cross-project observations in `LEARNINGS.md`.
 
 ## Workflow
 

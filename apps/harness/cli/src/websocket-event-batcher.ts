@@ -1,4 +1,4 @@
-import type { ServerEvent } from "../../shared/protocol";
+import type { ServerEvent } from "@hyperfocus/ai-core/protocol";
 import { guardedWebsocketSend, type GuardedWebSocket } from "./websocket-send-guard";
 
 export const DEFAULT_CONTROL_EVENT_BATCH_FLUSH_MS = 1;
@@ -19,6 +19,7 @@ type BatchState = {
 
 type WebsocketEventBatcherOptions = {
   maxQueuedBytes: number;
+  maxEventBytes?: number;
   slowCloseCode?: number;
   slowCloseReason?: string;
   flushDelayMs?: number;
@@ -36,7 +37,7 @@ const immediateControlEventTypes: ReadonlySet<ServerEvent["type"]> = new Set([
 ]);
 
 export function createWebsocketEventBatcher(options: WebsocketEventBatcherOptions) {
-  const states = new WeakMap<object, BatchState>();
+  const states = new WeakMap<GuardedWebSocket, BatchState>();
   const flushDelayMs = options.flushDelayMs ?? DEFAULT_CONTROL_EVENT_BATCH_FLUSH_MS;
   const maxBatchEvents = options.maxBatchEvents ?? DEFAULT_CONTROL_EVENT_BATCH_MAX_EVENTS;
   const maxBatchBytes = options.maxBatchBytes ?? DEFAULT_CONTROL_EVENT_BATCH_MAX_BYTES;
@@ -56,8 +57,7 @@ export function createWebsocketEventBatcher(options: WebsocketEventBatcherOption
   };
 
   const flush = (ws: GuardedWebSocket) => {
-    const key = ws as object;
-    const state = states.get(key);
+    const state = states.get(ws);
     if (!state || state.entries.length === 0) {
       return false;
     }
@@ -65,10 +65,12 @@ export function createWebsocketEventBatcher(options: WebsocketEventBatcherOption
     clearTimer(state);
     const entries = state.entries.splice(0);
     state.bytes = 0;
+    const first = entries[0];
+    if (!first) return false;
 
     const serialized =
       entries.length === 1
-        ? entries[0]!.serialized
+        ? first.serialized
         : `{"type":"server.events-batch","payload":{"events":[${entries.map((entry) => entry.serialized).join(",")}]}}`;
     return sendSerialized(ws, serialized);
   };
@@ -87,27 +89,30 @@ export function createWebsocketEventBatcher(options: WebsocketEventBatcherOption
   return {
     send(ws: GuardedWebSocket, event: ServerEvent) {
       const serialized = JSON.stringify(event);
+      const eventBytes = encoder.encode(serialized).byteLength;
+      if (options.maxEventBytes !== undefined && eventBytes > options.maxEventBytes) {
+        throw new Error(`Control event exceeds ${options.maxEventBytes} byte limit`);
+      }
       if (!shouldBatchControlEvent(event)) {
         flush(ws);
         return sendSerialized(ws, serialized);
       }
 
-      const bytes = encoder.encode(serialized).byteLength;
+      const bytes = eventBytes;
       if (bytes > maxBatchBytes) {
         flush(ws);
         return sendSerialized(ws, serialized);
       }
 
-      const key = ws as object;
-      const state = states.get(key) ?? { entries: [], bytes: 0 };
+      const state = states.get(ws) ?? { entries: [], bytes: 0 };
       if (state.entries.length > 0 && (state.entries.length >= maxBatchEvents || state.bytes + bytes > maxBatchBytes)) {
         flush(ws);
       }
 
-      const nextState = states.get(key) ?? state;
+      const nextState = states.get(ws) ?? state;
       nextState.entries.push({ event, serialized, bytes });
       nextState.bytes += bytes;
-      states.set(key, nextState);
+      states.set(ws, nextState);
 
       if (nextState.entries.length >= maxBatchEvents) {
         return flush(ws);
@@ -118,11 +123,11 @@ export function createWebsocketEventBatcher(options: WebsocketEventBatcherOption
     },
     flush,
     clear(ws: GuardedWebSocket) {
-      const state = states.get(ws as object);
+      const state = states.get(ws);
       if (state) {
         clearTimer(state);
       }
-      states.delete(ws as object);
+      states.delete(ws);
     }
   };
 }

@@ -1,4 +1,4 @@
-import { createRequestId, type ClientCommand } from "../../shared/protocol";
+import { createRequestId, type ClientCommand } from "@hyperfocus/ai-core/protocol";
 import type { HarnessViewState } from "./harness-store";
 
 export function activateProjectThread(

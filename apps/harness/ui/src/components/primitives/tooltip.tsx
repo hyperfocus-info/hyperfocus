@@ -11,6 +11,28 @@ type TooltipProps = {
   disabled?: boolean;
 };
 
+const styles = stylex.create({
+  trigger: { display: "inline-flex" },
+  content: {
+    borderColor: "var(--border)",
+    borderRadius: "0.5rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    paddingBlock: '0.375rem',
+    paddingInline: '0.75rem',
+    backgroundColor: "var(--foreground)",
+    boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+    color: "var(--surface-foreground)",
+    fontSize: "0.75rem",
+    pointerEvents: "none",
+    position: "fixed",
+    textAlign: "center",
+    whiteSpace: "pre-line",
+    zIndex: 160,
+    maxWidth: "20rem",
+  }
+});
+
 export function Tooltip(props: TooltipProps) {
   let triggerRef: HTMLSpanElement | undefined;
   let tooltipRef: HTMLSpanElement | undefined;
@@ -142,6 +164,7 @@ export function Tooltip(props: TooltipProps) {
       onMouseLeave={handleHide}
       onFocusIn={handleShow}
       onFocusOut={handleHide}
+      onClick={handleHide}
     >
       {props.children}
       <PrimitivePortal active={Boolean(props.content && open())} layer="tooltip">
@@ -150,24 +173,3 @@ export function Tooltip(props: TooltipProps) {
     </span>
   );
 }
-
-const styles = stylex.create({
-  trigger: { display: "inline-flex" },
-  content: {
-    backgroundColor: "var(--foreground)",
-    borderColor: "var(--border)",
-    borderRadius: "0.5rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
-    color: "var(--surface-foreground)",
-    fontSize: "0.75rem",
-    maxWidth: "20rem",
-    padding: "0.375rem 0.75rem",
-    pointerEvents: "none",
-    position: "fixed",
-    textAlign: "center",
-    whiteSpace: "pre-line",
-    zIndex: 160
-  }
-});

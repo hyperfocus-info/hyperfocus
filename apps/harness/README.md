@@ -1,15 +1,21 @@
-# Pi Harness Template
+# Hyperfocus Harness
 
 Local-first coding harness built around a Bun full-stack server, a SolidJS UI, local SQLite persistence, and a pi SDK integration that can run through GPT or Gemini.
 
+This README owns shipped harness behavior, runtime shape, local workflow, and
+testing commands. [docs/harness](../../docs/harness/README.md) owns roadmap,
+user-story, coverage, audit, and research evidence.
+
 ## What It Is
 
-- A same-origin web app and compressed websocket server started through Bun
+- A same-origin web app and compressed websocket server started through Bun, with a per-launch capability required by centralized admission for every privileged loopback HTTP and WebSocket route
 - A multi-project workspace where each project root keeps its own local chat history and multiple switchable threads
 - Empty workspace startup with no synthetic default project
 - Multiple agent runtimes: `pi`, `GitHub Copilot CLI`, and `Codex CLI`
 - Spotlight-style project switcher for recent roots, local folder search, and fast project activation from one shared flow
 - Bootstrap-first startup path for source users, plus portable Bun launcher packaging for release users
+- Browser-backed desktop IDE launches through `ide://` file or folder links, reuses one loopback backend, opens each request in a browser tab, and stops a desktop-owned backend after the last IDE tab closes
+- IDE trees, tabs, file buffers, and asynchronous results remain owned by the active project; switching projects clears project-local editor state and stale responses cannot replace current content or save state
 - Runtime health visibility so install, auth, browser-tool repair, and degraded interactive support show before a run starts
 - Workspace data defaults to `~/.ai-harness-template/harness.db`, with `HARNESS_DB_PATH` still available for explicit overrides
 - Shared activation checklist that keeps first-run setup inside the main chat cockpit instead of a blocking wizard
@@ -23,14 +29,16 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 - Local scheduled tasks and background jobs with durable ANSI-free SQLite history, startup catch-up, approval policy defaults, non-blocking assistant question auto-approval, hidden automation threads, concurrent launch, timeout/progress visibility, overload warnings, and a dedicated inbox surface
 - Header-level notification inbox for deferred planner questions, assistant questions, browser approvals, and passive background-run status updates
 - Local assistant operators with named personas, role prompts, project or global scope, synced routing defaults, pause and resume controls, chat, todo lists, deduped and compacted learnings, open questions, clone-to-project flow, and high-level plus deep-debug logs
-- Shared skills synchronize into `~/.ai-harness-template/skills` for use across opened projects, while `.agents/skills` stays available for project-local workflows
-- Product direction currently favors safe background execution, connector health visibility, explicit rule and memory control, preview-to-fix loops, durable review artifacts, budget-aware long runs, remote review from another device, and cleaner thread retrieval and cleanup over broader assistant surfaces
+- Launcher-bundled skills synchronize into `~/.ai-harness-template/skills` for use
+  across opened projects; source-checkout and project `.agents/skills` stay local to
+  their repository
+- Product direction currently favors safe background execution, connector health visibility, human-readable rule alignment and intentional pull-based notes, preview-to-fix loops, durable review artifacts, budget-aware long runs, remote review from another device, and cleaner thread retrieval and cleanup over broader assistant surfaces
 - Built-in workflow modes for asking, planning, implementing, debugging, and review, plus local custom modes at workspace or project scope
 - Brand-aware defaults for GPT or Gemini execution
 - Gemini planning defaults to `google/gemini-3-flash-preview`
-- Spawned subagents drop to cheapest runtime-compatible sibling in same model family, such as `google/gemini-2.5-flash` -> `google/gemini-2.5-flash-lite` and Codex `openai/gpt-5.4` -> `openai/gpt-5.4-mini`, while inheriting fast mode when the runtime supports it
+- Spawned subagents drop to the cheapest runtime-compatible sibling in the same model family, such as `google/gemini-2.5-flash` -> `google/gemini-2.5-flash-lite`, Codex `openai/gpt-5.6-sol` -> `openai/gpt-5.6-luna`, and Codex `openai/gpt-5.4` -> `openai/gpt-5.4-mini`, while inheriting fast mode when the runtime supports it
 - Run-only virtual experiment branches through BranchFS-style isolated mounts so risky execution can stay off physical disk until promote
-- Shared local memory bank for planner, main executor, and subagents, with bounded retrieval cards instead of dumping raw cache into every prompt
+- Intentional project notes with required semantic tags, bounded `memory_search` retrieval for tool-capable Pi planner, main executor, and subagent sessions, retrieval hit logging, and no automatic note injection into prompts
 - Same-worktree subagents fan out in parallel when contract-owned paths do not overlap, while ambiguous or overlapping same-worktree tasks stay serialized and broader isolated work can use BranchFS mounts
 - Isolated subagent results replay inside a separate BranchFS integration mount, verify there, and flush only after success
 - SQLite-backed persistence for projects, active selection, archived threads, and messages across restart
@@ -43,7 +51,7 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 - Built-in modes now differ on confirmation defaults and execution access: `plan` stays approval-first and read-only by default, `ask` suppresses transcript plan cards for direct Q&A without forcing read-only, and `implement` auto-runs unless the frozen plan fans out to multiple subagents
 - Composer input can auto-switch built-in modes when message intent is clear enough, using recent thread context to repair correction follow-ups so direct questions, review requests, debugging prompts, planning asks, and local workspace edits do not depend only on stale sticky mode state; an explicit user mode selection stays pinned for that send
 - Formatted markdown rendering across chat, plan, and trace surfaces with safe links, GFM tables and task lists, footnotes, and copyable highlighted code blocks
-- Workspace and project instruction context with lightweight working-memory summaries that feed planning and execution
+- Human-readable project `AGENTS.md` guidance plus explicit typed workspace and project rule overrides; recurring constraints belong in docs, types, tests, or CI instead of background memory
 - Transcript-level plan summary cards with shared plan modal access from chat and trace panel, plus durable Build now, In progress, Retry, Resume, and Completed action states from SQLite run status by run id
 - Global execution preferences for dirty-git chat restriction, dirty change threshold, plan gate mode, countdown delay, subagent isolation strategy, correctness iteration policy, and non-blocking assistant question auto-approval
 - Workspace preference for Pi auto-compaction threshold so long runs trim context earlier and continue with current intent intact
@@ -71,7 +79,8 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 - High-signal run milestones stream through one live tail message while work is in flight, then persist as compact phase rows before the final assistant answer; raw tool activity stays in the Run pane
 - Shell tool activity persists with each run so the Run pane can show command status, concise output previews, and sanitized copyable failure detail while chat stays compact
 - Project and thread switching stay available while another thread keeps streaming in background; only destructive removal stays blocked during active execution
-- OpenAI and Google API keys plus provider brand preference can be persisted locally for the current machine
+- On Windows, OpenAI, Google, and Anthropic API keys persist in a CurrentUser DPAPI-protected local credential file; provider brand remains a normal workspace preference
+- On platforms without a native credential-store adapter, newly entered keys remain process-memory-only and must be re-entered after restart or supplied through the provider's environment-variable flow; plaintext disk fallback is intentionally forbidden
 - Agent run state, planning questions, and subtask progress persist locally with the active thread
 - Plan-summary assistant messages persist with typed plan metadata so restart preserves the frozen plan shown to the user
 - Agent runs persist frozen execution plans and correctness reviews, not only loose subtask text
@@ -101,13 +110,16 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 - Tooltips render through a body-level portal so panel overflow does not clip them
 - Keyboard project open flow uses TanStack Hotkeys for `Cmd/Ctrl+K` as the reliable shortcut, plus best-effort `Cmd/Ctrl+Space` when the browser receives it
 - Left workspace tabs keep `Projects`, `Assistants`, `Jobs`, and `Runs` as the primary navigation, with scheduled work separated from run history
-- Project chat keeps transcript first and exposes plan, run, memory, and events through a compact local pane strip instead of a larger cockpit card
+- Project chat keeps transcript first and exposes plan, run, intentional project notes, and events through a compact local pane strip instead of a larger cockpit card
+- A browser-local Simple or Advanced interface preference preserves the full technical cockpit in Advanced mode. Both modes use a compact teammate header with selected-agent identity, presence, concise thread context, a quiet stop affordance while working, and new-thread plus secondary actions in one overflow menu; transcript messages use stable speaker identity and calmer, readable surfaces.
+- Simple mode removes the permanent pane strip, exposes Chat or Run contextually when a run exists, removes orchestration and tool-call rows from chat, hides trace and capability chrome, and keeps mode, provider, model, and effort controls behind one task-settings action. Advanced retains Plan, Run, Memory, model events, and detailed execution evidence with the same conversation-first hierarchy.
 - Chat transcript auto-sticks only when already at bottom and exposes an explicit `Scroll to latest` affordance when the user scrolls away
-- Run cockpit now includes virtual-branch experiment review, promote, discard, run terminal history, and a shared memory tab for local reusable learnings
+- Earlier transcript pages load only when requested. The Harness retains at most 1,024 active-thread messages in UI state while the shared Markdown surface owns at most 512 presentation rows, so durable history does not become an eager reconnect or render cost.
+- Run cockpit now includes virtual-branch experiment review, promote, discard, run terminal history, and a project-note pane with manual creation, semantic tags, retrieval counts, stale counts, and cleanup candidates
 - Jobs and Runs surfaces keep scheduled work, approval-needed runs, failures, and concise execution milestones out of normal project chat threads
-- Assistants surface keeps assistant chat, todos, questions, learnings, logs, and assistant-owned jobs inspectable outside normal project chat
+- Assistants surface keeps assistant chat, todos, questions, learnings, logs, and on-demand bounded pages of assistant-owned jobs and runs inspectable outside normal project chat
 - Header-level help opens guided walkthroughs instead of pushing setup into a separate onboarding funnel
-- Composer keeps mode, agent, provider, and model controls together in bottom row as compact popover-backed dropdowns with setting descriptions close at hand
+- Composer keeps mode, agent, provider, model, and effort controls in one bottom-left row when space allows; narrow and Simple layouts collapse to the current model plus one ellipsis menu without leaving an orphaned settings control
 - Composer also exposes one effort and fast-mode dropdown, persists those selections in browser-local session state, and keeps unsupported choices explained instead of silently hiding them
 - Main project-chat composer restores mode, agent, provider, and model from browser-local session state instead of reusing project-persisted backend selections
 - Composer supports attachment chips, UploadThing-backed upload flow, vision-aware image gating by selected model, and document ingestion for PDF, DOCX, XLSX, PPTX, and ODT on new top-level tasks
@@ -124,16 +136,40 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 - When `HARNESS_PORT` is unset, dev and bootstrap retry on a random open port if `8787` is already occupied
 - Development startup now prints a temp startup log path immediately, then streams current boot phase, weighted progress, ETA updates, and slow-phase hints to stdout
 - `bun run build:ui` builds the browser bundle through `Bun.build(...)` with the shared Solid/StyleX compiler and extracted atomic CSS
-- `bun run doctor` prints the shared activation and runtime health report, trims oversized `.local` artifacts, supports machine-readable JSON output, and exits non-zero when required first-task checks fail
+- `bun run doctor` performs a read-only setup inspection, prints the shared activation and runtime health report, supports machine-readable JSON output, and exits non-zero when required first-task checks fail
+- `bun run repair` performs the same inspection after repairing dependencies, removing `dist`, and trimming the oldest files from `.local` when it exceeds 1 GiB; the equivalent CLI form is `--doctor --repair`
 - `bun run package:launcher` builds a portable Bun launcher folder for the current OS target
+- `pi-harness --register-ide-protocol` registers the Windows release for the current user's `ide://` links; `--desktop` opens the IDE directly, and `--check-app-update` explicitly opts a desktop launch into a release check
 - Portable launcher startup failures now write a timestamped crash log under `logs/` next to the executable and print that path before exit
 - Development UI builds emit external source maps for browser debugging
 - `bun run test` runs core tests in parallel, capped at 12 workers by default and overridable with `HARNESS_TEST_WORKERS`; UI-sensitive tests run serially for browser preload stability
 - `bun run typecheck` validates TypeScript contracts
 - `bun run bench:websocket-batch` compares individual and batched control websocket frame throughput
+- `bun run bench:subagent-scheduler` records queue scans, shifted slots, retained queue capacity, and active-worker bounds for 100 to 10,000 queued subagents; elapsed time is environment-labeled diagnostic evidence
+
+Subagent execution defaults to four active workers. Set `HARNESS_SUBAGENT_CONCURRENCY`
+to an integer from 1 through 256 for an explicitly provisioned host; queued work
+uses an indexed FIFO so an unconstrained queue is amortized linear even when
+hundreds or thousands of tasks wait. Increasing concurrency raises provider,
+process, memory, and thermal pressure, so the benchmark reports capacity bounds
+instead of treating the fastest local setting as a default.
+Subagents, providers, BranchFS mounts, browser sessions, and document extraction
+also share one multi-resource capacity governor. Defaults are configurable through
+`HARNESS_CAPACITY_*` environment variables; acquisitions are atomic, queues are
+bounded and cancellable, and 100-agent plus 1,000-task tests gate peak counts
+instead of assuming one laptop's clock rate.
+Foreground, background, assistant, and subagent prompts share global and
+provider-account permits. Configure `HARNESS_CAPACITY_PROVIDERS`,
+`HARNESS_CAPACITY_OPENAI`, `HARNESS_CAPACITY_GOOGLE`,
+`HARNESS_CAPACITY_ANTHROPIC`, `HARNESS_CAPACITY_GITHUB`, and
+`HARNESS_CAPACITY_OTHER_PROVIDERS`; browser tools use
+`HARNESS_CAPACITY_BROWSERS`. Optional `HARNESS_PROVIDER_<PROVIDER>_RPM` and
+`HARNESS_PROVIDER_<PROVIDER>_TPM` limits add rolling account budgets. Typed rate
+or network congestion applies one shared cooldown and temporarily reduces only
+the affected provider capacity before restoring it.
 - Development startup backs up then purges broken local SQLite artifacts, retries delete on transient Windows file locks, then retries boot once if legacy migration drift makes the dev DB unloadable
 - Development DB recovery now logs the triggering startup error first and only auto-purges on concrete corruption or schema-drift signatures instead of generic SQLite failures
-- Background job run schema repair now also rebuilds dependent notification and event tables when an older migration left them pointing at legacy table names
+- SQLite schema upgrades use ordered transactional migrations that rebuild dependent notification and event tables with their parent runs, preserve populated history across rollback/reopen, and explicitly advance assistant provider constraints
 - If corrupted local SQLite artifacts stay locked during dev recovery, startup falls back to a fresh sibling DB path instead of failing on the busy file
 - `bun run screenshot` captures CDP screenshots from an already-running UI at `http://localhost:8787` by default and writes PNGs to `.local/screenshots/<runId>/`; `--start-server` and `--start-server --branchfs` opt into managed server startup or isolation
 
@@ -149,12 +185,13 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 
 ## Runtime Shape
 
-- The backend validates every websocket payload before processing it
+- The backend authenticates every privileged loopback HTTP and WebSocket handshake before reading or mutating state, then validates every websocket payload before processing it
 - SQLite persistence stays local-first and single-machine
 - SQLite persistence uses a cwd-independent default path so assistants and projects read the same local workspace state
 - Setup health is server-derived per machine, while tutorial progress and dismissal state stay local to the current browser profile
 - Assistant state persists locally in SQLite, including canonical thread memory summaries, active todo list, deduped learnings with AI-assisted compaction, pending questions, structured logs, and assistant-linked background jobs
-- Browser localStorage mirrors API key presence and global workspace defaults for the current browser profile
+- Browser localStorage mirrors global workspace defaults but never API-key values; old browser key entries are loaded into the current draft once and immediately scrubbed
+- Startup migrates legacy plaintext SQLite provider-key rows into the credential store and deletes the old rows
 - Browser localStorage also mirrors execution gate, isolation strategy, countdown, and correctness iteration defaults for the current browser profile
 - Browser localStorage also mirrors background-job approval defaults, non-blocking assistant question auto-approval, and local notification opt-in for the current browser profile
 - Browser localStorage also stores per-thread draft text keyed by project and thread id
@@ -164,14 +201,20 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 - Thread continuity stays harness-owned even for CLI runtimes, so fresh CLI invocations rebuild context from persisted transcript and plan state
 - Repeated clarification turns now scope planner-question ids per run so later runs in the same thread do not collide with older pending or answered questions
 - The UI sends typed project and chat commands only
-- Mode selection, rule sources, and memory summaries travel through typed contracts and persist with workspace state
+- Mode selection and rule sources travel through typed contracts, while semantic project notes use typed create, update, retrieval, audit, and deletion paths without becoming ambient prompt content
 - Built-in modes are policy presets, not separate pipelines: `ask` and `plan` bias toward read-heavy planning, execution access is configured separately from that intent, `implement` biases toward active delivery, `debug` biases toward root-cause and narrow fixes, and `review` biases toward findings-first analysis
 - Chat message persistence now includes uploaded attachment metadata, while planner and execution stages resolve remote image, text, and supported document context on demand
 - Server-side document parsing uses runtime-safe PDF handling so Bun development startup does not depend on browser-only globals
 - Plan execution starts through a typed `run.execute` command after plan presentation, not as an implicit side effect of `chat.send`
 - Ready plans can be replaced through a typed `planning.refine` command that starts a fresh planning cycle in the same thread
 - Project open responses report whether a new project was created or an existing project was reopened with a new thread
-- Planner and execution prompts include the repository `agents.md` guidance as thread context without copying it into newly created project folders
+- Planner and execution prompts include the launcher's runtime `agents.md`, discover
+  project `AGENTS.md` files through the runtime resource loader, and apply configured
+  workspace and project rule sources without copying those files into newly created
+  project folders
+- Routine completed runs do not create notes. Explicit `Remember:` or `Memory:`
+  directives always create a tagged pinned note; optional run recording captures only
+  corrections, correctness failures, and failed-run recovery context.
 - Thread lifecycle, planning answers, resume requests, retry requests, and preflight warnings use typed websocket contracts
 - Workspace-global execution pause and resume use typed websocket commands and a shared execution-control event so every connected client stays in sync
 - Browser approval decisions use a typed websocket command and persist on the active run record
@@ -204,4 +247,4 @@ Local-first coding harness built around a Bun full-stack server, a SolidJS UI, l
 
 - Product direction: maximize PMF by reducing setup friction, making capability limits explicit, preserving recoverability, keeping active context inspectable, and making unattended work easier to trust
 - Dense UI preference: keep default layouts tight, and require secondary controls or summaries to earn their visual footprint
-- [Roadmap TODOs](docs/todo.md)
+- [Roadmap TODOs](../../docs/harness/todo.md)

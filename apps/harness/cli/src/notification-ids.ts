@@ -17,3 +17,11 @@ export function createStableBoundedId(parts: readonly string[], maxLength: numbe
 export function createLegacyTruncatedId(parts: readonly string[], maxLength: number = MAX_BOUNDED_ID_LENGTH) {
   return parts.join(":").slice(0, maxLength);
 }
+
+export function createAssistantQuestionNotificationId(assistantId: string, questionId: string) {
+  return createStableBoundedId(["assistant-question", assistantId, questionId]);
+}
+
+export function createAssistantQuestionBatchNotificationId(assistantId: string, questionIds: readonly string[]) {
+  return createStableBoundedId(["assistant-question-batch", assistantId, ...[...questionIds].sort()]);
+}

@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it, mock } from "bun:test";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireInput } from "../utils/tests/test-harness";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
 import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
@@ -66,12 +66,9 @@ createUiTest("ChatPanel attachment guardrails", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     const rendered = render(() => <ChatPanel />);
-    const input = rendered.container.querySelector('input[type="file"]') as HTMLInputElement | null;
-    if (!input) {
-      throw new Error("Expected attachment input");
-    }
+    const input = requireInput(rendered.container.querySelector('input[type="file"]'));
 
     const file = new File(["docx"], "brief.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -148,10 +145,7 @@ createUiTest("ChatPanel attachment guardrails", () => {
     );
 
     const rendered = render(() => <ChatPanel />);
-    const input = rendered.container.querySelector('input[type="file"]') as HTMLInputElement | null;
-    if (!input) {
-      throw new Error("Expected attachment input");
-    }
+    const input = requireInput(rendered.container.querySelector('input[type="file"]'));
 
     const file = new File(["png"], "screen.png", {
       type: "image/png"

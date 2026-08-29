@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { extractDocumentText } from "./index";
+import { createResourceBudget } from "./types";
 import {
   createSampleDocxBuffer,
   createSampleOdtBuffer,
   createSamplePdfBuffer,
   createSamplePptxBuffer,
   createSampleXlsxBuffer,
-  createScanOnlyPdfBuffer
+  createScanOnlyPdfBuffer,
+  createStoredZip
 } from "./test-fixtures";
 
 describe("document extractors", () => {
@@ -127,5 +129,92 @@ describe("document extractors", () => {
       status: "ocr-required",
       reason: "PDF pages loaded, but no extractable text was found. OCR is not implemented yet."
     });
+  });
+
+  test("enforces configurable archive and output budgets before unbounded work", async () => {
+    const attachment = {
+      id: "docx-budget",
+      kind: "document" as const,
+      documentType: "docx" as const,
+      name: "budget.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      sizeBytes: createSampleDocxBuffer().length,
+      url: "https://example.com/budget.docx",
+      key: "docx-budget",
+      uploadedAt: new Date().toISOString()
+    };
+
+    await expect(extractDocumentText(attachment, createSampleDocxBuffer(), { maxItems: 0 }))
+      .rejects.toThrow("0 item budget");
+    await expect(extractDocumentText(attachment, createSampleDocxBuffer(), { maxEntryBytes: 32 }))
+      .rejects.toThrow("32 byte entry budget");
+    await expect(extractDocumentText(attachment, createSampleDocxBuffer(), { maxOutputChars: 4 }))
+      .rejects.toThrow("4 character output budget");
+  });
+
+  test("does not inflate unrelated Office media entries", async () => {
+    const documentXml = [
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
+      "<w:body><w:p><w:r><w:t>Relevant only</w:t></w:r></w:p></w:body>",
+      "</w:document>"
+    ].join("");
+    const archive = createStoredZip([
+      { name: "word/document.xml", content: documentXml },
+      { name: "word/media/ignored.bin", content: new Uint8Array(4096) }
+    ]);
+    const result = await extractDocumentText(
+      {
+        id: "docx-media",
+        kind: "document",
+        documentType: "docx",
+        name: "media.docx",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        sizeBytes: archive.length,
+        url: "https://example.com/media.docx",
+        key: "docx-media",
+        uploadedAt: new Date().toISOString()
+      },
+      archive,
+      { maxExpandedBytes: documentXml.length }
+    );
+
+    expect(result).toEqual({ status: "ok", text: "Relevant only" });
+  });
+});
+
+describe("document resource budget", () => {
+  test("allows exact item and byte limits", () => {
+    const budget = createResourceBudget({ maxItems: 2, maxBytes: 5 });
+    budget.consumeItems(2, "archive");
+    budget.consumeBytes(5, "archive");
+    expect(budget.snapshot()).toMatchObject({ items: 2, bytes: 5 });
+  });
+
+  test("rejects work beyond item and byte limits", () => {
+    const itemBudget = createResourceBudget({ maxItems: 1 });
+    itemBudget.consumeItems(1, "archive");
+    expect(() => itemBudget.consumeItems(1, "archive")).toThrow("1 item budget");
+
+    const byteBudget = createResourceBudget({ maxBytes: 4 });
+    expect(() => byteBudget.consumeBytes(5, "archive")).toThrow("4 byte budget");
+  });
+
+  test("checks elapsed time and abort signals", () => {
+    let currentTime = 10;
+    const timedBudget = createResourceBudget({ maxDurationMs: 5 }, () => currentTime);
+    currentTime = 16;
+    expect(() => timedBudget.check("parse")).toThrow("5 ms time budget");
+
+    const controller = new AbortController();
+    const abortedBudget = createResourceBudget({ signal: controller.signal });
+    controller.abort("cancelled");
+    expect(() => abortedBudget.check("parse")).toThrow("parse was aborted");
+  });
+
+  test("rejects invalid limits and counts", () => {
+    expect(() => createResourceBudget({ maxItems: 1.5 })).toThrow("maxItems");
+    expect(() => createResourceBudget({ maxBytes: -1 })).toThrow("maxBytes");
+    const budget = createResourceBudget();
+    expect(() => budget.consumeBytes(Number.NaN, "parse")).toThrow("byte count");
   });
 });

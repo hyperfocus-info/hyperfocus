@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { runCli } from "./cli-entry";
-import { CliUsageError } from "./cli-options";
+import { createCliUsageError } from "./cli-options";
 
 describe("runCli", () => {
   test("reports startup failure and exits non-zero when main load fails", async () => {
@@ -28,8 +28,10 @@ describe("runCli", () => {
     expect(reported[0]).toMatchObject({
       origin: "startup"
     });
-    expect(reported[0]?.error).toBeInstanceOf(Error);
-    expect((reported[0]?.error as Error).message).toBe("DOMMatrix is not defined");
+    const reportedError = reported[0]?.error;
+    expect(reportedError).toBeInstanceOf(Error);
+    if (!(reportedError instanceof Error)) throw new Error("Expected startup error");
+    expect(reportedError.message).toBe("DOMMatrix is not defined");
     expect(exitCodes).toEqual([1]);
   });
 
@@ -65,7 +67,7 @@ describe("runCli", () => {
       registerFatalHandlers: false,
       loadMain: async () => ({
         async main() {
-          throw new CliUsageError("Unknown option: --wat");
+          throw createCliUsageError("Unknown option: --wat");
         }
       }),
       reportFatalError(error) {

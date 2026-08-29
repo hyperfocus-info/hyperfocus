@@ -1,8 +1,8 @@
 # User Stories
 
-Canonical product-behavior inventory for the harness. Every shipped capability in [README.md](../README.md) and every roadmap bullet in [todo.md](todo.md) maps to one `US-*` entry here. [coverage-matrix.md](coverage-matrix.md) tracks which stories have tests and where the gaps are.
+Canonical product-behavior inventory for the harness. Every shipped capability in the [harness README](../../apps/harness/README.md) and every roadmap bullet in [todo.md](todo.md) maps to one `US-*` entry here. [coverage-matrix.md](coverage-matrix.md) tracks which stories have tests and where the gaps are.
 
-Story IDs are stable. When behavior changes, update the matching story in the same change. See the `User Stories And Coverage` section of [../.agents/skills/update-harness/SKILL.md](../.agents/skills/update-harness/SKILL.md).
+Story IDs are stable. When behavior changes, update the matching story and its coverage entry in the same change.
 
 Format: `US-<AREA>-<NNN>: As a <role>, I <capability> so that <outcome>. (source)`
 
@@ -27,8 +27,8 @@ Roles: `user`, `developer`, `reviewer`.
 | JOBS | 4 |
 | NOTIFICATIONS | 3 |
 | BROWSER | 3 |
-| ACTIVATION | 7 |
-| UI | 24 |
+| ACTIVATION | 8 |
+| UI | 25 |
 | PERSISTENCE | 15 |
 | PREFERENCES | 3 |
 | DEV | 26 |
@@ -105,7 +105,7 @@ US-THREADS-010: As a user, I archive and restore threads with optional auto-arch
 
 ### PLANNING
 
-US-PLANNING-001: As a user, I use a shared local memory bank for planner, main executor, and subagents with bounded retrieval cards so proven context reuses without dumping raw cache into every prompt. (README L31)
+US-PLANNING-001: As a user, I create focused project notes with semantic tags and let tool-capable Pi planner, main executor, or subagent sessions pull at most four relevant notes through `memory_search`, with hit and stale-state audits visible, so prior context is available without entering every prompt. (README What It Is, UI Stack)
 
 US-PLANNING-002: As a user, I answer interactive planning questions that pause execution until I reply, with three typed quick options and one recommended path so that clarification is fast and structured. (README L35)
 
@@ -113,7 +113,7 @@ US-PLANNING-003: As a user, I rely on plan-first execution that persists a full 
 
 US-PLANNING-004: As a user, I open transcript-level plan summary cards and reach the shared plan modal from chat or trace so that the plan stays one click away while I read the thread. (README L44)
 
-US-PLANNING-005: As a user, I get workspace and project instruction context with lightweight working-memory summaries feeding planning and execution so that the harness respects how I want this repo worked. (README L43)
+US-PLANNING-005: As a user, I rely on project `AGENTS.md`, types, tests, and explicit workspace or project rule overrides for durable direction so that policy stays human-readable and architectural instead of depending on opaque memory. (README What It Is, Runtime Shape)
 
 US-PLANNING-006: As a developer, I see planner-ready and planner-question transcript messages stop reporting `isStreaming` before the UI accepts refinement or answer input so that composer affordances become enabled at the right moment. (README L137)
 
@@ -139,7 +139,7 @@ US-RUNS-005: As a user, I get a dirty-git preflight with configurable chat-run r
 
 US-RUNS-006: As a user, I see a new top-level task or plan refinement clear prior transient traces, plan cards, countdown, and context snapshots for that thread so that follow-up runs do not inherit stale execution noise. (README L78)
 
-US-RUNS-007: As a user, I see a run cockpit that includes virtual-branch experiment review, promote, and discard actions plus a shared memory tab so that experiment lifecycle lives with the run. (README L101)
+US-RUNS-007: As a user, I see a run cockpit that includes virtual-branch experiment review, promote, and discard actions plus an intentional project-note pane so experiment lifecycle and relevant historical context remain inspectable. (README UI Stack)
 
 US-RUNS-008: As a developer, I trigger plan execution through a typed `run.execute` command after plan presentation, not as an implicit side effect of `chat.send`. (README L158)
 
@@ -233,7 +233,7 @@ US-MODES-003: As a user, I get built-in modes with different confirmation defaul
 
 US-MODES-004: As a user, I see composer input auto-switch built-in modes when message intent is clear enough, using recent thread context to repair correction follow-ups, so direct questions, review requests, debugging prompts, planning asks, and local workspace edits do not depend only on stale sticky mode state, while an explicit manual mode selection stays pinned for that send. (README L41)
 
-US-MODES-005: As a developer, I see mode selection, rule sources, and memory summaries travel through typed contracts and persist with workspace state. (README L154)
+US-MODES-005: As a developer, I see mode selection and rule sources travel through typed contracts while project notes use explicit typed commands and pull-based retrieval instead of ambient prompt injection. (README Runtime Shape)
 
 US-MODES-006: As a developer, I see built-in modes as policy presets, not separate pipelines: ask and plan bias toward read-heavy planning, execution access is configured separately from that intent, implement biases toward delivery, debug biases toward root-cause, and review biases toward findings-first. (README L155)
 
@@ -245,7 +245,7 @@ US-MODES-008: As a user, I use shared skills from a global harness skill root ac
 
 US-ASSISTANTS-001: As a user, I use local assistant operators with named personas, role prompts, project or global scope, synced routing defaults, action-runbook guidance, chat-addressable actions from project chat, assistant-owned background job creation, non-blocking question auto-approval preferences, pause and resume controls, chat, todo lists, learnings, open questions, clone-to-project flow, and high-level plus deep-debug logs. (README L24)
 
-US-ASSISTANTS-002: As a user, I get a dedicated Assistants surface with search and filters so assistant chat, todos, questions, bounded learnings, logs, and assistant-owned jobs stay inspectable outside normal project chat. (README L103)
+US-ASSISTANTS-002: As a user, I get a dedicated Assistants surface with search and filters so assistant chat, todos, questions, bounded learnings, logs, and on-demand bounded pages of assistant-owned jobs and runs stay inspectable outside normal project chat. (README L112)
 
 US-ASSISTANTS-003: As a developer, I see assistant state persist locally in SQLite, including canonical thread memory summaries, active todo list, deduped and compacted learnings, pending questions, structured logs, assistant intent contracts, and assistant-linked background jobs. (README L144)
 
@@ -291,13 +291,15 @@ US-ACTIVATION-002: As a user, I see runtime health visibility so install, auth, 
 
 US-ACTIVATION-003: As a user, I use a shared activation checklist that keeps first-run setup inside the main chat cockpit instead of a blocking wizard, including repair actions for missing project, provider, runtime, git, and browser requirements. (README L14, L86, L87)
 
-US-ACTIVATION-004: As a user, I open guided help tutorials with spotlight overlays for opening a project, connecting provider/runtime, sending the first task, and reviewing plans. (README L15, L104)
+US-ACTIVATION-004: As a user, I open guided help tutorials with spotlight overlays for opening a project, connecting provider/runtime, sending the first task, and reviewing plans, and I can dismiss the active tutorial with Escape. (README L15, L104)
 
 US-ACTIVATION-005: As a user, I use a shared project switcher dialog that replaces duplicated add-path inputs across sidebar and first-run onboarding. (README L88)
 
 US-ACTIVATION-006: As a developer, I see setup health be server-derived per machine while tutorial progress and dismissal state stay local to the current browser profile. (README L143)
 
 US-ACTIVATION-007: As a user, I can complete onboarding when at least one agent path is usable, whether that is Pi with a provider key or an authenticated CLI runtime. (README L13)
+
+US-ACTIVATION-008: As a user, I open an `ide://` folder as a project or a file in the IDE through one reusable desktop backend, receive a browser tab for each request, and have a desktop-owned backend stop after its last IDE tab closes; standalone update checks remain explicit opt-ins. (README What It Is, Local Workflow)
 
 ### UI
 
@@ -333,21 +335,25 @@ US-UI-015: As a developer, I keep developer traces out of the user-visible trans
 
 US-UI-016: As a user, I see all in-flight status and assistant text stay in one final-position live tail message until the run completes, then become finalized transcript rows. (README L67)
 
-US-UI-017: As a user, I see run cockpit expose virtual-branch experiment review, promote, and discard actions plus a shared memory tab for local reusable learnings. (README L101)
+US-UI-017: As a user, I see the run cockpit expose virtual-branch experiment review, promote, and discard actions plus project-note creation, semantic tags, retrieval history, stale counts, and cleanup candidates. (README UI Stack)
 
 US-UI-020: As a user, I inspect shell tool activity from a run pane with command status, concise output previews, classified failure detail, and copyable summaries while chat keeps only interpreted progress and blocking failures. (README L68)
 
 US-UI-021: As a user, I see the trace panel follow the selected project thread, assistant, or background job and show unified execution evidence, including task and trace timing, with current and total running-agent counts.
 
+US-UI-022: As a user, I load earlier active-thread messages explicitly while transcript rendering and client state remain bounded, so long durable histories do not make reconnect or Markdown work grow without limit. (README UI Stack)
+
 US-UI-018: As a user, I see shared popovers render through portal-backed primitives so that compact overlays (inbox, quick replies, interaction panels) stay well-positioned. (README L93)
 
 US-UI-019: As a user, I see the live context usage meter sourced from server runtime stats with app-session and lifetime totals. (README L51)
 
-US-UI-022: As a user, I open an IDE workbench with real project file navigation, read-only file previews, content search, Git status, editor tabs, command palette, resizable panes, terminal file-link handoff, status context, custom menus, themes, shortcut handling, notifications, and loading placeholders so that coding context can live beside harness execution.
+US-UI-022: As a user, I open an IDE workbench with real project file navigation, read-only file previews, content search, Git status, editor tabs, command palette, resizable panes, terminal file-link handoff, status context, custom menus, themes, shortcut handling, notifications, and loading placeholders, while project switches cannot leak stale files or asynchronous results into the active project.
 
 US-UI-023: As a user, I open a project-scoped terminal drawer with persistent integrated-terminal tabs, splits, scrollback, search, shell choice, and reconnectable live CLI sessions from chats and jobs so coding workflows stay in the harness. (integrated terminal)
 
 US-UI-024: As a user, I see agent-spawned terminals categorized separately, read them while a run is active, override input deliberately, and open terminal history from a project chat or run so terminal evidence stays tied to the work that created it. (README What It Is)
+
+US-UI-025: As a user, I choose a browser-local Simple or Advanced interface mode so both chats have clear agent identity, presence, readable messages, a quiet stop affordance, and new-thread plus secondary actions in one overflow menu; the composer keeps selectors bottom-left, collapsing to the current model and one ellipsis menu in Simple or narrow layouts; Simple removes the permanent specialist-pane strip and exposes Run contextually while hiding orchestration, tool cards, trace UI, capability badges, and secondary composer controls without changing execution policy, and Advanced preserves the full cockpit. (README UI Stack)
 
 ### PERSISTENCE
 
@@ -371,7 +377,7 @@ US-PERSISTENCE-009: As a user, I see the browser session remember last active pr
 
 US-PERSISTENCE-010: As a developer, I keep SQLite persistence local-first and single-machine. (README L142)
 
-US-PERSISTENCE-011: As a developer, I see browser localStorage mirror API key presence and global workspace defaults for the current browser profile. (README L145)
+US-PERSISTENCE-011: As a developer, I keep provider API-key values out of SQLite and browser localStorage, migrate legacy plaintext copies once, and use OS-protected persistence where a native adapter exists. (README credential storage and persistence)
 
 US-PERSISTENCE-012: As a developer, I see browser localStorage mirror execution gate, isolation strategy, countdown, and correctness iteration defaults for the current browser profile. (README L149)
 
@@ -393,7 +399,7 @@ US-PREFERENCES-003: As a user, I see the main project-chat composer restore mode
 
 ### DEV
 
-US-DEV-001: As a developer, I run a same-origin web app and per-message-deflate websocket server started through Bun. (README L7)
+US-DEV-001: As a developer, I run a same-origin web app and per-message-deflate websocket server started through Bun, with centralized origin and per-launch capability admission protecting every privileged loopback route. (README What It Is, Runtime Shape)
 
 US-DEV-002: As a developer, I run `bun run bootstrap` to install missing dependencies, check for a CDP-capable browser, build the UI, start the server, and open the browser by default. (README L115)
 
@@ -419,7 +425,7 @@ US-DEV-012: As a developer, I see development startup back up then purge broken 
 
 US-DEV-013: As a developer, I see dev DB recovery log the triggering startup error first and only auto-purge on concrete corruption or schema-drift signatures instead of generic SQLite failures. (README L126)
 
-US-DEV-014: As a developer, I see background job run schema repair rebuild dependent notification and event tables when an older migration left them pointing at legacy table names. (README L127)
+US-DEV-014: As a developer, I see ordered transactional SQLite migrations preserve populated background-run, event, and notification history across failure and reopen while explicitly upgrading assistant provider constraints. (README Local Workflow)
 
 US-DEV-015: As a developer, I see dev DB recovery fall back to a fresh sibling DB path when corrupted local SQLite artifacts stay locked, instead of failing on the busy file. (README L128)
 
@@ -427,7 +433,7 @@ US-DEV-016: As a developer, I see malformed legacy thread rows pruned during mig
 
 US-DEV-017: As a developer, I see Solid UI tests live next to core components as sibling `*.test.tsx` files, sharing one Bun plus Happy DOM harness. (README L132, L133)
 
-US-DEV-018: As a developer, I see the backend validate every websocket payload before processing it. (README L141)
+US-DEV-018: As a developer, I see the backend authenticate every privileged loopback HTTP and WebSocket handshake before state access, then validate every websocket payload before processing it. (README Runtime Shape)
 
 US-DEV-019: As a developer, I see pi tool use stay behind the backend adapter boundary. (README L167)
 
@@ -625,11 +631,9 @@ US-MODES-ROADMAP-004: As a user, I manage updates for installed skills with visi
 
 US-PLANNING-ROADMAP-001: As a user, I use versioned workspace and repo rules with visible source, last-used signal, and promote-from-chat or review flows instead of opaque auto-memory. (todo.md L110)
 
-US-PLANNING-ROADMAP-002: As a user, I share an execution cache across planner, main agent, and subagents so proven heuristics, fallback plans, prompt fragments, and verification recipes reuse without bloating every context window. (todo.md L111)
+US-PLANNING-ROADMAP-002: As a user, I export, import, and inspect version history for intentional semantic project notes without creating an ambient cross-project cache. (todo.md Memory And Skill Platform)
 
-US-PLANNING-ROADMAP-003: As a user, I inspect that shared cache with source links, freshness markers, hit history, pin or expire controls, and easy clear or rebuild actions. (todo.md L112)
-
-US-PLANNING-ROADMAP-004: As a user, I keep memory lightweight, inspectable, and editable instead of opaque long-term agent state. (todo.md L115)
+US-PLANNING-ROADMAP-003: As a user, I review guided bulk-cleanup candidates for never-retrieved and stale notes before archiving or deleting them. (todo.md Memory And Skill Platform)
 
 US-PLANNING-ROADMAP-005: As a user, I get recommendations to compress, pin, or evict stale files and old turns before context bloat becomes cost or quality loss. (todo.md Memory And Skill Platform)
 

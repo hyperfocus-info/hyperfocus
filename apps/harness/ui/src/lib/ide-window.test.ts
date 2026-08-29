@@ -2,7 +2,7 @@ import { beforeEach, expect, it } from "bun:test";
 import { harnessStore } from "../harness-store";
 import { clearBrowserStateForTests } from "../utils/tests/store-test-utils";
 import { createUiTest } from "../utils/tests/test-harness";
-import { createIdeWindowUrl, OPEN_IDE_WINDOW_EVENT, openIdeWindow, type OpenIdeWindowInput } from "./ide-window";
+import { createIdeWindowUrl, OPEN_IDE_WINDOW_EVENT, openIdeWindow, readOpenIdeWindowInput, type OpenIdeWindowInput } from "./ide-window";
 
 createUiTest("ide-window", () => {
   beforeEach(() => {
@@ -12,9 +12,7 @@ createUiTest("ide-window", () => {
   it("dispatches open IDE events and activates the IDE surface", () => {
     const openIdeEvents: OpenIdeWindowInput[] = [];
     const collectOpenIdeEvent = (event: Event) => {
-      if (event instanceof CustomEvent) {
-        openIdeEvents.push(event.detail as OpenIdeWindowInput);
-      }
+      openIdeEvents.push(readOpenIdeWindowInput(event));
     };
     window.addEventListener(OPEN_IDE_WINDOW_EVENT, collectOpenIdeEvent);
     try {

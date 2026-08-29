@@ -1,14 +1,17 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
-import { WorkspaceRepository } from "../workspace-repository";
-import { TerminalSessionManager, testExports } from "./terminal-session-manager";
-import type { TerminalSession } from "../../../shared/protocol";
+import { createWorkspaceRepository } from "../workspace-repository";
+import { createTerminalSessionManager, testExports } from "./terminal-session-manager";
+import type { TerminalSession } from "@hyperfocus/ai-core/protocol";
+import { resolveHarnessTestTempRoot } from "../test-support/test-temp-root";
 
-function createManagerFixture() {
-  const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+type ManagerOptions = Parameters<typeof createTerminalSessionManager>[0];
+
+function createManagerFixture(overrides: Partial<Pick<ManagerOptions, "discoverShells" | "startProcess">> = {}) {
+  const tempRoot = resolveHarnessTestTempRoot();
   mkdirSync(tempRoot, { recursive: true });
-  const repository = new WorkspaceRepository(path.join(tempRoot, `terminal-${crypto.randomUUID()}.sqlite`), process.cwd());
+  const repository = createWorkspaceRepository(path.join(tempRoot, `terminal-${crypto.randomUUID()}.sqlite`), process.cwd());
   const projectRoot = path.join(tempRoot, `terminal-project-${crypto.randomUUID()}`);
   mkdirSync(projectRoot, { recursive: true });
   const project = repository.addProject(projectRoot);
@@ -39,8 +42,9 @@ function createManagerFixture() {
   });
   const events: string[] = [];
   const updatedSessions: TerminalSession[] = [];
+  const createdSessions: TerminalSession[] = [];
   const historySessions: TerminalSession[][] = [];
-  const manager = new TerminalSessionManager({
+  const manager = createTerminalSessionManager({
     repository,
     onSessionsUpdated: () => events.push("sessions"),
     onShellsUpdated: () => events.push("shells"),
@@ -48,19 +52,38 @@ function createManagerFixture() {
       events.push("history");
       historySessions.push(sessions);
     },
-    onSessionCreated: () => events.push("created"),
+    onSessionCreated: ({ session }) => {
+      events.push("created");
+      createdSessions.push(session);
+    },
     onSessionUpdated: ({ session }) => {
       events.push("updated");
       updatedSessions.push(session);
     },
     onSessionExited: () => events.push("exited"),
     onAttachReady: () => events.push("attach"),
-    onPreferencesSaved: () => events.push("prefs")
+    onPreferencesSaved: () => events.push("prefs"),
+    ...overrides
   });
-  return { repository, project, manager, events, session, updatedSessions, historySessions };
+  return { repository, project, manager, events, session, createdSessions, updatedSessions, historySessions };
 }
 
 describe("TerminalSessionManager", () => {
+  test("chunks multibyte replay and acknowledges only after every successful frame", () => {
+    const frames: Uint8Array[] = [];
+    const socket = { send(data: Uint8Array) { frames.push(data); return 1; }, close() {} };
+    expect(testExports.sendTerminalReplay(socket, "😀".repeat(150_000))).toBe(true);
+    expect(frames.at(-1)).toEqual(new Uint8Array([2]));
+    expect(frames.slice(0, -1).every((frame) => frame.byteLength <= 64 * 1024 + 1)).toBe(true);
+    expect(new TextDecoder().decode(concat(frames.slice(0, -1).map((frame) => frame.slice(1))))).toBe("😀".repeat(150_000));
+  });
+
+  test.each([-1, 0, "throw"] as const)("does not acknowledge an unsent replay (%s)", (status) => {
+    const frames: Uint8Array[] = [];
+    const socket = { send(data: Uint8Array) { frames.push(data); if (status === "throw") throw new Error("closed"); return status; }, close() {} };
+    expect(testExports.sendTerminalReplay(socket, "tail")).toBe(false);
+    expect(frames.some((frame) => frame[0] === 2)).toBe(false);
+  });
   test("restores persisted running sessions as stopped after server start", () => {
     const { repository, session } = createManagerFixture();
     const restored = repository.getTerminalState().sessions.find((entry) => entry.id === session.id);
@@ -113,23 +136,40 @@ describe("TerminalSessionManager", () => {
   });
 
   test("coalesces hot output persistence", async () => {
-    const { repository, manager, session } = createManagerFixture();
+    let emitData: ((chunk: Uint8Array) => void) | undefined;
+    const fixture = createManagerFixture({
+      discoverShells: async () => [{
+        id: "test-shell", label: "Test shell", executableLabel: "test-shell", kind: "custom",
+        available: true, default: true
+      }],
+      startProcess: async (input) => {
+        emitData = input.onData;
+        return { transportMode: "pipe", write() {}, resize() {}, async stop() {} };
+      }
+    });
+    const { repository, manager, project, createdSessions } = fixture;
     const originalSetTerminalState = repository.setTerminalState.bind(repository);
     let persistCount = 0;
-    repository.setTerminalState = ((state) => {
+    repository.setTerminalState = (state) => {
       persistCount += 1;
       originalSetTerminalState(state);
-    }) as typeof repository.setTerminalState;
-    const handleChunk = (manager as unknown as { handleChunk: (sessionId: string, chunk: Uint8Array) => void }).handleChunk.bind(manager);
+    };
+    await manager.createSession({
+      requestId: "req-hot-output", projectId: project.id, projectRoot: project.rootPath,
+      clientId: "client-1", cols: 80, rows: 24
+    });
+    const created = createdSessions.at(-1);
+    if (!created || !emitData) throw new Error("Test terminal process did not start");
+    persistCount = 0;
 
-    handleChunk(session.id, new TextEncoder().encode("a"));
-    handleChunk(session.id, new TextEncoder().encode("b"));
-    handleChunk(session.id, new TextEncoder().encode("c"));
+    emitData(new TextEncoder().encode("a"));
+    emitData(new TextEncoder().encode("b"));
+    emitData(new TextEncoder().encode("c"));
 
     expect(persistCount).toBe(0);
     await delay(650);
     expect(persistCount).toBe(1);
-    expect(repository.getTerminalState().scrollbackBySessionId[session.id]?.endsWith("abc")).toBe(true);
+    expect(repository.getTerminalState().scrollbackBySessionId[created.id]?.endsWith("abc")).toBe(true);
   });
 
   test("decodes Windows PowerShell pipe output without null-padded glyph spacing", () => {
@@ -140,17 +180,19 @@ describe("TerminalSessionManager", () => {
   });
 
   test("marks pre-start spawn failures as failed sessions", async () => {
-    const { project, repository, manager, updatedSessions } = createManagerFixture();
-    (manager as unknown as { shells: unknown[] }).shells = [
-      {
+    const { project, repository, manager, updatedSessions } = createManagerFixture({
+      discoverShells: async () => [{
         id: "missing-shell",
         label: "Missing shell",
-        executableLabel: path.join(project.rootPath, "missing-shell.exe"),
+        executableLabel: "missing-shell",
         kind: "custom",
         available: true,
         default: true
+      }],
+      startProcess: async () => {
+        throw new Error("spawn failed");
       }
-    ];
+    });
 
     await expect(
       manager.createSession({
@@ -169,9 +211,9 @@ describe("TerminalSessionManager", () => {
   });
 
   test("keeps agent-spawned terminals read-only until override and preserves history after exit", async () => {
-    const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+    const tempRoot = resolveHarnessTestTempRoot();
     mkdirSync(tempRoot, { recursive: true });
-    const repository = new WorkspaceRepository(path.join(tempRoot, `terminal-agent-${crypto.randomUUID()}.sqlite`), process.cwd());
+    const repository = createWorkspaceRepository(path.join(tempRoot, `terminal-agent-${crypto.randomUUID()}.sqlite`), process.cwd());
     const projectRoot = path.join(tempRoot, `terminal-agent-project-${crypto.randomUUID()}`);
     mkdirSync(projectRoot, { recursive: true });
     const project = repository.addProject(projectRoot);
@@ -180,7 +222,7 @@ describe("TerminalSessionManager", () => {
     const historyLists: TerminalSession[][] = [];
     let writes = "";
     let exit: ((code: number) => void) | undefined;
-    const manager = new TerminalSessionManager({
+    const manager = createTerminalSessionManager({
       repository,
       discoverShells: async () => [
         {
@@ -288,6 +330,12 @@ describe("TerminalSessionManager", () => {
     expect(testExports.isStreamReaderCancelledError(error)).toBe(true);
   });
 });
+
+function concat(chunks: Uint8Array[]) {
+  const result = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.byteLength, 0));
+  let offset = 0; for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.byteLength; }
+  return result;
+}
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));

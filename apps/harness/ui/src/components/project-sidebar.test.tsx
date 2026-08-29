@@ -1,11 +1,11 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it, mock } from "bun:test";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireButton, requireElement } from "../utils/tests/test-harness";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { ProjectSidebar } from "./project-sidebar";
+import { ProjectSidebar } from "./project-sidebar/project-sidebar";
 import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
 import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
-import { createChatMessage, createEmptySession, createProjectThreadSummary } from "../../../shared/protocol";
+import { createChatMessage, createEmptySession, createProjectThreadSummary } from "@hyperfocus/ai-core/protocol";
 import { harnessStore, readProjectSidebarPreferences } from "../harness-store";
 import { OPEN_IDE_WINDOW_EVENT, type OpenIdeWindowInput } from "../lib/ide-window";
 
@@ -29,6 +29,25 @@ createUiTest("ProjectSidebar", () => {
 
     expect(document.querySelector("[data-test-left-pane-shell][data-left-pane-kind='projects']")).not.toBeNull();
     expect(screen.getByText(/No workspace roots yet/i).closest("[data-test-left-pane-empty-state]")).not.toBeNull();
+  });
+
+  it("keeps the project switcher visibly labeled after a project is open", () => {
+    const project = createViewProjectFixture({ id: "project-switcher-label" });
+    seedHarnessStoreForTests(
+      createHarnessStateFixture({
+        workspace: {
+          activeProjectId: project.id,
+          projects: [project]
+        }
+      })
+    );
+
+    render(() => <ProjectSidebar />);
+
+    const switcher = screen.getByRole("button", { name: "Open project switcher" });
+    expect(switcher.textContent).toContain("Open project");
+    fireEvent.click(switcher);
+    expect(harnessStore.state.projectSwitcherOpen).toBe(true);
   });
 
   it("searches projects from the left panel above the project list", () => {
@@ -74,7 +93,7 @@ createUiTest("ProjectSidebar", () => {
     expect(search.compareDocumentPosition(screen.getByRole("button", { name: "Switch to Billing api" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.input(search, { target: { value: "billing" } });
-    fireEvent.click(screen.getAllByText("Billing api")[0]!);
+    fireEvent.click(requireElement(screen.getAllByText("Billing api")[0]));
 
     expect(commands.at(-1)).toMatchObject({
       type: "project.activate",
@@ -126,9 +145,9 @@ createUiTest("ProjectSidebar", () => {
     render(() => <ProjectSidebar />);
 
     expect(screen.getByText("streaming")).not.toBeNull();
-    expect((screen.getByRole("button", { name: `Create a new thread in ${project.name}` }) as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole("button", { name: `Remove ${project.name}` }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByText("Thread 2").closest("button") as HTMLButtonElement).disabled).toBe(false);
+    expect(requireButton(screen.getByRole("button", { name: `Create a new thread in ${project.name}` })).disabled).toBe(false);
+    expect(requireButton(screen.getByRole("button", { name: `Remove ${project.name}` })).disabled).toBe(true);
+    expect(requireButton(screen.getByText("Thread 2").closest("button")).disabled).toBe(false);
     expect(screen.getByText("Planning")).not.toBeNull();
   });
 
@@ -161,7 +180,7 @@ createUiTest("ProjectSidebar", () => {
 
     const doneBadge = screen.getByText("Done");
     expect(doneBadge.closest("[data-test-status-chip]")?.className).toContain("success");
-    expect((screen.getByRole("button", { name: `Remove ${project.name}` }) as HTMLButtonElement).disabled).toBe(false);
+    expect(requireButton(screen.getByRole("button", { name: `Remove ${project.name}` })).disabled).toBe(false);
   });
 
   it("uses theme-backed active project and thread surfaces", () => {
@@ -234,7 +253,7 @@ createUiTest("ProjectSidebar", () => {
     captureDispatchedCommands(commands);
 
     render(() => <ProjectSidebar />);
-    fireEvent.click(screen.getByText("Target thread").closest("button") as HTMLButtonElement);
+    fireEvent.click(requireButton(screen.getByText("Target thread").closest("button")));
 
     expect(commands).toHaveLength(2);
     expect(commands[0]).toMatchObject({
@@ -290,8 +309,8 @@ createUiTest("ProjectSidebar", () => {
 
     render(() => <ProjectSidebar />);
 
-    expect((screen.getByRole("button", { name: `Remove ${project.name}` }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByText("Thread 1").closest("button") as HTMLButtonElement).disabled).toBe(false);
+    expect(requireButton(screen.getByRole("button", { name: `Remove ${project.name}` })).disabled).toBe(true);
+    expect(requireButton(screen.getByText("Thread 1").closest("button")).disabled).toBe(false);
   });
 
   it("hides automation threads from sidebar thread list", () => {
@@ -473,7 +492,7 @@ createUiTest("ProjectSidebar", () => {
     expect(
       screen.getByText("Old pinned").compareDocumentPosition(screen.getByText("New unpinned")) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-    expect((screen.getAllByRole("button", { name: "Delete" })[0] as HTMLButtonElement).disabled).toBe(true);
+    expect(requireButton(screen.getAllByRole("button", { name: "Delete" })[0]).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Unpin" }));
 
@@ -529,18 +548,22 @@ createUiTest("ProjectSidebar", () => {
     const originalClearTimeout = globalThis.clearTimeout;
     const timerCallbacks = new Map<number, () => void>();
     let nextTimerId = 0;
-    globalThis.setTimeout = ((callback: TimerHandler, _delay?: number, ...args: unknown[]) => {
-      const timerId = ++nextTimerId;
-      timerCallbacks.set(timerId, () => {
-        if (typeof callback === "function") {
-          callback(...args);
-        }
-      });
-      return timerId as unknown as ReturnType<typeof setTimeout>;
-    }) as unknown as typeof setTimeout;
-    globalThis.clearTimeout = ((timerId?: Parameters<typeof clearTimeout>[0]) => {
-      timerCallbacks.delete(Number(timerId));
-    }) as typeof clearTimeout;
+    Object.defineProperty(globalThis, "setTimeout", {
+      configurable: true,
+      value(callback: TimerHandler, _delay?: number, ...args: unknown[]) {
+        const timerId = ++nextTimerId;
+        timerCallbacks.set(timerId, () => {
+          if (typeof callback === "function") callback(...args);
+        });
+        return timerId;
+      }
+    });
+    Object.defineProperty(globalThis, "clearTimeout", {
+      configurable: true,
+      value(timerId?: Parameters<typeof clearTimeout>[0]) {
+        timerCallbacks.delete(Number(timerId));
+      }
+    });
     try {
       const now = new Date().toISOString();
       const project = createViewProjectFixture({
@@ -793,9 +816,8 @@ createUiTest("ProjectSidebar", () => {
   it("shows node-specific context menus with open in IDE last", async () => {
     const openIdeEvents: OpenIdeWindowInput[] = [];
     const collectOpenIdeEvent = (event: Event) => {
-      if (event instanceof CustomEvent) {
-        openIdeEvents.push(event.detail as OpenIdeWindowInput);
-      }
+      const input = readOpenIdeWindowInput(event);
+      if (input) openIdeEvents.push(input);
     };
     window.addEventListener(OPEN_IDE_WINDOW_EVENT, collectOpenIdeEvent);
     try {
@@ -824,9 +846,8 @@ createUiTest("ProjectSidebar", () => {
       render(() => <ProjectSidebar />);
       await Promise.resolve();
 
-      const projectCard = document.querySelector("[data-test-project-card][data-project-id='project-context-menu']") as HTMLElement | null;
-      expect(projectCard).not.toBeNull();
-      dispatchMouseDown(projectCard!);
+      const projectCard = requireElement(document.querySelector("[data-test-project-card][data-project-id='project-context-menu']"));
+      dispatchMouseDown(projectCard);
       await waitFor(() => expect(screen.getAllByRole("menuitem").length).toBeGreaterThan(0));
       const projectItems = screen.getAllByRole("menuitem").map((item) => item.textContent?.trim());
       expect(projectItems).toEqual(["New thread", "Remove", "Open in IDE"]);
@@ -835,9 +856,8 @@ createUiTest("ProjectSidebar", () => {
       expect(openIdeEvents[0]).toEqual({ projectId: "project-context-menu", threadId: undefined });
       expect(harnessStore.state.activeSurface).toBe("ide");
 
-      const threadCard = document.querySelector("[data-test-project-thread-card][data-thread-id='thread-context']") as HTMLElement | null;
-      expect(threadCard).not.toBeNull();
-      dispatchMouseDown(threadCard!);
+      const threadCard = requireElement(document.querySelector("[data-test-project-thread-card][data-thread-id='thread-context']"));
+      dispatchMouseDown(threadCard);
       await waitFor(() => expect(screen.getAllByRole("menuitem").length).toBeGreaterThan(0));
       const threadItems = screen.getAllByRole("menuitem").map((item) => item.textContent?.trim());
       expect(threadItems).toEqual(["Pin", "Fork", "Rename", "Delete", "Open in IDE"]);
@@ -851,4 +871,15 @@ createUiTest("ProjectSidebar", () => {
 
 function dispatchMouseDown(element: HTMLElement) {
   fireEvent.contextMenu(element, { clientX: 20, clientY: 30 });
+}
+
+function readOpenIdeWindowInput(event: Event): OpenIdeWindowInput | undefined {
+  if (!(event instanceof CustomEvent)) return undefined;
+  const detail: unknown = event.detail;
+  if (!detail || typeof detail !== "object") return undefined;
+  const projectId = Reflect.get(detail, "projectId");
+  const threadId = Reflect.get(detail, "threadId");
+  if (projectId !== undefined && typeof projectId !== "string") return undefined;
+  if (threadId !== undefined && typeof threadId !== "string") return undefined;
+  return { projectId, threadId };
 }

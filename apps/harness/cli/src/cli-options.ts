@@ -9,11 +9,14 @@ export type ParsedCliOptions<T extends string> = {
   values: Map<T, string>;
 };
 
-export class CliUsageError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "CliUsageError";
-  }
+export function createCliUsageError(message: string) {
+  const error = new Error(message);
+  error.name = "CliUsageError";
+  return error;
+}
+
+export function isCliUsageError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "CliUsageError";
 }
 
 export function parseCliOptions<T extends string>(argv: readonly string[], spec: CliOptionSpec<T>): ParsedCliOptions<T> {
@@ -24,11 +27,11 @@ export function parseCliOptions<T extends string>(argv: readonly string[], spec:
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (!arg.startsWith("--") || !allowed.has(arg as T)) {
-      throw new CliUsageError(`Unknown option: ${arg}`);
+    const flag = spec.flags.find((candidate) => candidate === arg);
+    if (!arg.startsWith("--") || !flag || !allowed.has(flag)) {
+      throw createCliUsageError(`Unknown option: ${arg}`);
     }
 
-    const flag = arg as T;
     flags.add(flag);
     if (!valueFlags.has(flag)) {
       continue;
@@ -36,7 +39,7 @@ export function parseCliOptions<T extends string>(argv: readonly string[], spec:
 
     const value = argv[index + 1];
     if (!value || value.startsWith("--")) {
-      throw new CliUsageError(`Missing value for ${flag}`);
+      throw createCliUsageError(`Missing value for ${flag}`);
     }
 
     values.set(flag, value);
@@ -45,7 +48,7 @@ export function parseCliOptions<T extends string>(argv: readonly string[], spec:
 
   for (const conflict of spec.conflicts ?? []) {
     if (conflict.every((flag) => flags.has(flag))) {
-      throw new CliUsageError(`Conflicting options: ${conflict.join(", ")}`);
+      throw createCliUsageError(`Conflicting options: ${conflict.join(", ")}`);
     }
   }
 

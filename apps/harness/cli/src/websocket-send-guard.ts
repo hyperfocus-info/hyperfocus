@@ -9,23 +9,27 @@ type GuardState = {
   queuedBytes: number;
 };
 
-const states = new WeakMap<object, GuardState>();
+const states = new WeakMap<GuardedWebSocket, GuardState>();
 const encoder = new TextEncoder();
+
+/** Enables RFC 7692 compression without changing websocket lifecycle handlers. */
+export function withWebsocketCompression<T extends object>(options: T) {
+  return { ...options, perMessageDeflate: true as const };
+}
 
 export function guardedWebsocketSend(
   ws: GuardedWebSocket,
   data: string | Uint8Array,
   options: { maxQueuedBytes: number; slowCloseCode?: number; slowCloseReason?: string }
 ) {
-  const key = ws as object;
-  const state = states.get(key) ?? { queuedBytes: 0 };
+  const state = states.get(ws) ?? { queuedBytes: 0 };
   const bytes = typeof data === "string" ? encoder.encode(data).byteLength : data.byteLength;
 
   try {
     const status = ws.send(data);
     if (status === -1) {
       state.queuedBytes += bytes;
-      states.set(key, state);
+      states.set(ws, state);
       debugLog("websocket.send.backpressured", {
         bytes,
         queuedBytes: state.queuedBytes,
@@ -48,7 +52,7 @@ export function guardedWebsocketSend(
           })
         );
         ws.close(options.slowCloseCode ?? 1011, options.slowCloseReason ?? "Websocket client is too slow");
-        states.delete(key);
+        states.delete(ws);
       }
       return false;
     }
@@ -56,10 +60,10 @@ export function guardedWebsocketSend(
       return false;
     }
     state.queuedBytes = 0;
-    states.set(key, state);
+    states.set(ws, state);
     return true;
   } catch {
-    states.delete(key);
+    states.delete(ws);
     return false;
   }
 }

@@ -8,7 +8,6 @@ import { buildGitRepositoryPromptContext } from "../git-context";
 import type {
   PiAgentAdapter,
   PiAgentExecutionController,
-  PiAgentExecutionEvent,
   PiAgentPromptRequest,
   PiAgentPromptResult,
   PiApiKeyProvider
@@ -96,27 +95,18 @@ type CodexSdkAgentMessageEvent = {
   text: string;
 };
 
-type CodexSdkUsage = {
-  input_tokens?: number;
-  cached_input_tokens?: number;
-  output_tokens?: number;
-};
-
 function createDefaultClient(options: CodexOptions) {
   return new Codex(options);
 }
 
-export class CodexSdkAdapter implements PiAgentAdapter {
-  constructor(private readonly options: CodexSdkAdapterOptions) {}
-
-  setApiKey(_provider: PiApiKeyProvider, _apiKey: string | undefined) {}
-
-  hasApiKey(_provider: PiApiKeyProvider) {
+export function createCodexSdkAdapter(options: CodexSdkAdapterOptions): PiAgentAdapter {
+  function setApiKey(_provider: PiApiKeyProvider, _apiKey: string | undefined) {}
+  function hasApiKey(_provider: PiApiKeyProvider) {
     return false;
   }
 
-  async runPrompt(request: PiAgentPromptRequest) {
-    const controller = await this.startExecution(request);
+  async function runPrompt(request: PiAgentPromptRequest) {
+    const controller = await startExecution(request);
     try {
       return await controller.result;
     } finally {
@@ -124,78 +114,71 @@ export class CodexSdkAdapter implements PiAgentAdapter {
     }
   }
 
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    const client = (this.options.createClient ?? createDefaultClient)({
-      codexPathOverride: this.options.executablePath,
+  async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    const client = (options.createClient ?? createDefaultClient)({
+      codexPathOverride: options.executablePath,
       env: buildCliProcessEnv({
         cols: 120,
         rows: 40
       })
     });
     const thread = client.startThread(buildThreadOptions(request));
-    return new CodexSdkExecutionController(thread, request);
+    return createCodexSdkExecutionController(thread, request);
   }
+
+  return { setApiKey, hasApiKey, runPrompt, startExecution };
 }
 
-class CodexSdkExecutionController implements PiAgentExecutionController {
-  readonly result: Promise<PiAgentPromptResult>;
+function createCodexSdkExecutionController(thread: CodexSdkThreadLike, request: PiAgentPromptRequest): PiAgentExecutionController {
+  let disposed = false;
+  let currentAbortController: AbortController | undefined;
+  let running = false;
 
-  private disposed = false;
-  private currentAbortController: AbortController | undefined;
-  private running = false;
-
-  constructor(
-    private readonly thread: CodexSdkThreadLike,
-    private readonly request: PiAgentPromptRequest
-  ) {
-    this.result = this.execute(this.request);
-  }
-
-  continueWithPrompt(prompt: string = "continue") {
-    return this.execute({
-      ...this.request,
+  function continueWithPrompt(prompt: string = "continue") {
+    return execute({
+      ...request,
       prompt
     });
   }
 
-  async abort() {
-    this.currentAbortController?.abort();
+  async function abort() {
+    currentAbortController?.abort();
   }
 
-  dispose() {
-    this.disposed = true;
-    if (this.running) {
-      this.currentAbortController?.abort();
+  function dispose() {
+    disposed = true;
+    if (running) {
+      currentAbortController?.abort();
     }
   }
 
-  private async execute(request: PiAgentPromptRequest) {
-    if (this.disposed) {
+  async function execute(nextRequest: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    if (disposed) {
       throw new Error("Execution controller is disposed");
     }
 
-    if (this.running) {
+    if (running) {
       throw new Error("Execution already running");
     }
 
-    this.running = true;
+    running = true;
     const abortController = new AbortController();
-    this.currentAbortController = abortController;
-    request.onExecutionEvent?.({ type: "session-created" });
-    const imageInput = await materializeSdkInput(request, {
-      promptText: buildCodexPromptWithPrelude(request)
+    currentAbortController = abortController;
+    nextRequest.onExecutionEvent?.({ type: "session-created" });
+    const imageInput = await materializeSdkInput(nextRequest, {
+      promptText: buildCodexPromptWithPrelude(nextRequest)
     });
     const messageState = new Map<string, string>();
     let finalText = "";
     const usage = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 };
 
     try {
-      const signal = mergeAbortSignals(request.abortSignal, abortController.signal);
-      const streamed = await runThreadWithCodexControls(this.thread, request, imageInput.input, signal);
+      const signal = mergeAbortSignals(nextRequest.abortSignal, abortController.signal);
+      const streamed = await runThreadWithCodexControls(thread, nextRequest, imageInput.input, signal);
       for await (const rawEvent of streamed.events) {
-        request.onExecutionEvent?.({ type: "activity" });
+        nextRequest.onExecutionEvent?.({ type: "activity" });
         accumulateCodexUsage(rawEvent, usage);
-        finalText = handleCodexSdkEvent(rawEvent, request, messageState, finalText);
+        finalText = handleCodexSdkEvent(rawEvent, nextRequest, messageState, finalText);
       }
 
       if (!finalText.trim()) {
@@ -204,14 +187,17 @@ class CodexSdkExecutionController implements PiAgentExecutionController {
 
       return {
         text: finalText.trim(),
-        contextUsage: createCodexContextUsage(request.modelId, usage)
+        contextUsage: createCodexContextUsage(nextRequest.modelId, usage)
       };
     } finally {
-      this.running = false;
-      this.currentAbortController = undefined;
+      running = false;
+      currentAbortController = undefined;
       await imageInput.cleanup();
     }
   }
+
+  const result = execute(request);
+  return { result, continueWithPrompt, abort, dispose };
 }
 
 function buildThreadOptions(
@@ -291,48 +277,48 @@ function handleCodexSdkEvent(
   messageState: Map<string, string>,
   priorFinalText: string
 ) {
-  const event = rawEvent as {
-    type?: string;
-    item?: CodexSdkCommandEvent | CodexSdkMcpEvent | CodexSdkWebSearchEvent | CodexSdkAgentMessageEvent;
-    error?: { message?: string };
-    message?: string;
-  };
-  if (event.type === "turn.failed") {
-    throw new Error(event.error?.message ?? "Codex turn failed");
+  if (rawEvent === null || typeof rawEvent !== "object") return priorFinalText;
+  const eventType = Reflect.get(rawEvent, "type");
+  if (eventType === "turn.failed") {
+    const error = Reflect.get(rawEvent, "error");
+    const errorMessage = error !== null && typeof error === "object" ? Reflect.get(error, "message") : undefined;
+    throw new Error(typeof errorMessage === "string" ? errorMessage : "Codex turn failed");
   }
 
-  if (event.type === "error") {
-    throw new Error(event.message ?? "Codex stream failed");
+  if (eventType === "error") {
+    const message = Reflect.get(rawEvent, "message");
+    throw new Error(typeof message === "string" ? message : "Codex stream failed");
   }
 
-  if (event.item?.type === "agent_message") {
-    const nextText = event.item.text ?? "";
-    const previousText = messageState.get(event.item.id) ?? "";
+  const item = parseCodexSdkItem(Reflect.get(rawEvent, "item"));
+  if (item?.type === "agent_message") {
+    const nextText = item.text;
+    const previousText = messageState.get(item.id) ?? "";
     if (nextText.startsWith(previousText)) {
       const delta = nextText.slice(previousText.length);
       if (delta) {
         request.onTextDelta?.(delta);
       }
     }
-    messageState.set(event.item.id, nextText);
-    if (event.type === "item.completed") {
+    messageState.set(item.id, nextText);
+    if (eventType === "item.completed") {
       return nextText || priorFinalText;
     }
     return priorFinalText;
   }
 
-  if (event.item?.type === "command_execution") {
-    emitCommandExecutionEvent(request, event.type, event.item);
+  if (item?.type === "command_execution") {
+    emitCommandExecutionEvent(request, typeof eventType === "string" ? eventType : undefined, item);
     return priorFinalText;
   }
 
-  if (event.item?.type === "mcp_tool_call") {
-    emitMcpToolEvent(request, event.type, event.item);
+  if (item?.type === "mcp_tool_call") {
+    emitMcpToolEvent(request, typeof eventType === "string" ? eventType : undefined, item);
     return priorFinalText;
   }
 
-  if (event.item?.type === "web_search") {
-    emitWebSearchEvent(request, event.type, event.item);
+  if (item?.type === "web_search") {
+    emitWebSearchEvent(request, typeof eventType === "string" ? eventType : undefined, item);
     return priorFinalText;
   }
 
@@ -340,14 +326,57 @@ function handleCodexSdkEvent(
 }
 
 function accumulateCodexUsage(rawEvent: unknown, usage: { inputTokens: number; cachedInputTokens: number; outputTokens: number }) {
-  const event = rawEvent as { type?: string; usage?: CodexSdkUsage };
-  if (event.type !== "turn.completed" || !event.usage) {
-    return;
-  }
+  if (rawEvent === null || typeof rawEvent !== "object" || Reflect.get(rawEvent, "type") !== "turn.completed") return;
+  const rawUsage = Reflect.get(rawEvent, "usage");
+  if (rawUsage === null || typeof rawUsage !== "object") return;
+  usage.inputTokens += readFiniteNumber(rawUsage, "input_tokens");
+  usage.cachedInputTokens += readFiniteNumber(rawUsage, "cached_input_tokens");
+  usage.outputTokens += readFiniteNumber(rawUsage, "output_tokens");
+}
 
-  usage.inputTokens += event.usage.input_tokens ?? 0;
-  usage.cachedInputTokens += event.usage.cached_input_tokens ?? 0;
-  usage.outputTokens += event.usage.output_tokens ?? 0;
+function parseCodexSdkItem(value: unknown): CodexSdkCommandEvent | CodexSdkMcpEvent | CodexSdkWebSearchEvent | CodexSdkAgentMessageEvent | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const id = Reflect.get(value, "id");
+  const type = Reflect.get(value, "type");
+  if (typeof id !== "string" || typeof type !== "string") return undefined;
+  if (type === "agent_message") {
+    const text = Reflect.get(value, "text");
+    return typeof text === "string" ? { id, type, text } : undefined;
+  }
+  if (type === "web_search") {
+    const query = Reflect.get(value, "query");
+    return typeof query === "string" ? { id, type, query } : undefined;
+  }
+  const status = parseCodexItemStatus(Reflect.get(value, "status"));
+  if (!status) return undefined;
+  if (type === "command_execution") {
+    const command = Reflect.get(value, "command");
+    const aggregatedOutput = Reflect.get(value, "aggregated_output");
+    const exitCode = Reflect.get(value, "exit_code");
+    if (typeof command !== "string" || typeof aggregatedOutput !== "string" || (exitCode !== undefined && typeof exitCode !== "number")) return undefined;
+    return { id, type, command, aggregated_output: aggregatedOutput, status, ...(typeof exitCode === "number" ? { exit_code: exitCode } : {}) };
+  }
+  if (type === "mcp_tool_call") {
+    const server = Reflect.get(value, "server");
+    const tool = Reflect.get(value, "tool");
+    if (typeof server !== "string" || typeof tool !== "string") return undefined;
+    const error = Reflect.get(value, "error");
+    const errorMessage = error !== null && typeof error === "object" ? Reflect.get(error, "message") : undefined;
+    return {
+      id, type, server, tool, arguments: Reflect.get(value, "arguments"), result: Reflect.get(value, "result"), status,
+      ...(typeof errorMessage === "string" ? { error: { message: errorMessage } } : {}),
+    };
+  }
+  return undefined;
+}
+
+function parseCodexItemStatus(value: unknown): CodexSdkCommandEvent["status"] | undefined {
+  return value === "in_progress" || value === "completed" || value === "failed" ? value : undefined;
+}
+
+function readFiniteNumber(record: object, field: string) {
+  const value = Reflect.get(record, field);
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function createCodexContextUsage(

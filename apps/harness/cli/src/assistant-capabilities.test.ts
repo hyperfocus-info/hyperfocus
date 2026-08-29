@@ -8,8 +8,9 @@ import {
   type AssistantAssetRef,
   type BackgroundJobTemplate,
   type ModeDefinition
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { assertResolvedAssistantAssetRefs, resolveAssistantAssetRefs } from "./assistant-capabilities";
+import { createHarnessTestTempPath } from "./test-support/test-temp-root";
 
 function createAssistant(overrides: Partial<Assistant> = {}): Assistant {
   const now = new Date().toISOString();
@@ -45,7 +46,7 @@ function createAssetRef(assistantId: string, value: string, kind: AssistantAsset
 
 describe("assistant capabilities", () => {
   test("resolves repo skills to canonical paths", () => {
-    const repoRoot = path.join(process.cwd(), ".tmp-test-data", `assistant-cap-${crypto.randomUUID()}`);
+    const repoRoot = createHarnessTestTempPath("assistant-cap");
     const skillPath = path.join(repoRoot, ".agents", "skills", "review", "SKILL.md");
     mkdirSync(path.dirname(skillPath), { recursive: true });
     writeFileSync(skillPath, "# Review\n");
@@ -66,8 +67,8 @@ describe("assistant capabilities", () => {
   });
 
   test("resolves global skills when a repo skill is absent", () => {
-    const repoRoot = path.join(process.cwd(), ".tmp-test-data", `assistant-cap-${crypto.randomUUID()}`);
-    const homeRoot = path.join(process.cwd(), ".tmp-test-data", `assistant-global-${crypto.randomUUID()}`);
+    const repoRoot = createHarnessTestTempPath("assistant-cap");
+    const homeRoot = createHarnessTestTempPath("assistant-global");
     const globalRoot = path.join(homeRoot, "skills");
     mkdirSync(repoRoot, { recursive: true });
     const skillPath = path.join(globalRoot, "grill-me", "SKILL.md");
@@ -100,7 +101,7 @@ describe("assistant capabilities", () => {
   });
 
   test("rejects missing refs and out-of-scope project modes", () => {
-    const repoRoot = path.join(process.cwd(), ".tmp-test-data", `assistant-cap-${crypto.randomUUID()}`);
+    const repoRoot = createHarnessTestTempPath("assistant-cap");
     mkdirSync(repoRoot, { recursive: true });
     const assistant = createAssistant();
     const projectMode: ModeDefinition = {
@@ -129,7 +130,7 @@ describe("assistant capabilities", () => {
   });
 
   test("resolves background templates by id", () => {
-    const repoRoot = path.join(process.cwd(), ".tmp-test-data", `assistant-cap-${crypto.randomUUID()}`);
+    const repoRoot = createHarnessTestTempPath("assistant-cap");
     mkdirSync(repoRoot, { recursive: true });
     const assistant = createAssistant();
     const template: BackgroundJobTemplate = {

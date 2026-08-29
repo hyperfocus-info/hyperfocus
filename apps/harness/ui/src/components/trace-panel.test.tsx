@@ -1,8 +1,8 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireButton } from "../utils/tests/test-harness";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import type { Assistant, BackgroundJob, BackgroundJobRun, ClientCommand } from "../../../shared/protocol";
+import type { Assistant, BackgroundJob, BackgroundJobRun, ClientCommand } from "@hyperfocus/ai-core/protocol";
 import { TracePanel } from "./trace-panel";
 import { createDefaultJobsPanePreferences, createEmptyAssistantsState, harnessStore } from "../harness-store";
 import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
@@ -201,11 +201,11 @@ createUiTest("TracePanel", () => {
 
     render(() => <TracePanel />);
 
-    expect((screen.getByRole("button", { name: "Refresh the active run" }) as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole("button", { name: "Refresh this active subagent" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(requireButton(screen.getByRole("button", { name: "Refresh the active run" })).disabled).toBe(false);
+    expect(requireButton(screen.getByRole("button", { name: "Refresh this active subagent" })).disabled).toBe(true);
     const retryButtons = screen.getAllByRole("button", { name: /Retry/ });
-    expect((retryButtons[0] as HTMLButtonElement).disabled).toBe(true);
-    expect((retryButtons[1] as HTMLButtonElement).disabled).toBe(true);
+    expect(requireButton(retryButtons[0]).disabled).toBe(true);
+    expect(requireButton(retryButtons[1]).disabled).toBe(true);
   });
 
   it("sends explicit browser approval decisions from run UI", () => {
@@ -272,6 +272,42 @@ createUiTest("TracePanel", () => {
         approved: true
       }
     });
+  });
+
+  it("does not expose stale browser approval actions from a terminal last run", () => {
+    const approval = {
+      toolCallId: "stale-call",
+      toolName: "playwright-browser",
+      kind: "navigate" as const,
+      label: "Open stale page",
+      status: "pending" as const,
+      requestedAt: now
+    };
+    const lastRun = createRunFixture({
+      id: "run-stopped",
+      status: "stopped",
+      browserSessions: [createBrowserSessionFixture({
+        id: "stale-session",
+        runId: "run-stopped",
+        status: "awaiting-approval",
+        pendingApproval: approval,
+        activities: [createBrowserActivityFixture({
+          toolCallId: "stale-call",
+          status: "pending-approval",
+          approval
+        })]
+      })]
+    });
+    const project = createViewProjectFixture({ id: "project-stopped", lastRun });
+    seedHarnessStoreForTests(createHarnessStateFixture({
+      workspace: { activeProjectId: project.id, projects: [project] }
+    }));
+
+    render(() => <TracePanel />);
+
+    expect(screen.queryByRole("button", { name: "Approve this browser step" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reject this browser step" })).toBeNull();
+    expect(screen.queryByText("Approval needed")).toBeNull();
   });
 
   it("hides aggregation-only traces from the panel", () => {

@@ -110,7 +110,7 @@ export const DEFAULT_THEME_PREFERENCE: ThemePreference = {
   mode: "system"
 };
 
-export const DEFAULT_CUSTOM_BASE_THEME_ID: BuiltInThemeId = "graphite";
+export const DEFAULT_CUSTOM_BASE_THEME_ID = "graphite";
 
 const systemUiFont = `"IBM Plex Sans", "Trebuchet MS", "Segoe UI", sans-serif`;
 const systemDisplayFont = `"Aptos Display", "Segoe UI", sans-serif`;
@@ -128,22 +128,6 @@ export const SEMANTIC_LABEL_TOKENS = {
   "--danger-strong": "#b91c1c",
   "--success": "#047857",
   "--success-strong": "#166534"
-} satisfies Pick<
-  ThemeTokens,
-  | "--info"
-  | "--info-strong"
-  | "--warning"
-  | "--warning-strong"
-  | "--danger"
-  | "--danger-strong"
-  | "--success"
-  | "--success-strong"
->;
-
-type CustomThemeFontOption = {
-  value: string;
-  label: string;
-  description: string;
 };
 
 export const CUSTOM_THEME_FONT_OPTIONS = {
@@ -213,7 +197,7 @@ export const CUSTOM_THEME_FONT_OPTIONS = {
       description: "Structured technical monospace stack."
     }
   ]
-} satisfies Record<CustomThemeFontVariable, CustomThemeFontOption[]>;
+};
 
 const CUSTOM_THEME_COLOR_VARIABLE_SET = new Set<ThemeCssVariable>(
   CUSTOM_THEME_COLOR_VARIABLES.map((entry) => entry.variable)
@@ -715,7 +699,7 @@ export function isThemeModePreference(value: unknown): value is ThemeModePrefere
 }
 
 export function isBuiltInThemeId(value: unknown): value is BuiltInThemeId {
-  return typeof value === "string" && BUILT_IN_THEME_IDS.includes(value as BuiltInThemeId);
+  return typeof value === "string" && BUILT_IN_THEME_IDS.some((themeId) => themeId === value);
 }
 
 export function isThemeId(value: unknown): value is ThemeId {
@@ -727,7 +711,7 @@ export function getBuiltInTheme(themeId: BuiltInThemeId) {
 }
 
 export function normalizeThemePreference(input: unknown): ThemePreference {
-  const parsed = input && typeof input === "object" ? (input as Partial<ThemePreference>) : {};
+  const parsed = isRecord(input) ? input : {};
   const themeId = isThemeId(parsed.themeId) ? parsed.themeId : DEFAULT_THEME_PREFERENCE.themeId;
   const mode = isThemeModePreference(parsed.mode) ? parsed.mode : DEFAULT_THEME_PREFERENCE.mode;
   const custom = normalizeCustomThemeDefinition(parsed.custom);
@@ -746,11 +730,8 @@ export function createDefaultCustomTheme(baseThemeId: BuiltInThemeId = DEFAULT_C
 }
 
 export function normalizeCustomThemeDefinition(input: unknown): CustomThemeDefinition | undefined {
-  if (!input || typeof input !== "object") {
-    return undefined;
-  }
-
-  const parsed = input as Partial<CustomThemeDefinition>;
+  if (!isRecord(input)) return undefined;
+  const parsed = input;
   const baseThemeId = isBuiltInThemeId(parsed.baseThemeId) ? parsed.baseThemeId : DEFAULT_CUSTOM_BASE_THEME_ID;
   const baseTheme = getBuiltInTheme(baseThemeId);
   return {
@@ -901,11 +882,8 @@ export function normalizeHexColor(value: string) {
 }
 
 function normalizePartialTokens(input: unknown, fallbackTokens: ThemeTokens): Partial<ThemeTokens> | undefined {
-  if (!input || typeof input !== "object") {
-    return undefined;
-  }
-
-  const parsed = input as Partial<Record<ThemeCssVariable, unknown>>;
+  if (!isRecord(input)) return undefined;
+  const parsed = input;
   const tokens: Partial<ThemeTokens> = {};
   for (const variable of THEME_CSS_VARIABLES) {
     const value = parsed[variable];
@@ -923,6 +901,10 @@ function normalizePartialTokens(input: unknown, fallbackTokens: ThemeTokens): Pa
     }
   }
   return Object.keys(tokens).length > 0 ? tokens : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parseHexColor(value: string) {

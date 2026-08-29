@@ -127,20 +127,29 @@ export function requireToastStore() {
   return activeToastStore;
 }
 
-export const toastStore = new Proxy({} as ToastStoreApi, {
-  get(_target, prop, receiver) {
-    return Reflect.get(requireToastStore(), prop, receiver);
+export const toastStore: ToastStoreApi = {
+  get toasts() {
+    return requireToastStore().toasts;
   },
-  set(_target, prop, value, receiver) {
-    return Reflect.set(requireToastStore(), prop, value, receiver);
+  push(toast) {
+    requireToastStore().push(toast);
   },
-  ownKeys() {
-    return Reflect.ownKeys(requireToastStore());
+  dismiss(id) {
+    requireToastStore().dismiss(id);
   },
-  getOwnPropertyDescriptor(_target, prop) {
-    return Object.getOwnPropertyDescriptor(requireToastStore(), prop);
+  clear() {
+    requireToastStore().clear();
+  },
+  replace(toasts) {
+    requireToastStore().replace(toasts);
+  },
+  dispose() {
+    requireToastStore().dispose();
+  },
+  get pendingTimerCount() {
+    return requireToastStore().pendingTimerCount;
   }
-});
+};
 
 type ReportUiErrorOptions = {
   projectId?: string;

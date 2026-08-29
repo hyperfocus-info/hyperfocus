@@ -1,5 +1,5 @@
 import type { Subprocess } from "bun";
-import { BoundedOutputBuffer, formatOutputCapExceeded } from "../bounded-output-buffer";
+import { createBoundedOutputBuffer, formatOutputCapExceeded } from "../bounded-output-buffer";
 import { buildToolchainPath } from "./toolchain";
 
 export type CliProcessEnvInput = {
@@ -79,11 +79,16 @@ export function buildCliProcessEnv(input: CliProcessEnvInput) {
     EDITOR: "cat",
     PAGER: "cat",
     ...input.extraEnv
-  } satisfies Record<string, string | undefined>;
+  };
 }
 
-export class CliProcessManager {
-  async runNonInteractive(options: NonInteractiveOptions): Promise<CliProcessExecutionResult> {
+export type CliProcessManager = {
+  runNonInteractive(options: NonInteractiveOptions): Promise<CliProcessExecutionResult>;
+  startInteractive(options: InteractiveOptions): InteractiveCliProcess;
+};
+
+export function createCliProcessManager(): CliProcessManager {
+  async function runNonInteractive(options: NonInteractiveOptions): Promise<CliProcessExecutionResult> {
     const proc = Bun.spawn({
       cmd: options.cmd,
       cwd: options.cwd,
@@ -97,8 +102,8 @@ export class CliProcessManager {
       stderr: "pipe"
     });
 
-    const stdout = new BoundedOutputBuffer(CLI_PROCESS_OUTPUT_CAP_BYTES);
-    const stderr = new BoundedOutputBuffer(CLI_PROCESS_OUTPUT_CAP_BYTES);
+    const stdout = createBoundedOutputBuffer(CLI_PROCESS_OUTPUT_CAP_BYTES);
+    const stderr = createBoundedOutputBuffer(CLI_PROCESS_OUTPUT_CAP_BYTES);
     const startedAt = Date.now();
     let lastOutputAt = Date.now();
     let hangDetected = false;
@@ -178,7 +183,7 @@ export class CliProcessManager {
     }
   }
 
-  startInteractive(options: InteractiveOptions): InteractiveCliProcess {
+  function startInteractive(options: InteractiveOptions): InteractiveCliProcess {
     const proc = Bun.spawn({
       cmd: options.cmd,
       cwd: options.cwd,
@@ -192,8 +197,8 @@ export class CliProcessManager {
       stderr: "pipe"
     });
 
-    const stdout = new BoundedOutputBuffer(CLI_PROCESS_OUTPUT_CAP_BYTES);
-    const stderr = new BoundedOutputBuffer(CLI_PROCESS_OUTPUT_CAP_BYTES);
+    const stdout = createBoundedOutputBuffer(CLI_PROCESS_OUTPUT_CAP_BYTES);
+    const stderr = createBoundedOutputBuffer(CLI_PROCESS_OUTPUT_CAP_BYTES);
 
     const stdoutReader = consumeStream(proc.stdout, {
       onChunk: (chunk) => {
@@ -228,6 +233,8 @@ export class CliProcessManager {
       }
     };
   }
+
+  return { runNonInteractive, startInteractive };
 }
 
 async function consumeStream(
@@ -251,12 +258,13 @@ async function consumeStream(
   }
 }
 
-async function readStreamChunk(reader: ReadableStreamDefaultReader<Uint8Array>) {
+async function readStreamChunk(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<{ done: true } | { done: false; value: Uint8Array }> {
   try {
-    return await reader.read();
+    const result = await reader.read();
+    return result.done ? { done: true } : { done: false, value: result.value };
   } catch (error) {
     if (isStreamReaderCancelledError(error)) {
-      return { done: true, value: undefined } as ReadableStreamReadDoneResult<Uint8Array>;
+      return { done: true };
     }
     throw error;
   }

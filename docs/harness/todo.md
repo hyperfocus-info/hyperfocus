@@ -64,6 +64,15 @@
 - Require preview or dry-run plus per-item result readback for destructive, cross-project, or live-run actions so partial failures do not look like success
 - Project-chat bulk requests should route through the same operation registry and assistant maintenance scripts as the UI, not repeated single-row commands or ad hoc state mutation
 
+## August 2026 Grok Bot UX Signals
+
+- Make the active runtime feel like a dependable teammate through stable name, avatar, presence, and concise working or ready state; identity should clarify ownership, not become decorative persona chrome
+- Keep normal control conversational and outcome-focused, with technical activity progressively disclosed and durable evidence promoted into Run and result surfaces
+- Keep Simple ruthlessly conversation-first: no permanent specialist-pane strip, no raw thread identifiers, and no always-visible provider or model plumbing; expose Run contextually and keep settings behind one action
+- Carry the same calmer header, speaker identity, message rhythm, and secondary-action overflow into Advanced while preserving Plan, Run, Memory, model events, and full technical evidence
+- Ask only for judgment or sensitive takeover at narrow boundaries, and preserve explicit stop, retry, approval, and recovery paths instead of hiding failure state in the name of magic
+- Defer Grok Bot-style broad multi-agent group chat and personal-assistant expansion; the harness should borrow the legible handoff and ownership model only where it improves local coding work
+
 ## Engine Package Priorities
 
 - P1: Keep root and browser exports restrained until every public primitive has clear consumer proof, strong naming, and a defensible reason to live outside a game-local helper
@@ -178,12 +187,12 @@
 - Expand local modes into reusable skill and playbook distribution
 - Support install, import, export, and workspace discovery for custom workflows
 - Add versioned workspace and repo rules with visible source, last-used signal, and promote-from-chat or review flows instead of opaque auto-memory
-- Add a shared execution cache for planner, main agent, and subagents so proven repo heuristics, fallback plans, prompt fragments, and verification recipes can be reused without bloating every live context window
-- Keep that shared cache explicit and inspectable with source links, freshness markers, hit history, pin or expire controls, and easy clear or rebuild actions
+- Add export, import, and version history for intentional semantic project notes without turning them into a cross-project ambient cache
+- Add guided bulk cleanup for never-retrieved and stale note audit candidates, with review before archive or deletion
 - Add context lifecycle controls that recommend compressing, pinning, or evicting stale files and old turns before context bloat becomes cost or quality loss
 - Add skill provenance, trust signals, and per-workspace allowlists so reusable automation stays inspectable instead of silently privileged
 - Add managed update flows for installed skills with visible source, version, freshness, hit history, and review state
-- Keep memory lightweight, inspectable, and editable instead of opaque long-term agent state
+- Keep project notes pull-based, lightweight, inspectable, and editable; routine run completion must not generate memory
 
 ## GitHub Operations
 

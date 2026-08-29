@@ -1,4 +1,0 @@
-interface:
-  display_name: "User Audit"
-  short_description: "Run deep persona-based UI flow audits"
-  default_prompt: "Use $user-audit to run a deep multi-persona audit of this app and rank the gaps."

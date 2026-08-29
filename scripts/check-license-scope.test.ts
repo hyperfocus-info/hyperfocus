@@ -49,7 +49,7 @@ describe("repository license scope", () => {
   test("keeps distributed package licenses synchronized with the repository license", async () => {
     const [repositoryLicense, enginePackageLicense, editorPackageLicense] = await Promise.all([
       readRepositoryFile("LICENSE"),
-      readRepositoryFile("engine/LICENSE"),
+      readRepositoryFile("packages/engine/LICENSE"),
       readRepositoryFile("apps/engine-editor/LICENSE"),
     ]);
 

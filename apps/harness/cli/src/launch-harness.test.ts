@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import path from "node:path";
 import { resolveHarnessDbPath } from "./dev-db-recovery";
 import { launchHarnessServerWithRecovery } from "./launch-harness";
 import { startHarnessServer } from "./server";
 import type { StartupPhaseId, StartupTelemetrySink } from "./startup-telemetry";
-import { WorkspaceRepository } from "./workspace-repository";
+import { createWorkspaceRepository } from "./workspace-repository";
+import { createHarnessTestTempPath } from "./test-support/test-temp-root";
 
 setDefaultTimeout(15000);
 
@@ -86,11 +86,11 @@ describe("launch harness with recovery", () => {
       throw new Error("Expected Bun to assign a port for test server");
     }
 
-    const dbPath = path.join(process.cwd(), ".tmp-test-data", `launch-harness-${crypto.randomUUID()}.sqlite`);
+    const dbPath = createHarnessTestTempPath("launch-harness", ".sqlite");
     const server = await launchHarnessServerWithRecovery({
       port: busyPort,
       serverOnly: true,
-      repository: new WorkspaceRepository(dbPath, process.cwd()),
+      repository: createWorkspaceRepository(dbPath, process.cwd()),
       allowPortFallback: true
     });
     servers.push(server);
@@ -101,7 +101,7 @@ describe("launch harness with recovery", () => {
 
   test("uses fresh fallback db when purge leaves locked artifact behind", async () => {
     const warnings: string[] = [];
-    const dbPath = path.join(process.cwd(), ".tmp-test-data", `locked-${crypto.randomUUID()}.sqlite`);
+    const dbPath = createHarnessTestTempPath("locked", ".sqlite");
     let attemptCount = 0;
     const fallbackDbPath = dbPath.replace(".sqlite", ".recovered-test.sqlite");
 
@@ -219,7 +219,7 @@ describe("launch harness with recovery", () => {
 
   test("recoverable db retry emits telemetry with purge and fallback detail", async () => {
     const telemetry = createFakeStartupTelemetry();
-    const dbPath = path.join(process.cwd(), ".tmp-test-data", `recovery-${crypto.randomUUID()}.sqlite`);
+    const dbPath = createHarnessTestTempPath("recovery", ".sqlite");
     const fallbackDbPath = dbPath.replace(".sqlite", ".fallback.sqlite");
     let attemptCount = 0;
 
@@ -310,7 +310,7 @@ function createFakeStartupTelemetry(): StartupTelemetrySink & { events: FakeStar
 
   return {
     events,
-    logPath: path.join(process.cwd(), ".tmp-test-data", `startup-${crypto.randomUUID()}.jsonl`),
+    logPath: createHarnessTestTempPath("startup", ".jsonl"),
     sessionStart(message = "session start", details) {
       events.push({ attempt, kind: "session-start", message, details });
     },

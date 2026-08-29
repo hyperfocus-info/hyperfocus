@@ -1,9 +1,10 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireButton } from "../utils/tests/test-harness";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { ChatPanel } from "./chat-panel";
 import { harnessStore } from "../harness-store";
+import { beginRunDetailRetry, clearRunDetailRecovery, setRunDetailRecovery } from "../store/run-detail-state";
 import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
 import {
   createAgentPlanFixture,
@@ -17,6 +18,21 @@ import {
 createUiTest("ChatPanel followup integration", () => {
   beforeEach(() => {
     clearBrowserStateForTests();
+  });
+
+  it("keeps exhausted run-detail recovery visible beyond its toast", () => {
+    let retries = 0;
+    const run = createRunFixture({ id: "run-detail-unavailable", detailState: "unavailable" });
+    const project = createViewProjectFixture({ id: "project-detail-unavailable", activeRun: run, lastRun: run });
+    seedHarnessStoreForTests(createHarnessStateFixture({ chatPaneTab: "run",
+      workspace: { activeProjectId: project.id, projects: [project] } }));
+    setRunDetailRecovery({ projectId: project.id, threadId: run.threadId, runId: run.id, status: "retryable",
+      retry: () => { if (beginRunDetailRetry(run.id)) retries += 1; } });
+    render(() => <ChatPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry loading full run details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry loading full run details" }));
+    expect(screen.getByText(/Run actions remain disabled/)).not.toBeNull(); expect(retries).toBe(1);
+    clearRunDetailRecovery(run.id);
   });
 
   it("accepts immediate plan refinement after planner-ready message stops streaming", () => {
@@ -46,7 +62,7 @@ createUiTest("ChatPanel followup integration", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
 
     harnessStore.applyServerEvent({
@@ -95,13 +111,13 @@ createUiTest("ChatPanel followup integration", () => {
 
     expect(screen.queryByText("assistant (streaming)")).toBeNull();
     cleanup();
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     expect(screen.getAllByText(plan.summary).length).toBeGreaterThan(0);
     expect(harnessStore.state.workspace.projects[0]?.session.isStreaming).toBe(false);
-    expect((screen.getByRole("button", { name: "Refine plan before execution" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(requireButton(screen.getByRole("button", { name: "Refine plan before execution" })).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Refine plan before execution" }));
 
-    expect((commands[0] as { type: string }).type).toBe("planning.refine");
+    expect(commands[0]?.type).toBe("planning.refine");
   });
 });

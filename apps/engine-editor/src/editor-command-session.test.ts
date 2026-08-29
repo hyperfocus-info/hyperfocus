@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { EditorCommandSession, applyEditorPatch, type EditorCommandAsset } from "./editor-command-session.ts";
-import { createDefaultProject } from "./project.ts";
+import { applyEditorPatch, createEditorCommandSession, validateCommandPlan, type EditorCommandAsset } from "./editor-command-session.ts";
+import { createDefaultProject, stableProjectJson } from "@hyperfocus/engine/project";
 
 describe("DOM-free editor command session", () => {
   test("applies validated project patches and returns explicit handoffs", async () => {
-    const session = new EditorCommandSession(createDefaultProject("Before"));
+    const session = createEditorCommandSession(createDefaultProject("Before"));
     const handoff = await session.execute({
       requestId: "rename-1",
       intent: "Rename and retarget the project without a browser",
@@ -28,7 +28,7 @@ describe("DOM-free editor command session", () => {
   });
 
   test("validation failures do not mutate authoritative state", async () => {
-    const session = new EditorCommandSession(createDefaultProject("Safe"));
+    const session = createEditorCommandSession(createDefaultProject("Safe"));
     const handoff = await session.execute({
       requestId: "invalid-1",
       intent: "Reject an invalid project mutation",
@@ -49,15 +49,15 @@ describe("DOM-free editor command session", () => {
     expect(() => applyEditorPatch(project, [{ op: "test", path: "/name", value: "Wrong" }])).toThrow("test failed");
   });
 
-  test("rejects unknown command types before execution", async () => {
-    const session = new EditorCommandSession(createDefaultProject());
-    await expect(session.execute({ requestId: "unknown-1", intent: "Reject unknown", commands: [{ type: "unknown.command" } as never] })).rejects.toThrow("unknown command");
+  test("rejects unknown command types before execution", () => {
+    const session = createEditorCommandSession(createDefaultProject());
+    expect(() => validateCommandPlan({ requestId: "unknown-1", intent: "Reject unknown", commands: [{ type: "unknown.command" }] })).toThrow("invalid command");
     expect(session.dirty).toBe(false);
   });
 
-  test("imports and removes binary assets through an injected host", async () => {
+  test("keeps removed binary assets recoverable for project undo", async () => {
     const assets = new Map<string, EditorCommandAsset>();
-    const session = new EditorCommandSession(createDefaultProject(), {
+    const session = createEditorCommandSession(createDefaultProject(), {
       async putAsset(asset) { assets.set(asset.id, asset); },
       async removeAsset(id) { assets.delete(id); },
     });
@@ -73,13 +73,16 @@ describe("DOM-free editor command session", () => {
 
     const removed = await session.execute({ requestId: "asset-2", intent: "Remove imported data", commands: [{ type: "asset.remove", assetId: asset.id }] });
     expect(removed.ok).toBe(true);
-    expect(assets.has(asset.id)).toBe(false);
+    expect(assets.has(asset.id)).toBe(true);
     expect(removed.snapshot.project.assets.some((candidate) => candidate.id === asset.id)).toBe(false);
+    const restored = await session.execute({ requestId: "asset-3", intent: "Undo asset removal", commands: [{ type: "history.undo" }] });
+    expect(restored.snapshot.project.assets.some((candidate) => candidate.id === asset.id)).toBe(true);
+    expect(assets.get(asset.id)?.bytes.byteLength).toBe(14);
   });
 
   test("creates binary-backed starters through the same command host", async () => {
     const assets = new Map<string, EditorCommandAsset>();
-    const session = new EditorCommandSession(createDefaultProject(), {
+    const session = createEditorCommandSession(createDefaultProject(), {
       async putAsset(asset) { assets.set(asset.id, asset); },
       async removeAsset(id) { assets.delete(id); },
     });
@@ -88,5 +91,134 @@ describe("DOM-free editor command session", () => {
     expect(handoff.snapshot.project.name).toBe("Headless World");
     expect(assets.size).toBeGreaterThan(0);
     expect(handoff.snapshot.project.assets.every((asset) => asset.source !== "imported" || /^[0-9a-f]{64}$/.test(asset.sha256 ?? ""))).toBe(true);
+  });
+
+  test("hydrates a cataloged asset without duplicating metadata or dirtying history", async () => {
+    const project = createDefaultProject("Hydration target");
+    project.assets.push({
+      id: "existing-data",
+      name: "existing.txt",
+      kind: "data",
+      mimeType: "text/plain",
+      size: 3,
+      lastModified: 1,
+      source: "imported",
+      sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    });
+    const catalogSize = project.assets.length;
+    const assets = new Map<string, EditorCommandAsset>();
+    const session = createEditorCommandSession(project, {
+      async putAsset(asset) { assets.set(asset.id, asset); },
+      async removeAsset(id) { assets.delete(id); },
+    });
+    const handoff = await session.execute({
+      requestId: "hydrate-1",
+      intent: "Restore packed bytes for an already-open project",
+      commands: [{ type: "asset.hydrate", assetId: "existing-data", base64: "YWJj" }],
+    });
+
+    expect(handoff.ok).toBe(true);
+    expect(handoff.snapshot.project.assets).toHaveLength(catalogSize);
+    expect(handoff.snapshot.project.assets.filter((asset) => asset.id === "existing-data")).toHaveLength(1);
+    expect(handoff.snapshot.revision).toBe(0);
+    expect(handoff.snapshot.dirty).toBe(false);
+    expect(assets.get("existing-data")?.bytes).toEqual(new TextEncoder().encode("abc"));
+  });
+
+  test("accepts every starter from the canonical extensible inventory", async () => {
+    const session = createEditorCommandSession(createDefaultProject("Before"));
+    const handoff = await session.execute({ requestId: "platformer-starter", intent: "Create a platformer from the shared starter inventory", commands: [{ type: "project.create-starter", starter: "platformer", name: "Glassline" }] });
+    expect(handoff.ok).toBe(true);
+    expect(handoff.snapshot.project.extensions?.hyperfocusStarter).toMatchObject({ template: "platformer" });
+  });
+
+  test("normalizes portable glTF JSON imported with a generic browser MIME", async () => {
+    const assets = new Map<string, EditorCommandAsset>();
+    const session = createEditorCommandSession(createDefaultProject(), {
+      async putAsset(asset) { assets.set(asset.id, asset); },
+      async removeAsset(id) { assets.delete(id); },
+    });
+    const handoff = await session.execute({ requestId: "gltf-1", intent: "Import portable glTF", commands: [{ type: "asset.import", name: "level.gltf", mimeType: "application/octet-stream", base64: btoa('{"asset":{"version":"2.0"}}') }] });
+    expect(handoff.snapshot.project.assets.at(-1)).toMatchObject({ name: "level.gltf", kind: "data", mimeType: "model/gltf+json" });
+  });
+
+  test("uses reversible deltas and serializes only dirty top-level sections for project patches", async () => {
+    const session = createEditorCommandSession(createDefaultProject("Delta history"));
+    const projectReference = session.project;
+    const initialSections = session.serializationMetrics.sectionSerializations;
+    const handoff = await session.execute({
+      requestId: "delta-1",
+      intent: "Rename without cloning every project version",
+      commands: [{ type: "project.patch", label: "Rename", operations: [{ op: "replace", path: "/name", value: "Delta changed" }] }]
+    });
+
+    expect(handoff.ok).toBe(true);
+    expect(session.project).toBe(projectReference);
+    expect(session.project.name).toBe("Delta changed");
+    expect(session.serializationMetrics.sectionSerializations).toBe(initialSections);
+    expect(session.serialize()).toBe(stableProjectJson(session.project));
+    expect(session.serializationMetrics.sectionSerializations - initialSections).toBe(2);
+    expect(session.undo()).toBe(true);
+    expect(session.project).toBe(projectReference);
+    expect(session.project.name).toBe("Delta history");
+    expect(session.redo()).toBe(true);
+    expect(session.project.name).toBe("Delta changed");
+  });
+
+  test("reverses array additions at their concrete index", async () => {
+    const session = createEditorCommandSession(createDefaultProject());
+    const before = session.project.settings.input.length;
+    await session.execute({ requestId: "delta-array", intent: "Add binding", commands: [{
+      type: "project.patch", label: "Add input", operations: [{ op: "add", path: "/settings/input/-",
+        value: { action: "dash", bindings: ["ShiftLeft"] } }]
+    }] });
+    expect(session.project.settings.input).toHaveLength(before + 1);
+    session.undo();
+    expect(session.project.settings.input).toHaveLength(before);
+    session.redo();
+    expect(session.project.settings.input.at(-1)?.action).toBe("dash");
+  });
+
+  test("applies reusable choreography through the DOM-free command surface", async () => {
+    const project = createDefaultProject("Command choreography");
+    const [attacker, victim] = project.scenes[0]!.entities;
+    const session = createEditorCommandSession(project);
+    const handoff = await session.execute({ requestId: "bite-command", intent: "Author a complete bite exchange", commands: [{
+      type: "timeline.apply-recipe",
+      recipe: "bite",
+      frame: 40,
+      primaryEntityId: attacker!.id,
+      secondaryEntityId: victim!.id,
+      id: "bite-command-01",
+    }] });
+
+    expect(handoff.ok).toBe(true);
+    expect(handoff.results[0]?.detail).toContain("8 editable tracks, 3 effects, contact frame 49");
+    expect(handoff.snapshot.project.timeline.effects?.map((effect) => effect.kind)).toEqual(["camera-shake", "hit-flash", "particle-burst"]);
+    expect(handoff.snapshot.dirty).toBe(true);
+    expect(session.undo()).toBe(true);
+    expect(session.project.timeline.effects).toEqual([]);
+  });
+
+  test("authors and replaces stepped animation clip cues through the DOM-free command surface", async () => {
+    const project = createDefaultProject("Command clip cues");
+    const entity = project.scenes[0]!.entities[0]!;
+    const session = createEditorCommandSession(project);
+    const first = await session.execute({ requestId: "idle-cue", intent: "Switch the actor to idle", commands: [{
+      type: "timeline.set-clip-key", entityId: entity.id, clipId: "idle", frame: 24,
+    }] });
+    expect(first.ok).toBe(true);
+    expect(first.results[0]?.detail).toContain("Set Idle");
+    const track = session.project.timeline.clipTracks?.[0];
+    expect(track).toMatchObject({ targetId: entity.id, keyframes: [{ frame: 24, clipId: "idle" }] });
+
+    const replace = await session.execute({ requestId: "attack-cue", intent: "Replace that cue", commands: [{
+      type: "timeline.set-clip-key", entityId: entity.id, clipId: "attack", frame: 24, trackId: track!.id,
+    }] });
+    expect(replace.results[0]?.detail).toContain("Updated Attack");
+    expect(session.project.timeline.clipTracks?.[0]?.keyframes).toHaveLength(1);
+    expect(session.project.timeline.clipTracks?.[0]?.keyframes[0]?.clipId).toBe("attack");
+    expect(session.undo()).toBe(true);
+    expect(session.project.timeline.clipTracks?.[0]?.keyframes[0]?.clipId).toBe("idle");
   });
 });

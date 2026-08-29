@@ -1,6 +1,6 @@
 import { readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { IdeFileRead, IdeFileTreeEntry, IdeGitChange, IdeSearchResult } from "../../shared/protocol";
+import type { IdeFileRead, IdeFileTreeEntry, IdeGitChange, IdeSearchResult } from "@hyperfocus/ai-core/protocol";
 import { resolveBundledRipgrepPath } from "./agent-runtimes/toolchain";
 import { resolveGlobalSkillsRoot } from "./harness-paths";
 
@@ -64,37 +64,32 @@ export type SearchIdeProjectOptions = {
   signal?: AbortSignal;
 };
 
-export class IdeProjectService {
-  private readonly fs: FileSystemAdapter;
-  private readonly process: ProcessAdapter;
-  private readonly ripgrepPath?: string;
-  private readonly externalFileRoots: string[];
+export type IdeProjectService = ReturnType<typeof createIdeProjectService>;
 
-  constructor(options: IdeProjectServiceOptions = {}) {
-    this.fs = { ...defaultFs, ...options.fs };
-    this.process = { ...defaultProcess, ...options.process };
-    this.ripgrepPath = options.ripgrepPath;
-    this.externalFileRoots = options.externalFileRoots ?? [resolveGlobalSkillsRoot()];
-  }
+export function createIdeProjectService(options: IdeProjectServiceOptions = {}) {
+  const fs: FileSystemAdapter = { ...defaultFs, ...options.fs };
+  const processAdapter: ProcessAdapter = { ...defaultProcess, ...options.process };
+  const ripgrepPath = options.ripgrepPath;
+  const externalFileRoots = options.externalFileRoots ?? [resolveGlobalSkillsRoot()];
 
-  async listFileTree(options: ListFileTreeOptions): Promise<{ rootPath: string; entries: IdeFileTreeEntry[]; truncated: boolean }> {
-    const projectRoot = resolveProjectRoot(options.projectRoot);
-    const startPath = resolveProjectPath(projectRoot, options.rootPath ?? ".");
-    const maxEntries = options.maxEntries ?? DEFAULT_TREE_ENTRY_LIMIT;
+  async function listFileTree(listOptions: ListFileTreeOptions): Promise<{ rootPath: string; entries: IdeFileTreeEntry[]; truncated: boolean }> {
+    const projectRoot = resolveProjectRoot(listOptions.projectRoot);
+    const startPath = resolveProjectPath(projectRoot, listOptions.rootPath ?? ".");
+    const maxEntries = listOptions.maxEntries ?? DEFAULT_TREE_ENTRY_LIMIT;
     const entries: IdeFileTreeEntry[] = [];
     let truncated = false;
 
     let children: Array<{ name: string; isDirectory: () => boolean }>;
     try {
-      children = await this.fs.readdir(startPath, { withFileTypes: true });
+      children = await fs.readdir(startPath, { withFileTypes: true });
     } catch {
       children = [];
     }
 
-    const parentPath = options.rootPath && options.rootPath !== "." ? toProtocolPath(path.relative(projectRoot, startPath)) : undefined;
+    const parentPath = listOptions.rootPath && listOptions.rootPath !== "." ? toProtocolPath(path.relative(projectRoot, startPath)) : undefined;
     const parentDepth = parentPath ? parentPath.split("/").filter(Boolean).length : 0;
     const sorted = children
-      .filter((entry) => options.includeIgnored || !IGNORED_DIRECTORY_NAMES.has(entry.name))
+      .filter((entry) => listOptions.includeIgnored || !IGNORED_DIRECTORY_NAMES.has(entry.name))
       .sort((left, right) => Number(right.isDirectory()) - Number(left.isDirectory()) || left.name.localeCompare(right.name));
 
     for (const child of sorted) {
@@ -111,7 +106,7 @@ export class IdeProjectService {
         kind: isDirectory ? "directory" : "file",
         depth: parentDepth,
         parentPath,
-        hasChildren: isDirectory ? await hasVisibleChildren(this.fs, absolutePath, options.includeIgnored) : undefined
+        hasChildren: isDirectory ? await hasVisibleChildren(fs, absolutePath, listOptions.includeIgnored) : undefined
       };
       entries.push(entry);
     }
@@ -119,23 +114,23 @@ export class IdeProjectService {
     return { rootPath: projectRoot, entries, truncated };
   }
 
-  async readFile(options: ReadIdeFileOptions): Promise<IdeFileRead> {
-    const projectRoot = resolveProjectRoot(options.projectRoot);
-    const absolutePath = resolveProjectPath(projectRoot, options.filePath, this.externalFileRoots);
-    const stats = await this.fs.stat(absolutePath);
+  async function readIdeFile(readOptions: ReadIdeFileOptions): Promise<IdeFileRead> {
+    const projectRoot = resolveProjectRoot(readOptions.projectRoot);
+    const absolutePath = resolveProjectPath(projectRoot, readOptions.filePath, externalFileRoots);
+    const stats = await fs.stat(absolutePath);
     if (!stats.isFile()) {
       throw new Error("IDE file read target is not a file");
     }
 
-    const maxBytes = options.maxBytes ?? DEFAULT_FILE_READ_LIMIT;
-    const buffer = await this.fs.readFile(absolutePath);
+    const maxBytes = readOptions.maxBytes ?? DEFAULT_FILE_READ_LIMIT;
+    const buffer = await fs.readFile(absolutePath);
     const isBinary = isLikelyBinary(buffer);
     const tooLarge = buffer.byteLength > maxBytes;
     const content = isBinary || tooLarge ? undefined : buffer.toString("utf8");
     const normalizedPath = toProtocolFilePath(projectRoot, absolutePath);
 
     return {
-      projectId: options.projectId,
+      projectId: readOptions.projectId,
       path: normalizedPath,
       name: path.basename(absolutePath),
       language: inferLanguage(absolutePath),
@@ -148,29 +143,29 @@ export class IdeProjectService {
     };
   }
 
-  async writeFile(options: WriteIdeFileOptions): Promise<IdeFileRead> {
-    const projectRoot = resolveProjectRoot(options.projectRoot);
-    const absolutePath = resolveProjectPath(projectRoot, options.filePath, this.externalFileRoots);
-    const stats = await this.fs.stat(absolutePath).catch(() => undefined);
+  async function writeIdeFile(writeOptions: WriteIdeFileOptions): Promise<IdeFileRead> {
+    const projectRoot = resolveProjectRoot(writeOptions.projectRoot);
+    const absolutePath = resolveProjectPath(projectRoot, writeOptions.filePath, externalFileRoots);
+    const stats = await fs.stat(absolutePath).catch(() => undefined);
     if (stats && !stats.isFile()) {
       throw new Error("IDE file write target is not a file");
     }
-    await this.fs.writeFile(absolutePath, options.content, "utf8");
-    return this.readFile({
-      projectId: options.projectId,
+    await fs.writeFile(absolutePath, writeOptions.content, "utf8");
+    return readIdeFile({
+      projectId: writeOptions.projectId,
       projectRoot,
-      filePath: options.filePath
+      filePath: writeOptions.filePath
     });
   }
 
-  async searchProject(options: SearchIdeProjectOptions): Promise<{ results: IdeSearchResult[]; truncated: boolean }> {
-    const projectRoot = resolveProjectRoot(options.projectRoot);
-    const rgPath = this.ripgrepPath ?? resolveBundledRipgrepPath();
+  async function searchProject(searchOptions: SearchIdeProjectOptions): Promise<{ results: IdeSearchResult[]; truncated: boolean }> {
+    const projectRoot = resolveProjectRoot(searchOptions.projectRoot);
+    const rgPath = ripgrepPath ?? resolveBundledRipgrepPath();
     if (!rgPath) {
       throw new Error("Bundled ripgrep is unavailable");
     }
 
-    const maxResults = options.maxResults ?? DEFAULT_SEARCH_RESULT_LIMIT;
+    const maxResults = searchOptions.maxResults ?? DEFAULT_SEARCH_RESULT_LIMIT;
     const args = [
       "--json",
       "--line-number",
@@ -179,42 +174,42 @@ export class IdeProjectService {
       "--glob",
       "!{.git,node_modules,dist,build,.cache,coverage,target}/**"
     ];
-    if (!options.regex) {
+    if (!searchOptions.regex) {
       args.push("-F");
     }
-    if (!options.caseSensitive) {
+    if (!searchOptions.caseSensitive) {
       args.push("-i");
     }
-    if (options.wholeWord) {
+    if (searchOptions.wholeWord) {
       args.push("-w");
     }
-    if (options.includeGlob) {
-      args.push("--glob", options.includeGlob);
+    if (searchOptions.includeGlob) {
+      args.push("--glob", searchOptions.includeGlob);
     }
-    if (options.excludeGlob) {
-      args.push("--glob", `!${options.excludeGlob}`);
+    if (searchOptions.excludeGlob) {
+      args.push("--glob", `!${searchOptions.excludeGlob}`);
     }
-    args.push(options.query, ".");
+    args.push(searchOptions.query, ".");
 
-    const process = this.process.spawn([rgPath, ...args], {
+    const process = processAdapter.spawn([rgPath, ...args], {
       cwd: projectRoot,
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore",
-      signal: options.signal
+      signal: searchOptions.signal
     });
     const output = await new Response(process.stdout).text();
     await process.exited;
     return parseRipgrepJson(output, maxResults);
   }
 
-  async gitStatus(projectRootInput: string): Promise<{ branch?: string; isRepository: boolean; changes: IdeGitChange[] }> {
+  async function gitStatus(projectRootInput: string): Promise<{ branch?: string; isRepository: boolean; changes: IdeGitChange[] }> {
     const projectRoot = await resolveRealProjectRoot(projectRootInput);
-    const repoRoot = await this.resolveGitRepoRoot(projectRoot);
+    const repoRoot = await resolveGitRepoRoot(projectRoot);
     if (!repoRoot) {
       return { isRepository: false, changes: [] };
     }
-    const process = this.process.spawn(["git", "-C", projectRoot, "status", "--porcelain=v1", "--branch", "-z", "--", "."], {
+    const process = processAdapter.spawn(["git", "-C", projectRoot, "status", "--porcelain=v1", "--branch", "-z", "--", "."], {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore"
@@ -227,8 +222,8 @@ export class IdeProjectService {
     return normalizeGitStatusForProject(parseGitStatus(output), repoRoot, projectRoot);
   }
 
-  private async resolveGitRepoRoot(projectRoot: string) {
-    const process = this.process.spawn(["git", "-C", projectRoot, "rev-parse", "--show-toplevel"], {
+  async function resolveGitRepoRoot(projectRoot: string) {
+    const process = processAdapter.spawn(["git", "-C", projectRoot, "rev-parse", "--show-toplevel"], {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore"
@@ -237,6 +232,8 @@ export class IdeProjectService {
     const exitCode = await process.exited;
     return exitCode === 0 ? path.resolve(output.trim()) : undefined;
   }
+
+  return { listFileTree, readFile: readIdeFile, writeFile: writeIdeFile, searchProject, gitStatus };
 }
 
 export function resolveProjectPath(projectRootInput: string, inputPath: string, externalFileRoots: readonly string[] = []) {

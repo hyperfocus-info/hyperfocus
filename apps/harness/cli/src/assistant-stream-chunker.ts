@@ -1,113 +1,105 @@
-export type AssistantStreamChunk = {
-  index: number;
-  content: string;
-  startedAt: string;
-  updatedAt: string;
-  closed: boolean;
-};
-
-type AssistantStreamChunkerOptions = {
-  targetIntervalMs?: number;
-  maxWaitMs?: number;
-};
-
 const DEFAULT_TARGET_INTERVAL_MS = 5_000;
 const DEFAULT_MAX_WAIT_MS = 10_000;
 
-export class AssistantStreamChunker {
-  private readonly targetIntervalMs: number;
-  private readonly maxWaitMs: number;
-  private chunks: AssistantStreamChunk[] = [];
-  private open = "";
-  private openStartedAt = 0;
-  private openStartedIso = "";
-  private openUpdatedIso = "";
+function createStreamChunk(index: number, content: string, startedAt: string, updatedAt: string, closed: boolean) {
+  return { index, content, startedAt, updatedAt, closed };
+}
 
-  constructor(options: AssistantStreamChunkerOptions = {}) {
-    this.targetIntervalMs = options.targetIntervalMs ?? DEFAULT_TARGET_INTERVAL_MS;
-    this.maxWaitMs = options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
-  }
+export type AssistantStreamChunk = ReturnType<typeof createStreamChunk>;
 
-  append(delta: string, nowMs = Date.now()) {
-    if (!delta) {
-      return;
-    }
+export function createAssistantStreamChunker(
+  options: { targetIntervalMs?: number; maxWaitMs?: number } = {}
+) {
+  const targetIntervalMs = options.targetIntervalMs ?? DEFAULT_TARGET_INTERVAL_MS;
+  const maxWaitMs = options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
+  const chunks: AssistantStreamChunk[] = [];
+  let open = "";
+  let openStartedAt = 0;
+  let openStartedIso = "";
+  let openUpdatedIso = "";
 
-    const nowIso = new Date(nowMs).toISOString();
-    if (!this.open) {
-      this.openStartedAt = nowMs;
-      this.openStartedIso = nowIso;
-    }
-
-    this.open += delta;
-    this.openUpdatedIso = nowIso;
-    this.closeReadyChunks(nowMs, false);
-  }
-
-  seed(content: string, nowMs = Date.now()) {
-    if (this.hasContent() || !content.trim()) {
-      return;
-    }
-    this.append(content, nowMs);
-  }
-
-  flush(nowMs = Date.now()) {
-    this.closeReadyChunks(nowMs, true);
-  }
-
-  getChunks() {
-    const result = [...this.chunks];
-    if (this.open.trim()) {
-      result.push({
-        index: result.length,
-        content: this.open,
-        startedAt: this.openStartedIso || new Date().toISOString(),
-        updatedAt: this.openUpdatedIso || new Date().toISOString(),
-        closed: false
-      });
-    }
-    return result;
-  }
-
-  hasContent() {
-    return this.chunks.length > 0 || Boolean(this.open.trim());
-  }
-
-  private closeReadyChunks(nowMs: number, force: boolean) {
-    while (this.open.trim()) {
-      const elapsed = nowMs - this.openStartedAt;
-      const boundary = force ? this.open.length : findSplitBoundary(this.open, elapsed >= this.maxWaitMs);
+  const closeReadyChunks = (nowMs: number, force: boolean) => {
+    while (open.trim()) {
+      const elapsed = nowMs - openStartedAt;
+      const boundary = force ? open.length : findSplitBoundary(open, elapsed >= maxWaitMs);
       if (boundary === undefined) {
         return;
       }
-      if (!force && elapsed < this.targetIntervalMs) {
+      if (!force && elapsed < targetIntervalMs) {
         return;
       }
 
-      const content = this.open.slice(0, boundary).trimEnd();
+      const content = open.slice(0, boundary).trimEnd();
       if (!content.trim()) {
-        this.open = this.open.slice(boundary);
+        open = open.slice(boundary);
         continue;
       }
 
-      this.chunks.push({
-        index: this.chunks.length,
-        content,
-        startedAt: this.openStartedIso || new Date(nowMs).toISOString(),
-        updatedAt: this.openUpdatedIso || new Date(nowMs).toISOString(),
-        closed: true
-      });
+      chunks.push(
+        createStreamChunk(
+          chunks.length,
+          content,
+          openStartedIso || new Date(nowMs).toISOString(),
+          openUpdatedIso || new Date(nowMs).toISOString(),
+          true
+        )
+      );
 
-      this.open = this.open.slice(boundary).trimStart();
-      this.openStartedAt = nowMs;
-      this.openStartedIso = new Date(nowMs).toISOString();
-      this.openUpdatedIso = this.openStartedIso;
+      open = open.slice(boundary).trimStart();
+      openStartedAt = nowMs;
+      openStartedIso = new Date(nowMs).toISOString();
+      openUpdatedIso = openStartedIso;
 
       if (!force) {
         return;
       }
     }
-  }
+  };
+
+  const append = (delta: string, nowMs = Date.now()) => {
+    if (!delta) {
+      return;
+    }
+
+    const nowIso = new Date(nowMs).toISOString();
+    if (!open) {
+      openStartedAt = nowMs;
+      openStartedIso = nowIso;
+    }
+
+    open += delta;
+    openUpdatedIso = nowIso;
+    closeReadyChunks(nowMs, false);
+  };
+
+  const hasContent = () => chunks.length > 0 || Boolean(open.trim());
+
+  const seed = (content: string, nowMs = Date.now()) => {
+    if (hasContent() || !content.trim()) {
+      return;
+    }
+    append(content, nowMs);
+  };
+
+  const flush = (nowMs = Date.now()) => closeReadyChunks(nowMs, true);
+
+  const getChunks = () => {
+    const result = [...chunks];
+    if (open.trim()) {
+      result.push(
+        createStreamChunk(
+          result.length,
+          open,
+          openStartedIso || new Date().toISOString(),
+          openUpdatedIso || new Date().toISOString(),
+          false
+        )
+      );
+    }
+    return result;
+  };
+
+  return { append, seed, flush, getChunks, hasContent };
 }
 
 function findSplitBoundary(input: string, allowWhitespaceFallback: boolean) {

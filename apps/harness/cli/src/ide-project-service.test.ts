@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
-import { IdeProjectService, parseGitStatus, parseRipgrepJson, resolveProjectPath } from "./ide-project-service";
+import { createIdeProjectService, parseGitStatus, parseRipgrepJson, resolveProjectPath } from "./ide-project-service";
 
 async function withTempProject(run: (root: string) => Promise<void>) {
   const root = await mkdtemp(path.join(os.tmpdir(), "harness-ide-"));
@@ -29,14 +29,14 @@ describe("IdeProjectService", () => {
       await writeFile(path.join(root, "src", "app.ts"), "export const ok = true;\n");
       await writeFile(path.join(root, "node_modules", "pkg", "index.js"), "ignored\n");
 
-      const result = await new IdeProjectService().listFileTree({ projectRoot: root });
+      const result = await createIdeProjectService().listFileTree({ projectRoot: root });
 
       expect(result.entries.map((entry) => entry.path)).toContain("src");
       expect(result.entries.find((entry) => entry.path === "src")?.hasChildren).toBe(true);
       expect(result.entries.some((entry) => entry.path.startsWith("node_modules"))).toBe(false);
       expect(result.truncated).toBe(false);
 
-      const childResult = await new IdeProjectService().listFileTree({ projectRoot: root, rootPath: "src" });
+      const childResult = await createIdeProjectService().listFileTree({ projectRoot: root, rootPath: "src" });
       expect(childResult.entries.map((entry) => entry.path)).toContain("src/app.ts");
       expect(childResult.entries.find((entry) => entry.path === "src/app.ts")?.parentPath).toBe("src");
     });
@@ -56,7 +56,7 @@ describe("IdeProjectService", () => {
         await mkdir(path.dirname(skillPath), { recursive: true });
         await writeFile(skillPath, "# caveman\n");
 
-        const file = await new IdeProjectService({ externalFileRoots: [skillsRoot] }).readFile({
+        const file = await createIdeProjectService({ externalFileRoots: [skillsRoot] }).readFile({
           projectId: "project-1",
           projectRoot: root,
           filePath: skillPath
@@ -75,7 +75,7 @@ describe("IdeProjectService", () => {
     await withTempProject(async (root) => {
       await writeFile(path.join(root, "readme.md"), "# Hello\nBody\n");
 
-      const file = await new IdeProjectService().readFile({
+      const file = await createIdeProjectService().readFile({
         projectId: "project-1",
         projectRoot: root,
         filePath: "readme.md"
@@ -93,7 +93,7 @@ describe("IdeProjectService", () => {
     await withTempProject(async (root) => {
       await writeFile(path.join(root, "readme.md"), "# Old\n");
 
-      const file = await new IdeProjectService().writeFile({
+      const file = await createIdeProjectService().writeFile({
         projectId: "project-1",
         projectRoot: root,
         filePath: "readme.md",
@@ -109,7 +109,7 @@ describe("IdeProjectService", () => {
     await withTempProject(async (root) => {
       await writeFile(path.join(root, "asset.bin"), Buffer.from([1, 2, 0, 4]));
       await writeFile(path.join(root, "large.txt"), "0123456789");
-      const service = new IdeProjectService();
+      const service = createIdeProjectService();
 
       const binary = await service.readFile({ projectId: "project-1", projectRoot: root, filePath: "asset.bin" });
       const large = await service.readFile({ projectId: "project-1", projectRoot: root, filePath: "large.txt", maxBytes: 4 });
@@ -171,7 +171,7 @@ describe("IdeProjectService", () => {
       await runGit(repoRoot, ["commit", "-m", "init"]);
       await writeFile(skillPath, "new\n");
 
-      const status = await new IdeProjectService().gitStatus(projectRoot);
+      const status = await createIdeProjectService().gitStatus(projectRoot);
 
       expect(status.isRepository).toBe(true);
       expect(status.changes).toContainEqual({ path: ".agents/skills/deep/SKILL.md", status: "modified", shortStatus: "M" });

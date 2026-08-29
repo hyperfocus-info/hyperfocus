@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { stylexSolidPlugin } from "../../../../../scripts/stylex-solid-plugin";
+import { stylexSolidPlugin } from "@hyperfocus/ui/build/stylex-solid-plugin";
 
 const [smokeRoot, fixtureSourcePath] = process.argv.slice(2);
 if (!smokeRoot || !fixtureSourcePath) {
@@ -37,6 +37,7 @@ await writeFile(path.join(outDir, "index.html"), `<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="harness-session-token" content="browser-fixture-session-token" />
     <title>Project Chat First Paint</title>
     <link rel="stylesheet" href="./main.css" />
   </head>

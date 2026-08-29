@@ -1,7 +1,7 @@
-import { Match, Switch, createEffect, createMemo, createSignal, onMount } from "solid-js";
+import { Match, Show, Switch, createEffect, createMemo, createSignal, onMount } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { ClipboardCheck, ChevronDown, Copy, Plus, RotateCw, Search, Settings2, Square, TerminalSquare } from "lucide-solid";
-import { createRequestId, type CliSession, type TerminalEnvVar, type TerminalSession } from "../../../shared/protocol";
+import { createRequestId, type CliSession, type TerminalEnvVar, type TerminalSession } from "@hyperfocus/ai-core/protocol";
 import { harnessStore, getActiveProject, type ViewProjectState } from "../harness-store";
 import { sendCliSessionInput } from "../harness-websocket";
 import { ActionButton } from "../components/action-button";
@@ -19,6 +19,7 @@ import { normalizeTerminalGlyphSpacing } from "./terminal-output-format";
 import { shouldUseSolidTerminalRenderer } from "./terminal-renderer-mode";
 import { closeTerminalSearch, openTerminalSearch, toggleTerminalSearch } from "./terminal-search-actions";
 import { resolveTerminalKeyboardAction } from "./terminal-keybindings";
+import { ownTerminalCreatingAttachRequest, prepareManualTerminalReconnect, requestCliAttach, requestTerminalAttach } from "./terminal-transport";
 import { terminalStyles as styles, terminalUtilities as utilities } from "./terminal.styles";
 
 type DrawerSession =
@@ -39,10 +40,7 @@ type DrawerSession =
       session: CliSession;
     };
 
-export function TerminalDrawer() {
-  const [settingsOpen, setSettingsOpen] = createSignal(false);
-  const [shellId, setShellId] = createSignal("");
-  const [envText, setEnvText] = createSignal("");
+function createTerminalDrawerModel() {
   const activeProject = () => getActiveProject(harnessStore.state);
   const projectTerminalSessions = createMemo(() => {
     const project = activeProject();
@@ -50,9 +48,7 @@ export function TerminalDrawer() {
   });
   const drawerSessions = createMemo<DrawerSession[]>(() => {
     const project = activeProject();
-    if (!project) {
-      return [];
-    }
+    if (!project) return [];
     return [
       ...projectTerminalSessions().map((session): DrawerSession => ({
         kind: "terminal",
@@ -83,15 +79,36 @@ export function TerminalDrawer() {
   );
   const activeEntry = () =>
     drawerSessions().find((session) => session.id === terminalStore.state.focusedSessionId) ?? drawerSessions()[0];
+  const activeCliEntry = () => {
+    const entry = activeEntry();
+    return entry?.kind === "cli" ? entry : undefined;
+  };
+  const activeTerminalEntry = () => {
+    const entry = activeEntry();
+    return entry?.kind === "terminal" ? entry : undefined;
+  };
   const activeTerminalSession = () => {
     const entry = activeEntry();
     return entry?.kind === "terminal" ? entry.session : undefined;
   };
-
+  const retryTerminalTransport = (sessionId: string) => {
+    const session = projectTerminalSessions().find((entry) => entry.id === sessionId);
+    if (!session) return;
+    const requestId = createRequestId();
+    try {
+      if (!requestTerminalAttach(harnessStore.actions.sendCommand, {
+        requestId,
+        projectId: session.projectId,
+        sessionId
+      })) throw new Error("Terminal attach was not accepted");
+      prepareManualTerminalReconnect(sessionId);
+    } catch {
+      terminalStore.setTransportStatus(sessionId, "replay-exhausted");
+    }
+  };
   onMount(() => {
     harnessStore.actions.sendCommand({ type: "terminal.shells.list", requestId: createRequestId() });
   });
-
   createEffect(() => {
     const sessions = drawerSessions();
     if (!sessions.length) {
@@ -102,89 +119,94 @@ export function TerminalDrawer() {
       terminalStore.focusSession(sessions[0].id);
     }
   });
-
   createEffect(() => {
     const entry = activeEntry();
-    if (!entry) {
-      return;
-    }
+    if (!entry) return;
     if (entry.kind === "terminal") {
-      if (terminalStore.state.connectedBySessionId[entry.id]) {
-        return;
-      }
-      harnessStore.actions.sendCommand({
-        type: "terminal.session.attach",
-        requestId: createRequestId(),
-        payload: {
+      if ((terminalStore.state.transportStatusBySessionId[entry.id] ?? "disconnected") !== "disconnected") return;
+      terminalStore.setTransportStatus(entry.id, "connecting");
+      const requestId = createRequestId();
+      try {
+        if (!requestTerminalAttach(harnessStore.actions.sendCommand, {
+          requestId,
           projectId: entry.session.projectId,
           sessionId: entry.session.id
-        }
-      });
+        })) throw new Error("Terminal attach was not accepted");
+      } catch {
+        terminalStore.setTransportStatus(entry.id, "replay-exhausted");
+      }
       return;
     }
     if (
       (entry.session.status === "running" || entry.session.status === "starting") &&
       !harnessStore.state.cliSessionTerminal[entry.id]?.connected
     ) {
-      harnessStore.actions.sendCommand({
-        type: "cli-session.attach",
+      requestCliAttach(harnessStore.actions.sendCommand, {
         requestId: createRequestId(),
-        payload: {
-          projectId: entry.session.projectId,
-          threadId: entry.session.threadId,
-          sessionId: entry.session.id
-        }
+        projectId: entry.session.projectId,
+        threadId: entry.session.threadId,
+        sessionId: entry.session.id
       });
     }
   });
+  return {
+    activeProject,
+    projectTerminalSessions,
+    drawerSessions,
+    tabItems,
+    activeEntry,
+    activeCliEntry,
+    activeTerminalEntry,
+    activeTerminalSession,
+    retryTerminalTransport
+  };
+}
 
+function createTerminalDrawerActions(options: {
+  shellId: () => string;
+  envText: () => string;
+  activeProject: ReturnType<typeof createTerminalDrawerModel>["activeProject"];
+  projectTerminalSessions: ReturnType<typeof createTerminalDrawerModel>["projectTerminalSessions"];
+  drawerSessions: ReturnType<typeof createTerminalDrawerModel>["drawerSessions"];
+  activeEntry: ReturnType<typeof createTerminalDrawerModel>["activeEntry"];
+  activeTerminalSession: ReturnType<typeof createTerminalDrawerModel>["activeTerminalSession"];
+}) {
   const createSession = () => {
-    const project = activeProject();
-    if (!project) {
-      return;
-    }
-    const parsedEnv = parseEnvText(envText());
-    harnessStore.actions.sendCommand({
+    const project = options.activeProject();
+    if (!project) return;
+    const parsedEnv = parseEnvText(options.envText());
+    const requestId = createRequestId();
+    if (!harnessStore.actions.sendCommand({
       type: "terminal.session.create",
-      requestId: createRequestId(),
+      requestId,
       payload: {
         projectId: project.id,
-        shellId: shellId() || terminalStore.state.preferences.defaultShellId,
-        cols: activeEntry()?.session.cols ?? 100,
-        rows: activeEntry()?.session.rows ?? 24,
+        shellId: options.shellId() || terminalStore.state.preferences.defaultShellId,
+        cols: options.activeEntry()?.session.cols ?? 100,
+        rows: options.activeEntry()?.session.rows ?? 24,
         env: parsedEnv.length ? parsedEnv : undefined
       }
-    });
+    })) return;
+    ownTerminalCreatingAttachRequest(requestId);
   };
-
   const closeSession = (session: TerminalSession) => {
     const running = session.status === "running" || session.status === "starting";
-    if (running && !window.confirm(`Stop and close ${session.name}?`)) {
-      return;
-    }
+    if (running && !window.confirm(`Stop and close ${session.name}?`)) return;
     harnessStore.actions.sendCommand({
       type: "terminal.session.close",
       requestId: createRequestId(),
-      payload: {
-        projectId: session.projectId,
-        sessionId: session.id
-      }
+      payload: { projectId: session.projectId, sessionId: session.id }
     });
   };
-
   const closeEntry = (sessionId: string) => {
-    const entry = drawerSessions().find((session) => session.id === sessionId);
-    if (!entry) {
-      return;
-    }
+    const entry = options.drawerSessions().find((session) => session.id === sessionId);
+    if (!entry) return;
     if (entry.kind === "terminal") {
       closeSession(entry.session);
       return;
     }
     const running = entry.session.status === "running" || entry.session.status === "starting";
-    if (running && !window.confirm(`Stop and close ${entry.name}?`)) {
-      return;
-    }
+    if (running && !window.confirm(`Stop and close ${entry.name}?`)) return;
     harnessStore.actions.sendCommand({
       type: "cli-session.stop",
       requestId: createRequestId(),
@@ -195,7 +217,6 @@ export function TerminalDrawer() {
       }
     });
   };
-
   const savePreferences = () => {
     harnessStore.actions.sendCommand({
       type: "terminal.preferences.save",
@@ -203,13 +224,12 @@ export function TerminalDrawer() {
       payload: {
         preferences: {
           ...terminalStore.state.preferences,
-          defaultShellId: shellId() || terminalStore.state.preferences.defaultShellId
+          defaultShellId: options.shellId() || terminalStore.state.preferences.defaultShellId
         },
-        layout: terminalStore.state.layout ?? createDefaultTerminalLayout(activeTerminalSession()?.id)
+        layout: terminalStore.state.layout ?? createDefaultTerminalLayout(options.activeTerminalSession()?.id)
       }
     });
   };
-
   const startResize = (event: PointerEvent) => {
     event.preventDefault();
     const startY = event.clientY;
@@ -222,34 +242,26 @@ export function TerminalDrawer() {
     };
     const onPointerMove = (moveEvent: PointerEvent) => {
       nextHeight = startHeight - (moveEvent.clientY - startY);
-      if (animationFrame === undefined) {
-        animationFrame = window.requestAnimationFrame(applyHeight);
-      }
+      if (animationFrame === undefined) animationFrame = window.requestAnimationFrame(applyHeight);
     };
     const onPointerUp = () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
-      if (animationFrame !== undefined) {
-        window.cancelAnimationFrame(animationFrame);
-      }
+      if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
       terminalStore.setHeight(nextHeight);
     };
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
   };
-
   const copyActiveBuffer = () => {
-    const entry = activeEntry();
+    const entry = options.activeEntry();
     if (entry?.kind === "terminal") {
       void navigator.clipboard?.writeText(terminalStore.state.outputBySessionId[entry.id] ?? "");
-      return;
-    }
-    if (entry?.kind === "cli") {
+    } else if (entry?.kind === "cli") {
       const terminal = harnessStore.state.cliSessionTerminal[entry.id];
       void navigator.clipboard?.writeText(`${terminal?.stdout ?? ""}${terminal?.stderr ?? ""}`);
     }
   };
-
   const handleDrawerKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Escape" && terminalStore.state.searchOpen) {
       event.preventDefault();
@@ -263,6 +275,33 @@ export function TerminalDrawer() {
       toggleTerminalSearch();
     }
   };
+  return { createSession, closeEntry, savePreferences, startResize, copyActiveBuffer, handleDrawerKeyDown };
+}
+
+export function TerminalDrawer() {
+  const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [shellId, setShellId] = createSignal("");
+  const [envText, setEnvText] = createSignal("");
+  const model = createTerminalDrawerModel();
+  const {
+    projectTerminalSessions,
+    drawerSessions,
+    tabItems,
+    activeEntry,
+    activeCliEntry,
+    activeTerminalEntry,
+    retryTerminalTransport
+  } = model;
+  const { createSession, closeEntry, savePreferences, startResize, copyActiveBuffer, handleDrawerKeyDown } =
+    createTerminalDrawerActions({
+      shellId,
+      envText,
+      activeProject: model.activeProject,
+      projectTerminalSessions,
+      drawerSessions,
+      activeEntry,
+      activeTerminalSession: model.activeTerminalSession
+    });
 
   return (
     <>
@@ -293,7 +332,11 @@ export function TerminalDrawer() {
               <TerminalTabs
                 sessions={tabItems()}
                 activeSessionId={activeEntry()?.id}
-                onSelect={terminalStore.focusSession}
+                onSelect={(sessionId) => {
+                  terminalStore.focusSession(sessionId);
+                  if (terminalStore.state.transportStatusBySessionId[sessionId] !== "replay-exhausted") return;
+                  retryTerminalTransport(sessionId);
+                }}
                 onRename={(sessionId, name) => {
                   const session = projectTerminalSessions().find((entry) => entry.id === sessionId);
                   if (!session) {
@@ -336,16 +379,26 @@ export function TerminalDrawer() {
           </aside>
           <main class={stylex.attrs(styles.surface, utilities.flex, utilities.minH0, utilities.minW0, utilities.flex1, utilities.flexCol, utilities.p15).class}>
             <Switch fallback={<EmptyTerminalState onCreate={createSession} />}>
-              <Match when={activeEntry()?.kind === "cli" ? activeEntry() : undefined}>
+              <Match when={activeCliEntry()}>
                 {(entry) => (
                   <CliSessionDrawerPane
-                    session={(entry() as Extract<DrawerSession, { kind: "cli" }>).session}
+                    session={entry().session}
                     name={entry().name}
                   />
                 )}
               </Match>
-              <Match when={activeEntry()?.kind === "terminal"}>
-                <TerminalSplitLayout sessions={projectTerminalSessions()} />
+              <Match when={activeTerminalEntry()}>
+                {(entry) => (
+                  <>
+                    <Show when={terminalStore.state.transportStatusBySessionId[entry().id] === "replay-exhausted"}>
+                      <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2, utilities.p2, styles.dangerText).class} role="alert" data-test-terminal-replay-error="">
+                        <span>Terminal connection expired before output could be restored.</span>
+                        <ActionButton tooltip="Retry terminal connection" variant="secondary" onClick={() => retryTerminalTransport(entry().id)}>Retry</ActionButton>
+                      </div>
+                    </Show>
+                    <TerminalSplitLayout sessions={projectTerminalSessions()} />
+                  </>
+                )}
               </Match>
             </Switch>
           </main>
@@ -429,15 +482,8 @@ function CliSessionDrawerPane(props: { session: CliSession; name: string }) {
   };
 
   const attachSession = () => {
-    harnessStore.actions.sendCommand({
-      type: "cli-session.attach",
-      requestId: createRequestId(),
-      payload: {
-        projectId: props.session.projectId,
-        threadId: props.session.threadId,
-        sessionId: props.session.id
-      }
-    });
+    requestCliAttach(harnessStore.actions.sendCommand, { requestId: createRequestId(), projectId: props.session.projectId,
+      threadId: props.session.threadId, sessionId: props.session.id });
   };
 
   const captureVisibleState = () => {

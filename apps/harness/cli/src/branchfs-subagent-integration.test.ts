@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {  mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { lstat, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -9,7 +9,8 @@ import {
   prepareBranchfsIntegrationLease,
   verifyBranchfsIntegrationLease
 } from "./branchfs-subagent-integration";
-import { BranchfsManager } from "./branchfs-manager";
+import { createBranchfsManager } from "./branchfs-manager";
+import { createHarnessTestTempPath } from "./test-support/test-temp-root";
 import type {
   PiAgentAdapter,
   PiAgentExecutionController,
@@ -23,17 +24,10 @@ const tempPaths: string[] = [];
 
 setDefaultTimeout(30000);
 
-class MergeResolverAdapter implements PiAgentAdapter {
-  readonly calls: PiAgentPromptRequest[] = [];
-
-  setApiKey() {}
-
-  hasApiKey() {
-    return false;
-  }
-
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    this.calls.push(request);
+function createMergeResolverAdapter(): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const calls: PiAgentPromptRequest[] = [];
+  async function runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    calls.push(request);
     if (request.kind === "merge-resolver") {
       await Bun.write(path.join(request.cwd, "shared.txt"), "resolved\n");
       return { text: "resolved conflict" };
@@ -42,21 +36,22 @@ class MergeResolverAdapter implements PiAgentAdapter {
     return { text: "ok" };
   }
 
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    const adapter = this;
-    let currentResult = adapter.runPrompt(request);
+  async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    let currentResult = runPrompt(request);
     return {
       get result() {
         return currentResult;
       },
       continueWithPrompt(prompt: string = "continue") {
-        currentResult = adapter.runPrompt({ ...request, prompt });
+        currentResult = runPrompt({ ...request, prompt });
         return currentResult;
       },
       async abort() {},
       dispose() {}
     };
   }
+
+  return { calls, setApiKey() {}, hasApiKey: () => false, runPrompt, startExecution };
 }
 
 afterEach(async () => {
@@ -91,7 +86,7 @@ describe("branchfs subagent integration", () => {
     ]);
 
     const integration = await prepareBranchfsIntegrationLease(
-      new MergeResolverAdapter(),
+      createMergeResolverAdapter(),
       {
         rootPath,
         runId: "run-merge",
@@ -136,7 +131,7 @@ describe("branchfs subagent integration", () => {
     ];
 
     const integration = await prepareBranchfsIntegrationLease(
-      new MergeResolverAdapter(),
+      createMergeResolverAdapter(),
       {
         rootPath,
         runId: "run-shape-change",
@@ -173,7 +168,7 @@ describe("branchfs subagent integration", () => {
       })
     ]);
 
-    const adapter = new MergeResolverAdapter();
+    const adapter = createMergeResolverAdapter();
     const integration = await prepareBranchfsIntegrationLease(
       adapter,
       {
@@ -217,7 +212,7 @@ describe("branchfs subagent integration", () => {
     ];
 
     const integration = await prepareBranchfsIntegrationLease(
-      new MergeResolverAdapter(),
+      createMergeResolverAdapter(),
       {
         rootPath: projectRoot,
         runId: "run-slice",
@@ -254,7 +249,7 @@ describe("branchfs subagent integration", () => {
     ];
 
     const integration = await prepareBranchfsIntegrationLease(
-      new MergeResolverAdapter(),
+      createMergeResolverAdapter(),
       {
         rootPath: projectRoot,
         runId: "run-unborn",
@@ -275,18 +270,18 @@ describe("branchfs subagent integration", () => {
 });
 
 async function createSnapshot(rootPath: string, taskId: string, edit: (lease: BranchfsSubagentSnapshot["lease"]) => void) {
-  const manager = new BranchfsManager({ rootPath, runId: `${taskId}-${crypto.randomUUID()}` });
+  const manager = createBranchfsManager({ rootPath, runId: `${taskId}-${crypto.randomUUID()}` });
   const lease = await manager.prepareExperimentLease();
   edit(lease);
   return {
     taskId,
     manager,
     lease
-  } satisfies BranchfsSubagentSnapshot;
+  };
 }
 
 function createTempDir(prefix: string) {
-  const targetPath = path.join(process.cwd(), ".tmp-test-data", `${prefix}-${crypto.randomUUID()}`);
+  const targetPath = createHarnessTestTempPath(prefix);
   mkdirSync(targetPath, { recursive: true });
   tempPaths.push(targetPath);
   return targetPath;

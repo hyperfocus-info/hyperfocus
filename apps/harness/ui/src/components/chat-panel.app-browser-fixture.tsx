@@ -5,8 +5,8 @@ import {
   createProjectThreadSummary,
   createWorkspaceProjectState,
   type ServerEvent
-} from "../../../shared/protocol";
-import { defaultAgentCatalog } from "../../../shared/agent-catalog";
+} from "@hyperfocus/ai-core/protocol";
+import { defaultAgentCatalog } from "@hyperfocus/ai-core/agent-catalog";
 import "../global-styles";
 import { App } from "../app";
 import {
@@ -18,12 +18,13 @@ import {
   createInitialSetupState
 } from "../harness-store";
 import { UiStateProviders } from "../store-providers";
-import { defaultPreferencesFixture } from "../utils/tests/test-fixtures";
+import { createBackgroundJobFixture, createBackgroundJobRunFixture, defaultPreferencesFixture } from "../utils/tests/test-fixtures";
 import { createProjectChatBrowserMessages } from "./chat-panel.browser-data";
 
 const threadId = "browser-project-chat-app-thread";
 const projectId = "browser-project-chat-app-project";
 const messages = createProjectChatBrowserMessages("browser-project-chat-app-message");
+const now = new Date().toISOString();
 const project = createWorkspaceProjectState({
   id: projectId,
   name: "repo-one",
@@ -44,6 +45,14 @@ const project = createWorkspaceProjectState({
     })
   ]
 });
+const browserJob = createBackgroundJobFixture({ id: "browser-run-card-job", projectId, name: "Browser run card",
+  automationThreadId: "browser-run-card-thread",
+  definition: { kind: "ai-routine", prompt: "Exercise run card controls." },
+  schedule: { type: "one-off", runAt: now, sourceText: "manual" }, scheduleInput: "manual",
+  createdAt: now, updatedAt: now });
+const browserRun = createBackgroundJobRunFixture({ id: "browser-run-card-run", jobId: browserJob.id, projectId,
+  automationThreadId: browserJob.automationThreadId, summary: "Browser run card summary", queuedAt: now,
+  createdAt: now, updatedAt: now });
 const connectionReadyEvent: ServerEvent = {
   type: "connection.ready",
   payload: {
@@ -58,54 +67,48 @@ const connectionReadyEvent: ServerEvent = {
     preferences: defaultPreferencesFixture,
     tokenUsage: createEmptyTokenUsageState(),
     setup: createInitialSetupState(),
-    backgroundJobs: createEmptyBackgroundJobsState(),
+    backgroundJobs: { ...createEmptyBackgroundJobsState(), jobs: [browserJob], runs: [browserRun] },
     assistants: createEmptyAssistantsState(),
     notifications: createEmptyNotificationInboxState()
   }
 };
 
-class FixtureWebSocket extends EventTarget {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSING = 2;
-  static readonly CLOSED = 3;
-  readonly CONNECTING = FixtureWebSocket.CONNECTING;
-  readonly OPEN = FixtureWebSocket.OPEN;
-  readonly CLOSING = FixtureWebSocket.CLOSING;
-  readonly CLOSED = FixtureWebSocket.CLOSED;
-  binaryType: BinaryType = "blob";
-  readyState = FixtureWebSocket.CONNECTING;
-  url: string;
-
-  constructor(url: string | URL) {
-    super();
-    this.url = String(url);
+function FixtureWebSocket(url: string | URL) {
+  const target = new EventTarget();
+  const binaryType: BinaryType = "blob";
+  const socket = Object.assign(target, {
+    CONNECTING: 0,
+    OPEN: 1,
+    CLOSING: 2,
+    CLOSED: 3,
+    binaryType,
+    readyState: 0,
+    url: String(url),
+    send(_data: string | ArrayBufferLike | Blob | ArrayBufferView) {},
+    close() {
+      socket.readyState = socket.CLOSED;
+      target.dispatchEvent(new CloseEvent("close"));
+    },
+  });
     requestAnimationFrame(() => {
-      this.readyState = FixtureWebSocket.OPEN;
-      this.dispatchEvent(new Event("open"));
+      socket.readyState = socket.OPEN;
+      target.dispatchEvent(new Event("open"));
       waitFrames(4, () => {
-        this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(connectionReadyEvent) }));
+        target.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(connectionReadyEvent) }));
         waitFrames(12, () => {
           document.documentElement.dataset.testFixtureReady = "1";
         });
       });
     });
-  }
-
-  send(_data: string | ArrayBufferLike | Blob | ArrayBufferView) {
-    return undefined;
-  }
-
-  close() {
-    this.readyState = FixtureWebSocket.CLOSED;
-    this.dispatchEvent(new CloseEvent("close"));
-  }
+  return socket;
 }
+
+Object.assign(FixtureWebSocket, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
 
 Object.defineProperty(globalThis, "WebSocket", {
   configurable: true,
   writable: true,
-  value: FixtureWebSocket as unknown as typeof WebSocket
+  value: FixtureWebSocket
 });
 
 function waitFrames(count: number, callback: () => void) {
@@ -116,11 +119,13 @@ function waitFrames(count: number, callback: () => void) {
   requestAnimationFrame(() => waitFrames(count - 1, callback));
 }
 
+const root = document.getElementById("root");
+if (!root) throw new Error("Browser fixture root is missing");
 render(
   () => (
     <UiStateProviders>
       <App />
     </UiStateProviders>
   ),
-  document.getElementById("root")!
+  root
 );

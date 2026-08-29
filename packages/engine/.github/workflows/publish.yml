@@ -1,0 +1,30 @@
+name: Publish trusted package
+
+on:
+  push:
+    tags: ["v0.*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-production
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: bun install --frozen-lockfile
+      - run: bun run release:verify
+      - run: bun run certify:package
+        env:
+          RELEASE_EVIDENCE_FILE: release-evidence/${{ github.ref_name }}.json
+      - run: npm publish --access public --provenance

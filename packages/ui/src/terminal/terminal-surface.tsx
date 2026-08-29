@@ -5,6 +5,10 @@ import { Terminal, type ITerminalOptions } from "@xterm/xterm";
 import { onCleanup, onMount } from "solid-js";
 import { tokens } from "../theme/tokens.stylex";
 
+const styles = stylex.create({
+  root: { padding: "0.4rem", overflow: "hidden", backgroundColor: tokens.background, height: "100%", minHeight: "8rem", width: "100%", }
+});
+
 export function TerminalSurface(props: { options?: ITerminalOptions; onData?: (data: string) => void; terminalRef?: (terminal: Terminal) => void }) {
   let host: HTMLDivElement | undefined;
   onMount(() => {
@@ -22,8 +26,3 @@ export function TerminalSurface(props: { options?: ITerminalOptions; onData?: (d
   });
   return <div ref={host} {...stylex.attrs(styles.root)} data-test-terminal-surface="" />;
 }
-
-const styles = stylex.create({
-  root: { padding: "0.4rem", overflow: "hidden", backgroundColor: tokens.background, height: "100%", minHeight: "8rem", width: "100%", }
-});
-

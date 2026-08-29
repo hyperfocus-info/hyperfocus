@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { FolderOpen, Search } from "lucide-solid";
-import { createRequestId, type ProjectSearchResult } from "../../../shared/protocol";
+import { createRequestId, type ProjectSearchResult } from "@hyperfocus/ai-core/protocol";
 import { harnessStore } from "../harness-store";
 import {
   isAbsolutePath,
@@ -80,27 +80,18 @@ type DialogResult =
       actionLabel: string;
     } & ProjectActivityMetadata);
 
-export function ProjectSwitcherDialog() {
-  let inputRef: HTMLInputElement | undefined;
-  let debounceTimer: number | undefined;
-  const state = harnessStore.state;
-  const sendCommand = harnessStore.actions.sendCommand;
-  const [selectedIndex, setSelectedIndex] = createSignal(0);
-
-  const query = () => state.projectSearchQuery;
-  const trimmedQuery = () => query().trim();
-
+function createProjectSwitcherResults(
+  state: typeof harnessStore.state,
+  trimmedQuery: () => string
+) {
   const workspaceMatches = createMemo<WorkspaceMatch[]>(() => {
     const normalizedQuery = normalizePathForComparison(trimmedQuery());
     return state.workspace.projects
-      .map((project) => {
+      .map<WorkspaceMatch | undefined>((project) => {
         const normalizedName = normalizePathForComparison(project.name);
         const normalizedPath = normalizePathForComparison(project.rootPath);
         const matchKind = getWorkspaceMatchKind(normalizedQuery, normalizedName, normalizedPath);
-        if (!matchKind) {
-          return undefined;
-        }
-
+        if (!matchKind) return undefined;
         return {
           projectId: project.id,
           name: project.name,
@@ -111,30 +102,21 @@ export function ProjectSwitcherDialog() {
           ...getWorkspaceProjectActivity(project)
         };
       })
-      .filter(Boolean) as WorkspaceMatch[];
+      .filter((match): match is WorkspaceMatch => match !== undefined);
   });
-
   const filesystemMatches = createMemo(() => {
     const workspaceKeys = new Set(workspaceMatches().map((result) => normalizePathForComparison(result.rootPath)));
     return state.projectSearchFilesystemResults.filter(
       (result) => !workspaceKeys.has(normalizePathForComparison(result.rootPath))
     );
   });
-
   const exactPathResult = createMemo<DialogResult | undefined>(() => {
-    if (!isAbsolutePath(trimmedQuery())) {
-      return undefined;
-    }
-
+    if (!isAbsolutePath(trimmedQuery())) return undefined;
     const queryKey = normalizePathForComparison(trimmedQuery());
     const alreadyRepresented =
       workspaceMatches().some((result) => normalizePathForComparison(result.rootPath) === queryKey) ||
       filesystemMatches().some((result) => normalizePathForComparison(result.rootPath) === queryKey);
-
-    if (alreadyRepresented) {
-      return undefined;
-    }
-
+    if (alreadyRepresented) return undefined;
     return {
       key: `exact:${queryKey}`,
       source: "exact-path",
@@ -144,102 +126,137 @@ export function ProjectSwitcherDialog() {
       actionLabel: "Create/open folder"
     };
   });
-
-  const mergedResults = createMemo<DialogResult[]>(() => [
-    ...workspaceMatches().map((result) => ({
-      key: `workspace:${result.projectId}`,
-      source: "workspace" as const,
-      name: result.name,
-      rootPath: result.rootPath,
-      repoKind: result.repoKind,
-      actionLabel: result.isActive ? "Current" : "Open now",
-      disabled: false,
-      projectId: result.projectId,
-      activeRunCount: result.activeRunCount,
-      pendingApprovalCount: result.pendingApprovalCount,
-      pendingQuestionCount: result.pendingQuestionCount,
-      failedJobCount: result.failedJobCount,
-      lastThreadPreview: result.lastThreadPreview,
-      detectedFrameworks: result.detectedFrameworks
-    })),
-    ...filesystemMatches().map((result) => ({
-      key: `filesystem:${normalizePathForComparison(result.rootPath)}`,
-      source: "filesystem" as const,
-      name: result.name,
-      rootPath: result.rootPath,
-      repoKind: result.repoKind,
-      actionLabel: "Add",
-      activeRunCount: result.activeRunCount,
-      pendingApprovalCount: result.pendingApprovalCount,
-      pendingQuestionCount: result.pendingQuestionCount,
-      failedJobCount: result.failedJobCount,
-      lastThreadPreview: result.lastThreadPreview,
-      detectedFrameworks: result.detectedFrameworks
-    })),
-    ...(exactPathResult() ? [exactPathResult()!] : [])
-  ]);
-
+  const mergedResults = createMemo<DialogResult[]>(() => {
+    const exactPath = exactPathResult();
+    return [
+      ...workspaceMatches().map((result) => ({
+        key: `workspace:${result.projectId}`,
+        source: "workspace" as const,
+        name: result.name,
+        rootPath: result.rootPath,
+        repoKind: result.repoKind,
+        actionLabel: result.isActive ? "Current" : "Open now",
+        disabled: false,
+        projectId: result.projectId,
+        activeRunCount: result.activeRunCount,
+        pendingApprovalCount: result.pendingApprovalCount,
+        pendingQuestionCount: result.pendingQuestionCount,
+        failedJobCount: result.failedJobCount,
+        lastThreadPreview: result.lastThreadPreview,
+        detectedFrameworks: result.detectedFrameworks
+      })),
+      ...filesystemMatches().map((result) => ({
+        key: `filesystem:${normalizePathForComparison(result.rootPath)}`,
+        source: "filesystem" as const,
+        name: result.name,
+        rootPath: result.rootPath,
+        repoKind: result.repoKind,
+        actionLabel: "Add",
+        activeRunCount: result.activeRunCount,
+        pendingApprovalCount: result.pendingApprovalCount,
+        pendingQuestionCount: result.pendingQuestionCount,
+        failedJobCount: result.failedJobCount,
+        lastThreadPreview: result.lastThreadPreview,
+        detectedFrameworks: result.detectedFrameworks
+      })),
+      ...(exactPath ? [exactPath] : [])
+    ];
+  });
   const completionSuffix = createMemo(() => {
     const topResult = mergedResults()[0];
-    return topResult ? getProjectSwitcherAutocompleteSuffix(trimmedQuery(), topResult.rootPath, topResult.source) : undefined;
+    return topResult
+      ? getProjectSwitcherAutocompleteSuffix(trimmedQuery(), topResult.rootPath, topResult.source)
+      : undefined;
   });
+  return { workspaceMatches, filesystemMatches, exactPathResult, mergedResults, completionSuffix };
+}
 
+function createProjectSwitcherEffects(options: {
+  open: () => boolean;
+  focusInput: () => void;
+  mergedResults: () => DialogResult[];
+  setSelectedIndex: (index: number) => void;
+  trimmedQuery: () => string;
+  sendCommand: typeof harnessStore.actions.sendCommand;
+}) {
+  let debounceTimer: number | undefined;
   createEffect(() => {
-    if (!state.projectSwitcherOpen) {
+    if (!options.open()) {
       if (debounceTimer !== undefined) {
         window.clearTimeout(debounceTimer);
         debounceTimer = undefined;
       }
       return;
     }
-
-    // Run on the task queue (not microtask) so we focus the input after the
-    // shared Dialog primitive finishes focusing its own surface ref.
-    const timer = window.setTimeout(() => inputRef?.focus(), 0);
+    const timer = window.setTimeout(options.focusInput, 0);
     onCleanup(() => window.clearTimeout(timer));
   });
-
   createEffect(() => {
-    if (!state.projectSwitcherOpen) {
-      return;
-    }
-
-    mergedResults().length;
-    setSelectedIndex(0);
+    if (!options.open()) return;
+    options.mergedResults().length;
+    options.setSelectedIndex(0);
   });
-
   createEffect(() => {
-    if (!state.projectSwitcherOpen) {
-      return;
-    }
-
-    const currentQuery = trimmedQuery();
+    if (!options.open()) return;
+    const currentQuery = options.trimmedQuery();
     if (!shouldSearchProjects(currentQuery)) {
       harnessStore.clearProjectSearchResults();
       return;
     }
-
-    if (debounceTimer !== undefined) {
-      window.clearTimeout(debounceTimer);
-    }
-
+    if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
     debounceTimer = window.setTimeout(() => {
       const requestId = createRequestId();
       harnessStore.startProjectSearch(requestId, currentQuery);
-      sendCommand({
-        type: "project.search",
-        requestId,
-        payload: {
-          query: currentQuery
-        }
-      });
+      options.sendCommand({ type: "project.search", requestId, payload: { query: currentQuery } });
     }, 150);
   });
-
   onCleanup(() => {
-    if (debounceTimer !== undefined) {
-      window.clearTimeout(debounceTimer);
+    if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
+  });
+}
+
+function openProjectSwitcherResult(
+  result: DialogResult | undefined,
+  state: typeof harnessStore.state,
+  sendCommand: typeof harnessStore.actions.sendCommand
+) {
+  if (!result) return;
+  if (result.source === "workspace") {
+    if (result.projectId === state.workspace.activeProjectId) {
+      harnessStore.closeProjectSwitcher();
+      return;
     }
+    sendCommand({
+      type: "project.activate",
+      requestId: createRequestId(),
+      payload: { projectId: result.projectId }
+    });
+    return;
+  }
+  sendCommand({
+    type: result.source === "exact-path" ? "project.create" : "project.add",
+    requestId: createRequestId(),
+    payload: { rootPath: result.rootPath }
+  });
+}
+
+export function ProjectSwitcherDialog() {
+  let inputRef: HTMLInputElement | undefined;
+  const state = harnessStore.state;
+  const sendCommand = harnessStore.actions.sendCommand;
+  const [selectedIndex, setSelectedIndex] = createSignal(0);
+
+  const query = () => state.projectSearchQuery;
+  const trimmedQuery = () => query().trim();
+  const { workspaceMatches, filesystemMatches, exactPathResult, mergedResults, completionSuffix } =
+    createProjectSwitcherResults(state, trimmedQuery);
+  createProjectSwitcherEffects({
+    open: () => state.projectSwitcherOpen,
+    focusInput: () => inputRef?.focus(),
+    mergedResults,
+    setSelectedIndex,
+    trimmedQuery,
+    sendCommand
   });
 
   function handleBrowse() {
@@ -251,33 +268,7 @@ export function ProjectSwitcherDialog() {
   }
 
   function openResult(result: DialogResult | undefined) {
-    if (!result) {
-      return;
-    }
-
-    if (result.source === "workspace") {
-      if (result.projectId === state.workspace.activeProjectId) {
-        harnessStore.closeProjectSwitcher();
-        return;
-      }
-
-      sendCommand({
-        type: "project.activate",
-        requestId: createRequestId(),
-        payload: {
-          projectId: result.projectId
-        }
-      });
-      return;
-    }
-
-    sendCommand({
-      type: result.source === "exact-path" ? "project.create" : "project.add",
-      requestId: createRequestId(),
-      payload: {
-        rootPath: result.rootPath
-      }
-    });
+    openProjectSwitcherResult(result, state, sendCommand);
   }
 
   function handleInputKeyDown(event: KeyboardEvent) {

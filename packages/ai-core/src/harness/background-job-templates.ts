@@ -1,6 +1,4 @@
-import type { BackgroundJobTemplate } from "./protocol";
-
-export const defaultBackgroundJobTemplates: readonly BackgroundJobTemplate[] = [
+export const defaultBackgroundJobTemplates = [
   {
     id: "scheduled-task",
     label: "Scheduled task",

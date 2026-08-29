@@ -1,4 +1,4 @@
-import type { AgentTrace, RunPreflight, SubagentTaskState } from "../../../shared/protocol";
+import type { AgentRunState, AgentTrace, RunPreflight, SubagentTaskState } from "@hyperfocus/ai-core/protocol";
 import type { ViewProjectState } from "../harness-store";
 
 export type ChatStatusCard = {
@@ -8,6 +8,10 @@ export type ChatStatusCard = {
   tone: "info" | "warning" | "error";
   spinning?: boolean;
 };
+
+export function getCompleteRun(run: AgentRunState | undefined) {
+  return run?.detailState && run.detailState !== "complete" ? undefined : run;
+}
 
 export function isHiddenUserTraceStage(stage: AgentTrace["stage"]) {
   return stage === "aggregation-start" || stage === "aggregation-complete";

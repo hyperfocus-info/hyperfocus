@@ -1,7 +1,7 @@
-import { appendFile, copyFile, lstat, mkdir, readFile, readdir, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, lstat, mkdir, readFile, readdir, readlink, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import type { AgentTrace, ExperimentInspection, ExperimentRun } from "../../shared/protocol";
+import type { AgentTrace, ExperimentInspection, ExperimentRun } from "@hyperfocus/ai-core/protocol";
 import { DEFAULT_BRANCHFS_RETENTION, pruneBranchfsRoots } from "./branchfs-cleanup";
 
 type BranchfsTrace = {
@@ -11,7 +11,7 @@ type BranchfsTrace = {
   subagentId?: string;
 };
 
-type ManagerCallbacks = {
+export type ManagerCallbacks = {
   onTrace?: (trace: BranchfsTrace) => void;
 };
 
@@ -37,8 +37,6 @@ type BranchfsManifest = {
   virtualBranchName: string;
   passthroughDirectories: string[];
   createdAt: string;
-  baselineFiles: Record<string, string>;
-  deletedRelativePaths: string[];
 };
 
 type BranchfsWarning = {
@@ -81,25 +79,38 @@ const LARGE_MATERIALIZATION_BYTES = 2 * 1024 * 1024 * 1024;
 const LARGE_MATERIALIZATION_FILES = 50000;
 const LARGE_DIRTY_ENTRY_WARNING_COUNT = 1000;
 const DIRTY_TRACE_DETAIL_LIMIT = 20;
+const MATERIALIZATION_CONCURRENCY = 32;
 
 // Current BranchFS is a local materialized mount shim with isolated diff/flush semantics.
 // It preserves the command surface for a future true CoW virtual filesystem.
-export class BranchfsManager {
-  private readonly context: BranchfsExecutionContext;
-  private readonly callbacks: ManagerCallbacks;
+type BranchfsLeasePreparationTools = {
+  context: BranchfsExecutionContext;
+  ensureExecutable: (binary: string, label?: string) => Promise<void>;
+  emitTrace: (trace: BranchfsTrace) => void;
+  emitDirtyStatusWarnings: (snapshot: DirtyStatusSnapshot) => void;
+  createMaterializationPlan: (repoRoot: string, projectRelativePath: string) => Promise<BranchfsMaterializationPlan>;
+  materializeMount: (plan: BranchfsMaterializationPlan, repoMountPath: string, runRoot: string) => Promise<void>;
+  snapshotProjectBaseline: (plan: BranchfsMaterializationPlan, projectMountPath: string, baseProjectPath: string) => Promise<void>;
+  seedIsolatedGitRepository: (repoMountPath: string, passthroughDirectories: string[]) => Promise<void>;
+  captureDirtySeed: (repoRoot: string, dirtySeedPath: string, entries: DirtyStatusEntry[]) => Promise<void>;
+  resolveRepoRoot: (cwd: string) => Promise<string>;
+  resolveHeadCommit: (cwd: string) => Promise<string | undefined>;
+  resolveBranchName: (cwd: string) => Promise<string | undefined>;
+  readDirtyStatus: (repoRoot: string, projectRelativePath: string) => Promise<DirtyStatusSnapshot>;
+  computeDirtyFingerprint: (repoRoot: string, entries: DirtyStatusEntry[]) => Promise<string>;
+};
 
-  constructor(context: BranchfsExecutionContext, callbacks: ManagerCallbacks = {}) {
-    this.context = context;
-    this.callbacks = callbacks;
-  }
-
-  async prepareExperimentLease(): Promise<BranchfsExperimentLease> {
-    await this.ensureExecutable(GIT_EXECUTABLE, "git");
-    assertSafeRunId(this.context.runId);
-    const repoRoot = await this.resolveRepoRoot(this.context.rootPath);
-    const resolvedRootPath = path.resolve(this.context.rootPath);
+function createBranchfsLeasePreparer(tools: BranchfsLeasePreparationTools) {
+  const { context, ensureExecutable, emitTrace, emitDirtyStatusWarnings, createMaterializationPlan, materializeMount,
+    snapshotProjectBaseline, seedIsolatedGitRepository, captureDirtySeed, resolveRepoRoot, resolveHeadCommit,
+    resolveBranchName, readDirtyStatus, computeDirtyFingerprint } = tools;
+  async function prepareExperimentLease(): Promise<BranchfsExperimentLease> {
+    await ensureExecutable(GIT_EXECUTABLE, "git");
+    assertSafeRunId(context.runId);
+    const repoRoot = await canonicalizeExistingPath(await resolveRepoRoot(context.rootPath));
+    const resolvedRootPath = await canonicalizeExistingPath(path.resolve(context.rootPath));
     const projectRelativePath = path.relative(repoRoot, resolvedRootPath);
-    const runRoot = path.join(repoRoot, BRANCHFS_DIRNAME, this.context.runId);
+    const runRoot = path.join(repoRoot, BRANCHFS_DIRNAME, context.runId);
     const repoMountPath = path.join(runRoot, "mount");
     const projectMountPath = projectRelativePath ? path.join(repoMountPath, projectRelativePath) : repoMountPath;
     const baseProjectPath = path.join(runRoot, "base", projectRelativePath);
@@ -109,7 +120,7 @@ export class BranchfsManager {
     const manifestPath = path.join(metaPath, "manifest.json");
 
     await pruneBranchfsRoots({ repoRoot, mode: "retention", retention: DEFAULT_BRANCHFS_RETENTION }).catch((error: unknown) => {
-      this.emitTrace({
+      emitTrace({
         stage: "branchfs-cleanup-warning",
         message: "BranchFS retention cleanup failed",
         detail: formatError(error)
@@ -124,39 +135,38 @@ export class BranchfsManager {
       await mkdir(upperPath, { recursive: true });
       await mkdir(metaPath, { recursive: true });
 
-      const baseCommitSha = await this.resolveHeadCommit(repoRoot);
-      const baseBranchName = await this.resolveBranchName(repoRoot);
-      const dirtyStatus = await this.readDirtyStatus(repoRoot, projectRelativePath);
+      const baseCommitSha = await resolveHeadCommit(repoRoot);
+      const baseBranchName = await resolveBranchName(repoRoot);
+      const dirtyStatus = await readDirtyStatus(repoRoot, projectRelativePath);
       const dirtyEntries = dirtyStatus.entries;
-      this.emitDirtyStatusWarnings(dirtyStatus);
-      const baseDirtyFingerprint = await this.computeDirtyFingerprint(repoRoot, dirtyEntries);
-      const materializationPlan = await this.createMaterializationPlan(repoRoot, projectRelativePath);
+      emitDirtyStatusWarnings(dirtyStatus);
+      const baseDirtyFingerprint = await computeDirtyFingerprint(repoRoot, dirtyEntries);
+      const materializationPlan = await createMaterializationPlan(repoRoot, projectRelativePath);
       for (const warning of materializationPlan.warnings) {
-        this.emitTrace({
+        emitTrace({
           stage: "branchfs-size-warning",
           message: warning.message,
           detail: `${formatBytes(warning.estimatedBytes)} across ${materializationPlan.estimatedFiles} files`
         });
       }
 
-      await this.materializeMount(materializationPlan, repoMountPath, runRoot);
-      await this.captureDirtySeed(repoRoot, dirtySeedPath, dirtyEntries);
+      await materializeMount(materializationPlan, repoMountPath, runRoot);
+      await captureDirtySeed(repoRoot, dirtySeedPath, dirtyEntries);
       if (dirtyEntries.length > 0) {
-        this.emitTrace({
+        emitTrace({
           stage: "branchfs-inherit-dirty",
           message: "Inherited base dirty state into BranchFS mount",
           detail: formatDirtyTraceDetail(dirtyEntries)
         });
       }
 
-      await this.snapshotProjectBaseline(projectMountPath, baseProjectPath);
-      const baselineFiles = await hashTree(baseProjectPath);
-      await this.seedIsolatedGitRepository(repoMountPath, materializationPlan.passthroughDirectories);
-      const virtualBranchName = `ai-experiment/${this.context.runId}`;
+      await snapshotProjectBaseline(materializationPlan, projectMountPath, baseProjectPath);
+      await seedIsolatedGitRepository(repoMountPath, materializationPlan.passthroughDirectories);
+      const virtualBranchName = `ai-experiment/${context.runId}`;
       const createdAt = new Date().toISOString();
       const experiment: ExperimentRun = {
-        id: this.context.runId,
-        runId: this.context.runId,
+        id: context.runId,
+        runId: context.runId,
         status: "prepared",
         virtualBranchName,
         repoMountPath,
@@ -171,7 +181,7 @@ export class BranchfsManager {
         updatedAt: createdAt
       };
       const manifest: BranchfsManifest = {
-        runId: this.context.runId,
+        runId: context.runId,
         repoRoot,
         projectRelativePath,
         baseCommitSha,
@@ -179,12 +189,10 @@ export class BranchfsManager {
         baseDirtyFingerprint,
         virtualBranchName,
         passthroughDirectories: materializationPlan.passthroughDirectories,
-        createdAt,
-        baselineFiles,
-        deletedRelativePaths: []
+        createdAt
       };
       await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
-      this.emitTrace({
+      emitTrace({
         stage: "branchfs-mounted",
         message: "Mounted BranchFS experiment workspace",
         detail: projectMountPath
@@ -204,13 +212,13 @@ export class BranchfsManager {
     } catch (error) {
       await rm(runRoot, { recursive: true, force: true })
         .then(() => {
-          this.emitTrace({
+          emitTrace({
             stage: "branchfs-unmounted",
             message: "Unmounted failed BranchFS experiment workspace"
           });
         })
         .catch((cleanupError: unknown) => {
-          this.emitTrace({
+          emitTrace({
             stage: "branchfs-cleanup-warning",
             message: "Failed to clean up partial BranchFS workspace",
             detail: formatError(cleanupError)
@@ -220,102 +228,49 @@ export class BranchfsManager {
     }
   }
 
-  async readInspection(lease: BranchfsExperimentLease): Promise<ExperimentInspection> {
-    const changedPaths = await collectChangedPaths(lease.baseProjectPath, lease.projectMountPath);
-    const diffText = await this.diffDirectories(lease.baseProjectPath, lease.projectMountPath, changedPaths);
-    const { insertions, deletions } = summarizeDiffText(diffText);
-    const inspectedAt = new Date().toISOString();
-    this.emitTrace({
-      stage: "branchfs-diff-read",
-      message: "Read BranchFS diff layer",
-      detail: `${changedPaths.length} changed`
-    });
-    return {
-      experiment: {
-        ...lease.experiment,
-        filesChanged: changedPaths.length,
-        insertions,
-        deletions,
-        updatedAt: inspectedAt
-      },
-      diffText,
-      files: summarizeDiffFiles(diffText, changedPaths),
-      inspectedAt,
-      filesChanged: changedPaths.length,
-      insertions,
-      deletions,
-      changedPaths
-    };
-  }
+  return prepareExperimentLease;
+}
 
-  async flushExperiment(lease: BranchfsExperimentLease): Promise<ExperimentInspection> {
-    const inspection = await this.readInspection(lease);
-    const relativeDeleted = await collectDeletedPaths(lease.baseProjectPath, lease.projectMountPath);
-    for (const relativePath of relativeDeleted) {
-      await removeBranchfsPath(path.join(lease.repoRoot, lease.projectRelativePath, relativePath));
-    }
-
-    for (const relativePath of inspection.changedPaths) {
-      const sourcePath = path.join(lease.projectMountPath, relativePath);
-      const destinationPath = path.join(lease.repoRoot, lease.projectRelativePath, relativePath);
-      if (!(await pathExists(sourcePath))) {
-        await removeBranchfsPath(destinationPath);
-        continue;
-      }
-
-      await mkdir(path.dirname(destinationPath), { recursive: true });
-      await copyBranchfsPathRobust(sourcePath, destinationPath);
-    }
-
-    this.emitTrace({
-      stage: "branchfs-flushed",
-      message: "Flushed BranchFS mount back to physical disk",
-      detail: `${inspection.filesChanged} changed`
-    });
-    return inspection;
-  }
-
-  async discardExperiment(lease: BranchfsExperimentLease) {
-    await this.unmountExperiment(lease);
-  }
-
-  async unmountExperiment(lease: BranchfsExperimentLease) {
-    const runRoot = path.dirname(lease.repoMountPath);
-    await rm(runRoot, { recursive: true, force: true }).catch(() => undefined);
-    this.emitTrace({
-      stage: "branchfs-unmounted",
-      message: "Unmounted BranchFS experiment workspace"
-    });
-  }
-
-  private async createMaterializationPlan(repoRoot: string, projectRelativePath: string): Promise<BranchfsMaterializationPlan> {
-    const result = await this.runCommand(
-      [GIT_EXECUTABLE, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-      repoRoot
-    );
-    const includedPaths = result.stdout
+function createBranchfsMaterializationTools(
+  runCommand: (command: string[], cwd: string) => Promise<{ exitCode: number; stdout: string; stderr: string; detail: string }>,
+  emitTrace: (trace: BranchfsTrace) => void
+) {
+  async function createMaterializationPlan(repoRoot: string, projectRelativePath: string): Promise<BranchfsMaterializationPlan> {
+    const [includedResult, ignoredResult] = await Promise.all([
+      runCommand([GIT_EXECUTABLE, "ls-files", "-z", "--cached", "--others", "--exclude-standard"], repoRoot),
+      runCommand([GIT_EXECUTABLE, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"], repoRoot)
+    ]);
+    const includedPaths = includedResult.stdout
       .split("\0")
       .filter(Boolean)
       .map((entry) => entry.replace(/\\/g, "/"))
       .filter((entry) => !isExcludedMaterializationPath(entry))
       .sort();
+    const passthroughCandidates = new Set([
+      ...PASSTHROUGH_DIRECTORIES,
+      ...ignoredResult.stdout
+        .split("\0")
+        .filter(Boolean)
+        .map(normalizeRelativeDirectory)
+        .filter(isPassthroughDirectoryPath)
+    ]);
     const passthroughDirectories: string[] = [];
-    for (const entry of PASSTHROUGH_DIRECTORIES) {
-      const entryStats = await statIfPresent(path.join(repoRoot, entry));
-      if (entryStats?.isDirectory()) {
+    await forEachConcurrent([...passthroughCandidates].sort(), MATERIALIZATION_CONCURRENCY, async (entry) => {
+      if ((await statIfPresent(path.join(repoRoot, entry)))?.isDirectory()) {
         passthroughDirectories.push(entry);
       }
-    }
+    });
+    passthroughDirectories.sort();
     let estimatedBytes = 0;
     let estimatedFiles = 0;
-    for (const relativePath of includedPaths) {
+    await forEachConcurrent(includedPaths, MATERIALIZATION_CONCURRENCY, async (relativePath) => {
       const entryStats = await lstat(path.join(repoRoot, relativePath)).catch(() => undefined);
       if (!entryStats || entryStats.isSymbolicLink() || !entryStats.isFile()) {
-        continue;
+        return;
       }
       estimatedBytes += entryStats.size;
       estimatedFiles += 1;
-    }
+    });
     const warnings: BranchfsWarning[] = [];
     if (estimatedBytes > LARGE_MATERIALIZATION_BYTES || estimatedFiles > LARGE_MATERIALIZATION_FILES) {
       warnings.push({
@@ -335,7 +290,7 @@ export class BranchfsManager {
     };
   }
 
-  private async materializeMount(plan: BranchfsMaterializationPlan, repoMountPath: string, runRoot: string) {
+  async function materializeMount(plan: BranchfsMaterializationPlan, repoMountPath: string, runRoot: string) {
     for (const directory of plan.passthroughDirectories) {
       const sourcePath = path.join(plan.repoRoot, directory);
       const sourceStats = await statIfPresent(sourcePath);
@@ -353,26 +308,30 @@ export class BranchfsManager {
       });
     }
 
-    for (const relativePath of plan.includedPaths) {
-      if (isWithinPassthrough(relativePath)) {
-        continue;
-      }
+    await forEachConcurrent(plan.includedPaths, MATERIALIZATION_CONCURRENCY, async (relativePath) => {
+      if (isWithinPassthrough(relativePath, plan.passthroughDirectories)) return;
       const sourceStats = await lstatIfPresent(path.join(plan.repoRoot, relativePath));
-      if (!sourceStats) {
-        continue;
-      }
+      if (!sourceStats) return;
       await copyBranchfsPathRobust(path.join(plan.repoRoot, relativePath), path.join(repoMountPath, relativePath));
-    }
+    });
 
     await mkdir(path.join(runRoot, "upper"), { recursive: true });
   }
 
-  private async snapshotProjectBaseline(projectMountPath: string, baseProjectPath: string) {
-    await copyBranchfsPathRobust(projectMountPath, baseProjectPath);
+  async function snapshotProjectBaseline(plan: BranchfsMaterializationPlan, projectMountPath: string, baseProjectPath: string) {
+    const projectPrefix = normalizeRelativeDirectory(plan.projectRelativePath);
+    const baselinePaths = projectPrefix
+      ? plan.includedPaths
+          .filter((relativePath) => relativePath.startsWith(`${projectPrefix}/`))
+          .map((relativePath) => relativePath.slice(projectPrefix.length + 1))
+      : plan.includedPaths;
+    await forEachConcurrent(baselinePaths, MATERIALIZATION_CONCURRENCY, async (relativePath) => {
+      await copyBranchfsPathRobust(path.join(projectMountPath, relativePath), path.join(baseProjectPath, relativePath));
+    });
   }
 
-  private async seedIsolatedGitRepository(repoMountPath: string, passthroughDirectories: string[]) {
-    await this.runCommand([GIT_EXECUTABLE, "init"], repoMountPath);
+  async function seedIsolatedGitRepository(repoMountPath: string, passthroughDirectories: string[]) {
+    await runCommand([GIT_EXECUTABLE, "init"], repoMountPath);
     await appendFile(
       path.join(repoMountPath, ".git", "config"),
       "\n[core]\n\tlongpaths = true\n[user]\n\temail = branchfs@local.invalid\n\tname = BranchFS\n",
@@ -384,46 +343,53 @@ export class BranchfsManager {
       ...passthroughDirectories.map((directory) => `${directory.replace(/\\/g, "/")}/`)
     ];
     await writeFile(excludePath, `${excludeLines.join("\n")}\n`, "utf8");
-    await this.runCommand([GIT_EXECUTABLE, "add", "-A"], repoMountPath);
-    await this.runCommand([GIT_EXECUTABLE, "commit", "--allow-empty", "-m", "branchfs baseline"], repoMountPath);
-    this.emitTrace({
+    await runCommand([GIT_EXECUTABLE, "add", "-A"], repoMountPath);
+    await runCommand([GIT_EXECUTABLE, "commit", "--allow-empty", "-m", "branchfs baseline"], repoMountPath);
+    emitTrace({
       stage: "branchfs-mounted",
       message: "Initialized isolated git baseline for BranchFS mount",
       detail: repoMountPath
     });
   }
 
-  private async captureDirtySeed(repoRoot: string, dirtySeedPath: string, entries: DirtyStatusEntry[]) {
-    for (const entry of entries) {
+  async function captureDirtySeed(repoRoot: string, dirtySeedPath: string, entries: DirtyStatusEntry[]) {
+    await forEachConcurrent(entries, MATERIALIZATION_CONCURRENCY, async (entry) => {
       const sourcePath = path.join(repoRoot, entry.path);
       const destinationPath = path.join(dirtySeedPath, entry.path);
       if (!(await pathExists(sourcePath))) {
-        continue;
+        return;
       }
 
       await mkdir(path.dirname(destinationPath), { recursive: true });
       await copyBranchfsPathRobust(sourcePath, destinationPath);
-    }
+    });
   }
 
-  private async resolveRepoRoot(cwd: string) {
-    const result = await this.runCommand([GIT_EXECUTABLE, "rev-parse", "--show-toplevel"], cwd);
+  return { createMaterializationPlan, materializeMount, snapshotProjectBaseline, seedIsolatedGitRepository, captureDirtySeed };
+}
+
+function createBranchfsRepositoryTools(
+  runCommand: (command: string[], cwd: string) => Promise<{ exitCode: number; stdout: string; stderr: string; detail: string }>,
+  tryRunCommand: (command: string[], cwd: string) => Promise<{ exitCode: number; stdout: string; stderr: string; detail: string }>
+) {
+  async function resolveRepoRoot(cwd: string) {
+    const result = await runCommand([GIT_EXECUTABLE, "rev-parse", "--show-toplevel"], cwd);
     return result.stdout.trim();
   }
 
-  private async resolveHeadCommit(cwd: string) {
-    const result = await this.tryRunCommand([GIT_EXECUTABLE, "rev-parse", "--verify", "HEAD"], cwd);
+  async function resolveHeadCommit(cwd: string) {
+    const result = await tryRunCommand([GIT_EXECUTABLE, "rev-parse", "--verify", "HEAD"], cwd);
     return result.exitCode === 0 ? result.stdout.trim() : undefined;
   }
 
-  private async resolveBranchName(cwd: string) {
-    const result = await this.tryRunCommand([GIT_EXECUTABLE, "branch", "--show-current"], cwd);
+  async function resolveBranchName(cwd: string) {
+    const result = await tryRunCommand([GIT_EXECUTABLE, "branch", "--show-current"], cwd);
     return result.exitCode === 0 ? result.stdout.trim() || undefined : undefined;
   }
 
-  private async readDirtyStatus(repoRoot: string, projectRelativePath: string): Promise<DirtyStatusSnapshot> {
+  async function readDirtyStatus(repoRoot: string, projectRelativePath: string): Promise<DirtyStatusSnapshot> {
     const scope = projectRelativePath ? projectRelativePath.replace(/\\/g, "/") : ".";
-    const result = await this.runCommand(
+    const result = await runCommand(
       [GIT_EXECUTABLE, "status", "--porcelain", "-z", "--untracked-files=all", "--", scope],
       repoRoot
     );
@@ -456,7 +422,7 @@ export class BranchfsManager {
     };
   }
 
-  private async computeDirtyFingerprint(repoRoot: string, entries: DirtyStatusEntry[]) {
+  async function computeDirtyFingerprint(repoRoot: string, entries: DirtyStatusEntry[]) {
     const hash = createHash("sha256");
     for (const entry of [...entries].sort((left, right) => left.path.localeCompare(right.path))) {
       hash.update(entry.staged);
@@ -473,9 +439,90 @@ export class BranchfsManager {
     return hash.digest("hex");
   }
 
-  private emitDirtyStatusWarnings(snapshot: DirtyStatusSnapshot) {
+  return { resolveRepoRoot, resolveHeadCommit, resolveBranchName, readDirtyStatus, computeDirtyFingerprint };
+}
+export function createBranchfsManager(context: BranchfsExecutionContext, callbacks: ManagerCallbacks = {}) {
+  const materializationTools = createBranchfsMaterializationTools(runCommand, emitTrace);
+  const repositoryTools = createBranchfsRepositoryTools(runCommand, tryRunCommand);
+  const prepareExperimentLease = createBranchfsLeasePreparer({
+    context, ensureExecutable, emitTrace, emitDirtyStatusWarnings,
+    ...materializationTools, ...repositoryTools
+  });
+
+
+  async function readInspection(lease: BranchfsExperimentLease): Promise<ExperimentInspection> {
+    const changedPaths = await collectChangedPaths(lease.baseProjectPath, lease.projectMountPath);
+    const diffText = await diffDirectories(lease.baseProjectPath, lease.projectMountPath, changedPaths);
+    const { insertions, deletions } = summarizeDiffText(diffText);
+    const inspectedAt = new Date().toISOString();
+    emitTrace({
+      stage: "branchfs-diff-read",
+      message: "Read BranchFS diff layer",
+      detail: `${changedPaths.length} changed`
+    });
+    return {
+      experiment: {
+        ...lease.experiment,
+        filesChanged: changedPaths.length,
+        insertions,
+        deletions,
+        updatedAt: inspectedAt
+      },
+      diffText,
+      files: summarizeDiffFiles(diffText, changedPaths),
+      inspectedAt,
+      filesChanged: changedPaths.length,
+      insertions,
+      deletions,
+      changedPaths
+    };
+  }
+
+  async function flushExperiment(lease: BranchfsExperimentLease): Promise<ExperimentInspection> {
+    const inspection = await readInspection(lease);
+    const relativeDeleted = await collectDeletedPaths(lease.baseProjectPath, lease.projectMountPath);
+    for (const relativePath of relativeDeleted) {
+      await removeBranchfsPath(path.join(lease.repoRoot, lease.projectRelativePath, relativePath));
+    }
+
+    for (const relativePath of inspection.changedPaths) {
+      const sourcePath = path.join(lease.projectMountPath, relativePath);
+      const destinationPath = path.join(lease.repoRoot, lease.projectRelativePath, relativePath);
+      if (!(await pathExists(sourcePath))) {
+        await removeBranchfsPath(destinationPath);
+        continue;
+      }
+
+      await mkdir(path.dirname(destinationPath), { recursive: true });
+      await copyBranchfsPathRobust(sourcePath, destinationPath);
+    }
+
+    emitTrace({
+      stage: "branchfs-flushed",
+      message: "Flushed BranchFS mount back to physical disk",
+      detail: `${inspection.filesChanged} changed`
+    });
+    return inspection;
+  }
+
+  async function discardExperiment(lease: BranchfsExperimentLease) {
+    await unmountExperiment(lease);
+  }
+
+  async function unmountExperiment(lease: BranchfsExperimentLease) {
+    const runRoot = path.dirname(lease.repoMountPath);
+    await rm(runRoot, { recursive: true, force: true }).catch(() => undefined);
+    emitTrace({
+      stage: "branchfs-unmounted",
+      message: "Unmounted BranchFS experiment workspace"
+    });
+  }
+
+
+
+  function emitDirtyStatusWarnings(snapshot: DirtyStatusSnapshot) {
     if (snapshot.rawEntryCount > LARGE_DIRTY_ENTRY_WARNING_COUNT) {
-      this.emitTrace({
+      emitTrace({
         stage: "branchfs-size-warning",
         message: "BranchFS dirty state is large; continuing with capped trace detail",
         detail: `${snapshot.rawEntryCount} raw dirty entries, ${snapshot.entries.length} inherited`
@@ -483,7 +530,7 @@ export class BranchfsManager {
     }
 
     if (snapshot.skippedGeneratedEntries.length > 0) {
-      this.emitTrace({
+      emitTrace({
         stage: "branchfs-size-warning",
         message: "Skipped generated or passthrough dirty state during BranchFS inherit",
         detail: formatPathSummary(
@@ -495,33 +542,33 @@ export class BranchfsManager {
     }
   }
 
-  private async diffDirectories(baseDir: string, nextDir: string, changedPaths: string[] = []) {
+  async function diffDirectories(baseDir: string, nextDir: string, changedPaths: string[] = []) {
     if (changedPaths.length === 0) {
       return "";
     }
     return createSimpleDiffText(baseDir, nextDir, changedPaths);
   }
 
-  private emitTrace(trace: BranchfsTrace) {
-    this.callbacks.onTrace?.(trace);
+  function emitTrace(trace: BranchfsTrace) {
+    callbacks.onTrace?.(trace);
   }
 
-  private async ensureExecutable(binary: string, label: string = binary) {
-    const result = await this.tryRunCommand([binary, "--version"], this.context.rootPath);
+  async function ensureExecutable(binary: string, label: string = binary) {
+    const result = await tryRunCommand([binary, "--version"], context.rootPath);
     if (result.exitCode !== 0) {
       throw new Error(`${label} is required`);
     }
   }
 
-  private async runCommand(command: string[], cwd: string) {
-    const result = await this.tryRunCommand(command, cwd);
+  async function runCommand(command: string[], cwd: string) {
+    const result = await tryRunCommand(command, cwd);
     if (result.exitCode !== 0) {
       throw new Error(result.detail);
     }
     return result;
   }
 
-  private async tryRunCommand(command: string[], cwd: string) {
+  async function tryRunCommand(command: string[], cwd: string) {
     const proc = Bun.spawn({
       cmd: command,
       cwd,
@@ -540,6 +587,14 @@ export class BranchfsManager {
       detail: stderr.trim() || stdout.trim() || `exit ${exitCode}`
     };
   }
+
+  return { prepareExperimentLease, readInspection, flushExperiment, discardExperiment, unmountExperiment };
+}
+
+export type BranchfsManager = ReturnType<typeof createBranchfsManager>;
+
+async function canonicalizeExistingPath(targetPath: string) {
+  return await realpath(targetPath).catch(() => path.resolve(targetPath));
 }
 
 async function collectChangedPaths(baseDir: string, nextDir: string) {
@@ -850,8 +905,22 @@ function isGeneratedOrPassthroughPath(relativePath: string) {
   return segments.some((segment) => PASSTHROUGH_DIRECTORIES.includes(segment));
 }
 
-function isWithinPassthrough(relativePath: string) {
-  return PASSTHROUGH_DIRECTORIES.some((directory) => relativePath === directory || relativePath.startsWith(`${directory}/`));
+function normalizeRelativeDirectory(relativePath: string) { return relativePath.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, ""); }
+
+function isPassthroughDirectoryPath(relativePath: string) { return PASSTHROUGH_DIRECTORIES.includes(relativePath.split("/").at(-1) ?? ""); }
+
+function isWithinPassthrough(relativePath: string, passthroughDirectories: readonly string[]) { return passthroughDirectories.some((directory) => relativePath === directory || relativePath.startsWith(`${directory}/`)); }
+
+async function forEachConcurrent<T>(items: readonly T[], concurrency: number, operation: (item: T) => Promise<void>) {
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      await operation(items[index]!);
+    }
+  }));
 }
 
 function formatDirtyTraceDetail(entries: DirtyStatusEntry[]) {

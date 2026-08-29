@@ -40,6 +40,55 @@ type ExecutionLogProps = {
   class?: string;
 };
 
+const styles = stylex.create({
+  root: { flex: "1", display: "flex", flexDirection: "column", minHeight: 0, },
+  empty: { color: "var(--muted)", fontSize: "0.675rem" },
+  flatEmpty: { borderColor: "var(--border)",
+ borderStyle: "dashed",
+ borderBottomWidth: '0',
+ borderLeftWidth: '2px',
+ borderRightWidth: '0',
+ borderTopWidth: '0',
+ paddingBottom: '0.75rem',
+ paddingLeft: '1rem',
+ paddingRight: '0',
+ paddingTop: '0.75rem', },
+  cardEmpty: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.9rem", borderStyle: "dashed", borderWidth: "1px", backgroundColor: "rgb(255 255 255 / 0.45)", },
+  list: { flex: "1", minHeight: 0, minWidth: 0, overflowX: "hidden", paddingRight: "0.5rem" },
+  listContent: { minWidth: 0, width: "100%" },
+  listItem: { minWidth: 0, paddingBottom: "0.75rem" },
+  row: { borderColor: "var(--border)", borderStyle: "solid" },
+  flatRow: { borderBottomWidth: '0',
+ borderLeftWidth: '2px',
+ borderRightWidth: '0',
+ borderTopWidth: '0',
+ paddingBottom: '0.75rem',
+ paddingLeft: '1rem',
+ paddingRight: '0.5rem',
+ paddingTop: '0.75rem', },
+  cardRow: { padding: "0.75rem", borderRadius: "0.9rem", borderWidth: "1px", backgroundColor: "rgb(255 255 255 / 0.7)", },
+  interactiveRow: { borderColor: { default: null, ":hover": "var(--accent-strong)" }, outline: { default: null, ":focus-visible": "none" }, backgroundColor: { default: null, ":hover": "rgb(255 255 255 / 0.85)" }, boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, cursor: "pointer", transitionDuration: "150ms", transitionProperty: "background-color, border-color", },
+  error: { borderColor: "rgb(251 113 133)" },
+  warningBorder: { borderColor: "rgb(251 191 36)" },
+  success: { borderColor: "rgb(16 185 129)" },
+  running: { borderColor: "rgb(56 189 248)" },
+  neutralBorder: { borderColor: "var(--border)" },
+  rowLayout: { gap: "0.75rem", alignItems: "flex-start", display: "flex", flexWrap: "wrap", justifyContent: "space-between", },
+  rowCopy: { flex: "1", minWidth: 0 },
+  interactiveCopy: { borderRadius: "0.5rem", outline: { default: null, ":focus-visible": "none" }, boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, },
+  summary: { color: "var(--foreground)", fontSize: "0.675rem", overflowWrap: "break-word" },
+  metadata: { color: "var(--muted)", fontSize: "0.575rem", letterSpacing: "0.14em", textTransform: "uppercase", marginTop: "0.25rem", },
+  detailsButton: { flexShrink: 0, opacity: { default: 0.42, ":focus-visible": 1, ":hover": 1, }, transitionDuration: "160ms", transitionProperty: "opacity, transform", },
+  icon: { height: "1rem", width: "1rem" },
+  dialog: { maxWidth: "48rem" },
+  dialogContent: { maxHeight: "80vh" },
+  details: { gap: "0.75rem", display: "flex", flexDirection: "column", },
+  copyAction: { display: "flex", justifyContent: "flex-end" },
+  plainDetail: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.9rem", borderStyle: "solid", borderWidth: "1px", overflow: "visible", backgroundColor: "rgb(255 255 255 / 0.7)", color: "var(--foreground)", fontSize: "0.7rem", lineHeight: "1.25rem", overflowWrap: "break-word", whiteSpace: "pre-wrap", },
+  json: { padding: "0.75rem", borderRadius: "0.9rem", overflow: "auto", backgroundColor: "rgb(2 6 23 / 0.95)", color: "rgb(241 245 249)", fontSize: "0.625rem", lineHeight: "1.25rem", },
+  warning: { padding: "0.75rem", borderColor: "rgb(253 230 138)", borderRadius: "0.9rem", borderStyle: "solid", borderWidth: "1px", backgroundColor: "rgb(255 251 235)", color: "rgb(120 53 15)", fontSize: "0.675rem", }
+});
+
 export function ExecutionLog(props: ExecutionLogProps) {
   const [internalSelectedEntryId, setInternalSelectedEntryId] = createSignal<string>();
   const summaryLength = () => props.summaryLength ?? defaultSummaryLength;
@@ -256,36 +305,3 @@ function executionLogLevelTone(level: string): "error" | "warningBorder" | "succ
   }
   return "neutralBorder";
 }
-
-const styles = stylex.create({
-  root: { display: "flex", flex: "1", flexDirection: "column", minHeight: 0 },
-  empty: { color: "var(--muted)", fontSize: "0.675rem" },
-  flatEmpty: { borderColor: "var(--border)", borderStyle: "dashed", borderWidth: "0 0 0 2px", padding: "0.75rem 0 0.75rem 1rem" },
-  cardEmpty: { backgroundColor: "rgb(255 255 255 / 0.45)", borderColor: "var(--border)", borderRadius: "0.9rem", borderStyle: "dashed", borderWidth: "1px", padding: "0.75rem" },
-  list: { flex: "1", minHeight: 0, minWidth: 0, overflowX: "hidden", paddingRight: "0.5rem" },
-  listContent: { minWidth: 0, width: "100%" },
-  listItem: { minWidth: 0, paddingBottom: "0.75rem" },
-  row: { borderColor: "var(--border)", borderStyle: "solid" },
-  flatRow: { borderWidth: "0 0 0 2px", padding: "0.75rem 0.5rem 0.75rem 1rem" },
-  cardRow: { backgroundColor: "rgb(255 255 255 / 0.7)", borderRadius: "0.9rem", borderWidth: "1px", padding: "0.75rem" },
-  interactiveRow: { backgroundColor: { default: null, ":hover": "rgb(255 255 255 / 0.85)" }, borderColor: { default: null, ":hover": "var(--accent-strong)" }, boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, cursor: "pointer", outline: { default: null, ":focus-visible": "none" }, transitionProperty: "background-color, border-color", transitionDuration: "150ms" },
-  error: { borderColor: "rgb(251 113 133)" },
-  warningBorder: { borderColor: "rgb(251 191 36)" },
-  success: { borderColor: "rgb(16 185 129)" },
-  running: { borderColor: "rgb(56 189 248)" },
-  neutralBorder: { borderColor: "var(--border)" },
-  rowLayout: { alignItems: "flex-start", display: "flex", flexWrap: "wrap", gap: "0.75rem", justifyContent: "space-between" },
-  rowCopy: { flex: "1", minWidth: 0 },
-  interactiveCopy: { borderRadius: "0.5rem", boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, outline: { default: null, ":focus-visible": "none" } },
-  summary: { color: "var(--foreground)", fontSize: "0.675rem", overflowWrap: "break-word" },
-  metadata: { color: "var(--muted)", fontSize: "0.575rem", letterSpacing: "0.14em", marginTop: "0.25rem", textTransform: "uppercase" },
-  detailsButton: { flexShrink: 0, opacity: { default: 0.42, ":hover": 1, ":focus-visible": 1 }, transitionProperty: "opacity, transform", transitionDuration: "160ms" },
-  icon: { height: "1rem", width: "1rem" },
-  dialog: { maxWidth: "48rem" },
-  dialogContent: { maxHeight: "80vh" },
-  details: { display: "flex", flexDirection: "column", gap: "0.75rem" },
-  copyAction: { display: "flex", justifyContent: "flex-end" },
-  plainDetail: { backgroundColor: "rgb(255 255 255 / 0.7)", borderColor: "var(--border)", borderRadius: "0.9rem", borderStyle: "solid", borderWidth: "1px", color: "var(--foreground)", fontSize: "0.7rem", lineHeight: "1.25rem", overflow: "visible", overflowWrap: "break-word", padding: "0.75rem", whiteSpace: "pre-wrap" },
-  json: { backgroundColor: "rgb(2 6 23 / 0.95)", borderRadius: "0.9rem", color: "rgb(241 245 249)", fontSize: "0.625rem", lineHeight: "1.25rem", overflow: "auto", padding: "0.75rem" },
-  warning: { backgroundColor: "rgb(255 251 235)", borderColor: "rgb(253 230 138)", borderRadius: "0.9rem", borderStyle: "solid", borderWidth: "1px", color: "rgb(120 53 15)", fontSize: "0.675rem", padding: "0.75rem" }
-});

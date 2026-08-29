@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { buildGitRepositoryPromptContext, resolveGitRepositoryPromptContext } from "./git-context";
+import { createHarnessTestTempPath } from "./test-support/test-temp-root";
 
 describe("git prompt context", () => {
   test("reports non-repository folders with git-safe guidance", () => {
@@ -24,7 +25,7 @@ describe("git prompt context", () => {
   });
 
   test("reports repository folders with git command availability", () => {
-    const root = path.join(process.cwd(), ".tmp-test-data", `git-context-${crypto.randomUUID()}`);
+    const root = createHarnessTestTempPath("git-context");
     mkdirSync(root, { recursive: true });
     Bun.spawnSync({ cmd: ["git", "init"], cwd: root, stdout: "pipe", stderr: "pipe" });
 

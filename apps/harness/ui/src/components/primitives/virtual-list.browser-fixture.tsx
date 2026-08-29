@@ -128,7 +128,11 @@ function FixtureRow(props: { item: FixtureItem }) {
 render(() => <FixtureApp />, document.getElementById("root")!);
 
 const styles = stylex.create({
-  viewport: { flex: "1 1 0%", minHeight: 0, paddingRight: "0.5rem" },
+  viewport: { flexBasis: '0%',
+ flexGrow: '1',
+ flexShrink: '1',
+ minHeight: 0,
+ paddingRight: "0.5rem", },
   content: { width: "100%" },
   item: { paddingBottom: "0.5rem" },
 });

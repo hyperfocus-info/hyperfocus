@@ -1,4 +1,4 @@
-import type { ProjectThreadSummary, WorkspaceProjectState } from "../../../shared/protocol";
+import type { ProjectThreadSummary, WorkspaceProjectState } from "@hyperfocus/ai-core/protocol";
 
 const maxDurationMs = 520 * 7 * 24 * 60 * 60 * 1000;
 const unitMs = {
@@ -14,7 +14,8 @@ export function parseThreadCleanupDuration(input: string): { ok: true; ms: numbe
     return { ok: false, reason: "Use a duration like 30d, 2w, 12h, or 90m." };
   }
   const amount = Number(match[1]);
-  const unit = match[2].toLowerCase() as keyof typeof unitMs;
+  const unit = match[2]?.toLowerCase();
+  if (!isDurationUnit(unit)) return { ok: false, reason: "Use a duration like 30d, 2w, 12h, or 90m." };
   const ms = amount * unitMs[unit];
   if (!Number.isSafeInteger(ms) || ms <= 0) {
     return { ok: false, reason: "Duration must be greater than zero." };
@@ -23,6 +24,10 @@ export function parseThreadCleanupDuration(input: string): { ok: true; ms: numbe
     return { ok: false, reason: "Duration must be 520w or less." };
   }
   return { ok: true, ms };
+}
+
+function isDurationUnit(value: string | undefined): value is keyof typeof unitMs {
+  return value === "m" || value === "h" || value === "d" || value === "w";
 }
 
 export function getThreadCleanupActivityAt(thread: ProjectThreadSummary) {

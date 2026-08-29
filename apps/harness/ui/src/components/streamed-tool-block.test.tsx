@@ -1,7 +1,7 @@
 /** @jsxImportSource solid-js */
 import { expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
-import type { ExecutionToolActivity } from "../../../shared/protocol";
+import type { ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
 import type { TimelineToolBlock } from "../lib/chat-timeline-model";
 import { formatShortTimestamp } from "../lib/time-format";
 import { formatToolActivityCopyText, formatToolMetadata } from "../lib/tool-activity-format";

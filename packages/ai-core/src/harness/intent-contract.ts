@@ -1,10 +1,7 @@
-import {
-  intentContractSchema,
-  type Assistant,
-  type BackgroundJob,
-  type IntentArtifactType,
-  type IntentContract
-} from "./protocol";
+import type { Assistant } from "./protocol/assistants";
+import { intentContractSchema, type IntentContract } from "./protocol/conversation";
+import type { BackgroundJob } from "./protocol/jobs-and-notifications";
+import type { IntentArtifactType } from "./protocol/shared";
 
 const DEFAULT_ALLOWED_ADAPTATION =
   "May adapt implementation details to fit repository conventions, but do not downgrade required artifact types without recording the blocker.";

@@ -1,0 +1,34 @@
+name: Branch version bump
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-version:
+    if: ${{ github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip version]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun scripts/bump-patch-version.ts
+      - run: bun install --lockfile-only
+      - name: Commit patch version
+        run: |
+          if git diff --quiet; then
+            echo "No version changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json apps/*/package.json packages/*/package.json bun.lock
+          git commit -m "chore: bump branch patch version [skip version]"
+          git push

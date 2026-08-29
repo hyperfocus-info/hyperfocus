@@ -1,6 +1,6 @@
 import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { stylexSolidPlugin } from "../../../scripts/stylex-solid-plugin";
+import { stylexSolidPlugin } from "@hyperfocus/ui/build/stylex-solid-plugin";
 
 const repoRoot = path.resolve(import.meta.dir, "..", "..", "..");
 // Keep the generated entry beneath the harness package so Bun resolves the
@@ -94,7 +94,7 @@ function fixtureSource() {
 import { onMount } from "solid-js";
 import { render } from "solid-js/web";
 import "${toImportPath(path.join(repoRoot, "apps/harness/ui/src/global-styles.ts"))}";
-import { createWorkspaceProjectState } from "${toImportPath(path.join(repoRoot, "apps/harness/shared/protocol.ts"))}";
+import { createWorkspaceProjectState } from "${toImportPath(path.join(repoRoot, "packages/ai-core/src/harness/protocol.ts"))}";
 import { UiStateProviders } from "${toImportPath(path.join(repoRoot, "apps/harness/ui/src/store-providers.tsx"))}";
 import { harnessStore } from "${toImportPath(path.join(repoRoot, "apps/harness/ui/src/harness-store.ts"))}";
 import { IdeWorkbench } from "${toImportPath(path.join(repoRoot, "apps/harness/ui/src/ide/ide-workbench.tsx"))}";
@@ -183,7 +183,7 @@ function isPathWithin(directory: string, candidatePath: string) {
 
 async function runBrowserCheck(baseUrl: string) {
   await progress("launching browser runner");
-  const runnerPath = path.join(import.meta.dir, "ide-positioning-playwright-runner.mjs");
+  const runnerPath = path.join(import.meta.dir, "ide-positioning-playwright-runner.ts");
   const proc = Bun.spawn({
     cmd: ["node", runnerPath],
     cwd: repoRoot,

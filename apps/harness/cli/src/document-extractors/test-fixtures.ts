@@ -165,7 +165,7 @@ export function createDataUrl(mimeType: string, buffer: Buffer) {
   return `data:${mimeType};base64,${buffer.toString("base64")}`;
 }
 
-function createStoredZip(entries: ZipEntryInput[]) {
+export function createStoredZip(entries: ZipEntryInput[]) {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;

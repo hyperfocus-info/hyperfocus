@@ -5,8 +5,8 @@ import { cn } from "../../lib/utils";
 import { Popover } from "./popover";
 import { Tooltip } from "./tooltip";
 
-type DropdownOption = {
-  value: string;
+type DropdownOption<TValue extends string = string> = {
+  value: TValue;
   label: string;
   description?: string;
   icon?: JSX.Element;
@@ -22,11 +22,11 @@ type DropdownBaseProps = {
   dataAttributes?: Record<string, string>;
 };
 
-type DropdownSelectProps = DropdownBaseProps & {
+type DropdownSelectProps<TValue extends string = string> = DropdownBaseProps & {
   kind: "select";
-  value: string;
-  options: DropdownOption[];
-  onChange: (value: string) => void;
+  value: TValue;
+  options: DropdownOption<TValue>[];
+  onChange: (value: TValue) => void;
   hideWhenSingleOption?: boolean;
   popoverSide?: "top" | "right" | "bottom" | "left";
   popoverAlign?: "start" | "center" | "end";
@@ -40,7 +40,68 @@ type DropdownTriggerProps = DropdownBaseProps & {
   type?: "button" | "submit" | "reset";
 };
 
-export function DropdownControl(props: DropdownSelectProps | DropdownTriggerProps) {
+const styles = stylex.create({
+  popoverRoot: { minWidth: 0 },
+  popoverContent: { padding: "0.375rem", maxWidth: "20rem", minWidth: "var(--popover-trigger-width)", },
+  options: { gap: "0.125rem", display: "flex", flexDirection: "column", minWidth: "var(--popover-trigger-width)", },
+  option: {
+    borderRadius: "0.5rem",
+    borderWidth: 0,
+    gap: "0.375rem",
+    outline: { default: null, ":focus-visible": "none" },
+    paddingBlock: '0.25rem',
+    paddingInline: '0.375rem',
+    alignItems: "center",
+    backgroundColor: { default: "transparent", ":focus-visible": "rgb(0 0 0 / 0.05)", ":hover": "rgb(0 0 0 / 0.05)", },
+    color: "var(--foreground)",
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    display: "flex",
+    fontWeight: 500,
+    opacity: { default: 1, ":disabled": 0.5 },
+    textAlign: "left",
+    transitionDuration: "150ms",
+    transitionProperty: "background-color, color",
+    minWidth: 0,
+    width: "100%",
+  },
+  optionSmall: { fontSize: "0.525rem" },
+  optionMedium: { fontSize: "0.575rem" },
+  optionIcon: { alignItems: "center", color: "var(--muted)", display: "flex", flexShrink: 0, justifyContent: "center", height: "0.875rem", width: "0.875rem", },
+  optionCopy: { flex: "1", minWidth: 0 },
+  optionLabel: { display: "block", whiteSpace: "nowrap" },
+  optionDescription: { color: "var(--muted)", display: "block", fontSize: "0.55rem", fontWeight: 400, lineHeight: "1rem", marginTop: "0.125rem" },
+  check: { color: "var(--foreground)", flexShrink: 0, height: "0.75rem", width: "0.75rem" },
+  shell: {
+    borderColor: "var(--border)",
+    borderRadius: "0.5rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    gap: "0.375rem",
+    outline: "none",
+    paddingInline: "0.375rem",
+    alignItems: "center",
+    backgroundColor: { default: "rgb(255 255 255 / 0.7)", ":hover": "rgb(255 255 255 / 0.85)" },
+    boxShadow: { default: "0 1px 2px rgb(0 0 0 / 0.05)", ":focus-visible": "0 0 0 2px var(--ring)", ":focus-within": "0 0 0 2px var(--ring)" },
+    color: "var(--foreground)",
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    display: "inline-flex",
+    fontWeight: 500,
+    justifyContent: "flex-start",
+    opacity: { default: 1, ":disabled": 0.6 },
+    transitionDuration: "150ms",
+    transitionProperty: "background-color, border-color, box-shadow",
+    minWidth: 0,
+  },
+  trigger: {},
+  fullTrigger: { width: "100%" },
+  small: { height: "1.75rem" },
+  medium: { height: "2rem" },
+  muted: { color: "var(--muted)" },
+  triggerLabel: { flex: "1", overflow: "hidden", fontSize: "0.625rem", textAlign: "left", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, },
+  chevron: { color: "var(--muted)", height: "0.875rem", width: "0.875rem" }
+});
+
+export function DropdownControl<TValue extends string = string>(props: DropdownSelectProps<TValue> | DropdownTriggerProps) {
   const size = () => props.size ?? "sm";
 
   if (props.kind === "select") {
@@ -145,63 +206,3 @@ export function DropdownControl(props: DropdownSelectProps | DropdownTriggerProp
 }
 
 export type { DropdownOption };
-
-const styles = stylex.create({
-  popoverRoot: { minWidth: 0 },
-  popoverContent: { maxWidth: "20rem", minWidth: "var(--popover-trigger-width)", padding: "0.375rem" },
-  options: { display: "flex", flexDirection: "column", gap: "0.125rem", minWidth: "var(--popover-trigger-width)" },
-  option: {
-    alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": "rgb(0 0 0 / 0.05)", ":focus-visible": "rgb(0 0 0 / 0.05)" },
-    borderWidth: 0,
-    borderRadius: "0.5rem",
-    color: "var(--foreground)",
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
-    display: "flex",
-    fontWeight: 500,
-    gap: "0.375rem",
-    minWidth: 0,
-    opacity: { default: 1, ":disabled": 0.5 },
-    outline: { default: null, ":focus-visible": "none" },
-    padding: "0.25rem 0.375rem",
-    textAlign: "left",
-    transitionProperty: "background-color, color",
-    transitionDuration: "150ms",
-    width: "100%"
-  },
-  optionSmall: { fontSize: "0.525rem" },
-  optionMedium: { fontSize: "0.575rem" },
-  optionIcon: { alignItems: "center", color: "var(--muted)", display: "flex", flexShrink: 0, height: "0.875rem", justifyContent: "center", width: "0.875rem" },
-  optionCopy: { flex: "1", minWidth: 0 },
-  optionLabel: { display: "block", whiteSpace: "nowrap" },
-  optionDescription: { color: "var(--muted)", display: "block", fontSize: "0.55rem", fontWeight: 400, lineHeight: "1rem", marginTop: "0.125rem" },
-  check: { color: "var(--foreground)", flexShrink: 0, height: "0.75rem", width: "0.75rem" },
-  shell: {
-    alignItems: "center",
-    backgroundColor: { default: "rgb(255 255 255 / 0.7)", ":hover": "rgb(255 255 255 / 0.85)" },
-    borderColor: "var(--border)",
-    borderRadius: "0.5rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    boxShadow: { default: "0 1px 2px rgb(0 0 0 / 0.05)", ":focus-visible": "0 0 0 2px var(--ring)", ":focus-within": "0 0 0 2px var(--ring)" },
-    color: "var(--foreground)",
-    display: "inline-flex",
-    fontWeight: 500,
-    gap: "0.375rem",
-    justifyContent: "flex-start",
-    minWidth: 0,
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
-    opacity: { default: 1, ":disabled": 0.6 },
-    outline: "none",
-    paddingInline: "0.375rem",
-    transitionProperty: "background-color, border-color, box-shadow",
-    transitionDuration: "150ms"
-  },
-  trigger: {},
-  fullTrigger: { width: "100%" },
-  small: { height: "1.75rem" },
-  medium: { height: "2rem" },
-  muted: { color: "var(--muted)" },
-  triggerLabel: { flex: "1", fontSize: "0.625rem", minWidth: 0, overflow: "hidden", textAlign: "left", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  chevron: { color: "var(--muted)", height: "0.875rem", width: "0.875rem" }
-});

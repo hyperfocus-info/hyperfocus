@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { resolveHarnessDbPath } from "../../../../harness/cli/src/harness-paths";
+import { resolveHarnessDbPath } from "../../assistant-actions/scripts/harness-db-path";
 
 type CliOptions = {
   dbPath: string;
@@ -12,6 +12,8 @@ type SectionCount = {
   label: string;
   count: number;
 };
+
+type DataRow = Record<string, unknown>;
 
 const DEFAULT_LIMIT = 20;
 
@@ -126,37 +128,11 @@ function parseArgs(argv: string[]) {
   };
 }
 
-function buildReport(db: Database, threadId: string, options: CliOptions) {
-  const projectThread = db
-    .query(
-      `SELECT
-         t.id,
-         t.project_id,
-         t.status,
-         t.kind,
-         t.title,
-         t.title_source,
-         t.updated_at,
-         t.forked_from_thread_id,
-         t.memory_summary_content,
-         t.memory_summary_updated_at,
-         t.created_at,
-         t.archived_at,
-         p.name AS project_name,
-         p.root_path AS project_root_path,
-         p.active_thread_id AS project_active_thread_id,
-         p.selected_mode_id AS project_selected_mode_id
-       FROM project_threads t
-       JOIN projects p ON p.id = t.project_id
-       WHERE t.id = ?1`
-    )
-    .get(threadId) as Record<string, unknown> | null;
-
-  if (projectThread) {
+function buildProjectThreadReport(db: Database, threadId: string, options: CliOptions, projectThread: DataRow) {
     const runIds = db
       .query(`SELECT id FROM agent_runs WHERE thread_id = ?1 ORDER BY updated_at DESC`)
       .all(threadId)
-      .map((row) => String((row as Record<string, unknown>).id));
+      .map((row) => String(requireDataRow(row).id));
 
     const report = {
       lookup: {
@@ -321,34 +297,9 @@ function buildReport(db: Database, threadId: string, options: CliOptions) {
     };
 
     return report;
-  }
+}
 
-  const assistantThread = db
-    .query(
-      `SELECT
-         t.id,
-         t.assistant_id,
-         t.session_id,
-         t.memory_summary_content,
-         t.memory_summary_updated_at,
-         t.updated_at,
-         t.created_at,
-         a.name AS assistant_name,
-         a.scope AS assistant_scope,
-         a.project_id AS assistant_project_id,
-         a.agent_id,
-         a.mode_id,
-         a.execution_model_id,
-         a.run_state,
-         a.bootstrap_state,
-         a.latest_activity_at
-       FROM assistant_threads t
-       JOIN assistants a ON a.id = t.assistant_id
-       WHERE t.id = ?1`
-    )
-    .get(threadId) as Record<string, unknown> | null;
-
-  if (assistantThread) {
+function buildAssistantThreadReport(db: Database, threadId: string, options: CliOptions, assistantThread: DataRow) {
     const assistantId = String(assistantThread.assistant_id);
     return {
       lookup: {
@@ -437,6 +388,67 @@ function buildReport(db: Database, threadId: string, options: CliOptions) {
         )
         .all(assistantId, options.limit)
     };
+}
+
+function buildReport(db: Database, threadId: string, options: CliOptions) {
+  const projectThread = readDataRow(
+    db
+      .query(
+        `SELECT
+           t.id,
+           t.project_id,
+           t.status,
+           t.kind,
+           t.title,
+           t.title_source,
+           t.updated_at,
+           t.forked_from_thread_id,
+           t.memory_summary_content,
+           t.memory_summary_updated_at,
+           t.created_at,
+           t.archived_at,
+           p.name AS project_name,
+           p.root_path AS project_root_path,
+           p.active_thread_id AS project_active_thread_id,
+           p.selected_mode_id AS project_selected_mode_id
+         FROM project_threads t
+         JOIN projects p ON p.id = t.project_id
+         WHERE t.id = ?1`
+      )
+      .get(threadId)
+  );
+  if (projectThread) {
+    return buildProjectThreadReport(db, threadId, options, projectThread);
+  }
+
+  const assistantThread = readDataRow(
+    db
+      .query(
+        `SELECT
+           t.id,
+           t.assistant_id,
+           t.session_id,
+           t.memory_summary_content,
+           t.memory_summary_updated_at,
+           t.updated_at,
+           t.created_at,
+           a.name AS assistant_name,
+           a.scope AS assistant_scope,
+           a.project_id AS assistant_project_id,
+           a.agent_id,
+           a.mode_id,
+           a.execution_model_id,
+           a.run_state,
+           a.bootstrap_state,
+           a.latest_activity_at
+         FROM assistant_threads t
+         JOIN assistants a ON a.id = t.assistant_id
+         WHERE t.id = ?1`
+      )
+      .get(threadId)
+  );
+  if (assistantThread) {
+    return buildAssistantThreadReport(db, threadId, options, assistantThread);
   }
 
   return {
@@ -455,14 +467,26 @@ function buildReport(db: Database, threadId: string, options: CliOptions) {
   };
 }
 
+function readDataRow(value: unknown): DataRow | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : null;
+}
+
+function requireDataRow(value: unknown): DataRow {
+  const row = readDataRow(value);
+  if (!row) {
+    throw new Error("Expected a database row object");
+  }
+  return row;
+}
+
 function countRow(db: Database, label: string, sql: string, value: string): SectionCount {
-  const row = db.query(sql).get(value) as { count?: number } | null;
-  return { label, count: row?.count ?? 0 };
+  const row = readDataRow(db.query(sql).get(value));
+  return { label, count: typeof row?.count === "number" ? row.count : 0 };
 }
 
 function renderReport(report: Record<string, unknown>) {
   const lines: string[] = [];
-  const lookup = report.lookup as Record<string, unknown>;
+  const lookup = requireDataRow(report.lookup);
   lines.push(`lookup-thread ${lookup.threadId}`);
   lines.push(`type: ${lookup.threadType}`);
   lines.push(`db: ${lookup.dbPath}`);
@@ -470,8 +494,8 @@ function renderReport(report: Record<string, unknown>) {
   if (report.error) {
     lines.push("");
     lines.push(`error: ${report.error}`);
-    const hints = report.hints as string[] | undefined;
-    if (hints?.length) {
+    const hints = readStringArray(report.hints);
+    if (hints.length > 0) {
       lines.push("hints:");
       for (const hint of hints) {
         lines.push(`- ${hint}`);
@@ -482,18 +506,18 @@ function renderReport(report: Record<string, unknown>) {
 
   lines.push("");
   lines.push("counts:");
-  for (const count of (report.counts as SectionCount[] | undefined) ?? []) {
+  for (const count of readSectionCounts(report.counts)) {
     lines.push(`- ${count.label}: ${count.count}`);
   }
 
   lines.push("");
   lines.push("thread:");
-  lines.push(renderObject(report.thread as Record<string, unknown>, 2));
+  lines.push(renderObject(requireDataRow(report.thread), 2));
 
   if (report.lineage) {
     lines.push("");
     lines.push("lineage:");
-    lines.push(renderObject(report.lineage as Record<string, unknown>, 2));
+    lines.push(renderObject(requireDataRow(report.lineage), 2));
   }
 
   const orderedSections = [
@@ -523,12 +547,28 @@ function renderReport(report: Record<string, unknown>) {
     }
     lines.push("");
     lines.push(`${section}:`);
-    for (const row of value as Record<string, unknown>[]) {
-      lines.push(renderObject(row, 2));
+    for (const row of value) {
+      lines.push(renderObject(requireDataRow(row), 2));
     }
   }
 
   return lines.join("\n");
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function readSectionCounts(value: unknown): SectionCount[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    const row = readDataRow(entry);
+    return row && typeof row.label === "string" && typeof row.count === "number"
+      ? [{ label: row.label, count: row.count }]
+      : [];
+  });
 }
 
 function renderObject(value: unknown, indent: number) {

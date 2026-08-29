@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { CliProcessManager, CLI_PROCESS_OUTPUT_CAP_BYTES, testExports } from "./cli-process-manager";
+import { createCliProcessManager, CLI_PROCESS_OUTPUT_CAP_BYTES, testExports } from "./cli-process-manager";
 
 describe("CliProcessManager", () => {
   test("caps noninteractive stdout and reports limit", async () => {
-    const manager = new CliProcessManager();
+    const manager = createCliProcessManager();
     const result = await manager.runNonInteractive({
       cmd: [process.execPath, "-e", `process.stdout.write("x".repeat(${CLI_PROCESS_OUTPUT_CAP_BYTES + 1024}))`],
       cwd: process.cwd(),

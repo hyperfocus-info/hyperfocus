@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import type { Assistant, BackgroundJob, BackgroundJobRun } from "../../../shared/protocol";
+import type { Assistant, BackgroundJob, BackgroundJobRun } from "@hyperfocus/ai-core/protocol";
 import { createDefaultJobsPanePreferences, createEmptyAssistantsState } from "../harness-store";
 import {
   createAgentPlanFixture,

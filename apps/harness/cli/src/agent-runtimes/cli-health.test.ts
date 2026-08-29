@@ -1,7 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { createSecureToken, extractCodexFinalText, parseCopilotModelChoices } from "./cli-health";
+import { createAttachTokenStore } from "../server/transport/attach-ownership";
 
 describe("cli health helpers", () => {
+  test("bounds and expires abandoned attach tokens", () => {
+    const removed: string[] = [], store = createAttachTokenStore<{ token: string; clientId: string; expiresAt: string }>(
+      (entry) => removed.push(entry.token), 2);
+    const record = (token: string, offsetMs = 10_000) => ({ token, clientId: "client",
+      expiresAt: new Date(Date.now() + offsetMs).toISOString() });
+    store.issue(record("expired", -1)); store.issue(record("first")); store.issue(record("second")); store.issue(record("latest"));
+    expect(removed).toEqual(["expired", "first"]);
+    expect(store.consume("first", "client")).toBeUndefined();
+    expect(store.consume("latest", "client")?.token).toBe("latest");
+  });
+
   test("extracts codex final assistant message from jsonl", () => {
     const stdout = [
       '{"type":"thread.started","thread_id":"1"}',

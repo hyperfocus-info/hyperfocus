@@ -1,16 +1,18 @@
-import type { AgentRuntimeCapability, ProviderBrand } from "../../../shared/protocol";
+import type { AgentRuntimeCapability, ProviderBrand } from "@hyperfocus/ai-core/protocol";
 import type { PiAgentAdapter } from "../pi-agent-adapter";
-import type { AgentRuntime } from "./agent-runtime";
 import { buildCliCapability, probeCliVersion, probeCodexAuth, probeInteractivePipeCompatibility, shouldSkipExpensiveCliProbes } from "./cli-health";
-import { CliProcessManager } from "./cli-process-manager";
+import { createCliProcessManager, type CliProcessManager } from "./cli-process-manager";
 import { getBundledCodexInstallation, type CodexInstallation } from "./codex-installation";
 import { resolveCodexSandboxMode } from "./codex-sandbox-policy";
-import { CodexSdkAdapter } from "./codex-sdk-adapter";
+import { createCodexSdkAdapter } from "./codex-sdk-adapter";
 import { resolveSubagentModelId } from "../subagent-defaults";
 
-const DEFAULT_MODEL_ID = "openai/gpt-5.5";
+const DEFAULT_MODEL_ID = "openai/gpt-5.6-sol";
 const FALLBACK_CODEX_SUPPORTED_MODEL_IDS = [
   DEFAULT_MODEL_ID,
+  "openai/gpt-5.6-terra",
+  "openai/gpt-5.6-luna",
+  "openai/gpt-5.5",
   "openai/gpt-5.4",
   "openai/gpt-5.4-mini",
   "openai/gpt-5.3-codex",
@@ -27,46 +29,40 @@ type CodexCliRuntimeOptions = {
   platform?: NodeJS.Platform;
 };
 
-export class CodexCliRuntime implements AgentRuntime {
-  readonly id = "codex-cli" as const;
-  readonly label = "Codex CLI";
+export type CodexCliRuntime = ReturnType<typeof createCodexCliRuntime>;
 
-  private readonly processManager: CliProcessManager;
-  private readonly getInstallation: () => CodexInstallation;
-  private readonly createAdapter: (executablePath: string) => PiAgentAdapter;
-  private readonly platform: NodeJS.Platform;
-  private adapter: PiAgentAdapter | undefined;
-  private capability: AgentRuntimeCapability | undefined;
+export function createCodexCliRuntime(options: CodexCliRuntimeOptions = {}) {
+  const id: "codex-cli" = "codex-cli";
+  const label = "Codex CLI";
+  const processManager = options.processManager ?? createCliProcessManager();
+  const getInstallation = options.getInstallation ?? getBundledCodexInstallation;
+  const createAdapter = options.createAdapter ?? ((executablePath: string) => createCodexSdkAdapter({ executablePath }));
+  const platform = options.platform ?? process.platform;
+  let adapter: PiAgentAdapter | undefined;
+  let capability: AgentRuntimeCapability | undefined;
 
-  constructor(options: CodexCliRuntimeOptions = {}) {
-    this.processManager = options.processManager ?? new CliProcessManager();
-    this.getInstallation = options.getInstallation ?? getBundledCodexInstallation;
-    this.createAdapter = options.createAdapter ?? ((executablePath) => new CodexSdkAdapter({ executablePath }));
-    this.platform = options.platform ?? process.platform;
-  }
-
-  getAdapter() {
-    if (!this.adapter) {
-      const installation = this.getInstallation();
+  function getAdapter() {
+    if (!adapter) {
+      const installation = getInstallation();
       if (!installation.installed || !installation.executablePath) {
         throw new Error(installation.healthMessage);
       }
-      this.adapter = this.createAdapter(installation.executablePath);
+      adapter = createAdapter(installation.executablePath);
     }
 
-    return this.adapter;
+    return adapter;
   }
 
-  getCapability() {
-    return this.capability;
+  function getCapability() {
+    return capability;
   }
 
-  async refreshCapability() {
-    const installation = this.getInstallation();
+  async function refreshCapability() {
+    const installation = getInstallation();
     if (!installation.installed || !installation.executablePath) {
-      this.capability = buildCliCapability({
-        agentId: this.id,
-        label: this.label,
+      capability = buildCliCapability({
+        agentId: id,
+        label,
         installed: false,
         authenticated: false,
         supportsInteractive: false,
@@ -80,14 +76,14 @@ export class CodexCliRuntime implements AgentRuntime {
         authCommand: installation.authCommand,
         docsUrl: installation.docsUrl
       });
-      return this.capability;
+      return capability;
     }
 
-    const version = await probeCliVersion(this.processManager, installation.executablePath);
+    const version = await probeCliVersion(processManager, installation.executablePath);
     if (!version) {
-      this.capability = buildCliCapability({
-        agentId: this.id,
-        label: this.label,
+      capability = buildCliCapability({
+        agentId: id,
+        label,
         installed: false,
         authenticated: false,
         supportsInteractive: false,
@@ -101,22 +97,22 @@ export class CodexCliRuntime implements AgentRuntime {
         authCommand: installation.authCommand,
         docsUrl: installation.docsUrl
       });
-      return this.capability;
+      return capability;
     }
 
     const skipExpensiveProbes = shouldSkipExpensiveCliProbes();
     const [authenticated, interactivePipeCompatible] = await Promise.all([
-      skipExpensiveProbes ? Promise.resolve(true) : probeCodexAuth(this.processManager, installation.executablePath),
-      probeInteractivePipeCompatibility(this.processManager, {
+      skipExpensiveProbes ? Promise.resolve(true) : probeCodexAuth(processManager, installation.executablePath),
+      probeInteractivePipeCompatibility(processManager, {
         executable: installation.executablePath,
         helpArgs: ["--help"]
       })
     ]);
-    const modelDiscovery = await discoverCodexModels(this.processManager, installation.executablePath);
+    const modelDiscovery = await discoverCodexModels(processManager, installation.executablePath);
 
-    this.capability = buildCliCapability({
-      agentId: this.id,
-      label: this.label,
+    capability = buildCliCapability({
+      agentId: id,
+      label,
       installed: true,
       authenticated,
       version,
@@ -135,27 +131,27 @@ export class CodexCliRuntime implements AgentRuntime {
       docsUrl: installation.docsUrl
     });
 
-    return this.capability;
+    return capability;
   }
 
-  getDefaultPlanningModelId(_providerBrand: ProviderBrand) {
+  function getDefaultPlanningModelId(_providerBrand: ProviderBrand) {
     return DEFAULT_MODEL_ID;
   }
 
-  getDefaultExecutionModelId(_providerBrand: ProviderBrand) {
+  function getDefaultExecutionModelId(_providerBrand: ProviderBrand) {
     return DEFAULT_MODEL_ID;
   }
 
-  getDefaultSubagentModelId(providerBrand: ProviderBrand, executionModelId?: string) {
+  function getDefaultSubagentModelId(providerBrand: ProviderBrand, executionModelId?: string) {
     return resolveSubagentModelId({
-      agentId: this.id,
+      agentId: id,
       providerBrand,
       executionModelId
     });
   }
 
-  buildInteractiveLaunch(input: { cwd: string; cols: number; rows: number; prompt?: string }) {
-    const installation = this.getInstallation();
+  function buildInteractiveLaunch(input: { cwd: string; cols: number; rows: number; prompt?: string }) {
+    const installation = getInstallation();
     if (!installation.installed || !installation.executablePath) {
       throw new Error(installation.healthMessage);
     }
@@ -168,7 +164,7 @@ export class CodexCliRuntime implements AgentRuntime {
         input.cwd,
         "-s",
         resolveCodexSandboxMode({
-          platform: this.platform
+          platform
         }),
         "-a",
         "on-request",
@@ -177,6 +173,8 @@ export class CodexCliRuntime implements AgentRuntime {
       env: {}
     };
   }
+
+  return { id, label, getAdapter, getCapability, refreshCapability, getDefaultPlanningModelId, getDefaultExecutionModelId, getDefaultSubagentModelId, buildInteractiveLaunch };
 }
 
 export function getCodexSupportedModelIds() {
@@ -184,7 +182,7 @@ export function getCodexSupportedModelIds() {
 }
 
 export function isCodexSupportedModelId(modelId: string | undefined) {
-  return Boolean(modelId && FALLBACK_CODEX_SUPPORTED_MODEL_IDS.includes(modelId as (typeof FALLBACK_CODEX_SUPPORTED_MODEL_IDS)[number]));
+  return Boolean(modelId && FALLBACK_CODEX_SUPPORTED_MODEL_IDS.some((candidate) => candidate === modelId));
 }
 
 export function resolveCodexModelId(modelId: string | undefined) {
@@ -231,12 +229,15 @@ async function discoverCodexModels(processManager: CliProcessManager, executable
 
 function parseCodexModelCatalog(input: string) {
   try {
-    const parsed = JSON.parse(input) as { models?: Array<{ slug?: unknown; visibility?: unknown }> };
-    const slugs =
-      parsed.models
-        ?.filter((model) => model.visibility === "list")
-        .map((model) => (typeof model.slug === "string" ? model.slug.trim() : ""))
-        .filter(Boolean) ?? [];
+    const parsed: unknown = JSON.parse(input);
+    if (parsed === null || typeof parsed !== "object") return [];
+    const models = Reflect.get(parsed, "models");
+    if (!Array.isArray(models)) return [];
+    const slugs = models.flatMap((model) => {
+      if (model === null || typeof model !== "object" || Reflect.get(model, "visibility") !== "list") return [];
+      const slug = Reflect.get(model, "slug");
+      return typeof slug === "string" && slug.trim() ? [slug.trim()] : [];
+    });
     return [...new Set(slugs.map((slug) => (slug.includes("/") ? slug : `openai/${slug}`)))];
   } catch {
     return [];

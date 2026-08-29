@@ -30,10 +30,11 @@ Backend websocket handlers and runtime orchestration for harness.
 - Assistant reprioritization includes recent assistant logs, keeping state summaries grounded in the job that just finished.
 - First assistant chat and assistant-owned job outputs are prompted to introduce the assistant role, prompts, and current learnings before work begins.
 - Assistant prompts share a consistent identity, operational logic, and active mission shape while passive background notifications redact prompt scaffolding.
+- Assistant proposal payload schemas live in `assistant-manager-schemas.ts`, and reusable learning normalization, deduplication, and merge policy lives in `assistant-learning-policy.ts`; orchestration and SQLite persistence consume those contracts instead of defining them inline.
 - Assistant chat prompts route assistant operations through the shared assistant action runbook, whether the user addressed the assistant from project chat or from the Assistants surface.
 - Assistant learnings reject placeholder summaries, clean stale garbage rows at startup, dedupe on write, compact through bounded AI summaries after growth thresholds, and keep prompt context focused on summaries plus durable user guidance.
 - Assistant todos and learnings can be manually removed, and completed todos age out after a short retention window to keep assistant state focused.
-- Assistant-generated todos carry work category and target metadata, bias toward coding once discovery is done, and default greenfield coding stacks to TypeScript, Bun, Bun tests, SQLite when needed, SolidJS plus Tailwind when needed, Happy DOM frontend tests, and useful documentation comments for new functions and variables unless the project or user says otherwise.
+- Assistant-generated todos carry work category and target metadata, bias toward coding once discovery is done, and default greenfield coding stacks to TypeScript, Bun, Bun tests, SQLite when needed, SolidJS plus StyleX when needed, Happy DOM frontend tests, shared primitives, and useful documentation comments for new functions and variables unless the project or user says otherwise.
 - Assistant-owned background jobs carry recent answered questions into routine context so repeated prompts honor prior user guidance.
 - Background job launch repairs stale assistant or automation-thread links before queuing, so old imported jobs fail closed only when the project itself is gone.
 - Assistant questions pass through a deterministic async-first policy gate, so duplicate or low-risk uncertainty becomes durable guidance instead of another inbox blocker.
@@ -45,14 +46,16 @@ Backend websocket handlers and runtime orchestration for harness.
 - Assistant bootstrap work is tracked as single-flight retryable durable state so reconnects and duplicate retries do not leave operators stuck in invisible setup work.
 - Assistant-generated bootstrap and reprioritize JSON is schema-validated with one bounded repair attempt before any durable state is saved.
 - Websocket streaming paths batch high-frequency assistant and terminal output, use heartbeat checks for stale sockets, and keep hot transcript updates narrow.
+- `server.ts` is the backend composition root; focused modules under `server/` group typed commands, execution, automation, workspace, runtime, transport, and shared contracts by responsibility.
+- Server integration suites live under `server-tests/`, grouped by the same behavioral domains with shared fixtures isolated in `server-tests/support/`.
 - Development live reload uses short backoff windows, keeps UI and backend timers independent, watches shared harness contracts for both surfaces, and ignores untracked or repo-local metadata changes.
 - Development DB recovery backs up local SQLite artifacts before purge so corrupted or schema-drifted workspace state remains inspectable.
 - Prompt attachments are accepted only from trusted upload metadata and can be reused on planning answers or refinements.
 - Pi provider routing supports GPT, Gemini, and Claude while keeping stable prompt context and large attachments cache-aware for cheaper repeated runs.
 - Top-level CLI and support scripts share explicit flag parsing for help, usage failures, and doctor JSON output.
 - Dirty-git preflight fails closed when git cannot inspect workspace state, and control plus terminal websocket handlers negotiate per-message compression.
-- Doctor repairs missing or stale dependencies before reporting setup health.
+- Doctor reports setup health without deleting builds, pruning local artifacts, installing dependencies, or syncing bundled skills. `--doctor --repair` opts into those repair operations before the report.
 - Setup health now reports real browser-tool readiness, including missing Playwright dependencies or Chromium installs, instead of a generic unsupported placeholder.
 - Integration coverage for project and thread switching lives through the shared server test harness entrypoints under this folder.
 
-See [root README](../../../README.md) for product overview.
+See the [harness README](../../README.md) for product overview.

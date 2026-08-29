@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { hashHyperfocusAsset } from "../../../engine/src/project/index.ts";
+import { hashHyperfocusAsset } from "@hyperfocus/engine/project";
 import { collectPlayableBuildAssets, playableAssetDataUrl } from "./playable-build-assets.ts";
-import { createDefaultProject } from "./project.ts";
+import { createDefaultProject } from "@hyperfocus/engine/project";
 
 describe("standalone playable asset collection", () => {
   test("verifies and deduplicates bytes into an HTML-safe representation", async () => {
@@ -71,6 +71,16 @@ describe("standalone playable asset collection", () => {
     expect(collection.assets).toHaveLength(0);
   });
 
+  test("accepts portable glTF JSON as runtime data", async () => {
+    const project = createDefaultProject();
+    disableDefaultBehaviors(project);
+    const bytes = new TextEncoder().encode('{"asset":{"version":"2.0"}}');
+    project.assets.push(imported("gltf", "level.gltf", "data", "model/gltf+json", bytes.byteLength, await hashHyperfocusAsset(bytes)));
+    const collection = await collectPlayableBuildAssets(project, async (id) => id === "gltf" ? new Blob([bytes], { type: "model/gltf+json" }) : undefined);
+    expect(collection.ok).toBe(true);
+    expect(collection.assets.at(-1)).toMatchObject({ id: "gltf", mimeType: "model/gltf+json" });
+  });
+
   test("blocks source and unknown modules while accepting known built-ins", async () => {
     const project = createDefaultProject();
     const player = project.scenes[0].entities.find((entity) => entity.id === "player-01")!;
@@ -87,6 +97,11 @@ describe("standalone playable asset collection", () => {
     const blocked = await collectPlayableBuildAssets(project, async () => undefined);
     expect(blocked.ok).toBe(false);
     expect(blocked.diagnostics.some((item) => item.code === "UNSUPPORTED_BEHAVIOR_MODULE" && item.entityId === "player-01")).toBe(true);
+
+    project.extensions ??= {};
+    project.extensions.hyperfocusScripts = { activePath: "src/player.ts", files: [{ path: "src/player.ts", language: "typescript", source: "export const update=()=>({});" }] };
+    const sourceAware = await collectPlayableBuildAssets(project, async () => undefined, { allowEmbeddedProjectSource: true });
+    expect(sourceAware.diagnostics.some((item) => item.code === "UNSUPPORTED_BEHAVIOR_MODULE" && item.entityId === "player-01")).toBe(false);
   });
 
   test("enforces count and byte limits before resolving Blob payloads", async () => {
@@ -162,7 +177,9 @@ describe("standalone playable asset collection", () => {
 
   test("blocks malformed browser save policy during build preflight", async () => {
     const project = createDefaultProject();
-    (project.extensions!.hyperfocusSave as Record<string, unknown>).maxBytes = 128;
+    const savePolicy = project.extensions?.hyperfocusSave;
+    if (!savePolicy || typeof savePolicy !== "object") throw new TypeError("Default project save policy is missing.");
+    Reflect.set(savePolicy, "maxBytes", 128);
     const collection = await collectPlayableBuildAssets(project, async () => undefined);
     expect(collection.ok).toBe(false);
     expect(collection.diagnostics).toMatchObject([{ code: "INVALID_SAVE_POLICY" }]);

@@ -17,6 +17,56 @@ type DialogProps = {
   footer?: JSX.Element;
 };
 
+const styles = stylex.create({
+  backdrop: { inset: 0, backdropFilter: "blur(4px)", backgroundColor: "rgb(0 0 0 / 0.45)", position: "fixed", zIndex: 80, },
+  positioner: {
+    inset: 0,
+    padding: { default: "0.75rem", "@media (min-width: 768px)": "1.25rem" },
+    alignItems: "center",
+    display: "flex",
+    justifyContent: "center",
+    position: "fixed",
+    zIndex: 81,
+  },
+  surface: {
+    padding: "1.25rem",
+    borderColor: "var(--border)",
+    borderRadius: "1.75rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    gap: "1rem",
+    backgroundColor: "var(--panel)",
+    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+    display: "flex",
+    flexDirection: "column",
+    maxHeight: "90vh",
+    maxWidth: "36rem",
+    width: "100%",
+  },
+  header: { gap: "0.75rem", alignItems: "flex-start", display: "flex", justifyContent: "space-between", },
+  heading: { gap: "0.25rem", display: "flex", flexDirection: "column", },
+  eyebrow: { color: "var(--muted)", fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase" },
+  title: { margin: 0, color: "var(--foreground)", fontSize: "1.25rem", fontWeight: 600, letterSpacing: "-0.04em", lineHeight: "1.75rem", },
+  description: { margin: 0, color: "var(--muted)", fontSize: "0.75rem", lineHeight: "1.25rem", },
+  close: {
+    borderRadius: "0.5rem",
+    borderWidth: 0,
+    alignItems: "center",
+    backgroundColor: { default: "transparent", ":hover": "var(--panel-strong)" },
+    color: { default: "var(--muted)", ":hover": "var(--foreground)" },
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    display: "inline-flex",
+    justifyContent: "center",
+    transitionDuration: "150ms",
+    transitionProperty: "background-color, color",
+    height: "2rem",
+    width: "2rem",
+  },
+  icon: { height: "1rem", width: "1rem" },
+  content: { gap: "1rem", overflow: "auto", display: "flex", flexDirection: "column", maxHeight: "70%", },
+  footer: { gap: "0.5rem", display: "flex", flexWrap: "wrap", justifyContent: "flex-end", }
+});
+
 export function Dialog(props: DialogProps) {
   let surfaceRef: HTMLElement | undefined;
   const overlayId = `dialog-${Math.random().toString(36).slice(2)}`;
@@ -110,53 +160,3 @@ export function Dialog(props: DialogProps) {
     </PrimitivePortal>
   );
 }
-
-const styles = stylex.create({
-  backdrop: { backdropFilter: "blur(4px)", backgroundColor: "rgb(0 0 0 / 0.45)", inset: 0, position: "fixed", zIndex: 80 },
-  positioner: {
-    alignItems: "center",
-    display: "flex",
-    inset: 0,
-    justifyContent: "center",
-    padding: { default: "0.75rem", "@media (min-width: 768px)": "1.25rem" },
-    position: "fixed",
-    zIndex: 81
-  },
-  surface: {
-    backgroundColor: "var(--panel)",
-    borderColor: "var(--border)",
-    borderRadius: "1.75rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "1rem",
-    maxHeight: "90vh",
-    maxWidth: "36rem",
-    padding: "1.25rem",
-    width: "100%"
-  },
-  header: { alignItems: "flex-start", display: "flex", gap: "0.75rem", justifyContent: "space-between" },
-  heading: { display: "flex", flexDirection: "column", gap: "0.25rem" },
-  eyebrow: { color: "var(--muted)", fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase" },
-  title: { color: "var(--foreground)", fontSize: "1.25rem", fontWeight: 600, letterSpacing: "-0.04em", lineHeight: "1.75rem", margin: 0 },
-  description: { color: "var(--muted)", fontSize: "0.75rem", lineHeight: "1.25rem", margin: 0 },
-  close: {
-    alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": "var(--panel-strong)" },
-    borderWidth: 0,
-    borderRadius: "0.5rem",
-    color: { default: "var(--muted)", ":hover": "var(--foreground)" },
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
-    display: "inline-flex",
-    height: "2rem",
-    justifyContent: "center",
-    transitionProperty: "background-color, color",
-    transitionDuration: "150ms",
-    width: "2rem"
-  },
-  icon: { height: "1rem", width: "1rem" },
-  content: { display: "flex", flexDirection: "column", gap: "1rem", maxHeight: "70%", overflow: "auto" },
-  footer: { display: "flex", flexWrap: "wrap", gap: "0.5rem", justifyContent: "flex-end" }
-});

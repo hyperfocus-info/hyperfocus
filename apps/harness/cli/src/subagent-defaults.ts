@@ -1,5 +1,5 @@
-import { defaultProviderCapabilities } from "../../shared/capabilities";
-import type { AgentId, ComposerReasoningStrength, ProviderBrand, RunModelPreference } from "../../shared/protocol";
+import { defaultProviderCapabilities } from "@hyperfocus/ai-core/capabilities";
+import type { AgentId, ComposerReasoningStrength, ProviderBrand, RunModelPreference } from "@hyperfocus/ai-core/protocol";
 
 type RankedModelFamily = {
   family: string;
@@ -13,6 +13,9 @@ type ParsedModelId = {
 
 const GPT_COST_RANK: Record<string, number> = {
   base: 0,
+  sol: 0,
+  terra: 1,
+  luna: 2,
   mini: 1,
   nano: 2
 };
@@ -83,7 +86,13 @@ export function resolveSubagentReasoningStrength(
 
 function getAvailableModelIds(agentId: AgentId | undefined, providerBrand: ProviderBrand) {
   if (agentId === "codex-cli") {
-    return ["openai/gpt-5.4", "openai/gpt-5.4-mini"];
+    return [
+      "openai/gpt-5.6-sol",
+      "openai/gpt-5.6-terra",
+      "openai/gpt-5.6-luna",
+      "openai/gpt-5.4",
+      "openai/gpt-5.4-mini"
+    ];
   }
 
   if (agentId === "pi" || !agentId) {
@@ -130,7 +139,7 @@ function pickLowestCostModelInFamily(executionModelId: string, availableModelIds
 
 function buildHeuristicLowestCostModelId(modelId: string, agentId: AgentId | undefined) {
   const parsed = splitModelId(modelId);
-  const gptMatch = parsed.bareModelId.match(/^(gpt-[\d.]+)(?:-(mini|nano))?$/);
+  const gptMatch = parsed.bareModelId.match(/^(gpt-[\d.]+)(?:-(sol|terra|luna|mini|nano))?$/);
   if (gptMatch) {
     if (agentId === "codex-cli" && gptMatch[1] === "gpt-5.5") {
       return joinModelId(parsed.providerPrefix, "gpt-5.4-mini");
@@ -154,7 +163,7 @@ function buildHeuristicLowestCostModelId(modelId: string, agentId: AgentId | und
 }
 
 function classifyModelFamily(bareModelId: string): RankedModelFamily | undefined {
-  const gptMatch = bareModelId.match(/^(gpt-[\d.]+)(?:-(mini|nano))?$/);
+  const gptMatch = bareModelId.match(/^(gpt-[\d.]+)(?:-(sol|terra|luna|mini|nano))?$/);
   if (gptMatch) {
     return {
       family: `gpt:${gptMatch[1]}`,

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
-import { rgPath as installedRipgrepPath } from "@vscode/ripgrep";
 
 const RIPGREP_PACKAGE = "@vscode/ripgrep";
 
@@ -8,6 +8,7 @@ export function resolveBundledRipgrepPath(input: { rootPath?: string; platform?:
   const rootPath = input.rootPath ?? process.cwd();
   const binaryName = input.platform === "win32" || (!input.platform && process.platform === "win32") ? "rg.exe" : "rg";
   const candidates = [
+    path.join(rootPath, "bin", binaryName),
     path.join(rootPath, "node_modules", RIPGREP_PACKAGE, "bin", binaryName),
     path.join(rootPath, "node_modules", RIPGREP_PACKAGE, "rg.exe"),
     path.join(rootPath, "node_modules", RIPGREP_PACKAGE, "rg")
@@ -19,9 +20,21 @@ export function resolveBundledRipgrepPath(input: { rootPath?: string; platform?:
   }
 
   const requestedPlatform = input.platform ?? process.platform;
-  return !input.rootPath && requestedPlatform === process.platform && existsSync(installedRipgrepPath)
-    ? installedRipgrepPath
+  return !input.rootPath && requestedPlatform === process.platform
+    ? resolveInstalledRipgrepPath(requestedPlatform, process.arch, binaryName)
     : undefined;
+}
+
+function resolveInstalledRipgrepPath(platform: NodeJS.Platform, architecture: string, binaryName: string) {
+  try {
+    const localRequire = createRequire(import.meta.url);
+    const packageEntry = localRequire.resolve(RIPGREP_PACKAGE);
+    const packageRequire = createRequire(packageEntry);
+    const resolved = packageRequire.resolve(`@vscode/ripgrep-${platform}-${architecture}/bin/${binaryName}`);
+    return existsSync(resolved) ? resolved : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function buildToolchainPath(input: { basePath?: string; rootPath?: string; platform?: NodeJS.Platform } = {}) {

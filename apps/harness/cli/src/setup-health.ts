@@ -8,7 +8,7 @@ import type {
   SetupLaunchMode,
   SetupState,
   WorkspaceState
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { buildToolchainPath, resolveBundledRipgrepPath } from "./agent-runtimes/toolchain";
 import type { BrowserToolHealth } from "./browser-tool-health";
 import { probeBrowserToolHealth } from "./browser-tool-health";
@@ -205,13 +205,29 @@ export function formatSetupDoctorReport(setup: SetupState) {
   const lines = [
     `Launch mode: ${setup.launchMode}`,
     `Required checks: ${setup.readyRequiredCount}/${setup.totalRequiredCount} ready`,
-    ""
+    "",
+    "Required now"
   ];
 
-  for (const check of setup.checks) {
+  appendSetupCheckGroup(lines, setup.checks.filter((check) => check.requiredForFirstTask && check.status !== "unsupported"), false);
+  lines.push("", "Optional capabilities");
+  appendSetupCheckGroup(lines, setup.checks.filter((check) => !check.requiredForFirstTask && check.status !== "unsupported"), true);
+  const unsupportedChecks = setup.checks.filter((check) => check.status === "unsupported");
+  if (unsupportedChecks.length > 0) {
+    lines.push("", "Not yet supported");
+    appendSetupCheckGroup(lines, unsupportedChecks, false);
+  }
+
+  return lines.join("\n");
+}
+
+function appendSetupCheckGroup(lines: string[], checks: SetupCheck[], optional: boolean) {
+  for (const check of checks) {
     const prefix =
       check.status === "ready"
         ? "[ok]"
+        : optional && (check.status === "warning" || check.status === "action-required")
+        ? "[optional]"
         : check.status === "warning"
         ? "[warn]"
         : check.status === "unsupported"
@@ -221,12 +237,11 @@ export function formatSetupDoctorReport(setup: SetupState) {
     if (check.detail) {
       lines.push(`    ${check.detail}`);
     }
-    for (const action of [check.primaryAction, check.secondaryAction].filter(Boolean) as SetupAction[]) {
+    const actions = [check.primaryAction, check.secondaryAction].filter((action): action is SetupAction => action !== undefined);
+    for (const action of actions) {
       lines.push(`    action: ${action.label}${action.value ? ` | ${action.value}` : ""}`);
     }
   }
-
-  return lines.join("\n");
 }
 
 function buildPiProviderCheck(hasProvider: boolean, updatedAt: string): SetupCheck {

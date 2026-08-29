@@ -1,5 +1,5 @@
 import { mountApp } from "./mount-app";
-import { HARNESS_APP_VERSION } from "../../shared/app-version";
+import { HARNESS_APP_VERSION } from "@hyperfocus/ai-core/app-version";
 
 const root = document.getElementById("root");
 

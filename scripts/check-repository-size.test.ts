@@ -4,9 +4,9 @@ import { collectExistingRepositoryEntries, findRepositoryPolicyViolations, MAX_G
 describe("repository size policy", () => {
   test("rejects oversized files and source asset packs", () => {
     expect(findRepositoryPolicyViolations([
-      { path: "engine/src/index.ts", size: 10 },
+      { path: "packages/engine/src/index.ts", size: 10 },
       { path: "large.bin", size: MAX_GIT_FILE_BYTES + 1 },
-      { path: "engine/examples/demo/assets/source/archive.zip", size: 20 }
+      { path: "packages/engine/examples/demo/assets/source/archive.zip", size: 20 }
     ])).toHaveLength(2);
   });
 

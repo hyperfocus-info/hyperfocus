@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 
 export type DependencyRepairStatus = "current" | "repaired";
+export type DependencyHealthResult = { status: DependencyRepairStatus; reason: string };
 
 type DependencyCommandRunner = (args: string[]) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
 
@@ -11,7 +12,7 @@ type EnsureDependencyHealthOptions = {
   log?: (message: string) => void;
 };
 
-export async function ensureDependencyHealth(options: EnsureDependencyHealthOptions = {}) {
+export async function ensureDependencyHealth(options: EnsureDependencyHealthOptions = {}): Promise<DependencyHealthResult> {
   const cwd = options.cwd ?? process.cwd();
   const runner = options.runner ?? ((args) => runBun(args, cwd));
   const log = options.log ?? (() => undefined);
@@ -19,7 +20,7 @@ export async function ensureDependencyHealth(options: EnsureDependencyHealthOpti
   const lockCheck = nodeModulesPresent ? await runner(["install", "--frozen-lockfile", "--dry-run"]) : undefined;
 
   if (nodeModulesPresent && lockCheck?.exitCode === 0) {
-    return { status: "current" as DependencyRepairStatus, reason: "dependencies current" };
+    return { status: "current", reason: "dependencies current" };
   }
 
   const reason = nodeModulesPresent ? describeInstallFailure(lockCheck) : "node_modules missing";
@@ -29,7 +30,7 @@ export async function ensureDependencyHealth(options: EnsureDependencyHealthOpti
     throw new Error(describeInstallFailure(install));
   }
 
-  return { status: "repaired" as DependencyRepairStatus, reason };
+  return { status: "repaired", reason };
 }
 
 async function pathExists(targetPath: string) {

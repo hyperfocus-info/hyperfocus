@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { Clock3, ExternalLink, Terminal } from "lucide-solid";
-import type { TerminalHistoryScope, TerminalSession } from "../../../shared/protocol";
+import type { TerminalHistoryScope, TerminalSession } from "@hyperfocus/ai-core/protocol";
 import { formatShortTimestamp } from "../lib/time-format";
 import { ActionButton } from "../components/action-button";
 import { Dialog } from "../components/primitives/dialog";

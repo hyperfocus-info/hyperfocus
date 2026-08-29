@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatMessage, ChatSessionState, RunMilestonesMessageMetadata } from "../../shared/protocol";
+import type { ChatMessage, ChatSessionState, RunMilestonesMessageMetadata } from "@hyperfocus/ai-core/protocol";
 import {
   aggregateMilestoneLines,
   classifyMilestoneLine,
   extractMilestoneLines,
   renderMilestoneLines,
-  RunTranscriptDraft,
-  RunMilestoneWindowManager,
+  createRunTranscriptDraft,
+  createRunMilestoneWindowManager,
   WINDOW_IDLE_CLOSE_MS
 } from "./run-milestone-windows";
 
@@ -51,7 +51,7 @@ describe("run milestone windows", () => {
       messages: [],
       isStreaming: false
     };
-    const manager = new RunMilestoneWindowManager({
+    const manager = createRunMilestoneWindowManager({
       append(input) {
         latestMessage = createMessage("message-1", input.content, input.metadata);
         state.messages = [latestMessage];
@@ -81,7 +81,7 @@ describe("run milestone windows", () => {
       messages: [],
       isStreaming: false
     };
-    const manager = new RunMilestoneWindowManager({
+    const manager = createRunMilestoneWindowManager({
       append(input) {
         latestMessage = createMessage("message-1", input.content, input.metadata);
         state.messages = [latestMessage];
@@ -118,7 +118,7 @@ describe("run milestone windows", () => {
       messages: [],
       isStreaming: false
     };
-    const manager = new RunMilestoneWindowManager({
+    const manager = createRunMilestoneWindowManager({
       append(input) {
         appendCount += 1;
         latestMessage = createMessage("message-1", input.content, input.metadata);
@@ -149,7 +149,7 @@ describe("run milestone windows", () => {
   });
 
   test("buffers stable milestones into phase streaming tail and final rows", () => {
-    const draft = new RunTranscriptDraft({ runId: "run-1" });
+    const draft = createRunTranscriptDraft({ runId: "run-1" });
 
     expect(draft.recordMilestone("Subagent UI: wired HUD controls", "subagents")).toBe(true);
     draft.appendAssistantDelta("Done soon.");
@@ -168,7 +168,7 @@ describe("run milestone windows", () => {
   });
 
   test("emits held fallback only once when stale caller requests it", () => {
-    const draft = new RunTranscriptDraft({ runId: "run-1" });
+    const draft = createRunTranscriptDraft({ runId: "run-1" });
 
     expect(draft.recordMilestone("Subagent UI: checking files", "subagents")).toBe(false);
     expect(draft.getSegments()).toHaveLength(0);

@@ -13,7 +13,7 @@ export function PreferenceSection(props: { title: string; description: string; c
     <section class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap3).class}>
       <div class={stylex.attrs(preferenceStyles.minWidth0, preferenceStyles.borderBottom, preferenceStyles.borderDefault, preferenceStyles.paddingBottom3).class}>
         <h3 class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.fontDisplay, preferenceStyles.textLg, preferenceStyles.fontSemibold, preferenceStyles.colorMuted).class}>{props.title}</h3>
-        <p class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.truncate, preferenceStyles.textXs, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{props.description}</p>
+        <p class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.wrapText, preferenceStyles.textXs, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{props.description}</p>
       </div>
       <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>{props.children}</div>
     </section>
@@ -46,10 +46,28 @@ export function PreferenceRow(props: {
     >
       <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
         <h4 class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.text0585, preferenceStyles.fontSemibold, preferenceStyles.tracking018, preferenceStyles.colorMuted).class}>{props.title}</h4>
-        <p class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.truncate, preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{props.description}</p>
+        <p class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.wrapText, preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{props.description}</p>
       </div>
       <div class={stylex.attrs(preferenceStyles.minWidth0).class}>{props.children}</div>
     </section>
+  );
+}
+
+export function PreferenceToggle(props: {
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label class={stylex.attrs(preferenceStyles.inlineFlex, preferenceStyles.minHeight9, preferenceStyles.cursorPointer, preferenceStyles.itemsCenter, preferenceStyles.justifyBetween, preferenceStyles.gap3, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanelStrong, preferenceStyles.paddingInline3, preferenceStyles.paddingBlock2, preferenceStyles.transition, preferenceStyles.hoverBackgroundSoftAccent).class}>
+      <span class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.fontMedium, preferenceStyles.colorForeground).class}>{props.label}</span>
+      <input
+        class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4, preferenceStyles.accentColor).class}
+        type="checkbox"
+        checked={props.checked}
+        onInput={(event) => props.onChange(event.currentTarget.checked)}
+      />
+    </label>
   );
 }
 
@@ -257,7 +275,7 @@ export function PasswordKeyInput(props: {
 }
 
 export function AdvancedDisclosure(props: { title: string; description?: string; children: JSX.Element }) {
-  const [open, setOpen] = createSignal(false);
+  const contentId = `advanced-preferences-${++advancedDisclosureSequence}`;
   const disclosureIconClass = stylex.attrs(
     preferenceStyles.height4,
     preferenceStyles.width4,
@@ -265,23 +283,12 @@ export function AdvancedDisclosure(props: { title: string; description?: string;
     preferenceStyles.colorMuted,
     preferenceStyles.transition
   ).class;
-  const openDisclosureIconClass = stylex.attrs(
-    preferenceStyles.height4,
-    preferenceStyles.width4,
-    preferenceStyles.shrink0,
-    preferenceStyles.colorMuted,
-    preferenceStyles.transition,
-    preferenceStyles.disclosureOpen
-  ).class;
-
   return (
-    <section class={stylex.attrs(preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite45).class}>
-      <Button
-        tooltip={open() ? "Collapse advanced settings" : "Expand advanced settings"}
-        variant="ghost"
-        class={stylex.attrs(preferenceStyles.flex, preferenceStyles.heightAuto, preferenceStyles.widthFull, preferenceStyles.justifyBetween, preferenceStyles.roundedXl, preferenceStyles.paddingInline4, preferenceStyles.paddingBlock3, preferenceStyles.textLeft).class}
-        aria-expanded={open()}
-        onClick={() => setOpen((current) => !current)}
+    <details class={stylex.attrs(preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite45).class}>
+      <summary
+        role="button"
+        class={stylex.attrs(preferenceStyles.flex, preferenceStyles.heightAuto, preferenceStyles.widthFull, preferenceStyles.cursorPointer, preferenceStyles.justifyBetween, preferenceStyles.roundedXl, preferenceStyles.paddingInline4, preferenceStyles.paddingBlock3, preferenceStyles.textLeft).class}
+        aria-controls={contentId}
       >
         <span class={stylex.attrs(preferenceStyles.minWidth0).class}>
           <span class={stylex.attrs(preferenceStyles.block, preferenceStyles.truncate, preferenceStyles.text0585, preferenceStyles.fontSemibold, preferenceStyles.tracking018, preferenceStyles.colorMuted).class}>{props.title}</span>
@@ -290,10 +297,12 @@ export function AdvancedDisclosure(props: { title: string; description?: string;
           </Show>
         </span>
         <ChevronDown
-          class={open() ? openDisclosureIconClass : disclosureIconClass}
+          class={disclosureIconClass}
         />
-      </Button>
-      <div class={stylex.attrs(preferenceStyles.borderTop, preferenceStyles.borderDefault, preferenceStyles.padding4).class}>{props.children}</div>
-    </section>
+      </summary>
+      <div id={contentId} class={stylex.attrs(preferenceStyles.borderTop, preferenceStyles.borderDefault, preferenceStyles.padding4).class}>{props.children}</div>
+    </details>
   );
 }
+
+let advancedDisclosureSequence = 0;

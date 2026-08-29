@@ -1,18 +1,20 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
-import { WorkspaceRepository } from "../workspace-repository";
-import { FakePiAgentAdapter, startServerForTest, stopServerForTest } from "../test-support/server-test-harness";
-import type { ServerEventFrame, TerminalSession } from "../../../shared/protocol";
-import { parseServerEventFrame } from "../../../shared/protocol";
+import { createWorkspaceRepository } from "../workspace-repository";
+import { createFakePiAgentAdapter } from "../test-support/fake-pi-agent-adapter";
+import { startServerForTest, stopServerForTest } from "../server-tests/support/server-test-client";
+import type { ServerEventFrame, TerminalSession } from "@hyperfocus/ai-core/protocol";
+import { parseServerEventFrame } from "@hyperfocus/ai-core/protocol";
+import { resolveHarnessTestTempRoot } from "../test-support/test-temp-root";
 
 describe("terminal websocket mock client", () => {
   test("lists active sessions separately from run-scoped terminal history", async () => {
-    const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+    const tempRoot = resolveHarnessTestTempRoot();
     mkdirSync(tempRoot, { recursive: true });
     const projectRoot = path.join(tempRoot, `terminal-ws-${crypto.randomUUID()}`);
     mkdirSync(projectRoot, { recursive: true });
-    const repository = new WorkspaceRepository(":memory:", process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(":memory:", process.cwd(), { durability: "test-fast" });
     const project = repository.addProject(projectRoot);
     const now = new Date().toISOString();
     const threadId = project.activeThreadId;
@@ -53,8 +55,8 @@ describe("terminal websocket mock client", () => {
       }
     });
 
-    const { server, port } = await startServerForTest({ port: 0, repository, adapter: new FakePiAgentAdapter() });
-    const client = new MockTerminalClient(port);
+    const { server, port } = await startServerForTest({ port: 0, repository, adapter: createFakePiAgentAdapter() });
+    const client = createMockTerminalClient(port);
     try {
       await client.waitFor("connection.ready");
 
@@ -95,24 +97,22 @@ describe("terminal websocket mock client", () => {
   });
 });
 
-class MockTerminalClient {
-  private readonly socket: WebSocket;
-  private readonly events: ServerEventFrame[] = [];
-
-  constructor(port: number) {
-    this.socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-    this.socket.addEventListener("message", (event) => {
-      this.events.push(...parsePayloads(event));
+function createMockTerminalClient(port: number) {
+  const socket = new WebSocket(
+    `ws://127.0.0.1:${port}/ws?harnessSession=test-harness-session-token-000000000000000000000000`
+  );
+  const events: ServerEventFrame[] = [];
+  socket.addEventListener("message", (event) => {
+      events.push(...parsePayloads(event));
     });
-    this.socket.addEventListener("error", () => undefined);
+  socket.addEventListener("error", () => undefined);
+
+  function send(command: unknown) {
+    socket.send(JSON.stringify(command));
   }
 
-  send(command: unknown) {
-    this.socket.send(JSON.stringify(command));
-  }
-
-  waitFor(type: string, predicate?: (event: any) => boolean) {
-    const existing = this.events.find((event) => event.type === type && (!predicate || predicate(event)));
+  function waitFor(type: string, predicate?: (event: any) => boolean) {
+    const existing = events.find((event) => event.type === type && (!predicate || predicate(event)));
     if (existing) {
       return Promise.resolve(existing);
     }
@@ -136,17 +136,19 @@ class MockTerminalClient {
       };
       const cleanup = () => {
         clearTimeout(timeout);
-        this.socket.removeEventListener("message", onMessage);
-        this.socket.removeEventListener("error", onError);
+        socket.removeEventListener("message", onMessage);
+        socket.removeEventListener("error", onError);
       };
-      this.socket.addEventListener("message", onMessage);
-      this.socket.addEventListener("error", onError);
+      socket.addEventListener("message", onMessage);
+      socket.addEventListener("error", onError);
     });
   }
 
-  close() {
-    this.socket.close();
+  function close() {
+    socket.close();
   }
+
+  return { send, waitFor, close };
 }
 
 function parsePayloads(event: MessageEvent): ServerEventFrame[] {

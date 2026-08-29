@@ -1,44 +1,36 @@
 import path from "node:path";
-import { existsSync } from "node:fs";
-import { withAgentsMdRuleSource } from "./agent-rules";
-import { resolveModeById } from "../../shared/modes";
-import { compileBackgroundJobIntentContract, renderIntentContractPrompt } from "../../shared/intent-contract";
+import { createProjectNoteSearch } from "./server/execution/project-note-search";
 import {
   createAssistantLogEntryId,
   createChatMessage,
-  type AssistantTodo,
   type AgentRunState,
   type AgentTrace,
   type BackgroundJob,
   type BackgroundJobRun,
   type AgentId,
-  type PlanningQuestionBatchNotification,
   type PlanningQuestion,
   type PlannerQuestionTurn,
-  type PlanningQuestionNotification,
   type PlannerReadyTurn,
   type ProjectContextUsage,
   type ProviderBrand,
   type WorkspaceRuleSource,
-  type MemorySummary,
   type ModeDefinition,
   type ComposerReasoningStrength
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { executeReadyRun, runPlannerTurn } from "./pi-orchestrator";
-import { BoundedOutputBuffer, formatOutputCapExceeded } from "./bounded-output-buffer";
+import { createBoundedOutputBuffer, formatOutputCapExceeded } from "./bounded-output-buffer";
 import { terminateProcessTree } from "./agent-runtimes/cli-process-manager";
-import { createStableBoundedId } from "./notification-ids";
 import type { PiAgentAdapter } from "./pi-agent-adapter";
-import { WorkspaceRepository } from "./workspace-repository";
+import { type WorkspaceRepository } from "./workspace-repository";
+import { readAssistantPromptLearnings } from "./assistant-learning-policy";
 import {
-  renderAssistantPromptContext,
-  renderAssistantPromptMemoryBlock,
-  selectAssistantPromptLearnings,
-  selectAssistantPromptQuestions
-} from "./assistant-manager";
+  buildBackgroundPromptCacheIdentity,
+  persistDeferredBackgroundPlanningQuestions,
+  prepareBackgroundAiRoutine
+} from "./prompts/background-job";
 import { getPostRunScheduleAdvance } from "./background-job-schedule";
-import { evaluateAssistantQuestionPolicy } from "./assistant-question-policy";
-import { buildWorkspaceConfigHash, type PromptCacheIdentity } from "./prompt-cache";
+import { evaluateAssistantQuestionPolicy, readAssistantQuestionPolicyContext, resolveAssistantPolicyAnswer } from "./assistant-question-policy";
+import type { PromptCacheIdentity } from "./prompt-cache";
 import { prepareGeminiCachedAttachmentContext, type GeminiCachedAttachmentContext } from "./gemini-cached-contents";
 import { debugLog } from "./logging";
 
@@ -62,7 +54,7 @@ type BackgroundJobExecutorOptions = {
 };
 
 // Defense-in-depth bounds for shell job timeouts. The WS boundary schema in
-// `harness/shared/protocol.ts` already enforces 1..86400; these guards protect
+// `@hyperfocus/ai-core/protocol` already enforces 1..86400; these guards protect
 // against stale DB rows or migration drift that could otherwise schedule a
 // zero/negative/NaN timeout and instantly kill a proc (or never time out).
 export const MIN_SHELL_TIMEOUT_SECONDS = 1;
@@ -89,72 +81,30 @@ function resolveBackgroundRunMaxTurns(job: BackgroundJob) {
   return /\b(factory|spawn|create(?:s|d|ing)?\s+assistant|assistant\s+factory)\b/i.test(intentText) ? 40 : 20;
 }
 
-function isProjectRootGitRepository(projectRoot: string) {
-  return existsSync(path.join(projectRoot, ".git"));
-}
-
 export async function executeBackgroundJobRun(options: BackgroundJobExecutorOptions) {
   return options.job.kind === "shell" ? executeShellJob(options) : executeAiRoutineJob(options);
 }
 
 async function executeAiRoutineJob(options: BackgroundJobExecutorOptions) {
-  const { repository, adapter, job, run, providerBrand, debugEnabled, abortSignal } = options;
+  const { repository, job, run, providerBrand } = options;
   if (job.definition.kind !== "ai-routine") {
     throw new Error(`Expected ai-routine definition for ${job.id}`);
   }
 
   const definition = job.definition;
-  const project = repository.getProject(job.projectId);
-  const threadId = job.automationThreadId;
-  const mode = resolveModeById(definition.modeId ?? project.selectedModeId, project.projectModes);
   const executionModelId = options.executionModelId;
-  const ruleSources = withAgentsMdRuleSource(
-    [project.projectRuleSource].filter((value): value is WorkspaceRuleSource => Boolean(value))
-  );
-  const memorySummaries = [repository.getThreadMemorySummary(job.projectId, threadId)].filter(
-    (value): value is MemorySummary => Boolean(value)
-  );
-  const assistantOwned = Boolean(job.assistantId);
-  const existingThreadMessages = repository.getThreadMessages(job.projectId, threadId);
-  const projectRootIsGitRepo = isProjectRootGitRepository(project.rootPath);
-  const basePrompt = buildBackgroundRoutinePrompt(job, repository);
-  const prompt =
-    assistantOwned && !projectRootIsGitRepo
-      ? [
-          basePrompt,
-          "Workspace note: project root is not a git repository. Use direct file inspection and avoid git status, git diff, and other git-only assumptions for this background job."
-        ].join("\n\n")
-      : basePrompt;
-  const plannerMessages = [
-    ...existingThreadMessages,
-    ...(assistantOwned && !projectRootIsGitRepo
-      ? [
-          createChatMessage(
-            "system",
-            "Project root is not a git repository. Use direct file inspection and avoid git status, git diff, and other git-only assumptions for this background job."
-          )
-        ]
-      : []),
-    createChatMessage("system", `Scheduled job ${job.name} started.`),
-    createChatMessage("user", prompt)
-  ];
-  const promptCacheIdentity = buildBackgroundPromptCacheIdentity(options, {
-    projectRootPath: project.rootPath,
+  const {
+    assistantOwned,
+    geminiCachedAttachmentContext,
     mode,
+    plannerMessages,
+    projectRoot,
+    prompt,
+    promptCacheIdentity,
+    resumableRun,
     ruleSources,
-    memorySummaries
-  });
-  const geminiCachedAttachmentContext = await prepareGeminiCachedAttachmentContext({
-    repository,
-    projectId: job.projectId,
-    modelId: options.planningModelId,
-    messages: plannerMessages,
-    googleApiKey: repository.getStoredGoogleApiKey()
-  });
-  const resumableRun =
-    run.linkedAgentRunId
-      ? repository.getRun(job.projectId, run.linkedAgentRunId)
-      : undefined;
+    threadId
+  } = await prepareBackgroundAiRoutine(options);
 
   setBackgroundJobRunStatus(options, run.id, "running");
   appendBackgroundJobRunEvent(options, run.id, "planned", `Starting AI routine ${job.name}`);
@@ -202,7 +152,7 @@ async function executeAiRoutineJob(options: BackgroundJobExecutorOptions) {
   }
 
   let plannerTurn = await runBackgroundPlannerTurn(options, {
-    projectRoot: project.rootPath,
+    projectRoot,
     threadId,
     prompt,
     backgroundRunId: run.id,
@@ -212,7 +162,6 @@ async function executeAiRoutineJob(options: BackgroundJobExecutorOptions) {
     messages: plannerMessages,
     mode,
     ruleSources,
-    memorySummaries,
     priorQuestions: activeRun.questions,
     promptCacheIdentity,
     geminiCachedAttachmentContext
@@ -249,11 +198,11 @@ async function executeAiRoutineJob(options: BackgroundJobExecutorOptions) {
         summary: "Planner kept asking nonblocking question after auto-resolution"
       });
       updateJobCompletionSchedule(repository, job.id);
-      return repository.getBackgroundJobRun(run.id)!;
+      return requireBackgroundJobRun(repository, run.id);
     }
     const refreshedRun = repository.getRun(job.projectId, activeRun.id) ?? activeRun;
     plannerTurn = await runBackgroundPlannerTurn(options, {
-      projectRoot: project.rootPath,
+      projectRoot,
       threadId,
       prompt,
       backgroundRunId: run.id,
@@ -263,7 +212,6 @@ async function executeAiRoutineJob(options: BackgroundJobExecutorOptions) {
       messages: plannerMessages,
       mode,
       ruleSources,
-      memorySummaries,
       priorQuestions: refreshedRun.questions,
       promptCacheIdentity,
       geminiCachedAttachmentContext
@@ -282,30 +230,13 @@ async function executeAiRoutineJob(options: BackgroundJobExecutorOptions) {
   }
 
   if (plannerTurn.plannerResult.type === "question") {
-    repository.appendPlanningQuestions(
-      job.projectId,
-      activeRun.id,
-      plannerTurn.plannerResult.questions,
-      "deferred",
-      createStableBoundedId(["planner-turn", activeRun.id, plannerTurn.promptStats.promptHash])
-    );
-    const questionRun = repository.getRun(job.projectId, activeRun.id);
-    const deferredQuestions = questionRun?.questions.filter((question) => question.status === "deferred") ?? [];
-    const deferredQuestion = deferredQuestions[0];
-    if (!deferredQuestion) {
-      throw new Error("Deferred planning question was not persisted for background run");
-    }
-
-    if (deferredQuestions.length > 1) {
-      repository.saveNotification(createPlanningQuestionBatchNotification(job, activeRun.id, deferredQuestions));
-      for (const question of deferredQuestions) {
-        repository.archiveNotification(createNotificationId("planning-question", activeRun.id, question.id));
-      }
-    } else {
-      for (const question of deferredQuestions) {
-        repository.saveNotification(createPlanningQuestionNotification(job, activeRun.id, question));
-      }
-    }
+    const { deferredQuestion, deferredQuestions } = persistDeferredBackgroundPlanningQuestions({
+      activeRunId: activeRun.id,
+      job,
+      promptHash: plannerTurn.promptStats.promptHash,
+      questions: plannerTurn.plannerResult.questions,
+      repository
+    });
     appendBackgroundJobRunEvent(
       options,
       run.id,
@@ -317,29 +248,31 @@ async function executeAiRoutineJob(options: BackgroundJobExecutorOptions) {
       summary: deferredQuestion.prompt
     });
     updateJobCompletionSchedule(repository, job.id);
-    return repository.getBackgroundJobRun(run.id)!;
+    return requireBackgroundJobRun(repository, run.id);
   }
+
+  const readyPlan = plannerTurn.plannerResult;
 
   repository.setAgentRunReady(
     job.projectId,
     activeRun.id,
-    plannerTurn.plannerResult,
+    readyPlan,
     plannerTurn.executionPlan,
-    plannerTurn.plannerResult.subtasks,
+    readyPlan.subtasks,
     plannerTurn.planningModelId
   );
-  appendBackgroundJobRunEvent(options, run.id, "planned", plannerTurn.plannerResult.summary);
+  appendBackgroundJobRunEvent(options, run.id, "planned", readyPlan.summary);
   repository.setAgentRunStatus(
     job.projectId,
     activeRun.id,
-    plannerTurn.plannerResult.usesSubagents ? "running-subagents" : "running-main"
+    readyPlan.usesSubagents ? "running-subagents" : "running-main"
   );
   return finalizeBackgroundAiRun(
     options,
     job,
     activeRun,
     plannerMessages,
-    plannerTurn.plannerResult as PlannerReadyTurn,
+    readyPlan,
     plannerTurn.executionPlan,
     assistantOwned,
     definition.reasoningStrength,
@@ -365,8 +298,7 @@ async function finalizeBackgroundAiRun(
   const promptCacheIdentity = buildBackgroundPromptCacheIdentity(options, {
     projectRootPath: project.rootPath,
     mode: plan?.mode,
-    ruleSources: plan?.ruleSources,
-    memorySummaries: plan?.memorySummaries
+    ruleSources: plan?.ruleSources
   });
   const geminiCachedAttachmentContext = await prepareGeminiCachedAttachmentContext({
     repository,
@@ -452,7 +384,7 @@ async function finalizeBackgroundAiRun(
     failureMessage: outcome.partial ? outcome.partialReason ?? "Some subagent work failed." : undefined
   });
   updateJobCompletionSchedule(repository, job.id);
-  return repository.getBackgroundJobRun(options.run.id)!;
+  return requireBackgroundJobRun(repository, options.run.id);
 }
 
 function isTerminalBackgroundJobRunStatus(status: BackgroundJobRun["status"]) {
@@ -563,7 +495,7 @@ async function executeShellJob(options: BackgroundJobExecutorOptions) {
   }
 
   updateJobCompletionSchedule(repository, job.id);
-  return repository.getBackgroundJobRun(run.id)!;
+  return requireBackgroundJobRun(repository, run.id);
 }
 
 function createBackgroundExecutionCallbacks(
@@ -574,6 +506,11 @@ function createBackgroundExecutionCallbacks(
 ) {
   const { repository } = options;
   return {
+    searchMemory: createProjectNoteSearch(repository, {
+      projectId,
+      threadId: repository.getRun(projectId, agentRunId)?.threadId,
+      runId: agentRunId
+    }),
     onTrace(trace: AgentTrace) {
       appendBackgroundJobRunEvent(options, backgroundRunId, trace.stage, trace.message, trace.detail);
     },
@@ -698,7 +635,6 @@ function runBackgroundPlannerTurn(
     messages: ReturnType<WorkspaceRepository["getThreadMessages"]>;
     mode: ModeDefinition;
     ruleSources: WorkspaceRuleSource[];
-    memorySummaries: MemorySummary[];
     priorQuestions: PlanningQuestion[];
     promptCacheIdentity?: PromptCacheIdentity;
     geminiCachedAttachmentContext?: GeminiCachedAttachmentContext;
@@ -724,7 +660,6 @@ function runBackgroundPlannerTurn(
     correctnessIterationMode: job.assistantId && input.mode.id === "implement" ? "auto-once" : repository.getCorrectnessIterationModeDefault(),
     mode: input.mode,
     ruleSources: input.ruleSources,
-    memorySummaries: input.memorySummaries,
     priorQuestions: input.priorQuestions,
     promptCacheIdentity: input.promptCacheIdentity,
     geminiCachedAttachmentContext: input.geminiCachedAttachmentContext,
@@ -733,30 +668,6 @@ function runBackgroundPlannerTurn(
     abortSignal,
     callbacks: createBackgroundExecutionCallbacks(options, job.projectId, input.backgroundRunId, input.runId)
   });
-}
-
-function buildBackgroundPromptCacheIdentity(
-  options: BackgroundJobExecutorOptions,
-  input: {
-    projectRootPath: string;
-    mode?: ModeDefinition;
-    ruleSources?: WorkspaceRuleSource[];
-    memorySummaries?: MemorySummary[];
-  }
-): PromptCacheIdentity {
-  return {
-    projectId: options.job.projectId,
-    workspaceConfigHash: buildWorkspaceConfigHash({
-      projectId: options.job.projectId,
-      projectRootPath: input.projectRootPath,
-      providerBrand: options.providerBrand,
-      selectedModeId: input.mode?.id,
-      mode: input.mode,
-      ruleSources: input.ruleSources,
-      memorySummaries: input.memorySummaries,
-      memoryBankEnabledDefault: options.repository.getMemoryBankEnabledDefault()
-    })
-  };
 }
 
 function tryAutoResolveAssistantPlanningQuestions(
@@ -768,8 +679,9 @@ function tryAutoResolveAssistantPlanningQuestions(
   if (!job.assistantId || questions.length === 0) {
     return undefined;
   }
-  const assistantQuestions = options.repository.getAssistantQuestions(job.assistantId);
-  const learnings = options.repository.getAssistantLearnings(job.assistantId);
+  const assistantId = job.assistantId;
+  const assistantQuestions = readAssistantQuestionPolicyContext((cursor) => options.repository.listAssistantQuestions({ assistantId, cursor, limit: 128 }));
+  const learnings = readAssistantPromptLearnings((cursor) => options.repository.listAssistantLearnings({ assistantId, cursor, limit: 128 }));
   const decisions = questions.map((question) => ({
     question,
     decision: evaluateAssistantQuestionPolicy({
@@ -811,19 +723,6 @@ function tryAutoResolveAssistantPlanningQuestions(
   return {
     summary: prompts.join("\n\n")
   };
-}
-
-function resolveAssistantPolicyAnswer(decision: ReturnType<typeof evaluateAssistantQuestionPolicy>) {
-  switch (decision.kind) {
-    case "auto-answer":
-      return decision.answerText;
-    case "suppress":
-      return decision.note;
-    case "note":
-      return decision.note;
-    case "ask":
-      return decision.reason;
-  }
 }
 
 function appendBackgroundJobRunEvent(
@@ -922,91 +821,13 @@ function summarizeShellOutput(stdout: string, stderr: string) {
   return primary.replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
-function buildBackgroundRoutinePrompt(job: BackgroundJob, repository: WorkspaceRepository) {
-  if (job.definition.kind !== "ai-routine") {
-    return "";
-  }
-
-  const contract = job.intentContract ?? compileBackgroundJobIntentContract(job);
-  const assistant = job.assistantId ? repository.getAssistant(job.assistantId) : undefined;
-  const activeTodos = job.assistantId
-    ? selectActiveTodosForPrompt(repository.getAssistantTodos(job.assistantId))
-    : [];
-  const activeTodoCount = job.assistantId
-    ? repository.getAssistantTodos(job.assistantId).filter((todo) => ["pending", "in-progress", "blocked"].includes(todo.state)).length
-    : 0;
-  const answeredQuestions = job.assistantId ? selectAssistantPromptQuestions(repository.getAssistantQuestions(job.assistantId)) : [];
-  const learnings = job.assistantId ? selectAssistantPromptLearnings(repository.getAssistantLearnings(job.assistantId)) : [];
-
-  return [
-    renderIntentContractPrompt(contract),
-    "Runtime instruction: treat the IntentContract as authority. Use job prompt, assistant persona, todos, questions, and learnings as supporting context.",
-    renderBackgroundJobSupportContext(job),
-    assistant ? renderAssistantPromptContext(assistant, job.definition.prompt) : renderUnownedRoutineContext(job),
-    renderActiveTodos(activeTodos, activeTodoCount),
-    job.assistantId ? renderAssistantPromptMemoryBlock(answeredQuestions, learnings) : undefined
-  ]
-    .filter((part): part is string => Boolean(part))
-    .join("\n\n");
-}
-
-function renderBackgroundJobSupportContext(job: BackgroundJob) {
-  return [
-    "# BACKGROUND JOB SUPPORTING CONTEXT",
-    `Job: ${job.name}`,
-    `Description: ${job.description?.trim() || "No description provided."}`,
-    `Definition prompt: ${job.definition.kind === "ai-routine" ? job.definition.prompt.trim() : "No AI routine prompt."}`
-  ].join("\n");
-}
-
-function renderUnownedRoutineContext(job: BackgroundJob) {
-  return [
-    "# ACTIVE MISSION (The Request)",
-    job.definition.kind === "ai-routine" ? job.definition.prompt.trim() : job.name
-  ].join("\n");
-}
-
-function renderActiveTodos(activeTodos: AssistantTodo[], activeTodoCount: number) {
-  if (activeTodoCount === 0) {
-    return "Active assistant todos: none";
-  }
-  const lines = [
-    `Active assistant todos: showing ${activeTodos.length} of ${activeTodoCount}`,
-    ...activeTodos.map(
-      (todo) =>
-        `- (${todo.id}) state=${todo.state} workKind=${todo.workKind} target=${todo.workTarget ?? "none"} title=${todo.title}${todo.description ? ` description=${summarize(todo.description, 240)}` : ""}${todo.blockerReason ? ` blocker=${summarize(todo.blockerReason, 240)}` : ""}`
-    )
-  ];
-  return lines.join("\n");
-}
-
-function selectActiveTodosForPrompt(todos: AssistantTodo[]) {
-  return todos
-    .filter((todo) => ["pending", "in-progress", "blocked"].includes(todo.state))
-    .sort((left, right) => todoPromptRank(left) - todoPromptRank(right) || left.sortOrder - right.sortOrder)
-    .slice(0, 12);
-}
-
-function todoPromptRank(todo: AssistantTodo) {
-  if (todo.state === "in-progress") {
-    return 0;
-  }
-  if (todo.state === "pending" && (todo.workKind === "app-code" || todo.workKind === "automation-code")) {
-    return 1;
-  }
-  if (todo.state === "pending") {
-    return 2;
-  }
-  return 3;
-}
-
 async function consumeBoundedStream(
   stream: ReadableStream<Uint8Array>,
   label: "stdout" | "stderr",
   onExceeded: (message: string) => void,
   onChunk?: () => void
 ) {
-  const buffer = new BoundedOutputBuffer(SHELL_OUTPUT_CAP_BYTES);
+  const buffer = createBoundedOutputBuffer(SHELL_OUTPUT_CAP_BYTES);
   const reader = stream.getReader();
   try {
     while (true) {
@@ -1030,10 +851,20 @@ async function readStreamChunk(reader: ReadableStreamDefaultReader<Uint8Array>) 
     return await reader.read();
   } catch (error) {
     if (isStreamReaderCancelledError(error)) {
-      return { done: true, value: undefined } as ReadableStreamReadDoneResult<Uint8Array>;
+      return createStreamReadDoneResult();
     }
     throw error;
   }
+}
+
+function createStreamReadDoneResult(): ReadableStreamDefaultReadDoneResult {
+  return { done: true };
+}
+
+function requireBackgroundJobRun(repository: WorkspaceRepository, runId: string) {
+  const run = repository.getBackgroundJobRun(runId);
+  if (!run) throw new Error(`Background job run ${runId} was not persisted`);
+  return run;
 }
 
 function releaseStreamReaderLock(reader: ReadableStreamDefaultReader<Uint8Array>) {
@@ -1048,53 +879,6 @@ function releaseStreamReaderLock(reader: ReadableStreamDefaultReader<Uint8Array>
 
 function isStreamReaderCancelledError(error: unknown) {
   return error instanceof Error && error.name === "AbortError" && error.message.includes("releaseLock");
-}
-
-function createPlanningQuestionNotification(
-  job: BackgroundJob,
-  linkedAgentRunId: string,
-  question: PlanningQuestion
-): PlanningQuestionNotification {
-  return {
-    id: createNotificationId("planning-question", linkedAgentRunId, question.id),
-    kind: "planning-question",
-    interactive: true,
-    createdAt: new Date().toISOString(),
-    projectId: job.projectId,
-    threadId: job.automationThreadId,
-    runId: linkedAgentRunId,
-    questionId: question.id,
-    prompt: question.prompt,
-    placeholder: question.placeholder,
-    choices: question.choices
-  };
-}
-
-function createPlanningQuestionBatchNotification(
-  job: BackgroundJob,
-  linkedAgentRunId: string,
-  questions: PlanningQuestion[]
-): PlanningQuestionBatchNotification {
-  return {
-    id: createStableBoundedId(["planning-question-batch", linkedAgentRunId, ...questions.map((question) => question.id)]),
-    kind: "planning-question-batch",
-    interactive: true,
-    createdAt: new Date().toISOString(),
-    projectId: job.projectId,
-    threadId: job.automationThreadId,
-    runId: linkedAgentRunId,
-    questions: questions.slice(0, 5).map((question) => ({
-      questionId: question.id,
-      prompt: question.prompt,
-      placeholder: question.placeholder,
-      responseKind: question.responseKind,
-      choices: question.choices
-    }))
-  };
-}
-
-function createNotificationId(kind: string, primaryId: string, secondaryId: string) {
-  return createStableBoundedId([kind, primaryId, secondaryId]);
 }
 
 function resolveEnvironmentRefs(envRefs: string[] | undefined) {

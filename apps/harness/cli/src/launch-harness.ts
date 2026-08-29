@@ -6,10 +6,10 @@ import {
 } from "./dev-db-recovery";
 import { startHarnessServer } from "./server";
 import { type StartupTelemetrySink } from "./startup-telemetry";
-import { WorkspaceRepository } from "./workspace-repository";
+import { createWorkspaceRepository } from "./workspace-repository";
 
 type StartHarnessServerOptions = Parameters<typeof startHarnessServer>[0];
-type StartHarnessServerResult = Awaited<ReturnType<typeof startHarnessServer>>;
+export type StartHarnessServerResult = Awaited<ReturnType<typeof startHarnessServer>>;
 type StartHarnessServerFn<TServer> = (options: StartHarnessServerOptions) => Promise<TServer>;
 
 type LaunchHarnessServerOptions<TServer> = StartHarnessServerOptions & {
@@ -20,6 +20,12 @@ type LaunchHarnessServerOptions<TServer> = StartHarnessServerOptions & {
   startupTelemetry?: StartupTelemetrySink;
 };
 
+export function launchHarnessServerWithRecovery(
+  options: LaunchHarnessServerOptions<StartHarnessServerResult> & { startServer?: undefined }
+): Promise<StartHarnessServerResult>;
+export function launchHarnessServerWithRecovery<TServer>(
+  options: LaunchHarnessServerOptions<TServer> & { startServer: StartHarnessServerFn<TServer> }
+): Promise<TServer>;
 export async function launchHarnessServerWithRecovery<TServer = StartHarnessServerResult>({
   allowPortFallback = false,
   logger = console,
@@ -28,7 +34,6 @@ export async function launchHarnessServerWithRecovery<TServer = StartHarnessServ
   startupTelemetry,
   ...serverOptions
 }: LaunchHarnessServerOptions<TServer>) {
-  const runStart = (startServer ?? startHarnessServer) as StartHarnessServerFn<TServer>;
   let nextPort = serverOptions.port;
   let attemptedPortFallback = false;
   let attemptedDbRecovery = false;
@@ -40,12 +45,13 @@ export async function launchHarnessServerWithRecovery<TServer = StartHarnessServ
         attempt: startupTelemetry.getAttempt(),
         port: nextPort
       });
-      return await runStart({
+      const options = {
         ...serverOptions,
         startupTelemetry,
         repository: repositoryOverride,
         port: nextPort
-      });
+      };
+      return startServer ? await startServer(options) : await startHarnessServer(options);
     } catch (error) {
       if (!attemptedPortFallback && allowPortFallback && isPortInUseError(error)) {
         attemptedPortFallback = true;
@@ -76,9 +82,9 @@ export async function launchHarnessServerWithRecovery<TServer = StartHarnessServ
           logger.warn(
             `[dev-db-recovery] db remained locked; starting with fresh fallback db at ${purgeResult.fallbackDbPath}`
           );
-          repositoryOverride = new WorkspaceRepository(purgeResult.fallbackDbPath, process.cwd());
+          repositoryOverride = createWorkspaceRepository(purgeResult.fallbackDbPath, process.cwd());
         } else {
-          repositoryOverride = new WorkspaceRepository(dbPath, process.cwd());
+          repositoryOverride = createWorkspaceRepository(dbPath, process.cwd());
         }
         startupTelemetry?.retry("recoverable workspace db error, purging local db and retrying startup", {
           backupPath: purgeResult.backupPath,

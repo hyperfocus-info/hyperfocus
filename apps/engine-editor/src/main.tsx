@@ -1,9 +1,6 @@
-import "../../../packages/ui/src/stylex-entry.css";
-import { render } from "solid-js/web";
-import { EditorAiPanel } from "./editor-ai-panel";
+import "@hyperfocus/ui/stylex-entry.css";
+import { installDomTooltips } from "@hyperfocus/ui";
+import "./editor-workspace-layouts.css";
 import "./client";
 
-const aiRoot = document.getElementById("editor-ai-root");
-if (!aiRoot) throw new Error("Missing editor AI mount point");
-render(() => <EditorAiPanel />, aiRoot);
-
+installDomTooltips(document);

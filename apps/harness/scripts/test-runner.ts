@@ -1,6 +1,9 @@
 import os from "node:os";
+import { mkdtemp, rm } from "node:fs/promises";
+import path from "node:path";
 
 export const DEFAULT_TEST_WORKER_CAP = 12;
+export const WINDOWS_TEST_WORKER_CAP = 4;
 export const DEFAULT_TEST_PARALLEL_DELAY_MS = 0;
 
 export type BunTestPlan = {
@@ -17,15 +20,17 @@ export function normalizeForwardedArgs(args: string[]) {
   return normalizedArgs;
 }
 
-export function resolveDefaultWorkerCount(logicalCpuCount = detectLogicalCpuCount()) {
+export function resolveDefaultWorkerCount(logicalCpuCount = detectLogicalCpuCount(), platform = process.platform) {
   const normalizedCpuCount = Number.isFinite(logicalCpuCount) ? Math.max(1, Math.floor(logicalCpuCount)) : 1;
-  return Math.min(DEFAULT_TEST_WORKER_CAP, normalizedCpuCount);
+  const workerCap = platform === "win32" ? WINDOWS_TEST_WORKER_CAP : DEFAULT_TEST_WORKER_CAP;
+  return Math.min(workerCap, normalizedCpuCount);
 }
 
 export function buildBunTestPlan(
   forwardedArgs: string[],
   env: NodeJS.ProcessEnv,
-  logicalCpuCount = detectLogicalCpuCount()
+  logicalCpuCount = detectLogicalCpuCount(),
+  platform = process.platform
 ): BunTestPlan {
   const normalizedArgs = normalizeForwardedArgs(forwardedArgs);
   const explicitParallelArg = findFlagValue(normalizedArgs, "--parallel");
@@ -37,7 +42,7 @@ export function buildBunTestPlan(
     parsePositiveInteger(explicitParallelArg) ??
     parsePositiveInteger(aliasWorkerArg) ??
     parsePositiveInteger(env.HARNESS_TEST_WORKERS) ??
-    resolveDefaultWorkerCount(logicalCpuCount);
+    resolveDefaultWorkerCount(logicalCpuCount, platform);
   const parallelDelayMs = parseNonNegativeInteger(explicitDelayArg) ?? parseNonNegativeInteger(env.HARNESS_TEST_PARALLEL_DELAY) ?? DEFAULT_TEST_PARALLEL_DELAY_MS;
 
   if (!hasFlag(normalizedArgs, "--parallel")) {
@@ -55,6 +60,35 @@ export function buildBunTestPlan(
     workerCount: parsePositiveInteger(explicitParallelArg) ?? workerCount,
     parallelDelayMs
   };
+}
+
+export async function createHarnessTestRunRoot() {
+  return await mkdtemp(path.join(resolveTestTempBaseDir(), "hf-"));
+}
+
+export async function removeHarnessTestRunRoot(rootPath: string) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await rm(rootPath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (!isRetryableFilesystemError(error) || attempt === 7) {
+        throw error;
+      }
+      await Bun.sleep(125 * (attempt + 1));
+    }
+  }
+}
+
+function resolveTestTempBaseDir() {
+  if (process.platform === "win32" && process.env.LOCALAPPDATA?.trim()) {
+    return path.join(process.env.LOCALAPPDATA, "Temp");
+  }
+  return os.tmpdir();
+}
+
+function isRetryableFilesystemError(error: unknown) {
+  return error instanceof Error && "code" in error && ["EBUSY", "EPERM", "EACCES", "ENOTEMPTY"].includes(String(error.code));
 }
 
 export function stripFlag(args: string[], flagName: string) {

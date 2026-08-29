@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { AlertTriangle } from "lucide-solid";
-import type { ExecutionPlan } from "../../../shared/protocol";
+import type { ExecutionPlan } from "@hyperfocus/ai-core/protocol";
 import { harnessStore } from "../harness-store";
 import type { ChatFileTarget } from "../lib/chat-file-links";
 import { openIdeWindow } from "../lib/ide-window";

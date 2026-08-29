@@ -19,3 +19,12 @@ export function debugLog(event: string, fields: LogFields = {}) {
     })
   );
 }
+
+export function normalizeErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : "Unknown assistant error";
+}
+
+export function serializeError(error: unknown) {
+  return error instanceof Error ? { message: error.message } : { value: error };
+}

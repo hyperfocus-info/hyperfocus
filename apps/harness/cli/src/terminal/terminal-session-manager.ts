@@ -14,21 +14,24 @@ import {
   type TerminalSessionSource,
   type TerminalTransportMode,
   type TerminalShell
-} from "../../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { buildCliProcessEnv } from "../agent-runtimes/cli-process-manager";
 import { createSecureToken } from "../agent-runtimes/cli-health";
-import { StreamPump } from "../stream-pump";
-import { guardedWebsocketSend } from "../websocket-send-guard";
-import type { PersistedTerminalState, WorkspaceRepository } from "../workspace-repository";
+import { cancelStreamPumps, createStreamPump, DEFAULT_STREAM_MAX_QUEUED_BYTES, drainStreamPumps, type StreamPump } from "../stream-pump";
+import { guardedWebsocketSend, type GuardedWebSocket } from "../websocket-send-guard";
+import type {  WorkspaceRepository } from "../workspace-repository";
+import { createAttachTokenStore, createTerminalAttachReplay, type TerminalAttachReplay } from "../server/transport/attach-ownership";
 
 export const TERMINAL_STREAM_HEARTBEAT = 0x00;
 const TERMINAL_STREAM_DATA = 0x01;
+const TERMINAL_ATTACH_READY = 0x02;
 const ATTACH_TOKEN_TTL_MS = 30_000;
 const TERMINAL_HEARTBEAT_INTERVAL_MS = 15_000;
 const TERMINAL_STALE_TIMEOUT_MS = 30_000;
 const TERMINAL_STREAM_FLUSH_MS = 16;
 const TERMINAL_STREAM_MAX_BUFFERED_BYTES = 16 * 1024;
 const TERMINAL_SEND_QUEUE_CAP_BYTES = 512 * 1024;
+const TERMINAL_REPLAY_FRAME_BYTES = 64 * 1024;
 const TERMINAL_STATE_PERSIST_THROTTLE_MS = 500;
 const MAX_SCROLLBACK_CHARS = 2_000_000;
 const TERMINAL_UTF8_DECODER = new TextDecoder();
@@ -64,55 +67,46 @@ type TerminalSessionManagerOptions = {
   onSessionCreated: (input: { requestId: string; session: TerminalSession }) => void;
   onSessionUpdated: (input: { requestId: string; session: TerminalSession }) => void;
   onSessionExited: (input: { requestId: string; session: TerminalSession }) => void;
-  onAttachReady: (input: { requestId: string; sessionId: string; attachToken: TerminalAttachToken; snapshot: string }) => void;
+  onAttachReady: (input: { requestId: string; connectionId: string; sessionId: string; attachToken: TerminalAttachToken; snapshot: string }) => void;
   onPreferencesSaved: (input: { requestId: string; preferences: TerminalPreferences; layout?: TerminalPaneLayout }) => void;
   discoverShells?: () => Promise<TerminalShell[]>;
   startProcess?: typeof startTerminalProcess;
 };
 
-export class TerminalSessionManager {
-  private readonly sessions = new Map<string, SessionRecord>();
-  private readonly attachTokens = new Map<string, AttachTokenRecord>();
-  private shells: TerminalShell[] = [];
-  private preferences: TerminalPreferences;
-  private layout: TerminalPaneLayout | undefined;
-  private scrollbackBySessionId: Record<string, string>;
-  private persistTimer?: ReturnType<typeof setTimeout>;
-  private persistPending = false;
+type TerminalSessionManagerState = {
+  sessions: Map<string, SessionRecord>;
+  attachReplay: TerminalAttachReplay;
+  attachTokens: ReturnType<typeof createAttachTokenStore<AttachTokenRecord>>;
+  shells: TerminalShell[];
+  preferences: TerminalPreferences;
+  layout: TerminalPaneLayout | undefined;
+  scrollbackBySessionId: Record<string, string>;
+  persistTimer: ReturnType<typeof setTimeout> | undefined;
+  persistPending: boolean;
+};
 
-  constructor(private readonly options: TerminalSessionManagerOptions) {
-    const persisted = options.repository.getTerminalState();
-    this.preferences = persisted.preferences;
-    this.layout = persisted.layout;
-    this.scrollbackBySessionId = persisted.scrollbackBySessionId;
-    for (const session of persisted.sessions) {
-      this.sessions.set(session.id, { session });
-    }
-  }
+type TerminalSessionCreatorTools = {
+  discoverShells: () => Promise<TerminalShell[]>;
+  resolveShell: (shellId: string | undefined) => TerminalShell;
+  persistNow: () => void;
+  startProcess: (input: Parameters<typeof startTerminalProcess>[0]) => ReturnType<typeof startTerminalProcess>;
+  handleChunk: (sessionId: string, chunk: Uint8Array) => void;
+  handleExit: (sessionId: string, exitCode: number) => Promise<void>;
+  attachSession: (input: { requestId: string; projectId: ProjectId; sessionId: string; clientId: string; connectionId?: string }) => void;
+};
 
-  async refreshShells(requestId: string) {
-    this.shells = await this.discoverShells();
-    this.options.onShellsUpdated({ requestId, shells: this.shells });
-    this.emitSessionsUpdated(requestId);
-  }
-
-  listSessions(input: { requestId: string; projectId?: ProjectId }) {
-    this.emitSessionsUpdated(input.requestId, input.projectId);
-  }
-
-  listHistory(input: { requestId: string; scope: TerminalHistoryScope }) {
-    this.options.onHistoryListed({
-      requestId: input.requestId,
-      scope: input.scope,
-      sessions: this.getHistorySessions(input.scope)
-    });
-  }
-
-  async createSession(input: {
+function createTerminalSessionCreator(
+  options: TerminalSessionManagerOptions,
+  state: TerminalSessionManagerState,
+  tools: TerminalSessionCreatorTools
+) {
+  const { discoverShells, resolveShell, persistNow, startProcess, handleChunk, handleExit, attachSession } = tools;
+  async function createSession(input: {
     requestId: string;
     projectId: ProjectId;
     projectRoot: string;
     clientId: string;
+    connectionId?: string;
     source?: TerminalSessionSource;
     name?: string;
     shellId?: string;
@@ -121,10 +115,10 @@ export class TerminalSessionManager {
     rows: number;
     env?: TerminalEnvVar[];
   }) {
-    if (this.shells.length === 0) {
-      this.shells = await this.discoverShells();
+    if (state.shells.length === 0) {
+      state.shells = await discoverShells();
     }
-    const shell = this.resolveShell(input.shellId);
+    const shell = resolveShell(input.shellId);
     const cwd = resolveTerminalCwd(input.projectRoot, input.cwd);
     const env = normalizeTerminalEnv(input.env);
     const transportInfo = getTerminalTransportInfo();
@@ -151,20 +145,20 @@ export class TerminalSessionManager {
     };
 
     const record: SessionRecord = { session };
-    this.sessions.set(session.id, record);
-    this.persistNow();
-    this.options.onSessionCreated({ requestId: input.requestId, session });
+    state.sessions.set(session.id, record);
+    persistNow();
+    options.onSessionCreated({ requestId: input.requestId, session });
 
     try {
-      record.process = await this.startProcess({
+      record.process = await startProcess({
         cmd: resolveShellCommand(shell),
         cwd,
         cols: input.cols,
         rows: input.rows,
         env,
-        onData: (chunk) => this.handleChunk(session.id, chunk),
+        onData: (chunk) => handleChunk(session.id, chunk),
         onExit: (exitCode) => {
-          void this.handleExit(session.id, exitCode);
+          void handleExit(session.id, exitCode);
         }
       });
     } catch (error) {
@@ -176,8 +170,8 @@ export class TerminalSessionManager {
         exitedAt: failedAt,
         updatedAt: failedAt
       };
-      this.persistNow();
-      this.options.onSessionUpdated({ requestId: input.requestId, session: record.session });
+      persistNow();
+      options.onSessionUpdated({ requestId: input.requestId, session: record.session });
       throw error;
     }
     record.session = {
@@ -187,225 +181,62 @@ export class TerminalSessionManager {
       status: "running",
       updatedAt: new Date().toISOString()
     };
-    this.persistNow();
-    this.options.onSessionUpdated({ requestId: input.requestId, session: record.session });
-    this.attachSession({ requestId: input.requestId, projectId: input.projectId, sessionId: session.id, clientId: input.clientId });
+    persistNow();
+    options.onSessionUpdated({ requestId: input.requestId, session: record.session });
+    attachSession({ requestId: input.requestId, projectId: input.projectId, sessionId: session.id, clientId: input.clientId, connectionId: input.connectionId });
   }
 
-  setInputOverride(input: { requestId: string; projectId: ProjectId; sessionId: string; allowInput: boolean }) {
-    const record = this.requireOwnedSession(input.projectId, input.sessionId);
-    if (getTerminalSessionSource(record.session).kind !== "agent") {
-      record.session = {
-        ...record.session,
-        inputMode: "interactive",
-        inputOverride: false,
-        inputLockReason: undefined,
-        updatedAt: new Date().toISOString()
-      };
-    } else {
-      record.session = {
-        ...record.session,
-        inputMode: "read-only",
-        inputOverride: input.allowInput,
-        inputLockReason: input.allowInput ? undefined : "Agent-spawned terminal is read-only while its run is in progress.",
-        updatedAt: new Date().toISOString()
-      };
-    }
-    this.persistNow();
-    this.options.onSessionUpdated({ requestId: input.requestId, session: record.session });
-  }
+  return createSession;
+}
 
-  renameSession(input: { requestId: string; projectId: ProjectId; sessionId: string; name: string }) {
-    const record = this.requireOwnedSession(input.projectId, input.sessionId);
-    record.session = { ...record.session, name: input.name.trim(), updatedAt: new Date().toISOString() };
-    this.persistNow();
-    this.options.onSessionUpdated({ requestId: input.requestId, session: record.session });
-  }
-
-  async stopSession(input: { requestId: string; projectId: ProjectId; sessionId: string }) {
-    const record = this.requireOwnedSession(input.projectId, input.sessionId);
-    await record.process?.stop();
-    if (!record.process) {
-      record.session = { ...record.session, status: "stopped", updatedAt: new Date().toISOString() };
-      this.persistNow();
-      this.options.onSessionUpdated({ requestId: input.requestId, session: record.session });
-    }
-  }
-
-  async closeSession(input: { requestId: string; projectId: ProjectId; sessionId: string }) {
-    const record = this.requireOwnedSession(input.projectId, input.sessionId);
-    await record.process?.stop();
-    this.clearTransport(record);
-    const closedAt = new Date().toISOString();
-    record.process = undefined;
-    record.session = {
-      ...record.session,
-      status: record.session.status === "running" || record.session.status === "starting" ? "stopped" : record.session.status,
-      closedAt,
-      updatedAt: closedAt
-    };
-    this.pruneLayoutSession(input.sessionId);
-    this.persistNow();
-    this.options.onSessionUpdated({ requestId: input.requestId, session: record.session });
-    this.emitSessionsUpdated(input.requestId);
-  }
-
-  async restartSession(input: { requestId: string; projectId: ProjectId; projectRoot: string; sessionId: string; clientId: string; cols: number; rows: number }) {
-    const previous = this.requireOwnedSession(input.projectId, input.sessionId).session;
-    await this.closeSession(input);
-    await this.createSession({
-      requestId: input.requestId,
-      projectId: input.projectId,
-      projectRoot: input.projectRoot,
-      clientId: input.clientId,
-      name: previous.name,
-      shellId: previous.shellId,
-      cwd: previous.cwd,
-      cols: input.cols,
-      rows: input.rows
-    });
-  }
-
-  resizeSession(input: { requestId: string; projectId: ProjectId; sessionId: string; cols: number; rows: number }) {
-    const record = this.requireOwnedSession(input.projectId, input.sessionId);
-    record.process?.resize(input.cols, input.rows);
-    record.session = { ...record.session, cols: input.cols, rows: input.rows, updatedAt: new Date().toISOString() };
-    this.persistNow();
-    this.options.onSessionUpdated({ requestId: input.requestId, session: record.session });
-  }
-
-  attachSession(input: { requestId: string; projectId: ProjectId; sessionId: string; clientId: string }) {
-    this.requireOwnedSession(input.projectId, input.sessionId);
-    const attachToken = this.issueAttachToken(input);
-    this.options.onAttachReady({
-      requestId: input.requestId,
-      sessionId: input.sessionId,
-      attachToken,
-      snapshot: this.scrollbackBySessionId[input.sessionId] ?? ""
-    });
-  }
-
-  savePreferences(input: { requestId: string; preferences: TerminalPreferences; layout?: TerminalPaneLayout }) {
-    this.preferences = terminalPreferencesSchema.parse(input.preferences);
-    this.layout = input.layout ? terminalPaneLayoutSchema.parse(input.layout) : this.layout;
-    this.trimAllScrollback();
-    this.persistNow();
-    this.options.onPreferencesSaved({ requestId: input.requestId, preferences: this.preferences, layout: this.layout });
-  }
-
-  consumeAttachToken(token: string, clientId: string) {
-    const record = this.attachTokens.get(token);
-    if (!record || record.usedAt || record.clientId !== clientId || Date.parse(record.expiresAt) < Date.now()) {
-      this.attachTokens.delete(token);
-      return undefined;
-    }
-    record.usedAt = new Date().toISOString();
-    this.attachTokens.delete(token);
-    return record;
-  }
-
-  attachSocket(input: {
-    sessionId: string;
-    clientId: string;
-    socket: Bun.ServerWebSocket<{ clientId: string; kind: "control" | "pty" | "terminal"; sessionId?: string }>;
-  }) {
-    const record = this.requireSession(input.sessionId);
-    this.clearTransport(record);
-    record.socket = input.socket;
-    record.attachedClientId = input.clientId;
-    record.lastPongAt = Date.now();
-    this.startHeartbeat(record);
-  }
-
-  detachSocket(sessionId: string) {
-    const record = this.sessions.get(sessionId);
-    if (record) {
-      this.clearTransport(record);
-    }
-  }
-
-  detachClient(clientId: string) {
-    for (const [token, record] of this.attachTokens.entries()) {
-      if (record.clientId === clientId) {
-        this.attachTokens.delete(token);
-      }
-    }
-    for (const record of this.sessions.values()) {
-      if (record.attachedClientId === clientId) {
-        this.clearTransport(record);
-      }
-    }
-  }
-
-  recordPong(sessionId: string, clientId: string) {
-    const record = this.sessions.get(sessionId);
-    if (!record || record.attachedClientId !== clientId) {
-      return false;
-    }
-    record.lastPongAt = Date.now();
-    return true;
-  }
-
-  async writeToSession(sessionId: string, data: Uint8Array) {
-    const record = this.requireSession(sessionId);
-    if (isTerminalInputLocked(record.session)) {
-      return false;
-    }
-    await record.process?.write(data);
-    return true;
-  }
-
-  private handleChunk(sessionId: string, chunk: Uint8Array) {
-    const record = this.sessions.get(sessionId);
+function createTerminalSessionInternals(
+  options: TerminalSessionManagerOptions,
+  state: TerminalSessionManagerState,
+  schedulePersist: () => void,
+  persistNow: () => void
+) {
+  function handleChunk(sessionId: string, chunk: Uint8Array) {
+    const record = state.sessions.get(sessionId);
     if (!record) {
       return;
     }
     const text = decodeTerminalOutputChunk(chunk);
-    this.scrollbackBySessionId[sessionId] = trimScrollback(`${this.scrollbackBySessionId[sessionId] ?? ""}${text}`, this.preferences.scrollbackLimit);
+    state.attachReplay.appended(sessionId, text);
+    state.scrollbackBySessionId[sessionId] = trimScrollback(`${state.scrollbackBySessionId[sessionId] ?? ""}${text}`, state.preferences.scrollbackLimit);
     record.session = { ...record.session, updatedAt: new Date().toISOString() };
-    this.schedulePersist();
-    record.pump ??= new StreamPump({
+    schedulePersist();
+    const socket = record.socket;
+    record.pump ??= createStreamPump({
       flushIntervalMs: TERMINAL_STREAM_FLUSH_MS,
-      maxBufferedBytes: TERMINAL_STREAM_MAX_BUFFERED_BYTES,
-      onFlush: (payload) => this.sendFrame(record, payload)
+      maxBufferedBytes: TERMINAL_STREAM_MAX_BUFFERED_BYTES, maxQueuedBytes: DEFAULT_STREAM_MAX_QUEUED_BYTES,
+      onFlush: (payload) => { sendTerminalDataFrame(socket, payload); }, onError: () => { void record.process?.stop().catch(() => undefined); }
     });
     record.pump.push(text);
   }
 
-  private async handleExit(sessionId: string, exitCode: number) {
-    const record = this.sessions.get(sessionId);
+  async function handleExit(sessionId: string, exitCode: number) {
+    const record = state.sessions.get(sessionId);
     if (!record) {
       return;
     }
-    this.persistNow();
-    this.clearTransport(record);
+    persistNow();
+    const drainErrors = await drainTerminalTransport(record);
     const now = new Date().toISOString();
     record.process = undefined;
     record.session = {
       ...record.session,
-      status: exitCode === 0 ? "exited" : "failed",
+      status: exitCode === 0 && drainErrors.length === 0 ? "exited" : "failed",
       exitCode,
       exitedAt: now,
       closedAt: getTerminalSessionSource(record.session).kind === "agent" ? now : record.session.closedAt,
       updatedAt: now
     };
-    this.persistNow();
-    this.options.onSessionExited({ requestId: createRequestId(), session: record.session });
-    this.emitSessionsUpdated(createRequestId());
+    persistNow();
+    options.onSessionExited({ requestId: createRequestId(), session: record.session });
+    emitSessionsUpdated(createRequestId());
   }
 
-  private sendFrame(record: SessionRecord, text: string) {
-    if (!record.socket) {
-      return;
-    }
-    const payload = new TextEncoder().encode(text);
-    const frame = new Uint8Array(payload.length + 1);
-    frame[0] = TERMINAL_STREAM_DATA;
-    frame.set(payload, 1);
-    guardedWebsocketSend(record.socket, frame, { maxQueuedBytes: TERMINAL_SEND_QUEUE_CAP_BYTES });
-  }
-
-  private issueAttachToken(input: { projectId: ProjectId; sessionId: string; clientId: string }) {
+  function issueAttachToken(input: { projectId: ProjectId; sessionId: string; clientId: string }) {
     const token: AttachTokenRecord = {
       token: createSecureToken(),
       sessionId: input.sessionId,
@@ -413,18 +244,19 @@ export class TerminalSessionManager {
       clientId: input.clientId,
       expiresAt: new Date(Date.now() + ATTACH_TOKEN_TTL_MS).toISOString()
     };
-    this.attachTokens.set(token.token, token);
-    return token;
+    state.attachReplay.register(token.token, token.sessionId, token.expiresAt);
+    state.attachTokens.issue(token);
+    return { token: token.token, sessionId: token.sessionId, clientId: token.clientId, expiresAt: token.expiresAt };
   }
 
-  private startHeartbeat(record: SessionRecord) {
+  function startHeartbeat(record: SessionRecord) {
     record.heartbeatTimer = setInterval(() => {
       if (!record.socket || !record.attachedClientId) {
         return;
       }
       if (Date.now() - (record.lastPongAt ?? 0) > TERMINAL_STALE_TIMEOUT_MS) {
         record.socket.close(4000, "Terminal heartbeat missed");
-        this.clearTransport(record);
+        cancelTerminalTransport(record);
         return;
       }
       guardedWebsocketSend(record.socket, new Uint8Array([TERMINAL_STREAM_HEARTBEAT]), {
@@ -433,45 +265,32 @@ export class TerminalSessionManager {
     }, TERMINAL_HEARTBEAT_INTERVAL_MS);
   }
 
-  private clearTransport(record: SessionRecord) {
-    if (record.heartbeatTimer) {
-      clearInterval(record.heartbeatTimer);
-      record.heartbeatTimer = undefined;
-    }
-    void record.pump?.flush();
-    record.pump?.close();
-    record.pump = undefined;
-    record.socket = undefined;
-    record.attachedClientId = undefined;
-    record.lastPongAt = undefined;
-  }
-
-  private resolveShell(shellId: string | undefined) {
-    const defaultShellId = shellId ?? this.preferences.defaultShellId;
-    const shell = this.shells.find((entry) => entry.id === defaultShellId && entry.available) ?? this.shells.find((entry) => entry.default && entry.available) ?? this.shells.find((entry) => entry.available);
+  function resolveShell(shellId: string | undefined) {
+    const defaultShellId = shellId ?? state.preferences.defaultShellId;
+    const shell = state.shells.find((entry) => entry.id === defaultShellId && entry.available) ?? state.shells.find((entry) => entry.default && entry.available) ?? state.shells.find((entry) => entry.available);
     if (!shell) {
       throw new Error("No terminal shell is available");
     }
     return shell;
   }
 
-  private requireSession(sessionId: string) {
-    const record = this.sessions.get(sessionId);
+  function requireSession(sessionId: string) {
+    const record = state.sessions.get(sessionId);
     if (!record) {
       throw new Error(`Unknown terminal session: ${sessionId}`);
     }
     return record;
   }
 
-  private requireOwnedSession(projectId: ProjectId, sessionId: string) {
-    const record = this.requireSession(sessionId);
+  function requireOwnedSession(projectId: ProjectId, sessionId: string) {
+    const record = requireSession(sessionId);
     if (record.session.projectId !== projectId) {
       throw new Error(`Terminal session ${sessionId} belongs to another project`);
     }
     return record;
   }
 
-  private pruneLayoutSession(sessionId: string) {
+  function pruneLayoutSession(sessionId: string) {
     const prune = (layout: TerminalPaneLayout | undefined): TerminalPaneLayout | undefined => {
       if (!layout) {
         return undefined;
@@ -481,32 +300,32 @@ export class TerminalSessionManager {
       }
       return { ...layout, children: layout.children.map(prune).filter((child): child is TerminalPaneLayout => child !== undefined) };
     };
-    this.layout = prune(this.layout);
+    state.layout = prune(state.layout);
   }
 
-  private trimAllScrollback() {
-    this.scrollbackBySessionId = Object.fromEntries(
-      Object.entries(this.scrollbackBySessionId).map(([sessionId, scrollback]) => [
+  function trimAllScrollback() {
+    state.scrollbackBySessionId = Object.fromEntries(
+      Object.entries(state.scrollbackBySessionId).map(([sessionId, scrollback]) => [
         sessionId,
-        trimScrollback(scrollback, this.preferences.scrollbackLimit)
+        trimScrollback(scrollback, state.preferences.scrollbackLimit)
       ])
     );
   }
 
-  private emitSessionsUpdated(requestId: string, projectId?: ProjectId) {
-    const sessions = [...this.sessions.values()]
+  function emitSessionsUpdated(requestId: string, projectId?: ProjectId) {
+    const listedSessions = [...state.sessions.values()]
       .map((record) => record.session)
       .filter((session) => !session.closedAt && (!projectId || session.projectId === projectId));
-    this.options.onSessionsUpdated({
+    options.onSessionsUpdated({
       requestId,
-      sessions,
-      preferences: this.preferences,
-      layout: this.layout
+      sessions: listedSessions,
+      preferences: state.preferences,
+      layout: state.layout
     });
   }
 
-  private getHistorySessions(scope: TerminalHistoryScope) {
-    return [...this.sessions.values()]
+  function getHistorySessions(scope: TerminalHistoryScope) {
+    return [...state.sessions.values()]
       .map((record) => record.session)
       .filter((session) => {
         if (session.projectId !== scope.projectId) {
@@ -525,47 +344,335 @@ export class TerminalSessionManager {
       .slice(0, 256);
   }
 
-  private schedulePersist() {
-    this.persistPending = true;
-    if (this.persistTimer) {
+  return { handleChunk, handleExit, issueAttachToken, startHeartbeat, resolveShell, requireSession, requireOwnedSession,
+    pruneLayoutSession, trimAllScrollback, emitSessionsUpdated, getHistorySessions };
+}
+
+function createTerminalPersistence(options: TerminalSessionManagerOptions, state: TerminalSessionManagerState) {
+  function schedulePersist() {
+    state.persistPending = true;
+    if (state.persistTimer) {
       return;
     }
-    this.persistTimer = setTimeout(() => {
-      this.persistTimer = undefined;
-      if (!this.persistPending) {
+    state.persistTimer = setTimeout(() => {
+      state.persistTimer = undefined;
+      if (!state.persistPending) {
         return;
       }
-      this.persistPending = false;
-      this.persist();
+      state.persistPending = false;
+      persist();
     }, TERMINAL_STATE_PERSIST_THROTTLE_MS);
   }
 
-  private persistNow() {
-    if (this.persistTimer) {
-      clearTimeout(this.persistTimer);
-      this.persistTimer = undefined;
+  function persistNow() {
+    if (state.persistTimer) {
+      clearTimeout(state.persistTimer);
+      state.persistTimer = undefined;
     }
-    this.persistPending = false;
-    this.persist();
+    state.persistPending = false;
+    persist();
   }
 
-  private persist() {
-    this.options.repository.setTerminalState({
-      sessions: [...this.sessions.values()].map((record) => record.session),
-      scrollbackBySessionId: this.scrollbackBySessionId,
-      preferences: this.preferences,
-      layout: this.layout
-    } satisfies PersistedTerminalState);
+  function persist() {
+    options.repository.setTerminalState({
+      sessions: [...state.sessions.values()].map((record) => record.session),
+      scrollbackBySessionId: state.scrollbackBySessionId,
+      preferences: state.preferences,
+      layout: state.layout
+    });
   }
 
-  private discoverShells() {
-    return this.options.discoverShells?.() ?? discoverTerminalShells();
+  function discoverShells() {
+    return options.discoverShells?.() ?? discoverTerminalShells();
   }
 
-  private startProcess(input: Parameters<typeof startTerminalProcess>[0]) {
-    return this.options.startProcess?.(input) ?? startTerminalProcess(input);
+  function startProcess(input: Parameters<typeof startTerminalProcess>[0]) {
+    return options.startProcess?.(input) ?? startTerminalProcess(input);
+  }
+
+  return { schedulePersist, persistNow, discoverShells, startProcess };
+}
+
+function createTerminalListingApi(
+  options: TerminalSessionManagerOptions,
+  state: TerminalSessionManagerState,
+  discoverShells: () => Promise<TerminalShell[]>,
+  emitSessionsUpdated: (requestId: string, projectId?: ProjectId) => void,
+  getHistorySessions: (scope: TerminalHistoryScope) => TerminalSession[]
+) {
+  async function refreshShells(requestId: string) {
+    state.shells = await discoverShells();
+    options.onShellsUpdated({ requestId, shells: state.shells });
+    emitSessionsUpdated(requestId);
+  }
+  function listSessions(input: { requestId: string; projectId?: ProjectId }) {
+    emitSessionsUpdated(input.requestId, input.projectId);
+  }
+  function listHistory(input: { requestId: string; scope: TerminalHistoryScope }) {
+    options.onHistoryListed({ requestId: input.requestId, scope: input.scope, sessions: getHistorySessions(input.scope) });
+  }
+  return { refreshShells, listSessions, listHistory };
+}
+
+export function createTerminalSessionManager(options: TerminalSessionManagerOptions) {
+  const attachReplay: TerminalAttachReplay = createTerminalAttachReplay();
+  const persisted = options.repository.getTerminalState();
+  const state: TerminalSessionManagerState = {
+    sessions: new Map(),
+    attachReplay,
+    attachTokens: createAttachTokenStore<AttachTokenRecord>((record) => attachReplay.revoke(record.token)),
+    shells: [],
+    preferences: persisted.preferences,
+    layout: persisted.layout,
+    scrollbackBySessionId: persisted.scrollbackBySessionId,
+    persistTimer: undefined,
+    persistPending: false
+  };
+    for (const session of persisted.sessions) {
+      state.sessions.set(session.id, { session });
+    }
+  const { schedulePersist, persistNow, discoverShells, startProcess } = createTerminalPersistence(options, state);
+  const internals = createTerminalSessionInternals(options, state, schedulePersist, persistNow);
+  const { handleChunk, handleExit, issueAttachToken, startHeartbeat, resolveShell, requireSession, requireOwnedSession,
+    pruneLayoutSession, trimAllScrollback, emitSessionsUpdated, getHistorySessions } = internals;
+  const createSession = createTerminalSessionCreator(options, state, {
+    discoverShells, resolveShell, persistNow, startProcess, handleChunk, handleExit, attachSession
+  });
+  const { refreshShells, listSessions, listHistory } = createTerminalListingApi(
+    options, state, discoverShells, emitSessionsUpdated, getHistorySessions
+  );
+
+  function setInputOverride(input: { requestId: string; projectId: ProjectId; sessionId: string; allowInput: boolean }) {
+    const record = requireOwnedSession(input.projectId, input.sessionId);
+    if (getTerminalSessionSource(record.session).kind !== "agent") {
+      record.session = {
+        ...record.session,
+        inputMode: "interactive",
+        inputOverride: false,
+        inputLockReason: undefined,
+        updatedAt: new Date().toISOString()
+      };
+    } else {
+      record.session = {
+        ...record.session,
+        inputMode: "read-only",
+        inputOverride: input.allowInput,
+        inputLockReason: input.allowInput ? undefined : "Agent-spawned terminal is read-only while its run is in progress.",
+        updatedAt: new Date().toISOString()
+      };
+    }
+    persistNow();
+    options.onSessionUpdated({ requestId: input.requestId, session: record.session });
+  }
+
+  function renameSession(input: { requestId: string; projectId: ProjectId; sessionId: string; name: string }) {
+    const record = requireOwnedSession(input.projectId, input.sessionId);
+    record.session = { ...record.session, name: input.name.trim(), updatedAt: new Date().toISOString() };
+    persistNow();
+    options.onSessionUpdated({ requestId: input.requestId, session: record.session });
+  }
+
+  async function stopSession(input: { requestId: string; projectId: ProjectId; sessionId: string }) {
+    const record = requireOwnedSession(input.projectId, input.sessionId);
+    await record.process?.stop();
+    if (!record.process) {
+      record.session = { ...record.session, status: "stopped", updatedAt: new Date().toISOString() };
+      persistNow();
+      options.onSessionUpdated({ requestId: input.requestId, session: record.session });
+    }
+  }
+
+  async function closeSession(input: { requestId: string; projectId: ProjectId; sessionId: string }) {
+    const record = requireOwnedSession(input.projectId, input.sessionId);
+    await record.process?.stop();
+    const drainErrors = await drainTerminalTransport(record);
+    const closedAt = new Date().toISOString();
+    record.process = undefined;
+    record.session = {
+      ...record.session,
+      status: drainErrors.length > 0 ? "failed"
+        : record.session.status === "running" || record.session.status === "starting" ? "stopped" : record.session.status,
+      closedAt,
+      updatedAt: closedAt
+    };
+    pruneLayoutSession(input.sessionId);
+    persistNow();
+    options.onSessionUpdated({ requestId: input.requestId, session: record.session });
+    emitSessionsUpdated(input.requestId);
+  }
+
+  async function restartSession(input: { requestId: string; projectId: ProjectId; projectRoot: string; sessionId: string; clientId: string; connectionId?: string; cols: number; rows: number }) {
+    const previous = requireOwnedSession(input.projectId, input.sessionId).session;
+    await closeSession(input);
+    await createSession({
+      requestId: input.requestId,
+      projectId: input.projectId,
+      projectRoot: input.projectRoot,
+      clientId: input.clientId,
+      connectionId: input.connectionId,
+      name: previous.name,
+      shellId: previous.shellId,
+      cwd: previous.cwd,
+      cols: input.cols,
+      rows: input.rows
+    });
+  }
+
+  function resizeSession(input: { requestId: string; projectId: ProjectId; sessionId: string; cols: number; rows: number }) {
+    const record = requireOwnedSession(input.projectId, input.sessionId);
+    record.process?.resize(input.cols, input.rows);
+    record.session = { ...record.session, cols: input.cols, rows: input.rows, updatedAt: new Date().toISOString() };
+    persistNow();
+    options.onSessionUpdated({ requestId: input.requestId, session: record.session });
+  }
+
+  function attachSession(input: { requestId: string; projectId: ProjectId; sessionId: string; clientId: string; connectionId?: string }) {
+    requireOwnedSession(input.projectId, input.sessionId);
+    const attachToken = issueAttachToken(input);
+    options.onAttachReady({
+      requestId: input.requestId, connectionId: input.connectionId ?? input.clientId, sessionId: input.sessionId, attachToken,
+      snapshot: state.scrollbackBySessionId[input.sessionId] ?? ""
+    });
+  }
+
+  function savePreferences(input: { requestId: string; preferences: TerminalPreferences; layout?: TerminalPaneLayout }) {
+    state.preferences = terminalPreferencesSchema.parse(input.preferences);
+    state.layout = input.layout ? terminalPaneLayoutSchema.parse(input.layout) : state.layout;
+    trimAllScrollback();
+    persistNow();
+    options.onPreferencesSaved({ requestId: input.requestId, preferences: state.preferences, layout: state.layout });
+  }
+
+  function consumeAttachToken(token: string, clientId: string) {
+    return state.attachTokens.consume(token, clientId);
+  }
+
+  function revokeAttachReplay(ownerId: string) { state.attachReplay.revoke(ownerId); }
+
+  function attachSocket(input: {
+    sessionId: string;
+    clientId: string;
+    attachOwnerId: string;
+    socket: Bun.ServerWebSocket<{ clientId: string; kind: "control" | "pty" | "terminal"; sessionId?: string }>;
+  }) {
+    const record = requireSession(input.sessionId);
+    cancelTerminalTransport(record);
+    record.socket = input.socket;
+    record.attachedClientId = input.clientId;
+    record.lastPongAt = Date.now();
+    const gap = state.attachReplay.take(input.attachOwnerId);
+    if (gap === undefined || !sendTerminalReplay(record.socket, gap)) return expireTerminalAttach(input.socket, record);
+    startHeartbeat(record);
+  }
+
+  function detachSocket(sessionId: string) {
+    const record = state.sessions.get(sessionId);
+    if (record) {
+      cancelTerminalTransport(record);
+    }
+  }
+
+  function detachClient(clientId: string) {
+    state.attachTokens.invalidateClient(clientId);
+    for (const record of state.sessions.values()) {
+      if (record.attachedClientId === clientId) {
+        cancelTerminalTransport(record);
+      }
+    }
+  }
+
+  function recordPong(sessionId: string, clientId: string) {
+    const record = state.sessions.get(sessionId);
+    if (!record || record.attachedClientId !== clientId) {
+      return false;
+    }
+    record.lastPongAt = Date.now();
+    return true;
+  }
+
+  async function writeToSession(sessionId: string, data: Uint8Array) {
+    const record = requireSession(sessionId);
+    if (isTerminalInputLocked(record.session)) {
+      return false;
+    }
+    await record.process?.write(data);
+    return true;
+  }
+
+
+
+  return {
+    refreshShells, listSessions, listHistory, createSession, setInputOverride, renameSession,
+    stopSession, closeSession, restartSession, resizeSession, attachSession, savePreferences,
+    consumeAttachToken, revokeAttachReplay, attachSocket, detachSocket, detachClient, recordPong,
+    writeToSession
+  };
+}
+
+export type TerminalSessionManager = ReturnType<typeof createTerminalSessionManager>;
+
+function cancelTerminalTransport(record: SessionRecord) {
+  cancelStreamPumps(takeTerminalTransport(record));
+}
+
+function expireTerminalAttach(socket: NonNullable<SessionRecord["socket"]>, record: SessionRecord) {
+  socket.close(4001, "Terminal attach snapshot expired"); cancelTerminalTransport(record);
+}
+
+async function drainTerminalTransport(record: SessionRecord) {
+  return drainStreamPumps(takeTerminalTransport(record));
+}
+
+function takeTerminalTransport(record: SessionRecord) {
+  clearTerminalHeartbeat(record);
+  const pumps = record.pump ? [record.pump] : [];
+  clearTerminalTransportReferences(record);
+  return pumps;
+}
+
+function clearTerminalHeartbeat(record: SessionRecord) {
+  if (record.heartbeatTimer) clearInterval(record.heartbeatTimer);
+  record.heartbeatTimer = undefined;
+}
+
+function clearTerminalTransportReferences(record: SessionRecord) {
+  record.pump = undefined; record.socket = undefined; record.attachedClientId = undefined; record.lastPongAt = undefined;
+}
+
+function sendTerminalDataFrame(socket: SessionRecord["socket"], text: string) {
+  if (!socket) return false;
+  const payload = new TextEncoder().encode(text), frame = new Uint8Array(payload.length + 1);
+  frame[0] = TERMINAL_STREAM_DATA; frame.set(payload, 1);
+  return guardedWebsocketSend(socket, frame, { maxQueuedBytes: TERMINAL_SEND_QUEUE_CAP_BYTES });
+}
+
+function sendTerminalReadyFrame(socket: GuardedWebSocket | undefined) {
+  return !!socket && guardedWebsocketSend(socket, new Uint8Array([TERMINAL_ATTACH_READY]), { maxQueuedBytes: TERMINAL_SEND_QUEUE_CAP_BYTES });
+}
+
+function sendTerminalReplay(socket: GuardedWebSocket | undefined, text: string) {
+  if (!socket) return false;
+  for (const payload of splitUtf8(text, TERMINAL_REPLAY_FRAME_BYTES)) {
+    const frame = new Uint8Array(payload.byteLength + 1);
+    frame[0] = TERMINAL_STREAM_DATA; frame.set(payload, 1);
+    if (!guardedWebsocketSend(socket, frame, { maxQueuedBytes: TERMINAL_SEND_QUEUE_CAP_BYTES })) return false;
+  }
+  return sendTerminalReadyFrame(socket);
+}
+
+function* splitUtf8(text: string, maxBytes: number) {
+  const encoder = new TextEncoder(); let offset = 0;
+  while (offset < text.length) {
+    let low = offset + 1, high = Math.min(text.length, offset + maxBytes), end = low;
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2), boundary = isLowSurrogate(text.charCodeAt(middle)) ? middle - 1 : middle;
+      if (encoder.encode(text.slice(offset, boundary)).byteLength <= maxBytes) { end = boundary; low = middle + 1; } else high = middle - 1;
+    }
+    const payload = encoder.encode(text.slice(offset, end)); yield payload; offset = end;
   }
 }
+
+function isLowSurrogate(code: number) { return code >= 0xdc00 && code <= 0xdfff; }
 
 function getTerminalSessionSource(session: TerminalSession): TerminalSessionSource {
   return session.source ?? { kind: "user" };
@@ -735,7 +842,8 @@ async function readStreamChunk(reader: ReadableStreamDefaultReader<Uint8Array>) 
     return await reader.read();
   } catch (error) {
     if (isStreamReaderCancelledError(error)) {
-      return { done: true, value: undefined } as ReadableStreamReadDoneResult<Uint8Array>;
+      const done: { done: true; value: undefined } = { done: true, value: undefined };
+      return done;
     }
     throw error;
   }
@@ -798,5 +906,6 @@ function trimScrollback(input: string, lineLimit: number) {
 export const testExports = {
   consumePipe,
   decodeTerminalOutputChunk,
-  isStreamReaderCancelledError
+  isStreamReaderCancelledError,
+  sendTerminalReplay
 };

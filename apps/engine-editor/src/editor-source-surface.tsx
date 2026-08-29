@@ -4,7 +4,9 @@ import { createSignal, Show } from "solid-js";
 import { render } from "solid-js/web";
 
 export type EditorSourceSurface = {
-  load(file?: { path: string; source: string }): void;
+  load(file?: { path: string; source: string }): boolean;
+  path(): string;
+  dirty(): boolean;
   text(): string;
   save(): Promise<void>;
   dispose(): void;
@@ -52,6 +54,14 @@ export function mountEditorSourceSurface(options: {
 
   const load = (file?: { path: string; source: string }) => {
     const current = documentState();
+    const currentSnapshot = current?.getSnapshot();
+    if (currentSnapshot?.dirty && currentSnapshot.uri !== file?.path) {
+      const discard = globalThis.confirm?.(`Discard unsaved changes in ${currentSnapshot.uri}?`) === true;
+      if (!discard) {
+        options.status.textContent = `Unsaved changes in ${currentSnapshot.uri} · save before switching`;
+        return false;
+      }
+    }
     if (!file) {
       unsubscribe?.();
       unsubscribe = undefined;
@@ -60,12 +70,12 @@ export function mountEditorSourceSurface(options: {
       options.textarea.disabled = true;
       options.status.textContent = "Create a script to begin";
       options.lineCount.textContent = "0 lines";
-      return;
+      return true;
     }
     if (current?.getSnapshot().uri === file.path) {
       const snapshot = current.getSnapshot();
       if (!snapshot.dirty && snapshot.text !== file.source) current.reload(file.source);
-      return;
+      return true;
     }
     unsubscribe?.();
     const next = createEditorSourceSession({ path: file.path, source: file.source, save: (source) => options.save(file.path, source) });
@@ -76,10 +86,13 @@ export function mountEditorSourceSurface(options: {
       options.lineCount.textContent = `${snapshot.text.split("\n").length} lines`;
     });
     setDocumentState(next);
+    return true;
   };
 
   return {
     load,
+    path: () => documentState()?.getSnapshot().uri ?? "",
+    dirty: () => documentState()?.getSnapshot().dirty === true,
     text: () => documentState()?.getSnapshot().text ?? "",
     async save() { await documentState()?.save(); },
     dispose() {

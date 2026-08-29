@@ -59,7 +59,7 @@ describe("theme model", () => {
     for (const theme of BUILT_IN_THEMES) {
       for (const mode of ["light", "dark"] as const) {
         for (const [variable, value] of Object.entries(SEMANTIC_LABEL_TOKENS)) {
-          expect(theme[mode][variable as keyof typeof SEMANTIC_LABEL_TOKENS]).toBe(value);
+          expect(Reflect.get(theme[mode], variable)).toBe(value);
         }
       }
     }

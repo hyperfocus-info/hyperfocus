@@ -4,8 +4,8 @@ import {
   openHyperfocusProjectFiles,
   type HyperfocusAssetInput,
   type HyperfocusPortableAsset,
-} from "../../../engine/src/project/index.ts";
-import { migrateProject, type EditorProject } from "./project.ts";
+} from "@hyperfocus/engine/project";
+import { migrateProject, type EditorProject } from "@hyperfocus/engine/project";
 
 export type EditorPortableFiles = {
   projectJson: Uint8Array;
@@ -53,7 +53,7 @@ export async function openEditorPortableFiles(
   projectJson: Uint8Array | string,
   assetsArchive: Uint8Array,
 ) {
-  const opened = await openHyperfocusProjectFiles<unknown>(projectJson, assetsArchive, {
+  const opened = await openHyperfocusProjectFiles(projectJson, assetsArchive, {
     maxArchiveBytes: 1024 * 1024 * 1024,
     maxAssets: 5_000,
     maxUnpackedBytes: 1024 * 1024 * 1024,

@@ -9,27 +9,24 @@ import {
   createThreadId,
   type BackgroundJob,
   type BackgroundJobRun
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import {
-  DEFAULT_SHELL_TIMEOUT_SECONDS,
   executeBackgroundJobRun,
-  MAX_SHELL_TIMEOUT_SECONDS,
-  MIN_SHELL_TIMEOUT_SECONDS,
-  resolveShellTimeoutMs,
   startBackgroundRunLivenessHeartbeat
 } from "./background-job-executor";
+import { resolveHarnessTestTempRoot } from "./test-support/test-temp-root";
 import type { PiAgentAdapter, PiAgentExecutionController, PiAgentPromptRequest, PiAgentPromptResult } from "./pi-agent-adapter";
-import { WorkspaceRepository } from "./workspace-repository";
+import { createWorkspaceRepository, type WorkspaceRepository } from "./workspace-repository";
 
 function createTempDir() {
-  const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+  const tempRoot = resolveHarnessTestTempRoot();
   mkdirSync(tempRoot, { recursive: true });
   return tempRoot;
 }
 
 function createRepository() {
   const dbPath = path.join(createTempDir(), `background-job-executor-${crypto.randomUUID()}.sqlite`);
-  return new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+  return createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
 }
 
 function saveAssistant(repository: WorkspaceRepository, projectId: string) {
@@ -93,11 +90,10 @@ function createAssistantRoutineJob(projectId: string, assistantId: string, autom
   };
 }
 
-class QuestionAdapter implements PiAgentAdapter {
-  readonly calls: PiAgentPromptRequest[] = [];
-
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    this.calls.push(request);
+function createQuestionAdapter(): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const calls: PiAgentPromptRequest[] = [];
+  async function runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    calls.push(request);
     return {
       text: JSON.stringify({
         type: "question",
@@ -134,22 +130,17 @@ class QuestionAdapter implements PiAgentAdapter {
     };
   }
 
-  async startExecution(): Promise<PiAgentExecutionController> {
+  async function startExecution(): Promise<PiAgentExecutionController> {
     throw new Error("not used");
   }
 
-  setApiKey() {}
-
-  hasApiKey() {
-    return true;
-  }
+  return { calls, runPrompt, startExecution, setApiKey() {}, hasApiKey: () => true };
 }
 
-class ReadyRoutineAdapter implements PiAgentAdapter {
-  readonly calls: PiAgentPromptRequest[] = [];
-
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    this.calls.push(request);
+function createReadyRoutineAdapter(): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const calls: PiAgentPromptRequest[] = [];
+  async function runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    calls.push(request);
     if (request.kind === "planner") {
       return {
         text: JSON.stringify({
@@ -168,8 +159,8 @@ class ReadyRoutineAdapter implements PiAgentAdapter {
     return { text: "Routine done." };
   }
 
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    this.calls.push(request);
+  async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    calls.push(request);
     return {
       result: Promise.resolve({ text: "Routine done." }),
       continueWithPrompt: async () => ({ text: "Routine done." }),
@@ -178,38 +169,31 @@ class ReadyRoutineAdapter implements PiAgentAdapter {
     };
   }
 
-  setApiKey() {}
-
-  hasApiKey() {
-    return true;
-  }
+  return { calls, runPrompt, startExecution, setApiKey() {}, hasApiKey: () => true };
 }
 
-class TerminalDuringExecutionAdapter extends ReadyRoutineAdapter {
-  constructor(private readonly onExecution: () => void) {
-    super();
-  }
-
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    this.calls.push(request);
-    this.onExecution();
-    return {
+function createTerminalDuringExecutionAdapter(onExecution: () => void): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const adapter = createReadyRoutineAdapter();
+  return {
+    ...adapter,
+    async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+      adapter.calls.push(request);
+      onExecution();
+      return {
       result: Promise.resolve({ text: "Late success should not overwrite terminal run." }),
       continueWithPrompt: async () => ({ text: "Late success should not overwrite terminal run." }),
       abort: async () => {},
       dispose() {}
-    };
-  }
+      };
+    },
+  };
 }
 
-class TerminalBeforeSubagentCompleteAdapter implements PiAgentAdapter {
-  readonly calls: PiAgentPromptRequest[] = [];
-  private terminalTriggered = false;
-
-  constructor(private readonly onSubagentExecution: () => void) {}
-
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    this.calls.push(request);
+function createTerminalBeforeSubagentCompleteAdapter(onSubagentExecution: () => void): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const calls: PiAgentPromptRequest[] = [];
+  let terminalTriggered = false;
+  async function runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    calls.push(request);
     if (request.kind === "planner") {
       return {
         text: JSON.stringify({
@@ -264,18 +248,18 @@ class TerminalBeforeSubagentCompleteAdapter implements PiAgentAdapter {
       };
     }
     if (request.kind === "subagent") {
-      this.onSubagentExecution();
+      onSubagentExecution();
       return { text: "Late subagent success should not be persisted." };
     }
     return { text: "Late aggregate should not be persisted." };
   }
 
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    this.calls.push(request);
+  async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    calls.push(request);
     if (request.kind === "subagent") {
-      if (!this.terminalTriggered) {
-        this.terminalTriggered = true;
-        this.onSubagentExecution();
+      if (!terminalTriggered) {
+        terminalTriggered = true;
+        onSubagentExecution();
       }
       return {
         result: Promise.resolve({ text: "Late subagent success should not be persisted." }),
@@ -292,18 +276,13 @@ class TerminalBeforeSubagentCompleteAdapter implements PiAgentAdapter {
     };
   }
 
-  setApiKey() {}
-
-  hasApiKey() {
-    return true;
-  }
+  return { calls, runPrompt, startExecution, setApiKey() {}, hasApiKey: () => true };
 }
 
-class PartialSubagentRoutineAdapter implements PiAgentAdapter {
-  readonly calls: PiAgentPromptRequest[] = [];
-
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    this.calls.push(request);
+function createPartialSubagentRoutineAdapter(): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const calls: PiAgentPromptRequest[] = [];
+  async function runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    calls.push(request);
     if (request.kind === "planner") {
       return {
         text: JSON.stringify({
@@ -360,8 +339,8 @@ class PartialSubagentRoutineAdapter implements PiAgentAdapter {
     return { text: "Partial aggregate summary." };
   }
 
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    this.calls.push(request);
+  async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    calls.push(request);
     if (request.kind === "subagent") {
       return {
         result: Promise.reject(new Error("subagent failed")),
@@ -380,11 +359,7 @@ class PartialSubagentRoutineAdapter implements PiAgentAdapter {
     };
   }
 
-  setApiKey() {}
-
-  hasApiKey() {
-    return true;
-  }
+  return { calls, runPrompt, startExecution, setApiKey() {}, hasApiKey: () => true };
 }
 
 function plannerChoices(answerText: string = "Use existing guidance.") {
@@ -413,15 +388,14 @@ function plannerChoices(answerText: string = "Use existing guidance.") {
   ];
 }
 
-class AutoQuestionThenReadyAdapter implements PiAgentAdapter {
-  readonly calls: PiAgentPromptRequest[] = [];
-  private plannerCalls = 0;
-
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    this.calls.push(request);
+function createAutoQuestionThenReadyAdapter(): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const calls: PiAgentPromptRequest[] = [];
+  let plannerCalls = 0;
+  async function runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    calls.push(request);
     if (request.kind === "planner") {
-      this.plannerCalls += 1;
-      if (this.plannerCalls === 1) {
+      plannerCalls += 1;
+      if (plannerCalls === 1) {
         return {
           text: JSON.stringify({
             type: "question",
@@ -452,8 +426,8 @@ class AutoQuestionThenReadyAdapter implements PiAgentAdapter {
     return { text: "Routine done." };
   }
 
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    this.calls.push(request);
+  async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    calls.push(request);
     return {
       result: Promise.resolve({ text: "Routine done." }),
       continueWithPrompt: async () => ({ text: "Routine done." }),
@@ -462,16 +436,13 @@ class AutoQuestionThenReadyAdapter implements PiAgentAdapter {
     };
   }
 
-  setApiKey() {}
-
-  hasApiKey() {
-    return true;
-  }
+  return { calls, runPrompt, startExecution, setApiKey() {}, hasApiKey: () => true };
 }
 
-class RepeatingAutoQuestionAdapter extends AutoQuestionThenReadyAdapter {
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    this.calls.push(request);
+function createRepeatingAutoQuestionAdapter(): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const adapter = createAutoQuestionThenReadyAdapter();
+  return { ...adapter, async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    adapter.calls.push(request);
     if (request.kind === "planner") {
       return {
         text: JSON.stringify({
@@ -487,12 +458,13 @@ class RepeatingAutoQuestionAdapter extends AutoQuestionThenReadyAdapter {
       };
     }
     return { text: "Routine done." };
-  }
+  } };
 }
 
-class ScheduleQuestionAdapter extends AutoQuestionThenReadyAdapter {
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    this.calls.push(request);
+function createScheduleQuestionAdapter(): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const adapter = createAutoQuestionThenReadyAdapter();
+  return { ...adapter, async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    adapter.calls.push(request);
     if (request.kind === "planner") {
       return {
         text: JSON.stringify({
@@ -508,14 +480,13 @@ class ScheduleQuestionAdapter extends AutoQuestionThenReadyAdapter {
       };
     }
     return { text: "Routine done." };
-  }
+  } };
 }
 
-class DefaultNonBlockingQuestionAdapter implements PiAgentAdapter {
-  readonly calls: PiAgentPromptRequest[] = [];
-
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    this.calls.push(request);
+function createDefaultNonBlockingQuestionAdapter(): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
+  const calls: PiAgentPromptRequest[] = [];
+  async function runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    calls.push(request);
     if (request.kind === "planner") {
       return {
         text: JSON.stringify({
@@ -533,51 +504,12 @@ class DefaultNonBlockingQuestionAdapter implements PiAgentAdapter {
     return { text: "Routine done." };
   }
 
-  async startExecution(): Promise<PiAgentExecutionController> {
+  async function startExecution(): Promise<PiAgentExecutionController> {
     throw new Error("not used");
   }
 
-  setApiKey() {}
-
-  hasApiKey() {
-    return true;
-  }
+  return { calls, runPrompt, startExecution, setApiKey() {}, hasApiKey: () => true };
 }
-
-describe("resolveShellTimeoutMs", () => {
-  test("passes valid positive seconds through as milliseconds", () => {
-    expect(resolveShellTimeoutMs(30)).toBe(30 * 1000);
-    expect(resolveShellTimeoutMs(MAX_SHELL_TIMEOUT_SECONDS)).toBe(MAX_SHELL_TIMEOUT_SECONDS * 1000);
-  });
-
-  test("floors fractional seconds to whole seconds", () => {
-    expect(resolveShellTimeoutMs(1.7)).toBe(MIN_SHELL_TIMEOUT_SECONDS * 1000);
-    expect(resolveShellTimeoutMs(5.9)).toBe(5 * 1000);
-  });
-
-  test("clamps above-max values to the ceiling", () => {
-    expect(resolveShellTimeoutMs(MAX_SHELL_TIMEOUT_SECONDS + 10)).toBe(MAX_SHELL_TIMEOUT_SECONDS * 1000);
-  });
-
-  test("falls back to default on zero, negative, or NaN input", () => {
-    const fallback = DEFAULT_SHELL_TIMEOUT_SECONDS * 1000;
-    expect(resolveShellTimeoutMs(0)).toBe(fallback);
-    expect(resolveShellTimeoutMs(-1)).toBe(fallback);
-    expect(resolveShellTimeoutMs(Number.NaN)).toBe(fallback);
-    expect(resolveShellTimeoutMs(Number.POSITIVE_INFINITY)).toBe(fallback);
-  });
-
-  test("falls back to default on non-numeric input", () => {
-    const fallback = DEFAULT_SHELL_TIMEOUT_SECONDS * 1000;
-    expect(resolveShellTimeoutMs(undefined)).toBe(fallback);
-    expect(resolveShellTimeoutMs(null)).toBe(fallback);
-    expect(resolveShellTimeoutMs("not a number")).toBe(fallback);
-  });
-
-  test("accepts numeric strings as defense-in-depth against stale rows", () => {
-    expect(resolveShellTimeoutMs("45")).toBe(45 * 1000);
-  });
-});
 
 describe("executeBackgroundJobRun", () => {
   test("liveness heartbeat touches running main execution and stops after cleanup", async () => {
@@ -716,7 +648,7 @@ describe("executeBackgroundJobRun", () => {
 
     const result = await executeBackgroundJobRun({
       repository,
-      adapter: new QuestionAdapter(),
+      adapter: createQuestionAdapter(),
       agentId: "pi",
       job: savedJob,
       run,
@@ -753,7 +685,7 @@ describe("executeBackgroundJobRun", () => {
       riskLevel: savedJob.riskLevel,
       approvalStatus: "approved"
     });
-    const adapter = new AutoQuestionThenReadyAdapter();
+    const adapter = createAutoQuestionThenReadyAdapter();
 
     const result = await executeBackgroundJobRun({
       repository,
@@ -797,7 +729,7 @@ describe("executeBackgroundJobRun", () => {
       riskLevel: savedJob.riskLevel,
       approvalStatus: "approved"
     });
-    const adapter = new DefaultNonBlockingQuestionAdapter();
+    const adapter = createDefaultNonBlockingQuestionAdapter();
 
     const result = await executeBackgroundJobRun({
       repository,
@@ -849,7 +781,7 @@ describe("executeBackgroundJobRun", () => {
       riskLevel: savedJob.riskLevel,
       approvalStatus: "approved"
     });
-    const adapter = new ReadyRoutineAdapter();
+    const adapter = createReadyRoutineAdapter();
 
     await executeBackgroundJobRun({
       repository,
@@ -891,7 +823,7 @@ describe("executeBackgroundJobRun", () => {
 
     const result = await executeBackgroundJobRun({
       repository,
-      adapter: new ScheduleQuestionAdapter(),
+      adapter: createScheduleQuestionAdapter(),
       agentId: "pi",
       job: savedJob,
       run,
@@ -928,7 +860,7 @@ describe("executeBackgroundJobRun", () => {
 
     const result = await executeBackgroundJobRun({
       repository,
-      adapter: new RepeatingAutoQuestionAdapter(),
+      adapter: createRepeatingAutoQuestionAdapter(),
       agentId: "pi",
       job: savedJob,
       run,
@@ -990,7 +922,7 @@ describe("executeBackgroundJobRun", () => {
 
     const result = await executeBackgroundJobRun({
       repository,
-      adapter: new QuestionAdapter(),
+      adapter: createQuestionAdapter(),
       agentId: "pi",
       job: savedJob,
       run,
@@ -1058,7 +990,7 @@ describe("executeBackgroundJobRun", () => {
 
     await executeBackgroundJobRun({
       repository,
-      adapter: new QuestionAdapter(),
+      adapter: createQuestionAdapter(),
       agentId: "pi",
       job: savedJob,
       run,
@@ -1120,7 +1052,7 @@ describe("executeBackgroundJobRun", () => {
 
     const result = await executeBackgroundJobRun({
       repository,
-      adapter: new QuestionAdapter(),
+      adapter: createQuestionAdapter(),
       agentId: "pi",
       job: savedJob,
       run,
@@ -1160,7 +1092,7 @@ describe("executeBackgroundJobRun", () => {
       controllerLeaseId: "lease-1",
       controllerLeaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
     });
-    const adapter = new TerminalDuringExecutionAdapter(() => {
+    const adapter = createTerminalDuringExecutionAdapter(() => {
       const linkedRun = repository.getLatestThreadRun(project.id, savedJob.automationThreadId);
       expect(linkedRun).toBeDefined();
       repository.setAgentRunStatus(project.id, linkedRun!.id, "failed", "Background run interrupted before completion", "controller-lost");
@@ -1221,7 +1153,7 @@ describe("executeBackgroundJobRun", () => {
 
     const result = await executeBackgroundJobRun({
       repository,
-      adapter: new ReadyRoutineAdapter(),
+      adapter: createReadyRoutineAdapter(),
       agentId: "pi",
       job: savedJob,
       run,
@@ -1266,7 +1198,7 @@ describe("executeBackgroundJobRun", () => {
       controllerLeaseId: "lease-1",
       controllerLeaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
     });
-    const adapter = new TerminalBeforeSubagentCompleteAdapter(() => {
+    const adapter = createTerminalBeforeSubagentCompleteAdapter(() => {
       const linkedRun = repository.getLatestThreadRun(project.id, savedJob.automationThreadId);
       expect(linkedRun).toBeDefined();
       repository.setAgentRunStatus(project.id, linkedRun!.id, "failed", "Background run interrupted before completion", "controller-lost");
@@ -1325,7 +1257,7 @@ describe("executeBackgroundJobRun", () => {
 
     const result = await executeBackgroundJobRun({
       repository,
-      adapter: new PartialSubagentRoutineAdapter(),
+      adapter: createPartialSubagentRoutineAdapter(),
       agentId: "pi",
       job: savedJob,
       run,
@@ -1456,7 +1388,7 @@ describe("executeBackgroundJobRun", () => {
       riskLevel: savedJob.riskLevel,
       approvalStatus: "approved"
     });
-    const adapter = new ReadyRoutineAdapter();
+    const adapter = createReadyRoutineAdapter();
 
     await executeBackgroundJobRun({
       repository,
@@ -1534,7 +1466,7 @@ describe("executeBackgroundJobRun", () => {
       riskLevel: savedJob.riskLevel,
       approvalStatus: "approved"
     });
-    const adapter = new ReadyRoutineAdapter();
+    const adapter = createReadyRoutineAdapter();
 
     await executeBackgroundJobRun({
       repository,

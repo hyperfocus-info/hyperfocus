@@ -6,7 +6,7 @@ import type {
   StreamingTailPhase,
   StreamingTailSegment,
   ThreadId
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 
 export const WINDOW_IDLE_CLOSE_MS = 5000;
 const UPDATE_COALESCE_MS = 100;
@@ -73,25 +73,25 @@ export type RunMilestoneWindowStore = {
   emitUpdated(input: { projectId: ProjectId; threadId: ThreadId; message: ChatMessage; state: ChatSessionState }): void;
 };
 
-export class RunMilestoneWindowManager {
-  private readonly windows = new Map<WindowKey, MilestoneWindow>();
+export type RunMilestoneWindowManager = ReturnType<typeof createRunMilestoneWindowManager>;
 
-  constructor(private readonly store: RunMilestoneWindowStore) {}
+export function createRunMilestoneWindowManager(store: RunMilestoneWindowStore) {
+  const windows = new Map<WindowKey, MilestoneWindow>();
 
-  record(input: { projectId: ProjectId; threadId: ThreadId; runId: string; line: string }) {
+  function record(input: { projectId: ProjectId; threadId: ThreadId; runId: string; line: string }) {
     const lines = splitMilestoneInput(input.line);
     if (lines.length === 0) {
       return;
     }
 
     const key = createWindowKey(input.projectId, input.threadId, input.runId);
-    const existing = this.windows.get(key);
+    const existing = windows.get(key);
     if (existing && !existing.closed) {
       existing.lines.push(...lines);
       existing.updatedAt = new Date().toISOString();
       clearTimeout(existing.closeTimer);
-      existing.closeTimer = setTimeout(() => this.closeWindow(key), WINDOW_IDLE_CLOSE_MS);
-      this.scheduleFlush(existing);
+      existing.closeTimer = setTimeout(() => closeWindow(key), WINDOW_IDLE_CLOSE_MS);
+      scheduleFlush(existing);
       return;
     }
 
@@ -106,13 +106,13 @@ export class RunMilestoneWindowManager {
       lineCount: lines.length,
       lines
     };
-    const appended = this.store.append({
+    const appended = store.append({
       projectId: input.projectId,
       threadId: input.threadId,
       content: renderMilestoneLines(lines),
       metadata
     });
-    this.store.emitAppended({
+    store.emitAppended({
       projectId: input.projectId,
       threadId: input.threadId,
       message: appended.message,
@@ -129,18 +129,18 @@ export class RunMilestoneWindowManager {
       lines,
       startedAt: now,
       updatedAt: now,
-      closeTimer: setTimeout(() => this.closeWindow(key), WINDOW_IDLE_CLOSE_MS),
+      closeTimer: setTimeout(() => closeWindow(key), WINDOW_IDLE_CLOSE_MS),
       pendingFlush: false,
       closed: false
     };
-    this.windows.set(key, window);
+    windows.set(key, window);
   }
 
-  closeRun(projectId: ProjectId, threadId: ThreadId, runId: string) {
-    this.closeWindow(createWindowKey(projectId, threadId, runId));
+  function closeRun(projectId: ProjectId, threadId: ThreadId, runId: string) {
+    closeWindow(createWindowKey(projectId, threadId, runId));
   }
 
-  private scheduleFlush(window: MilestoneWindow) {
+  function scheduleFlush(window: MilestoneWindow) {
     window.pendingFlush = true;
     if (window.flushTimer) {
       return;
@@ -153,12 +153,12 @@ export class RunMilestoneWindowManager {
       }
 
       window.pendingFlush = false;
-      this.flushWindow(window, "open");
+      flushWindow(window, "open");
     }, UPDATE_COALESCE_MS);
   }
 
-  private closeWindow(key: WindowKey) {
-    const window = this.windows.get(key);
+  function closeWindow(key: WindowKey) {
+    const window = windows.get(key);
     if (!window || window.closed) {
       return;
     }
@@ -169,11 +169,11 @@ export class RunMilestoneWindowManager {
       window.flushTimer = undefined;
     }
     clearTimeout(window.closeTimer);
-    this.flushWindow(window, "closed");
-    this.windows.delete(key);
+    flushWindow(window, "closed");
+    windows.delete(key);
   }
 
-  private flushWindow(window: MilestoneWindow, status: "open" | "closed") {
+  function flushWindow(window: MilestoneWindow, status: "open" | "closed") {
     const metadata: RunMilestonesMessageMetadata = {
       type: "run-milestones",
       runId: window.runId,
@@ -187,30 +187,32 @@ export class RunMilestoneWindowManager {
       truncatedLineCount: aggregateMilestoneLines(window.lines).filter((entry) => entry.line.length > MAX_RENDERED_LINE_LENGTH).length,
       lines: aggregateMilestoneLines(window.lines).map((entry) => entry.line).slice(0, 64)
     };
-    const updated = this.store.update({
+    const updated = store.update({
       projectId: window.projectId,
       threadId: window.threadId,
       messageId: window.messageId,
       content: renderMilestoneLines(window.lines),
       metadata
     });
-    this.store.emitUpdated({
+    store.emitUpdated({
       projectId: window.projectId,
       threadId: window.threadId,
       message: updated.message,
       state: updated.state
     });
   }
+
+  return { record, closeRun };
 }
 
-export class RunTranscriptDraft {
-  private readonly phases = new Map<RunMilestonePhase, PhaseDraft>();
-  private assistantText = "";
-  private lastAcceptedAt = Date.now();
+export type RunTranscriptDraft = ReturnType<typeof createRunTranscriptDraft>;
 
-  constructor(private readonly input: { runId: string }) {}
+export function createRunTranscriptDraft(input: { runId: string }) {
+  const phases = new Map<RunMilestonePhase, PhaseDraft>();
+  let assistantText = "";
+  let lastAcceptedAt = Date.now();
 
-  recordMilestone(line: string, phase: RunMilestonePhase) {
+  function recordMilestone(line: string, phase: RunMilestonePhase) {
     let accepted = false;
     for (const candidate of splitMilestoneInput(line)) {
       const classification = classifyMilestoneLine(candidate);
@@ -218,63 +220,63 @@ export class RunTranscriptDraft {
         continue;
       }
 
-      const draft = this.getPhaseDraft(phase);
+      const draft = getPhaseDraft(phase);
       if (classification === "fallback") {
         draft.heldFallback = candidate;
         continue;
       }
 
-      this.addLine(draft, candidate);
+      addLine(draft, candidate);
       accepted = true;
     }
 
     return accepted;
   }
 
-  recordDerivedMilestone(line: string, phase: RunMilestonePhase) {
+  function recordDerivedMilestone(line: string, phase: RunMilestonePhase) {
     const normalized = normalizeMilestoneLine(line);
     if (!normalized) {
       return false;
     }
 
-    this.addLine(this.getPhaseDraft(phase), normalized);
+    addLine(getPhaseDraft(phase), normalized);
     return true;
   }
 
-  emitHeldFallback(phase: RunMilestonePhase) {
-    const draft = this.getPhaseDraft(phase);
+  function emitHeldFallback(phase: RunMilestonePhase) {
+    const draft = getPhaseDraft(phase);
     if (!draft.heldFallback || draft.fallbackEmitted) {
       return false;
     }
 
-    this.addLine(draft, draft.heldFallback);
+    addLine(draft, draft.heldFallback);
     draft.fallbackEmitted = true;
     return true;
   }
 
-  appendAssistantDelta(delta: string) {
+  function appendAssistantDelta(delta: string) {
     if (!delta) {
       return;
     }
 
-    this.assistantText += delta;
+    assistantText += delta;
   }
 
-  getLastAcceptedAt() {
-    return this.lastAcceptedAt;
+  function getLastAcceptedAt() {
+    return lastAcceptedAt;
   }
 
-  getSegments(): StreamingTailSegment[] {
+  function getSegments(): StreamingTailSegment[] {
     const now = new Date().toISOString();
     const phaseSegments = PHASE_ORDER.flatMap((phase) => {
-      const draft = this.phases.get(phase);
+      const draft = phases.get(phase);
       if (!draft || draft.lines.length === 0) {
         return [];
       }
 
       return [
         {
-          id: `${this.input.runId}:${phase}`,
+          id: `${input.runId}:${phase}`,
           kind: "status" as const,
           phase,
           content: renderPhaseContent(phase, draft.lines),
@@ -283,12 +285,12 @@ export class RunTranscriptDraft {
       ];
     });
 
-    const assistant = this.assistantText.trim()
+    const assistant = assistantText.trim()
       ? [
           {
-            id: `${this.input.runId}:assistant`,
+            id: `${input.runId}:assistant`,
             kind: "assistant" as const,
-            content: this.assistantText,
+            content: assistantText,
             updatedAt: now
           }
         ]
@@ -297,10 +299,10 @@ export class RunTranscriptDraft {
     return [...phaseSegments, ...assistant];
   }
 
-  finalizeMilestoneMessages(): FinalizedRunMilestoneMessage[] {
+  function finalizeMilestoneMessages(): FinalizedRunMilestoneMessage[] {
     const now = new Date().toISOString();
     return PHASE_ORDER.flatMap((phase) => {
-      const draft = this.phases.get(phase);
+      const draft = phases.get(phase);
       if (!draft || draft.lines.length === 0) {
         return [];
       }
@@ -311,8 +313,8 @@ export class RunTranscriptDraft {
           content: renderPhaseContent(phase, draft.lines),
           metadata: {
             type: "run-milestones" as const,
-            runId: this.input.runId,
-            windowId: `${this.input.runId}:${phase}`,
+            runId: input.runId,
+            windowId: `${input.runId}:${phase}`,
             status: "closed" as const,
             phase,
             phaseTitle: PHASE_TITLES[phase],
@@ -329,8 +331,8 @@ export class RunTranscriptDraft {
     });
   }
 
-  private getPhaseDraft(phase: RunMilestonePhase) {
-    const existing = this.phases.get(phase);
+  function getPhaseDraft(phase: RunMilestonePhase) {
+    const existing = phases.get(phase);
     if (existing) {
       return existing;
     }
@@ -340,17 +342,27 @@ export class RunTranscriptDraft {
       lines: [],
       fallbackEmitted: false
     };
-    this.phases.set(phase, draft);
+    phases.set(phase, draft);
     return draft;
   }
 
-  private addLine(draft: PhaseDraft, line: string) {
+  function addLine(draft: PhaseDraft, line: string) {
     const now = new Date().toISOString();
     draft.startedAt ??= now;
     draft.updatedAt = now;
     draft.lines.push(line);
-    this.lastAcceptedAt = Date.now();
+    lastAcceptedAt = Date.now();
   }
+
+  return {
+    recordMilestone,
+    recordDerivedMilestone,
+    emitHeldFallback,
+    appendAssistantDelta,
+    getLastAcceptedAt,
+    getSegments,
+    finalizeMilestoneMessages,
+  };
 }
 
 export function normalizeMilestoneLine(input: string) {

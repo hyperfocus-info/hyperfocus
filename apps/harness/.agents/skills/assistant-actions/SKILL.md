@@ -56,6 +56,7 @@ Dry-run first. Use `--execute` only after matched assistants/jobs are correct.
 ## Companion Workflows
 
 - Use `db-data-harnessing` when the task is mainly SQLite/thread persistence investigation instead of a normal assistant action.
-- Use `update-harness` when the requested assistant action needs harness command, protocol, scheduler, or UI changes.
-- Use `screenshot-ui` only when validating the Assistants or Jobs surfaces visually.
-- Use `branchfs` only for isolated experiments; normal assistant action maintenance should operate on the real harness DB after dry-run confirmation.
+- Use `screenshot` when validating the Assistants or Jobs surfaces visually.
+- Normal assistant maintenance operates on the real harness database after dry-run
+  confirmation. Product source changes belong in a Hyperfocus source checkout, not
+  in an opened user project.

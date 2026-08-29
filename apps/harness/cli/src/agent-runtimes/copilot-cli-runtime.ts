@@ -1,7 +1,7 @@
-import type { AgentRuntimeCapability, ProviderBrand } from "../../../shared/protocol";
+import type { AgentRuntimeCapability, ProviderBrand } from "@hyperfocus/ai-core/protocol";
 import type { PiAgentPromptRequest } from "../pi-agent-adapter";
 import type { AgentRuntime } from "./agent-runtime";
-import { CliAgentAdapter } from "./cli-agent-adapter";
+import { createCliAgentAdapter } from "./cli-agent-adapter";
 import {
   buildCliCapability,
   discoverCopilotModels,
@@ -10,36 +10,35 @@ import {
   probeInteractivePipeCompatibility,
   shouldSkipExpensiveCliProbes
 } from "./cli-health";
-import { CliProcessManager } from "./cli-process-manager";
+import { createCliProcessManager } from "./cli-process-manager";
 import { resolveSubagentModelId } from "../subagent-defaults";
 
 const DEFAULT_MODEL_ID = "openai/gpt-5.4";
 
-export class CopilotCliRuntime implements AgentRuntime {
-  readonly id = "copilot-cli" as const;
-  readonly label = "GitHub Copilot CLI";
-
-  private readonly processManager = new CliProcessManager();
-  private readonly adapter = new CliAgentAdapter({
-    label: this.label,
+export function createCopilotCliRuntime(): AgentRuntime {
+  const id: "copilot-cli" = "copilot-cli";
+  const label = "GitHub Copilot CLI";
+  const processManager = createCliProcessManager();
+  const adapter = createCliAgentAdapter({
+    label,
     buildCommand: ({ request, prompt }) => buildCopilotProgrammaticCommand(request, prompt)
   });
-  private capability: AgentRuntimeCapability | undefined;
+  let capability: AgentRuntimeCapability | undefined;
 
-  getAdapter() {
-    return this.adapter;
+  function getAdapter() {
+    return adapter;
   }
 
-  getCapability() {
-    return this.capability;
+  function getCapability() {
+    return capability;
   }
 
-  async refreshCapability() {
-    const version = await probeCliVersion(this.processManager, "copilot");
+  async function refreshCapability() {
+    const version = await probeCliVersion(processManager, "copilot");
     if (!version) {
-      this.capability = buildCliCapability({
-        agentId: this.id,
-        label: this.label,
+      capability = buildCliCapability({
+        agentId: id,
+        label,
         installed: false,
         authenticated: false,
         supportsInteractive: false,
@@ -52,22 +51,22 @@ export class CopilotCliRuntime implements AgentRuntime {
         installCommand: "winget install GitHub.cli && gh extension install github/gh-copilot",
         docsUrl: "https://docs.github.com/en/copilot/github-copilot-in-the-cli"
       });
-      return this.capability;
+      return capability;
     }
 
     const skipExpensiveProbes = shouldSkipExpensiveCliProbes();
     const [authenticated, interactivePipeCompatible, discovery] = await Promise.all([
-      skipExpensiveProbes ? Promise.resolve(false) : probeCopilotAuth(this.processManager),
-      probeInteractivePipeCompatibility(this.processManager, {
+      skipExpensiveProbes ? Promise.resolve(false) : probeCopilotAuth(processManager),
+      probeInteractivePipeCompatibility(processManager, {
         executable: "copilot",
         helpArgs: ["help"]
       }),
-      discoverCopilotModels(this.processManager)
+      discoverCopilotModels(processManager)
     ]);
 
-    this.capability = buildCliCapability({
-      agentId: this.id,
-      label: this.label,
+    capability = buildCliCapability({
+      agentId: id,
+      label,
       installed: true,
       authenticated,
       version,
@@ -86,31 +85,33 @@ export class CopilotCliRuntime implements AgentRuntime {
       modelDiscoveryConfidence: discovery.modelDiscoveryConfidence
     });
 
-    return this.capability;
+    return capability;
   }
 
-  getDefaultPlanningModelId(_providerBrand: ProviderBrand) {
+  function getDefaultPlanningModelId(_providerBrand: ProviderBrand) {
     return DEFAULT_MODEL_ID;
   }
 
-  getDefaultExecutionModelId(_providerBrand: ProviderBrand) {
+  function getDefaultExecutionModelId(_providerBrand: ProviderBrand) {
     return DEFAULT_MODEL_ID;
   }
 
-  getDefaultSubagentModelId(providerBrand: ProviderBrand, executionModelId?: string) {
+  function getDefaultSubagentModelId(providerBrand: ProviderBrand, executionModelId?: string) {
     return resolveSubagentModelId({
-      agentId: this.id,
+      agentId: id,
       providerBrand,
       executionModelId
     });
   }
 
-  buildInteractiveLaunch(input: { cwd: string; cols: number; rows: number; prompt?: string }) {
+  function buildInteractiveLaunch(input: { cwd: string; cols: number; rows: number; prompt?: string }) {
     return {
       cmd: ["copilot", ...(input.prompt ? ["-i", input.prompt] : [])],
       env: {}
     };
   }
+
+  return { id, label, getAdapter, getCapability, refreshCapability, getDefaultPlanningModelId, getDefaultExecutionModelId, getDefaultSubagentModelId, buildInteractiveLaunch };
 }
 
 function buildCopilotProgrammaticCommand(request: PiAgentPromptRequest, prompt: string) {

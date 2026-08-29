@@ -13,7 +13,7 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["cli/**/*.ts", "ui/**/*.ts", "ui/**/*.tsx", "shared/**/*.ts", "scripts/**/*.ts", "../../packages/ai-core/**/*.ts"],
+  "include": ["cli/**/*.ts", "ui/**/*.ts", "ui/**/*.tsx", "scripts/**/*.ts", "../../packages/ai-core/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
 

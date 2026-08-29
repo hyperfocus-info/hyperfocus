@@ -26,6 +26,35 @@ type ButtonGroupProps = {
   collapseBelowWidth?: number | string;
 };
 
+const styles = stylex.create({
+  root: { gap: "0.125rem", display: "flex", flexShrink: 0, },
+  popoverContent: { padding: "0.375rem", width: "11rem" },
+  menu: { gap: "0.25rem", display: "flex", flexDirection: "column", fontSize: "0.675rem", },
+  menuItem: {
+    borderRadius: "0.5rem",
+    borderWidth: 0,
+    gap: "0.5rem",
+    paddingInline: "0.5rem",
+    alignItems: "center",
+    backgroundColor: { default: "transparent", ":hover": "rgb(0 0 0 / 0.05)" },
+    color: "var(--foreground)",
+    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    display: "flex",
+    fontWeight: 600,
+    opacity: { default: 1, ":disabled": 0.45 },
+    textAlign: "left",
+    transitionDuration: "150ms",
+    transitionProperty: "background-color, color",
+    minHeight: "2rem",
+    width: "100%",
+  },
+  itemIcon: { alignItems: "center", display: "flex", justifyContent: "center", height: "1rem", width: "1rem", },
+  itemLabel: { flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, },
+  compactButton: { borderRadius: "0.5rem", height: "1.5rem", width: "1.5rem" },
+  menuIcon: { height: "0.75rem", width: "0.75rem" },
+  tooltipTrigger: { display: "block" }
+});
+
 export function ButtonGroup(props: ButtonGroupProps) {
   const [collapsed, setCollapsed] = createSignal(false);
   const [open, setOpen] = createSignal(false);
@@ -127,34 +156,6 @@ export function ButtonGroup(props: ButtonGroupProps) {
   );
 }
 
-const styles = stylex.create({
-  root: { display: "flex", flexShrink: 0, gap: "0.125rem" },
-  popoverContent: { padding: "0.375rem", width: "11rem" },
-  menu: { display: "flex", flexDirection: "column", fontSize: "0.675rem", gap: "0.25rem" },
-  menuItem: {
-    alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": "rgb(0 0 0 / 0.05)" },
-    borderWidth: 0,
-    borderRadius: "0.5rem",
-    color: "var(--foreground)",
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
-    display: "flex",
-    fontWeight: 600,
-    gap: "0.5rem",
-    minHeight: "2rem",
-    paddingInline: "0.5rem",
-    textAlign: "left",
-    transitionProperty: "background-color, color",
-    opacity: { default: 1, ":disabled": 0.45 },
-    transitionDuration: "150ms",
-    width: "100%"
-  },
-  itemIcon: { alignItems: "center", display: "flex", height: "1rem", justifyContent: "center", width: "1rem" },
-  itemLabel: { flex: "1", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  compactButton: { borderRadius: "0.5rem", height: "1.5rem", width: "1.5rem" },
-  menuIcon: { height: "0.75rem", width: "0.75rem" },
-  tooltipTrigger: { display: "block" }
-});
 
 function resolveCollapseWidth(width: number | string | undefined) {
   if (typeof width === "number") {

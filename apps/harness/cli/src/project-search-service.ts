@@ -1,7 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ProjectSearchResult } from "../../shared/protocol";
+import type { ProjectSearchResult } from "@hyperfocus/ai-core/protocol";
 
 const DIRECTORY_CACHE_TTL_MS = 30_000;
 const MAX_RESULTS = 8;

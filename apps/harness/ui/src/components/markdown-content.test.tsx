@@ -1,7 +1,7 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireInput } from "../utils/tests/test-harness";
 import { clearBrowserStateForTests } from "../utils/tests/store-test-utils";
 import { toastStore } from "../toast-store";
 import { MarkdownContent } from "./markdown-content";
@@ -48,7 +48,7 @@ Footnote here.[^1]
     expect(
       document.querySelector("[data-test-markdown-table-scroll]"),
     ).not.toBeNull();
-    const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
+    const checkbox = requireInput(screen.getByRole("checkbox"));
     expect(checkbox.checked).toBe(true);
     expect(checkbox.closest("[data-task-list-item]")).not.toBeNull();
     expect(

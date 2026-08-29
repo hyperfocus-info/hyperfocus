@@ -3,15 +3,26 @@ import {
   getChildObject,
   getChildObjects,
   getNodeText,
+  enforceExtractedTextBudget,
   normalizeExtractedText,
   parseXmlDocument,
   readOfficeZipEntries,
-  resolveZipPath
+  resolveZipPath,
+  type XmlNode
 } from "./extract-office-zip";
-import type { DocumentExtractionResult } from "./types";
+import type { DocumentExtractionOptions, DocumentExtractionResult } from "./types";
 
-export async function extractXlsxText(input: ArrayBuffer | Uint8Array | Buffer): Promise<DocumentExtractionResult> {
-  const entries = await readOfficeZipEntries(input);
+export async function extractXlsxText(
+  input: ArrayBuffer | Uint8Array | Buffer,
+  options: DocumentExtractionOptions = {}
+): Promise<DocumentExtractionResult> {
+  const entries = await readOfficeZipEntries(input, {
+    ...options,
+    includeEntry: (path) => path === "xl/workbook.xml"
+      || path === "xl/_rels/workbook.xml.rels"
+      || path === "xl/sharedStrings.xml"
+      || path.startsWith("xl/worksheets/")
+  });
   const workbookXml = entries.get("xl/workbook.xml");
   const workbookRelsXml = entries.get("xl/_rels/workbook.xml.rels");
   if (!workbookXml || !workbookRelsXml) {
@@ -62,7 +73,7 @@ export async function extractXlsxText(input: ArrayBuffer | Uint8Array | Buffer):
     })
     .filter((value): value is string => Boolean(value));
 
-  const text = normalizeExtractedText(sheetBlocks.join("\n\n"));
+  const text = enforceExtractedTextBudget(normalizeExtractedText(sheetBlocks.join("\n\n")), options);
   if (!text) {
     return {
       status: "no-text",
@@ -78,7 +89,8 @@ export async function extractXlsxText(input: ArrayBuffer | Uint8Array | Buffer):
 
 function parseSharedStrings(sharedStringsXml: Buffer | undefined) {
   if (!sharedStringsXml) {
-    return [] as string[];
+    const empty: string[] = [];
+    return empty;
   }
 
   const sharedStrings = getChildObject(parseXmlDocument(sharedStringsXml), "sst");
@@ -96,7 +108,8 @@ function parseWorksheetRows(sheetXml: Buffer, sharedStrings: string[]) {
   const worksheet = getChildObject(parseXmlDocument(sheetXml), "worksheet");
   const sheetData = getChildObject(worksheet, "sheetData");
   if (!sheetData) {
-    return [] as string[];
+    const empty: string[] = [];
+    return empty;
   }
 
   return getChildObjects(sheetData, "row")
@@ -120,9 +133,9 @@ function parseWorksheetRows(sheetXml: Buffer, sharedStrings: string[]) {
     .filter((row) => row.length > 0);
 }
 
-function resolveCellValue(cell: Record<string, unknown>, cellType: string | undefined, sharedStrings: string[]) {
+function resolveCellValue(cell: XmlNode, cellType: string | undefined, sharedStrings: string[]) {
   if (cellType === "inlineStr") {
-    return getNodeText((cell["is"] as Record<string, unknown> | undefined) ?? "").trim();
+    return getNodeText(getChildObject(cell, "is") ?? "").trim();
   }
 
   if (cellType === "s") {

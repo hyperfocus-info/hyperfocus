@@ -1,7 +1,8 @@
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
-import { BoundedOutputBuffer } from "../cli/src/bounded-output-buffer";
-import { BranchfsManager, type BranchfsExperimentLease } from "../cli/src/branchfs-manager";
+import { spawn as spawnNodeProcess } from "node:child_process";
+import { createBoundedOutputBuffer } from "../cli/src/bounded-output-buffer";
+import { createBranchfsManager, type BranchfsExperimentLease } from "../cli/src/branchfs-manager";
 
 export type Viewport = {
   name: string;
@@ -234,8 +235,8 @@ async function startDevServerInMount(mountPath: string): Promise<DevServerHandle
   });
 
   const decoder = new TextDecoder();
-  const stdoutBuffer = new BoundedOutputBuffer(SCREENSHOT_SERVER_OUTPUT_CAP_BYTES);
-  const stderrBuffer = new BoundedOutputBuffer(SCREENSHOT_SERVER_OUTPUT_CAP_BYTES);
+  const stdoutBuffer = createBoundedOutputBuffer(SCREENSHOT_SERVER_OUTPUT_CAP_BYTES);
+  const stderrBuffer = createBoundedOutputBuffer(SCREENSHOT_SERVER_OUTPUT_CAP_BYTES);
 
   const drainStderr = async () => {
     if (!proc.stderr) {
@@ -289,8 +290,28 @@ async function startDevServerInMount(mountPath: string): Promise<DevServerHandle
   });
 
   const stop = async () => {
-    proc.kill();
-    await proc.exited.catch(() => undefined);
+    if (process.platform === "win32" && proc.pid) {
+      const killer = spawnNodeProcess("taskkill", ["/PID", String(proc.pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true
+      });
+      await new Promise<number | null>((resolve, reject) => {
+        killer.once("error", reject);
+        killer.once("exit", resolve);
+      });
+    } else {
+      proc.kill();
+    }
+    const exited = await Promise.race([
+      proc.exited.then(() => true, () => true),
+      Bun.sleep(5_000).then(() => false)
+    ]);
+    if (!exited) {
+      proc.kill();
+      if (!(await Promise.race([proc.exited.then(() => true, () => true), Bun.sleep(2_000).then(() => false)]))) {
+        throw new Error(`Screenshot server process tree ${proc.pid} did not exit`);
+      }
+    }
   };
 
   return { baseUrl, stop };
@@ -325,12 +346,27 @@ async function runScreenshotRunner(runnerName: string, baseUrl: string, opts: Sc
     throw new Error(`${runnerName} failed with exit ${exitCode}.\n${stderr || stdout}`);
   }
   try {
-    const parsed = JSON.parse(stdout.trim()) as { artifacts: ScreenshotArtifact[] };
-    return parsed.artifacts;
+    return parseScreenshotRunnerOutput(JSON.parse(stdout.trim()));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`${runnerName} returned invalid JSON: ${detail}\n${stdout}\n${stderr}`);
   }
+}
+
+function parseScreenshotRunnerOutput(value: unknown): ScreenshotArtifact[] {
+  if (!isRecord(value) || !Array.isArray(value.artifacts) || !value.artifacts.every(isScreenshotArtifact)) {
+    throw new TypeError("Screenshot runner output is malformed");
+  }
+  return value.artifacts;
+}
+
+function isScreenshotArtifact(value: unknown): value is ScreenshotArtifact {
+  return isRecord(value) && typeof value.route === "string" && typeof value.viewport === "string" &&
+    typeof value.width === "number" && typeof value.height === "number" && typeof value.path === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 async function capturePagesWithCdp(baseUrl: string, opts: ScreenshotOptions) {
@@ -344,7 +380,7 @@ async function capturePagesWithCdp(baseUrl: string, opts: ScreenshotOptions) {
 }
 
 function createRealManager(rootPath: string, runId: string): BranchfsLike {
-  const manager = new BranchfsManager({ rootPath, runId });
+  const manager = createBranchfsManager({ rootPath, runId });
   let currentLease: BranchfsExperimentLease | undefined;
   return {
     prepareExperimentLease: async () => {

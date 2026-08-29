@@ -3,7 +3,7 @@
 ## 2026-05-06 Durable Refresh
 
 Source set:
-- [Todo research notes](../../docs/research/todo-research-notes.md)
+- [TODO research notes](../../../../docs/harness/research/todo-research-notes.md)
 - [Current queue](../../todo.md)
 - [OpenAI models docs](https://platform.openai.com/docs/models)
 - [OpenAI Responses API docs](https://platform.openai.com/docs/api-reference/responses/tutorials-and-guides)

@@ -1,8 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import type { ExecutionToolActivity } from "../../shared/protocol";
+import type { ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
 import { recordToolEnd, recordToolStart, recordToolUpdate } from "./tool-activity-state";
 
 describe("tool activity raw details", () => {
+  test("does not create an ambiguous duplicate tool call across owners", () => {
+    const event = { type: "tool-start" as const, toolCallId: "shared", toolName: "shell", args: { command: "echo hi" } };
+    const first = recordToolStart([], { runId: "run-1", owner: "main", event });
+    const duplicate = recordToolStart(first, { runId: "run-1", owner: "subagent", subagentId: "subagent", event });
+    expect(duplicate).toBe(first); expect(duplicate).toHaveLength(1);
+    const updated = recordToolUpdate(duplicate, { runId: "run-1", owner: "subagent", subagentId: "subagent",
+      event: { type: "tool-update", toolCallId: "shared", toolName: "shell", args: undefined,
+        partialResult: { stdout: "foreign" } } });
+    const ended = recordToolEnd(updated, { runId: "run-1", owner: "subagent", subagentId: "subagent",
+      event: { type: "tool-end", toolCallId: "shared", toolName: "shell", result: { stdout: "foreign-final" }, isError: false } });
+    expect(updated).toBe(first); expect(ended).toBe(first);
+    expect(ended[0]).toMatchObject({ owner: "main", status: "running", rawArgsJson: '{"command":"echo hi"}' });
+    expect(ended[0]?.rawResultJson).toBeUndefined();
+    const wrongTool = recordToolEnd(first, { runId: "run-1", owner: "main",
+      event: { type: "tool-end", toolCallId: "shared", toolName: "different", result: "foreign", isError: false } });
+    expect(wrongTool).toBe(first);
+  });
+
   test("stores bounded raw args and keeps previews", () => {
     const activities = recordToolStart([], {
       runId: "run-1",
@@ -47,6 +65,20 @@ describe("tool activity raw details", () => {
     expect(ended[0]?.rawResultJson).toBe('{"exitCode":0,"stdout":"final"}');
     expect(ended[0]?.rawResultStatus).toBe("final");
     expect(ended[0]?.stdoutPreview).toBe("final");
+  });
+
+  test("keeps terminal tool evidence authoritative over late events", () => {
+    const identity = { runId: "run-1", owner: "main" as const };
+    const started = recordToolStart([], { ...identity,
+      event: { type: "tool-start", toolCallId: "terminal", toolName: "shell", args: { command: "ok" } } });
+    const ended = recordToolEnd(started, { ...identity, event: { type: "tool-end", toolCallId: "terminal",
+      toolName: "shell", result: { stdout: "authoritative" }, isError: false } });
+    const lateUpdate = recordToolUpdate(ended, { ...identity, event: { type: "tool-update", toolCallId: "terminal",
+      toolName: "shell", args: undefined, partialResult: { stdout: "stale" } } });
+    const conflictingEnd = recordToolEnd(ended, { ...identity, event: { type: "tool-end", toolCallId: "terminal",
+      toolName: "shell", result: { stderr: "stale failure" }, isError: true } });
+    expect(lateUpdate).toBe(ended); expect(conflictingEnd).toBe(ended);
+    expect(ended[0]).toMatchObject({ status: "completed", rawResultStatus: "final", outputPreview: "authoritative" });
   });
 
   test("redacts sensitive raw args and results before persistence", () => {

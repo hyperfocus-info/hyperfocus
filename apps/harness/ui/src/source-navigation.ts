@@ -1,5 +1,5 @@
-import type { AgentRunState, AssistantLogEntry, BackgroundJobRun, NotificationInboxItem } from "../../shared/protocol";
-import { openBackgroundJobInJobsPane, openBackgroundRunInJobsPane } from "./background-run-navigation";
+import { createRequestId, type AgentRunState, type AssistantLogEntry, type BackgroundJobRun, type ClientCommand,
+  type NotificationInboxItem } from "@hyperfocus/ai-core/protocol";
 import {
   harnessStore,
   type AssistantDetailTab,
@@ -9,6 +9,37 @@ import {
   type PreferencesActiveSectionId
 } from "./harness-store";
 import { activateProjectThread } from "./project-thread-navigation";
+import { getBackgroundRunFilter } from "./store/background-jobs-pane-state";
+
+export function openBackgroundRunInJobsPane(state: HarnessViewState, runId: string, jobId?: string) {
+  const run = state.backgroundJobs.runs.find((entry) => entry.id === runId);
+  const runFilter = run ? getBackgroundRunFilter(run) : undefined;
+  harnessStore.setActiveLeftTab("runs");
+  harnessStore.closeBackgroundJobDetailsDialog();
+  if (runFilter) harnessStore.setJobsRunFilter(runFilter);
+  harnessStore.setJobsPanePreferences({ segment: "inbox", runSearch: "", selectedRunId: runId,
+    selectedJobId: jobId ?? run?.jobId, selectedNotificationId: undefined });
+}
+
+export function openBackgroundJobInJobsPane(jobId: string) {
+  harnessStore.setActiveLeftTab("jobs");
+  harnessStore.closeBackgroundJobDetailsDialog();
+  harnessStore.setJobsPanePreferences({ segment: "jobs", jobSearch: "", kind: undefined, status: undefined,
+    jobState: "all", risk: undefined, selectedJobId: jobId, selectedRunId: undefined, selectedNotificationId: undefined });
+}
+
+export function openBackgroundRunSource(state: HarnessViewState,
+  source: { projectId: string; runId: string; jobId: string }, sendCommand: (command: ClientCommand) => boolean) {
+  const cached = state.backgroundJobs.runs.find((run) => run.id === source.runId &&
+    run.projectId === source.projectId && run.jobId === source.jobId);
+  if (cached) { openBackgroundRunInJobsPane(state, cached.id, cached.jobId); return true; }
+  const requestId = createRequestId();
+  harnessStore.actions.startBackgroundJobSourceRequest({ requestId, kind: "run", ...source });
+  const sent = sendCommand({ type: "background-job.source.open", requestId,
+    payload: { kind: "run", projectId: source.projectId, runId: source.runId } });
+  if (!sent) harnessStore.actions.rejectBackgroundJobSourceRequest(requestId);
+  return sent;
+}
 
 export function openProjectThreadSource(
   state: HarnessViewState,
@@ -124,11 +155,18 @@ export function createCurrentToastSourceNavigation(state: HarnessViewState) {
   };
 }
 
-export function openNotificationSource(state: HarnessViewState, notification: NotificationInboxItem) {
+export function openNotificationSource(
+  state: HarnessViewState,
+  notification: NotificationInboxItem,
+  sendCommand: (command: ClientCommand) => boolean = harnessStore.actions.sendCommand
+) {
   switch (notification.kind) {
     case "background-run-status":
-      openBackgroundRunInJobsPane(state, notification.backgroundRunId, notification.jobId);
-      return true;
+      return openBackgroundRunSource(state, {
+        projectId: notification.projectId,
+        runId: notification.backgroundRunId,
+        jobId: notification.jobId
+      }, sendCommand);
     case "planning-question":
     case "planning-question-batch":
       return openAgentRunSource(state, notification.projectId, { id: notification.runId, threadId: notification.threadId }, "chat");
@@ -156,7 +194,7 @@ export function openAssistantLogEntrySource(state: HarnessViewState, entry: Assi
 
   const jobId = readString(details, "jobId");
   if (jobId && state.backgroundJobs.jobs.some((job) => job.id === jobId)) {
-    openBackgroundJobInJobsPane(state, jobId);
+    openBackgroundJobInJobsPane(jobId);
     harnessStore.setAssistantLogDetailsId(undefined);
     return true;
   }
@@ -227,7 +265,11 @@ function isAutomationThread(state: HarnessViewState, projectId: string, threadId
 }
 
 function getRecord(value: unknown) {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  return isRecord(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readString(record: Record<string, unknown> | undefined, key: string) {

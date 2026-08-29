@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import type { ExecutionToolActivity } from "../../../shared/protocol";
+import type { ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
 import {
   formatApprovalInvocationDescription,
   formatToolInvocationDescription,

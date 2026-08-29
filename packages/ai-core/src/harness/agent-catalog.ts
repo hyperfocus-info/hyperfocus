@@ -1,6 +1,4 @@
-import type { AgentOption } from "./protocol";
-
-export const defaultAgentCatalog: readonly AgentOption[] = [
+export const defaultAgentCatalog = [
   {
     id: "pi",
     label: "Pi",

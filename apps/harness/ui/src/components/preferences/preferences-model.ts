@@ -13,6 +13,7 @@ export type PreferencesSectionId =
   | "developer-advanced";
 
 export type PreferencesSettingId =
+  | "experience-mode"
   | "appearance-density"
   | "terminal-display"
   | "navigation-sidebar"
@@ -110,6 +111,13 @@ export const preferencesSections: PreferencesSectionMeta[] = [
 
 export const preferencesSettings: PreferencesSettingMeta[] = [
   {
+    id: "experience-mode",
+    sectionId: "general-ui",
+    title: "Interface mode",
+    description: "Use a streamlined daily view or the full technical cockpit.",
+    keywords: ["simple", "advanced", "streamlined", "interface", "chat", "tools", "trace"]
+  },
+  {
     id: "appearance-density",
     sectionId: "general-ui",
     title: "Appearance and density",
@@ -196,16 +204,16 @@ export const preferencesSettings: PreferencesSettingMeta[] = [
   {
     id: "workspace-context",
     sectionId: "workspace-memory",
-    title: "Workspace rules and context",
-    description: "Shared workspace rules and memory text.",
-    keywords: ["workspace", "rules", "context", "memory"]
+    title: "Workspace rules",
+    description: "Explicit shared rules, with repository AGENTS.md preferred for durable direction.",
+    keywords: ["workspace", "rules", "context", "agents"]
   },
   {
     id: "memory-bank",
     sectionId: "workspace-memory",
-    title: "Memory bank settings",
-    description: "Memory bank injection and run memory recording.",
-    keywords: ["memory", "bank", "record", "runs"]
+    title: "Project note settings",
+    description: "Pull-based semantic note search and exceptional learning capture.",
+    keywords: ["memory", "notes", "semantic", "search", "record", "runs"]
   },
   {
     id: "auto-archive",

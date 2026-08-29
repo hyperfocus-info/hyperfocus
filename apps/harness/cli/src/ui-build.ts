@@ -1,12 +1,13 @@
-import { existsSync, watch, type FSWatcher } from "node:fs";
+import { existsSync, watch } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { stylexSolidPlugin } from "../../../../scripts/stylex-solid-plugin";
+import { stylexSolidPlugin } from "@hyperfocus/ui/build/stylex-solid-plugin";
+import { createTimerApi, type TimerApi } from "./server/runtime/timer-api";
 
 const harnessRoot = path.resolve(import.meta.dir, "..", "..");
 const repoRoot = path.resolve(harnessRoot, "..", "..");
 const uiSourceDir = path.resolve(harnessRoot, "ui");
-const sharedSourceDir = path.resolve(harnessRoot, "shared");
+const aiCoreSourceDir = path.resolve(repoRoot, "packages", "ai-core", "src", "harness");
 const uiOutDir = path.resolve(repoRoot, "dist/ui");
 const uiEntryPoint = path.resolve(uiSourceDir, "src/main.tsx");
 const contextSourceDir = path.resolve(repoRoot, "docs", "harness");
@@ -14,11 +15,6 @@ const DEV_HMR_BACKOFF_MS = [1000, 1500, 2000, 2500, 5000, 10000, 15000] as const
 
 type UiBuildOptions = {
   minify?: boolean;
-};
-
-type TimerApi = {
-  setTimeout: typeof globalThis.setTimeout;
-  clearTimeout: typeof globalThis.clearTimeout;
 };
 
 type LiveReloadState = {
@@ -150,13 +146,10 @@ async function appendDevSourceMapReference() {
 
 export function createUiAssetManager(options: CreateUiAssetManagerOptions = {}) {
   const debounceScheduleMs = normalizeDebounceSchedule(options.debounceScheduleMs ?? [options.debounceMs ?? 0]);
-  const timerApi = options.timerApi ?? {
-    setTimeout: globalThis.setTimeout,
-    clearTimeout: globalThis.clearTimeout
-  };
+  const timerApi = options.timerApi ?? createTimerApi();
   const buildUi = options.buildUiBundle ?? buildUiBundle;
   const shouldRebuildForPath = options.isTrackedFile ?? createLiveReloadSourcePredicate();
-  const watchedSourceDirs = options.watchedSourceDirs ?? [uiSourceDir, sharedSourceDir];
+  const watchedSourceDirs = options.watchedSourceDirs ?? [uiSourceDir, aiCoreSourceDir];
   const watchSourceDir =
     options.watchSourceDir ??
     ((sourceDir: string, listener: (changedPath?: string) => void) =>
@@ -165,8 +158,8 @@ export function createUiAssetManager(options: CreateUiAssetManagerOptions = {}) 
       }));
   let buildInFlight: Promise<void> | undefined;
   let rebuildQueued = false;
-  let watchers: FSWatcher[] = [];
-  let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
+  let watchers: Array<{ close(): void }> = [];
+  let rebuildTimer: number | undefined;
   let rebuildBackoffStep = 0;
   let revision = 0;
 
@@ -243,7 +236,7 @@ export function createUiAssetManager(options: CreateUiAssetManagerOptions = {}) 
         }
 
         void queueBuild();
-      }) as FSWatcher);
+      }));
     },
     resolveAsset(pathname: string) {
       const relativePath = pathname === "/" || pathname === "/ide" ? "index.html" : pathname.slice(1);
@@ -349,7 +342,7 @@ function createLiveReloadSourcePredicate() {
       return false;
     }
 
-    if (isPathWithin(uiSourceDir, resolvedPath) || isPathWithin(sharedSourceDir, resolvedPath)) {
+    if (isPathWithin(uiSourceDir, resolvedPath) || isPathWithin(aiCoreSourceDir, resolvedPath)) {
       return existsSync(resolvedPath) || isGitTrackedFile(relativePath);
     }
 

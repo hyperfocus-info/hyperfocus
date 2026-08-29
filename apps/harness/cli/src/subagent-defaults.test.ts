@@ -32,6 +32,23 @@ describe("subagent defaults", () => {
     ).toBe("openai/gpt-5.4-mini");
   });
 
+  test("uses Luna as the low-cost Codex worker for the gpt-5.6 family", () => {
+    expect(
+      resolveSubagentModelId({
+        agentId: "codex-cli",
+        providerBrand: "gpt",
+        executionModelId: "openai/gpt-5.6-sol"
+      })
+    ).toBe("openai/gpt-5.6-luna");
+    expect(
+      resolveSubagentModelId({
+        agentId: "codex-cli",
+        providerBrand: "gpt",
+        executionModelId: "openai/gpt-5.6-luna"
+      })
+    ).toBe("openai/gpt-5.6-luna");
+  });
+
   test("maps claude families to haiku for cli runtimes", () => {
     expect(
       resolveSubagentModelId({

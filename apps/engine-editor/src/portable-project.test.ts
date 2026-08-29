@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createDefaultProject } from "./project.ts";
+import { createDefaultProject } from "@hyperfocus/engine/project";
 import { createEditorPortableFiles, openEditorPortableFiles, validatePortableAssetCatalog } from "./portable-project.ts";
 
 describe("editor portable project files", () => {

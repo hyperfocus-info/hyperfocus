@@ -49,8 +49,5 @@ Use the existing playtest observation structure as the source of truth. The help
 - source provenance, confidence, and claim notes
 - summary counts for input and visual surfaces
 
-## Sources
-
-- `./.agents/skills/playtest-evidence-capture/SKILL.md`
-- `./.agents/skills/catalog-sweep/SKILL.md`
-
+The observation JSON accepted by `--template` is the canonical input contract. Other
+playtest tools may produce that shape, but this skill does not require them.

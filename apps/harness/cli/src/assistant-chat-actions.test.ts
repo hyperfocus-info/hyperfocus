@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createAssistantId, type Assistant, type AssistantQuestion, type AssistantTodo, type BackgroundJob } from "../../shared/protocol";
+import { createAssistantId, type Assistant, type AssistantQuestion, type AssistantTodo, type BackgroundJob } from "@hyperfocus/ai-core/protocol";
 import { resolveAssistantChatAction } from "./assistant-chat-actions";
 
 const now = new Date().toISOString();
@@ -98,7 +98,7 @@ ec32e89b-08a3-41a5-80bf-6823701343f0
 
   test("requires a job when multiple assistant jobs exist", () => {
     const target = assistant();
-    const jobs = ["job-1", "job-2"].map((id) => ({
+    const jobs = ["job-1", "job-2"].map<BackgroundJob>((id) => ({
       id,
       projectId: "project-1",
       assistantId: target.id,
@@ -112,7 +112,7 @@ ec32e89b-08a3-41a5-80bf-6823701343f0
       scheduleInput: "hour",
       createdAt: now,
       updatedAt: now
-    })) satisfies BackgroundJob[];
+    }));
     const result = resolve("run Release watcher job now", { assistants: [target], jobs });
     expect(result.kind).toBe("clarify");
   });

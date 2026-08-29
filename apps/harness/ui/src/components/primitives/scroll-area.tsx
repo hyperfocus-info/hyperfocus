@@ -6,6 +6,8 @@ type ScrollAreaProps = JSX.IntrinsicElements["div"] & {
   viewportRef?: (element: HTMLDivElement) => void;
 };
 
+const styles = stylex.create({ root: { overflow: "auto" } });
+
 export function ScrollArea(props: ScrollAreaProps) {
   const [local, rest] = splitProps(props, ["class", "viewportRef", "onScroll", "onWheel"]);
 
@@ -20,5 +22,3 @@ export function ScrollArea(props: ScrollAreaProps) {
     />
   );
 }
-
-const styles = stylex.create({ root: { overflow: "auto" } });

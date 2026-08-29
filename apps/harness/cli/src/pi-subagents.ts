@@ -6,13 +6,21 @@ import type {
   ProjectContextUsage,
   ProviderBrand,
   RunModelPreference
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
+import type { CapacityGovernor, CapacityResources } from "@hyperfocus/ai-core/capacity-governor";
 import { createHash } from "node:crypto";
-import type { ManagedExecutionState } from "./execution-runtime";
-import { BranchfsManager, type BranchfsExperimentLease } from "./branchfs-manager";
+import { getHarnessCapacityGovernor, type ManagedExecutionState } from "./execution-runtime";
+import { createBranchfsManager, type BranchfsExperimentLease, type BranchfsManager } from "./branchfs-manager";
 import { debugLog } from "./logging";
 import { runManagedAgentExecution } from "./managed-agent-execution";
-import type { PiAgentAdapter, PiAgentExecutionEvent } from "./pi-agent-adapter";
+import type {
+  PiAgentAdapter,
+  PiAgentExecutionEvent,
+  PiAgentMemorySearchInput,
+  PiAgentMemorySearchResult,
+  PiAgentPromptRequest,
+  PiAgentPromptResult
+} from "./pi-agent-adapter";
 import { resolveSubagentModelId, resolveSubagentReasoningStrength } from "./subagent-defaults";
 import { createMilestoneDeltaParser, extractMilestoneLines, stripMilestoneLines } from "./run-milestone-windows";
 import {
@@ -61,6 +69,10 @@ export type SubagentProgressCallbacks = {
     toolName: string;
     args: unknown;
   }) => Promise<{ approved: boolean }>;
+  searchMemory?: (input: PiAgentMemorySearchInput & {
+    owner: "subagent";
+    subagentId: string;
+  }) => Promise<PiAgentMemorySearchResult>;
 };
 
 export type BranchfsSubagentSnapshot = {
@@ -80,17 +92,150 @@ export type SubagentVerificationInput = {
   abortSignal?: AbortSignal;
 };
 
+type QueuedSubagentTask = {
+  task: PlannerSubtask;
+  startingAttempt: number;
+  recoveryAttempt: number;
+  recoveryPrompt?: string;
+};
+
+type SubagentRetryOptions = {
+  runId: string;
+  agentId?: AgentId;
+  rootPath: string;
+  abortSignal: AbortSignal | undefined;
+  callbacks: SubagentProgressCallbacks | undefined;
+  executionModelId: string;
+  debugEnabled: boolean;
+  reasoningStrength?: ComposerReasoningStrength;
+  fastMode?: boolean;
+  promptCacheIdentity?: PromptCacheIdentity;
+  modelPreference?: RunModelPreference;
+  verifyResult?: (input: SubagentVerificationInput) => Promise<string[] | void>;
+  branchfsManagerFactory?: (
+    context: { rootPath: string; runId: string },
+    callbacks: { onTrace?: (trace: Pick<AgentTrace, "stage" | "message" | "detail" | "subagentId">) => void }
+  ) => BranchfsSubagentManager;
+};
+
 type ScheduledTaskEntry<Task> = {
   order: number;
   task: Task;
 };
 
+export type IndexedTaskQueueMetrics = {
+  enqueued: number;
+  dequeued: number;
+  slotScans: number;
+  eligibilityChecks: number;
+  compactedSlots: number;
+  compactions: number;
+  peakSize: number;
+};
+
+export function createIndexedTaskQueue<Value>(
+  initialValues: readonly Value[],
+  options: { compactionThreshold?: number } = {}
+) {
+  const compactionThreshold = options.compactionThreshold ?? 1_024;
+  if (!Number.isSafeInteger(compactionThreshold) || compactionThreshold < 1) {
+    throw new RangeError("compactionThreshold must be a positive safe integer");
+  }
+  let slots: Array<Value | undefined> = [...initialValues];
+  let head = 0;
+  let size = slots.length;
+  const metrics: IndexedTaskQueueMetrics = {
+    enqueued: slots.length,
+    dequeued: 0,
+    slotScans: 0,
+    eligibilityChecks: 0,
+    compactedSlots: 0,
+    compactions: 0,
+    peakSize: slots.length
+  };
+
+  function advanceHead() {
+    while (head < slots.length && slots[head] === undefined) head += 1;
+  }
+
+  function compactIfUseful() {
+    if (head < compactionThreshold || head * 2 < slots.length) return;
+    const retained: Value[] = [];
+    for (let index = head; index < slots.length; index += 1) {
+      const value = slots[index];
+      if (value !== undefined) retained.push(value);
+    }
+    metrics.compactedSlots += slots.length - head;
+    metrics.compactions += 1;
+    slots = retained;
+    head = 0;
+  }
+
+  return {
+    get size() {
+      return size;
+    },
+    get metrics(): Readonly<IndexedTaskQueueMetrics> {
+      return metrics;
+    },
+    enqueue(value: Value) {
+      slots.push(value);
+      size += 1;
+      metrics.enqueued += 1;
+      metrics.peakSize = Math.max(metrics.peakSize, size);
+    },
+    dequeue(canTake?: (value: Value) => boolean) {
+      if (size === 0) return undefined;
+      advanceHead();
+      for (let index = head; index < slots.length; index += 1) {
+        const value = slots[index];
+        if (value === undefined) continue;
+        metrics.slotScans += 1;
+        if (canTake) {
+          metrics.eligibilityChecks += 1;
+          if (!canTake(value)) continue;
+        }
+        slots[index] = undefined;
+        size -= 1;
+        metrics.dequeued += 1;
+        if (index === head) advanceHead();
+        compactIfUseful();
+        return value;
+      }
+      return undefined;
+    }
+  };
+}
+
 export const MAX_SUBAGENT_CONCURRENCY = 4;
+export const MAX_CONFIGURED_SUBAGENT_CONCURRENCY = 256;
+
+export type SubagentSchedulerMetrics = IndexedTaskQueueMetrics & {
+  workerCount: number;
+  peakActive: number;
+  peakWaiters: number;
+};
+
+export function resolveSubagentConcurrency(
+  value: number | string | undefined = process.env.HARNESS_SUBAGENT_CONCURRENCY
+) {
+  if (value === undefined || value === "") return MAX_SUBAGENT_CONCURRENCY;
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > MAX_CONFIGURED_SUBAGENT_CONCURRENCY) {
+    throw new RangeError(
+      `Subagent concurrency must be an integer from 1 to ${MAX_CONFIGURED_SUBAGENT_CONCURRENCY}.`
+    );
+  }
+  return parsed;
+}
 
 export async function scheduleSubagentTasks<Task, Result extends { id: string }, Snapshot>(
   options: {
     tasks: Task[];
     maxConcurrency?: number;
+    capacityGovernor?: CapacityGovernor | false;
+    capacityResources?: CapacityResources;
+    queueCompactionThreshold?: number;
     getTaskId: (task: Task) => string;
     canStart?: (task: Task, activeTasks: Task[]) => boolean;
     executeTask: (task: Task) => Promise<{ result: Result; retainedSnapshot?: Snapshot }>;
@@ -98,46 +243,51 @@ export async function scheduleSubagentTasks<Task, Result extends { id: string },
     scheduleRetry?: (task: Task, result: Result) => Task | undefined | Promise<Task | undefined>;
   }
 ) {
-  const queue = options.tasks.map((task, order) => ({ order, task }));
-  const orderById = new Map(queue.map((entry) => [options.getTaskId(entry.task), entry.order]));
+  const initialEntries = options.tasks.map((task, order) => ({ order, task }));
+  const queue = createIndexedTaskQueue(initialEntries, {
+    ...(options.queueCompactionThreshold === undefined
+      ? {}
+      : { compactionThreshold: options.queueCompactionThreshold })
+  });
+  const orderById = new Map(initialEntries.map((entry) => [options.getTaskId(entry.task), entry.order]));
   const active = new Map<string, ScheduledTaskEntry<Task>>();
   const results = new Map<string, Result>();
   const retainedSnapshots = new Map<string, Snapshot>();
-  const waiters: Array<() => void> = [];
+  const waiters = new Set<() => void>();
   let fatalError: Error | undefined;
+  let peakActive = 0;
+  let peakWaiters = 0;
 
   const signal = () => {
-    while (waiters.length > 0) {
-      waiters.shift()?.();
-    }
+    const pending = [...waiters];
+    waiters.clear();
+    for (const resolve of pending) resolve();
   };
 
   const waitForSignal = () =>
     new Promise<void>((resolve) => {
-      waiters.push(resolve);
+      waiters.add(resolve);
+      peakWaiters = Math.max(peakWaiters, waiters.size);
     });
 
   const dequeueNext = () => {
     const activeTasks = [...active.values()].map((entry) => entry.task);
-    for (let index = 0; index < queue.length; index += 1) {
-      const entry = queue[index];
-      if (options.canStart && !options.canStart(entry.task, activeTasks)) {
-        continue;
-      }
-
-      queue.splice(index, 1);
+    const entry = queue.dequeue(options.canStart
+      ? (candidate) => options.canStart?.(candidate.task, activeTasks) ?? true
+      : undefined);
+    if (entry) {
       active.set(options.getTaskId(entry.task), entry);
-      return entry;
+      peakActive = Math.max(peakActive, active.size);
     }
-
-    return undefined;
+    return entry;
   };
 
-  const workers = Array.from({ length: Math.min(options.maxConcurrency ?? MAX_SUBAGENT_CONCURRENCY, queue.length) }, async () => {
+  const workerCount = Math.min(resolveSubagentConcurrency(options.maxConcurrency), queue.size);
+  const workers = Array.from({ length: workerCount }, async () => {
     while (!fatalError) {
       const entry = dequeueNext();
       if (!entry) {
-        if (active.size === 0 && queue.length === 0) {
+        if (active.size === 0 && queue.size === 0) {
           return;
         }
 
@@ -158,7 +308,7 @@ export async function scheduleSubagentTasks<Task, Result extends { id: string },
         await options.onSettled?.(entry.task, execution.result);
         const retryTask = await options.scheduleRetry?.(entry.task, execution.result);
         if (retryTask) {
-          queue.push({
+          queue.enqueue({
             order: orderById.get(taskId) ?? entry.order,
             task: retryTask
           });
@@ -184,9 +334,16 @@ export async function scheduleSubagentTasks<Task, Result extends { id: string },
     .sort((left, right) => (orderById.get(left[0]) ?? 0) - (orderById.get(right[0]) ?? 0))
     .map(([, snapshot]) => snapshot);
 
+  const metrics: SubagentSchedulerMetrics = {
+    ...queue.metrics,
+    workerCount,
+    peakActive,
+    peakWaiters
+  };
   return {
     results: sortedResults,
-    retainedSnapshots: sortedSnapshots
+    retainedSnapshots: sortedSnapshots,
+    metrics
   };
 }
 
@@ -206,6 +363,9 @@ export async function executeSubagents(
     promptCacheIdentity?: PromptCacheIdentity;
     modelPreference?: RunModelPreference;
     abortSignal?: AbortSignal;
+    maxConcurrency?: number;
+    capacityGovernor?: CapacityGovernor | false;
+    capacityResources?: CapacityResources;
     verifyResult?: (input: SubagentVerificationInput) => Promise<string[] | void>;
     recoveryPrompt?: (input: { task: PlannerSubtask; result: SubagentResult }) => string;
     branchfsManagerFactory?: (
@@ -225,18 +385,23 @@ export async function executeSubagents(
     SubagentResult,
     BranchfsSubagentSnapshot
   >({
-    tasks: options.tasks.map((task) => ({
+    tasks: options.tasks.map<{
+      task: PlannerSubtask;
+      startingAttempt: number;
+      recoveryAttempt: number;
+      recoveryPrompt?: string;
+    }>((task) => ({
       task,
       startingAttempt: 1,
       recoveryAttempt: 0,
-      recoveryPrompt: undefined as string | undefined
+      recoveryPrompt: undefined
     })),
-    maxConcurrency: MAX_SUBAGENT_CONCURRENCY,
+    maxConcurrency: resolveSubagentConcurrency(options.maxConcurrency),
     getTaskId(entry) {
       return entry.task.id;
     },
     async executeTask(entry) {
-      return executeSubagentWithRetry(adapter, options.providerBrand, entry, options.brief, {
+      const execute = () => executeSubagentWithRetry(adapter, options.providerBrand, entry, options.brief, {
         runId: options.runId,
         agentId: options.agentId,
         rootPath: options.cwd,
@@ -251,6 +416,15 @@ export async function executeSubagents(
         verifyResult: options.verifyResult,
         branchfsManagerFactory: options.branchfsManagerFactory
       });
+      const governor = options.capacityGovernor === false
+        ? undefined
+        : options.capacityGovernor ?? getHarnessCapacityGovernor();
+      return governor
+        ? governor.run({
+            resources: options.capacityResources ?? { subagent: 1, branchfs: 1 },
+            signal: options.abortSignal
+          }, execute)
+        : execute();
     },
     async onSettled(_entry, result) {
       await options.callbacks?.onSettled?.(result);
@@ -286,33 +460,12 @@ export async function executeSubagents(
 async function executeSubagentWithRetry(
   adapter: PiAgentAdapter,
   providerBrand: ProviderBrand,
-  queuedTask: {
-    task: PlannerSubtask;
-    startingAttempt: number;
-    recoveryAttempt: number;
-    recoveryPrompt?: string;
-  },
+  queuedTask: QueuedSubagentTask,
   brief: string,
-  options: {
-    runId: string;
-    agentId?: AgentId;
-    rootPath: string;
-    abortSignal: AbortSignal | undefined;
-    callbacks: SubagentProgressCallbacks | undefined;
-    executionModelId: string;
-    debugEnabled: boolean;
-    reasoningStrength?: ComposerReasoningStrength;
-    fastMode?: boolean;
-    promptCacheIdentity?: PromptCacheIdentity;
-    modelPreference?: RunModelPreference;
-    verifyResult?: (input: SubagentVerificationInput) => Promise<string[] | void>;
-    branchfsManagerFactory?: (
-      context: { rootPath: string; runId: string },
-      callbacks: { onTrace?: (trace: Pick<AgentTrace, "stage" | "message" | "detail" | "subagentId">) => void }
-    ) => BranchfsSubagentManager;
-  }
+  options: SubagentRetryOptions
 ): Promise<{ result: SubagentResult; retainedSnapshot?: BranchfsSubagentSnapshot }> {
   const task = queuedTask.task;
+  const searchMemory = options.callbacks?.searchMemory;
   let attempt = 0;
   const dequeuedAt = Date.now();
 
@@ -325,7 +478,7 @@ async function executeSubagentWithRetry(
     }
 
     const worktreePrepareStartedAt = Date.now();
-    const manager = (options.branchfsManagerFactory ?? ((context, callbacks) => new BranchfsManager(context, callbacks)))(
+    const manager = (options.branchfsManagerFactory ?? createBranchfsManager)(
       {
         rootPath: options.rootPath,
         runId: `${options.runId}-${toSafeBranchfsSegment(task.id)}-attempt-${attempt}`
@@ -366,62 +519,24 @@ async function executeSubagentWithRetry(
         recoveryPrompt: queuedTask.recoveryPrompt
       });
       const milestoneParser = createMilestoneDeltaParser((line) => options.callbacks?.onMilestone?.(task, line));
+      const promptRequests = createSubagentPromptRequests({
+        task,
+        cwd: lease.projectMountPath,
+        modelId: subagentModelId,
+        basePrompt,
+        reasoningStrength: subagentReasoningStrength,
+        fastMode: options.fastMode,
+        promptCacheIdentity: options.promptCacheIdentity,
+        searchMemory,
+        callbacks: options.callbacks,
+        milestoneParser,
+      });
       const response = await runManagedAgentExecution(adapter, {
         runId: options.runId,
         kind: "subagent",
         subagentId: task.id,
-        originalRequest: {
-          kind: "subagent",
-          cwd: lease.projectMountPath,
-          modelId: subagentModelId,
-          prompt: basePrompt,
-          reasoningStrength: subagentReasoningStrength,
-          fastMode: options.fastMode,
-          promptCacheIdentity: options.promptCacheIdentity,
-          onTextDelta(delta: string) {
-            milestoneParser.push(delta);
-          },
-          onExecutionEvent(event: PiAgentExecutionEvent) {
-            void options.callbacks?.onExecutionEvent?.({
-              owner: "subagent",
-              subagentId: task.id,
-              event
-            });
-          },
-          requestBrowserApproval(input: { toolCallId: string; toolName: string; args: unknown }) {
-            return options.callbacks?.requestBrowserApproval?.({
-              owner: "subagent",
-              subagentId: task.id,
-              ...input
-            }) ?? Promise.resolve({ approved: true });
-          }
-        },
-        continuationRequest: {
-          kind: "subagent",
-          cwd: lease.projectMountPath,
-          modelId: subagentModelId,
-          prompt: ["continue", "", basePrompt].join("\n"),
-          reasoningStrength: subagentReasoningStrength,
-          fastMode: options.fastMode,
-          promptCacheIdentity: options.promptCacheIdentity,
-          onTextDelta(delta: string) {
-            milestoneParser.push(delta);
-          },
-          onExecutionEvent(event: PiAgentExecutionEvent) {
-            void options.callbacks?.onExecutionEvent?.({
-              owner: "subagent",
-              subagentId: task.id,
-              event
-            });
-          },
-          requestBrowserApproval(input: { toolCallId: string; toolName: string; args: unknown }) {
-            return options.callbacks?.requestBrowserApproval?.({
-              owner: "subagent",
-              subagentId: task.id,
-              ...input
-            }) ?? Promise.resolve({ approved: true });
-          }
-        },
+        originalRequest: promptRequests.original,
+        continuationRequest: promptRequests.continuation,
         abortSignal: options.abortSignal,
         store: createExecutionStore(options.callbacks, options.runId, task.id, {
           dequeuedAt,
@@ -446,19 +561,10 @@ async function executeSubagentWithRetry(
         }
       }
       const output = stripMilestoneLines(response.text);
-      if (response.contextUsage) {
-        options.callbacks?.onContextUsage?.(task, {
-          sourceKind: "subagent",
-          sourceLabel: task.id,
-          modelId: subagentModelId,
-          tokens: response.contextUsage.tokens,
-          contextWindow: response.contextUsage.contextWindow,
-          usagePercent: response.contextUsage.usagePercent,
-          totalProcessedTokens: response.contextUsage.sessionStats.tokens.total,
-          cachedInputTokens: response.contextUsage.cachedInputTokens,
-          updatedAt: new Date().toISOString()
-          });
-      }
+      const contextUsage = response.contextUsage
+        ? toSubagentContextUsage(task.id, subagentModelId, response.contextUsage)
+        : undefined;
+      if (contextUsage) options.callbacks?.onContextUsage?.(task, contextUsage);
       const contractDriftPaths = await options.verifyResult?.({
         task,
         mountPath: lease.projectMountPath,
@@ -477,38 +583,16 @@ async function executeSubagentWithRetry(
         completedAt: Date.now()
       });
       options.callbacks?.onComplete?.(task, output, Date.now() - startedAt);
-      return {
-        result: {
-          id: task.id,
-          title: task.title,
-          instruction: task.instruction,
-          status: "completed",
-          output,
-          attemptCount: effectiveAttempt,
-          durationMs: Date.now() - startedAt,
-          mountPath: lease.projectMountPath,
-          worktreePath: lease.projectMountPath,
-          contextUsage: response.contextUsage
-            ? {
-                sourceKind: "subagent",
-                sourceLabel: task.id,
-                modelId: subagentModelId,
-                tokens: response.contextUsage.tokens,
-                contextWindow: response.contextUsage.contextWindow,
-                usagePercent: response.contextUsage.usagePercent,
-                totalProcessedTokens: response.contextUsage.sessionStats.tokens.total,
-                cachedInputTokens: response.contextUsage.cachedInputTokens,
-                updatedAt: new Date().toISOString()
-              }
-            : undefined,
-          contractDriftPaths: contractDriftPaths && contractDriftPaths.length > 0 ? contractDriftPaths : undefined
-        },
-        retainedSnapshot: {
-          taskId: task.id,
-          manager,
-          lease
-        }
-      };
+      return createCompletedSubagentAttempt({
+        task,
+        output,
+        attemptCount: effectiveAttempt,
+        durationMs: Date.now() - startedAt,
+        manager,
+        lease,
+        contextUsage,
+        contractDriftPaths,
+      });
     } catch (error) {
       const typedError = error instanceof Error ? error : new Error("Unknown subagent failure");
       if (isAbortError(typedError, options.abortSignal)) {
@@ -553,6 +637,102 @@ async function executeSubagentWithRetry(
       }
     }
   }
+}
+
+function createSubagentPromptRequests(input: {
+  task: PlannerSubtask;
+  cwd: string;
+  modelId: string;
+  basePrompt: string;
+  reasoningStrength: ComposerReasoningStrength | undefined;
+  fastMode: boolean | undefined;
+  promptCacheIdentity: PromptCacheIdentity | undefined;
+  searchMemory: SubagentProgressCallbacks["searchMemory"];
+  callbacks: SubagentProgressCallbacks | undefined;
+  milestoneParser: ReturnType<typeof createMilestoneDeltaParser>;
+}) {
+  const searchMemory = input.searchMemory;
+  const createRequest = (prompt: string): PiAgentPromptRequest => ({
+    kind: "subagent",
+    cwd: input.cwd,
+    modelId: input.modelId,
+    prompt,
+    reasoningStrength: input.reasoningStrength,
+    fastMode: input.fastMode,
+    promptCacheIdentity: input.promptCacheIdentity,
+    memorySearch: searchMemory
+      ? (searchInput) => searchMemory({ owner: "subagent", subagentId: input.task.id, ...searchInput })
+      : undefined,
+    onTextDelta(delta) {
+      input.milestoneParser.push(delta);
+    },
+    onExecutionEvent(event: PiAgentExecutionEvent) {
+      void input.callbacks?.onExecutionEvent?.({ owner: "subagent", subagentId: input.task.id, event });
+    },
+    requestBrowserApproval(approvalInput) {
+      return input.callbacks?.requestBrowserApproval?.({
+        owner: "subagent",
+        subagentId: input.task.id,
+        ...approvalInput
+      }) ?? Promise.resolve({ approved: true });
+    }
+  });
+  return {
+    original: createRequest(input.basePrompt),
+    continuation: createRequest(["continue", "", input.basePrompt].join("\n")),
+  };
+}
+
+function toSubagentContextUsage(
+  taskId: string,
+  modelId: string,
+  usage: NonNullable<PiAgentPromptResult["contextUsage"]>,
+): ProjectContextUsage {
+  return {
+    sourceKind: "subagent",
+    sourceLabel: taskId,
+    modelId,
+    tokens: usage.tokens,
+    contextWindow: usage.contextWindow,
+    usagePercent: usage.usagePercent,
+    totalProcessedTokens: usage.sessionStats.tokens.total,
+    cachedInputTokens: usage.cachedInputTokens,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function createCompletedSubagentAttempt(input: {
+  task: PlannerSubtask;
+  output: string;
+  attemptCount: number;
+  durationMs: number;
+  manager: BranchfsSubagentManager;
+  lease: BranchfsExperimentLease;
+  contextUsage: ProjectContextUsage | undefined;
+  contractDriftPaths: string[] | void;
+}): { result: SubagentResult; retainedSnapshot: BranchfsSubagentSnapshot } {
+  return {
+    result: {
+      id: input.task.id,
+      title: input.task.title,
+      instruction: input.task.instruction,
+      status: "completed",
+      output: input.output,
+      attemptCount: input.attemptCount,
+      durationMs: input.durationMs,
+      mountPath: input.lease.projectMountPath,
+      worktreePath: input.lease.projectMountPath,
+      contextUsage: input.contextUsage,
+      contractDriftPaths: input.contractDriftPaths && input.contractDriftPaths.length > 0
+        ? input.contractDriftPaths
+        : undefined
+    },
+    retainedSnapshot: {
+      taskId: input.task.id,
+      manager: input.manager,
+      lease: input.lease
+    }
+  };
 }
 
 function toSafeBranchfsSegment(value: string) {
@@ -682,4 +862,3 @@ function emitSpawnTiming(
     subagentId: task.id
   });
 }
-

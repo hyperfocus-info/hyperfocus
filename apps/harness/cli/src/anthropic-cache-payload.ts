@@ -1,5 +1,5 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
-import { formatCacheableUserBlocks, stableCloneJson, type CacheableUserBlock } from "./prompt-cache-assembly";
+import { formatCacheableUserBlocks, stableCloneJson, stableCloneJsonObject, type CacheableUserBlock } from "./prompt-cache-assembly";
 
 const ANTHROPIC_MAX_CACHE_BREAKPOINTS = 4;
 export const ANTHROPIC_CACHEABLE_USER_BLOCK_MIN_CHARS = 4000;
@@ -17,7 +17,7 @@ export function transformAnthropicCachePayload(input: TransformInput) {
     return undefined;
   }
 
-  const payload = stableCloneJson(input.payload) as JsonObject;
+  const payload = stableCloneJsonObject(input.payload);
   const cacheControl = resolveCacheControl(payload);
   stripCacheControls(payload);
 
@@ -44,7 +44,7 @@ export function transformAnthropicCachePayload(input: TransformInput) {
 function resolveCacheControl(payload: JsonObject) {
   const existing = payload.cache_control;
   if (isObject(existing)) {
-    return stableCloneJson(existing);
+    return stableCloneJsonObject(existing);
   }
 
   return { type: "ephemeral" };
@@ -99,7 +99,7 @@ function applyToolsCacheControl(payload: JsonObject, cacheControl: JsonObject) {
 
   const sortedTools = tools
     .filter(isObject)
-    .map((tool) => stableCloneJson(tool))
+    .map((tool) => stableCloneJsonObject(tool))
     .sort((left, right) => getName(left).localeCompare(getName(right)));
   if (sortedTools.length === 0) {
     return false;

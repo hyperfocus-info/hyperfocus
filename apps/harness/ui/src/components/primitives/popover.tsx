@@ -16,6 +16,22 @@ type PopoverProps = {
   sideOffset?: number;
 };
 
+const styles = stylex.create({
+  trigger: { display: "inline-flex", position: "relative" },
+  content: {
+    padding: "0.75rem",
+    borderColor: "var(--border)",
+    borderRadius: "1.25rem",
+    borderStyle: "solid",
+    borderWidth: "1px",
+    backgroundColor: "var(--panel)",
+    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+    position: "fixed",
+    zIndex: 130,
+    width: "max-content",
+  }
+});
+
 export function Popover(props: PopoverProps) {
   let triggerRef: HTMLDivElement | undefined;
   let contentRef: HTMLDivElement | undefined;
@@ -113,7 +129,10 @@ export function Popover(props: PopoverProps) {
     queueMicrotask(updatePosition);
 
     const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
       const targetElement = target instanceof Element ? target : undefined;
       if (
         !triggerRef?.contains(target) &&
@@ -181,19 +200,3 @@ export function Popover(props: PopoverProps) {
     </div>
   );
 }
-
-const styles = stylex.create({
-  trigger: { display: "inline-flex", position: "relative" },
-  content: {
-    backgroundColor: "var(--panel)",
-    borderColor: "var(--border)",
-    borderRadius: "1.25rem",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
-    padding: "0.75rem",
-    position: "fixed",
-    width: "max-content",
-    zIndex: 130
-  }
-});

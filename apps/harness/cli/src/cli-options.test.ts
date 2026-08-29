@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CliUsageError, parseCliOptions } from "./cli-options";
+import { parseCliOptions } from "./cli-options";
 
 describe("CLI option parser", () => {
   test("accepts known flags and values", () => {
@@ -16,14 +16,14 @@ describe("CLI option parser", () => {
       parseCliOptions(["--wat"], {
         flags: ["--help"]
       })
-    ).toThrow(CliUsageError);
+    ).toThrow("Unknown option: --wat");
 
     expect(() =>
       parseCliOptions(["--open", "--no-open"], {
         flags: ["--open", "--no-open"],
         conflicts: [["--open", "--no-open"]]
       })
-    ).toThrow(CliUsageError);
+    ).toThrow("Conflicting options");
   });
 
   test("rejects missing values", () => {
@@ -32,6 +32,15 @@ describe("CLI option parser", () => {
         flags: ["--target"],
         valueFlags: ["--target"]
       })
-    ).toThrow(CliUsageError);
+    ).toThrow("Missing value");
+  });
+
+  test("accepts repair as a doctor modifier", () => {
+    const parsed = parseCliOptions(["--doctor", "--repair"], {
+      flags: ["--doctor", "--repair"]
+    });
+
+    expect(parsed.flags.has("--doctor")).toBe(true);
+    expect(parsed.flags.has("--repair")).toBe(true);
   });
 });

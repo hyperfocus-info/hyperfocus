@@ -1,8 +1,9 @@
-import type {
-  BrowserActivity,
-  BrowserActivityKind,
-  BrowserSession
-} from "../../shared/protocol";
+import {
+  deriveBrowserSessionStatus,
+  type BrowserActivity,
+  type BrowserActivityKind,
+  type BrowserSession
+} from "@hyperfocus/ai-core/protocol";
 
 type BrowserSessionOwner = BrowserSession["owner"];
 
@@ -67,6 +68,8 @@ export function requestBrowserApproval(sessions: BrowserSession[], input: Approv
     occurredAt
   });
 
+  const queueBehindPending = session.activities.some((entry) => entry.id !== activity.id &&
+    (entry.approval?.status === "pending" || entry.approval?.status === "deferred"));
   activity.status = "pending-approval";
   activity.updatedAt = occurredAt;
   activity.approval = {
@@ -75,7 +78,7 @@ export function requestBrowserApproval(sessions: BrowserSession[], input: Approv
     kind,
     label,
     inputSummary,
-    status: "pending",
+    status: queueBehindPending ? "deferred" : "pending",
     requestedAt: occurredAt
   };
   activity.replay = appendReplayEntry(activity.replay, {
@@ -84,8 +87,8 @@ export function requestBrowserApproval(sessions: BrowserSession[], input: Approv
     createdAt: occurredAt
   });
 
-  session.status = "awaiting-approval";
-  session.pendingApproval = activity.approval;
+  session.status = queueBehindPending ? deriveBrowserSessionStatus(session.activities) : "awaiting-approval";
+  if (!queueBehindPending) session.pendingApproval = activity.approval;
   session.lastActivityLabel = label;
   session.updatedAt = occurredAt;
   session.completedAt = undefined;
@@ -125,6 +128,33 @@ export function resolveBrowserApproval(sessions: BrowserSession[], input: Approv
   session.lastActivityLabel = activity.label;
   session.updatedAt = occurredAt;
   session.completedAt = input.approved ? undefined : occurredAt;
+  promoteNextDeferredBrowserApproval(session);
+  return normalizeBrowserSessions(sessions);
+}
+
+export function promoteNextDeferredBrowserApproval(session: BrowserSession) {
+  if (session.pendingApproval?.status === "pending") return false;
+  const next = session.activities.find((activity) => activity.status === "pending-approval" && activity.approval?.status === "deferred");
+  if (!next?.approval) { session.status = deriveBrowserSessionStatus(session.activities); return false; }
+  next.approval = { ...next.approval, status: "pending" }; session.pendingApproval = next.approval;
+  session.status = deriveBrowserSessionStatus(session.activities);
+  session.updatedAt = session.updatedAt > next.updatedAt ? session.updatedAt : next.updatedAt;
+  session.completedAt = undefined; session.lastActivityLabel = next.label; return true;
+}
+
+export function cancelBrowserApprovals(sessions: BrowserSession[], reason: string, occurredAt = new Date().toISOString()) {
+  for (const session of sessions) {
+    let cancelled = false;
+    for (const activity of session.activities) {
+      if (activity.approval?.status !== "pending" && activity.approval?.status !== "deferred") continue;
+      activity.approval = { ...activity.approval, status: "rejected", resolvedAt: occurredAt, resolutionReason: reason };
+      activity.status = "blocked"; activity.errorMessage = reason; activity.completedAt = occurredAt;
+      activity.updatedAt = occurredAt; cancelled = true;
+    }
+    if (!cancelled) continue;
+    session.pendingApproval = undefined; session.status = "blocked"; session.completedAt = occurredAt;
+    session.updatedAt = occurredAt;
+  }
   return normalizeBrowserSessions(sessions);
 }
 
@@ -197,7 +227,7 @@ export function recordBrowserToolEnd(sessions: BrowserSession[], input: ToolLife
     session.pendingApproval = undefined;
     session.lastActivityLabel = activity.label;
     session.updatedAt = occurredAt;
-    session.status = getBrowserSessionStatus(session.activities);
+    session.status = deriveBrowserSessionStatus(session.activities);
     session.completedAt = session.status === "running" || session.status === "awaiting-approval" ? undefined : occurredAt;
   });
 }
@@ -310,22 +340,6 @@ function normalizeBrowserSessions(sessions: BrowserSession[]) {
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
 }
 
-function getBrowserSessionStatus(activities: BrowserActivity[]): BrowserSession["status"] {
-  if (activities.some((activity) => activity.status === "pending-approval")) {
-    return "awaiting-approval";
-  }
-  if (activities.some((activity) => activity.status === "running")) {
-    return "running";
-  }
-  if (activities.some((activity) => activity.status === "failed")) {
-    return "failed";
-  }
-  if (activities.some((activity) => activity.status === "blocked")) {
-    return "blocked";
-  }
-  return activities.length > 0 ? "completed" : "idle";
-}
-
 function inferBrowserActivityKind(toolName: string, args: unknown): BrowserActivityKind {
   const value = [toolName, summarizeValue(args) ?? ""].join(" ").toLowerCase();
   if (/(verify|assert|expect|check)/.test(value)) {
@@ -399,7 +413,11 @@ function truncate(value: string, maxLength: number) {
 }
 
 function asRecord(value: unknown) {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+  return isRecord(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function readString(record: Record<string, unknown> | undefined, keys: string[]) {

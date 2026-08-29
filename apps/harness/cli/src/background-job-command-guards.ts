@@ -1,4 +1,4 @@
-import type { BackgroundJob, BackgroundJobRun, ProjectId } from "../../shared/protocol";
+import type { BackgroundJob, BackgroundJobRun, ProjectId } from "@hyperfocus/ai-core/protocol";
 import type { WorkspaceRepository } from "./workspace-repository";
 
 type BackgroundRunAction = "stop" | "retry" | "approve" | "reject";

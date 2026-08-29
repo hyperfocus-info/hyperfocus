@@ -1,5 +1,5 @@
 import { createFatalStartupLogger } from "./fatal-startup-log";
-import { CliUsageError } from "./cli-options";
+import { isCliUsageError } from "./cli-options";
 
 type CliMainModule = {
   main: () => Promise<void>;
@@ -24,7 +24,8 @@ export async function runCli(options: RunCliOptions = {}) {
     const addProcessListener =
       options.addProcessListener ??
       ((event: "uncaughtException" | "unhandledRejection", handler: (error: unknown) => void) => {
-        process.on(event, handler as never);
+        if (event === "uncaughtException") process.on("uncaughtException", handler);
+        else process.on("unhandledRejection", handler);
       });
 
     addProcessListener("uncaughtException", (error) => {
@@ -42,7 +43,7 @@ export async function runCli(options: RunCliOptions = {}) {
     const cliModule = await (options.loadMain ?? (() => import("./index-main")))();
     await cliModule.main();
   } catch (error) {
-    if (error instanceof CliUsageError) {
+    if (isCliUsageError(error)) {
       console.error(error.message);
       exit(2);
       return;

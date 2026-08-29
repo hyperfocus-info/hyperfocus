@@ -1,28 +1,34 @@
 import { describe, expect, test } from "bun:test";
-import { guardedWebsocketSend, type GuardedWebSocket } from "./websocket-send-guard";
+import { guardedWebsocketSend, withWebsocketCompression } from "./websocket-send-guard";
 
-class FakeGuardedSocket implements GuardedWebSocket {
-  closeCalls: Array<{ code?: number; reason?: string }> = [];
-  sendStatuses: Array<number | void>;
-  sent: Array<string | Uint8Array> = [];
-
-  constructor(sendStatuses: Array<number | void>) {
-    this.sendStatuses = sendStatuses;
-  }
-
-  send(data: string | Uint8Array) {
-    this.sent.push(data);
-    return this.sendStatuses.shift();
-  }
-
-  close(code?: number, reason?: string) {
-    this.closeCalls.push({ code, reason });
-  }
+function createFakeGuardedSocket(sendStatuses: Array<number | void>) {
+  const closeCalls: Array<{ code?: number; reason?: string }> = [];
+  const sent: Array<string | Uint8Array> = [];
+  return {
+    closeCalls,
+    sendStatuses,
+    sent,
+    send(data: string | Uint8Array) {
+      sent.push(data);
+      return sendStatuses.shift();
+    },
+    close(code?: number, reason?: string) {
+      closeCalls.push({ code, reason });
+    },
+  };
 }
 
 describe("guarded websocket send", () => {
+  test("preserves handlers while enabling per-message compression", () => {
+    const open = () => undefined;
+    const options = withWebsocketCompression({ open });
+
+    expect(options.open).toBe(open);
+    expect(options.perMessageDeflate).toBe(true);
+  });
+
   test("allows one large payload when Bun sends it immediately", () => {
-    const socket = new FakeGuardedSocket([512]);
+    const socket = createFakeGuardedSocket([512]);
 
     expect(guardedWebsocketSend(socket, "x".repeat(512), { maxQueuedBytes: 256 })).toBe(true);
     expect(socket.sent).toHaveLength(1);
@@ -30,7 +36,7 @@ describe("guarded websocket send", () => {
   });
 
   test("closes only after backpressured bytes exceed the queue cap", () => {
-    const socket = new FakeGuardedSocket([-1, -1]);
+    const socket = createFakeGuardedSocket([-1, -1]);
 
     expect(guardedWebsocketSend(socket, "x".repeat(128), { maxQueuedBytes: 256 })).toBe(false);
     expect(socket.closeCalls).toHaveLength(0);
@@ -45,7 +51,7 @@ describe("guarded websocket send", () => {
   });
 
   test("keeps large state snapshots open when they fit the queue cap", () => {
-    const socket = new FakeGuardedSocket([-1]);
+    const socket = createFakeGuardedSocket([-1]);
 
     expect(guardedWebsocketSend(socket, "x".repeat(512 * 1024), { maxQueuedBytes: 64 * 1024 * 1024 })).toBe(false);
     expect(socket.closeCalls).toHaveLength(0);

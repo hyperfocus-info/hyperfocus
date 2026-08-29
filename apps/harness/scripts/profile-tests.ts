@@ -16,7 +16,7 @@ const profiledArgs = stripFlag(stripFlag(stripFlag(plan.bunArgs.slice(1), "--rep
 const profileBasename = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
 const defaultSegments = shouldUseDefaultTestSegments(forwardedArgs)
   ? buildDefaultTestSegments(repoRoot)
-  : [{ name: "all", targets: [], env: {} }] satisfies TestSegment[];
+  : [{ name: "all", targets: [], env: {} }];
 const junitXmlPaths = defaultSegments.map((segment) => path.join(profileDir, `${profileBasename}.${segment.name}.xml`));
 const junitXmlPath = junitXmlPaths[0] ?? path.join(profileDir, `${profileBasename}.xml`);
 const outputJsonPath = path.join(profileDir, `${profileBasename}.json`);
@@ -60,7 +60,7 @@ if (existingJunitXmlPaths.length > 0) {
     ...mergeParsedReports(existingJunitXmlPaths.map((currentPath) => parseJUnitReport(readFileSync(currentPath, "utf8")))),
     workerCount: plan.workerCount,
     parallelDelayMs: plan.parallelDelayMs
-  } satisfies ParsedReport;
+  };
   writeFileSync(
     outputJsonPath,
     JSON.stringify(
@@ -130,7 +130,9 @@ type ParsedReport = {
 };
 
 function parseJUnitReport(xmlText: string): ParsedReport {
-  const tests = Array.from(xmlText.matchAll(/<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g), ([, attributesText, bodyText]) => {
+  const tests = Array.from(
+    xmlText.matchAll(/<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g),
+    ([, attributesText, bodyText]): TestProfileRecord => {
     const attributes = parseXmlAttributes(attributesText);
     const body = bodyText ?? "";
     return {
@@ -140,8 +142,9 @@ function parseJUnitReport(xmlText: string): ParsedReport {
       durationMs: roundDuration(Number(attributes.time ?? "0") * 1000),
       assertions: Number(attributes.assertions ?? "0"),
       status: body.includes("<failure") ? "fail" : "pass"
-    } satisfies TestProfileRecord;
-  }).sort((left, right) => right.durationMs - left.durationMs);
+    };
+    }
+  ).sort((left, right) => right.durationMs - left.durationMs);
 
   const fileStats = new Map<string, FileProfileRecord>();
   for (const test of tests) {

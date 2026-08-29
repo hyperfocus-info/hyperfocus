@@ -5,7 +5,7 @@ export const sharedStyles = stylex.create({
   focusRing: {
     outline: {
       default: "none",
-      ":focus-visible": `2px solid ${tokens.accent}`
+      ":focus-visible": `2px solid ${tokens.focus}`
     },
     outlineOffset: "2px"
   },
@@ -18,4 +18,3 @@ export const sharedStyles = stylex.create({
     color: tokens.foreground,
   }
 });
-

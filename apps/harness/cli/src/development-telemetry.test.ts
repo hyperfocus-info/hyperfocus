@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { CliAgentAdapter } from "./agent-runtimes/cli-agent-adapter";
+import { createCliAgentAdapter } from "./agent-runtimes/cli-agent-adapter";
 
 const originalFetch = globalThis.fetch;
 
@@ -12,12 +12,15 @@ afterEach(() => {
 describe("development telemetry", () => {
   test("CLI runtime does not post prompts or output to local telemetry endpoints", async () => {
     let fetchCallCount = 0;
-    globalThis.fetch = (async () => {
-      fetchCallCount += 1;
-      throw new Error("unexpected telemetry fetch");
-    }) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(
+      async () => {
+        fetchCallCount += 1;
+        throw new Error("unexpected telemetry fetch");
+      },
+      { preconnect: originalFetch.preconnect }
+    );
 
-    const adapter = new CliAgentAdapter({
+    const adapter = createCliAgentAdapter({
       label: "Test CLI",
       buildCommand() {
         return {

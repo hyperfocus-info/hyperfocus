@@ -49,7 +49,7 @@ describe("harness legacy style boundary", () => {
         offenders.push(`${relativeLocation(filename)} could not be parsed`);
         continue;
       }
-      visit(result.ast as unknown as AstNode, (node) => auditNode(node, filename, offenders));
+      visit(result.ast, (node) => auditNode(node, filename, offenders));
     }
 
     expect(offenders).toEqual([]);
@@ -110,16 +110,16 @@ function auditNode(node: AstNode, filename: string, offenders: string[]) {
       if (rawValue !== undefined) {
         offenders.push(`${relativeLocation(filename, node)} raw ${name}=${JSON.stringify(rawValue)}`);
       }
-      if (name === "classList" && readNodeType(readExpressionContainer(node.value as AstNode | undefined)) === "ObjectExpression") {
+      if (name === "classList" && readNodeType(readExpressionContainer(readAstNode(node.value))) === "ObjectExpression") {
         offenders.push(`${relativeLocation(filename, node)} raw classList object`);
       }
     }
   }
 
   if (node.type === "CallExpression") {
-    const callee = node.callee as AstNode | undefined;
+    const callee = readAstNode(node.callee);
     if (callee?.type === "Identifier" && callee.name === "cn") {
-      for (const argument of (node.arguments as AstNode[] | undefined) ?? []) {
+      for (const argument of readNodeArray(node.arguments)) {
         for (const value of directClassStrings(argument)) {
           offenders.push(`${relativeLocation(filename, argument)} raw cn() class ${JSON.stringify(value)}`);
         }
@@ -128,13 +128,13 @@ function auditNode(node: AstNode, filename: string, offenders: string[]) {
 
     if (callee?.type === "MemberExpression") {
       const propertyName = readMemberPropertyName(callee);
-      const object = callee.object as AstNode | undefined;
+      const object = readAstNode(callee.object);
       const objectPropertyName = object?.type === "MemberExpression" ? readMemberPropertyName(object) : undefined;
       if (objectPropertyName === "classList" && ["add", "remove", "replace", "toggle"].includes(propertyName ?? "")) {
         offenders.push(`${relativeLocation(filename, node)} imperative classList.${propertyName}`);
       }
       if (propertyName === "setAttribute") {
-        const args = (node.arguments as AstNode[] | undefined) ?? [];
+        const args = readNodeArray(node.arguments);
         if (readString(args[0]) === "class" && readString(args[1])?.trim()) {
           offenders.push(`${relativeLocation(filename, node)} imperative class attribute`);
         }
@@ -153,11 +153,9 @@ function visit(value: unknown, callback: (node: AstNode) => void) {
   if (!value || typeof value !== "object") {
     return;
   }
-  const node = value as AstNode;
-  if (typeof node.type === "string") {
-    callback(node);
-  }
-  for (const [key, child] of Object.entries(node)) {
+  const node = readAstNode(value);
+  if (node) callback(node);
+  for (const [key, child] of Object.entries(value)) {
     if (key !== "loc" && key !== "start" && key !== "end") {
       visit(child, callback);
     }
@@ -174,22 +172,22 @@ function directClassStrings(node: AstNode | undefined): string[] {
   }
   if (node.type === "ConditionalExpression") {
     return [
-      ...directClassStrings(node.consequent as AstNode | undefined),
-      ...directClassStrings(node.alternate as AstNode | undefined),
+      ...directClassStrings(readAstNode(node.consequent)),
+      ...directClassStrings(readAstNode(node.alternate)),
     ];
   }
   if (node.type === "LogicalExpression") {
-    return directClassStrings(node.right as AstNode | undefined);
+    return directClassStrings(readAstNode(node.right));
   }
   if (node.type === "ArrayExpression") {
-    return ((node.elements as AstNode[] | undefined) ?? []).flatMap((entry) => directClassStrings(entry));
+    return readNodeArray(node.elements).flatMap((entry) => directClassStrings(entry));
   }
   if (node.type === "ObjectExpression") {
-    return ((node.properties as AstNode[] | undefined) ?? []).flatMap((property) => {
+    return readNodeArray(node.properties).flatMap((property) => {
       if (property.type !== "ObjectProperty") {
         return [];
       }
-      const key = property.key as AstNode | undefined;
+      const key = readAstNode(property.key);
       const className = readString(key) ?? (key?.type === "Identifier" ? String(key.name ?? "") : "");
       return className.trim() ? [className] : [];
     });
@@ -198,7 +196,7 @@ function directClassStrings(node: AstNode | undefined): string[] {
 }
 
 function rawClassAttributeValue(value: unknown) {
-  const node = value as AstNode | undefined;
+  const node = readAstNode(value);
   if (!node) {
     return undefined;
   }
@@ -210,7 +208,7 @@ function rawClassAttributeValue(value: unknown) {
 }
 
 function readExpressionContainer(node: AstNode | undefined) {
-  return node?.type === "JSXExpressionContainer" ? node.expression as AstNode | undefined : undefined;
+  return node?.type === "JSXExpressionContainer" ? readAstNode(node.expression) : undefined;
 }
 
 function readString(node: AstNode | undefined): string | undefined {
@@ -218,15 +216,14 @@ function readString(node: AstNode | undefined): string | undefined {
     return String(node.value ?? "");
   }
   if (node?.type === "TemplateLiteral") {
-    const quasis = (node.quasis as Array<{ value?: { raw?: string } }> | undefined) ?? [];
-    const literalText = quasis.map((quasi) => quasi.value?.raw ?? "").join("");
+    const literalText = readNodeArray(node.quasis).map((quasi) => readTemplateRaw(quasi)).join("");
     return literalText.trim() ? literalText : undefined;
   }
   return undefined;
 }
 
 function readJsxAttributeName(value: unknown) {
-  const name = value as AstNode | undefined;
+  const name = readAstNode(value);
   return name?.type === "JSXIdentifier" ? String(name.name ?? "") : undefined;
 }
 
@@ -235,7 +232,7 @@ function isClassAttribute(name: string) {
 }
 
 function readMemberPropertyName(member: AstNode) {
-  const property = member.property as AstNode | undefined;
+  const property = readAstNode(member.property);
   if (property?.type === "Identifier") {
     return String(property.name ?? "");
   }
@@ -244,6 +241,25 @@ function readMemberPropertyName(member: AstNode) {
 
 function readNodeType(node: AstNode | undefined) {
   return node?.type;
+}
+
+function readAstNode(value: unknown): AstNode | undefined {
+  return isAstNode(value) ? value : undefined;
+}
+
+function isAstNode(value: unknown): value is AstNode {
+  return Boolean(value && typeof value === "object" && typeof Reflect.get(value, "type") === "string");
+}
+
+function readNodeArray(value: unknown): AstNode[] {
+  return Array.isArray(value) ? value.filter(isAstNode) : [];
+}
+
+function readTemplateRaw(node: AstNode) {
+  const value = node.value;
+  if (!value || typeof value !== "object") return "";
+  const raw = Reflect.get(value, "raw");
+  return typeof raw === "string" ? raw : "";
 }
 
 function relativeLocation(filename: string, node?: AstNode) {

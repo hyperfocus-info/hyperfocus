@@ -1,4 +1,4 @@
-import type { RunPreflight } from "../../shared/protocol";
+import type { RunPreflight } from "@hyperfocus/ai-core/protocol";
 import { probeInsideWorktree } from "./git-project";
 
 const MAX_DIRTY_FILE_COUNT = 20;

@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { CliProcessManager, type CliProcessExecutionResult } from "./cli-process-manager";
-import { CodexCliRuntime, testExports } from "./codex-cli-runtime";
+import type { CliProcessExecutionResult, CliProcessManager } from "./cli-process-manager";
+import { createCodexCliRuntime, testExports } from "./codex-cli-runtime";
 
-class FakeCliProcessManager extends CliProcessManager {
-  readonly calls: Array<string[]> = [];
-
-  constructor(private readonly result: CliProcessExecutionResult | CliProcessExecutionResult[]) {
-    super();
-  }
-
-  override async runNonInteractive(options: {
+function createFakeCliProcessManager(result: CliProcessExecutionResult | CliProcessExecutionResult[]): CliProcessManager & { calls: string[][] } {
+  const calls: string[][] = [];
+  const results = Array.isArray(result) ? result : [result];
+  const fallback = results.at(-1);
+  if (!fallback) throw new Error("Fake CLI process manager requires at least one result");
+  const fallbackResult: CliProcessExecutionResult = fallback;
+  async function runNonInteractive(options: {
     cmd: string[];
     cwd: string;
     cols: number;
@@ -21,14 +20,19 @@ class FakeCliProcessManager extends CliProcessManager {
     onStdout?: (chunk: Uint8Array) => void;
     onStderr?: (chunk: Uint8Array) => void;
   }): Promise<CliProcessExecutionResult> {
-    this.calls.push(options.cmd);
-    return Array.isArray(this.result) ? (this.result.shift() ?? this.result[this.result.length - 1]!) : this.result;
+    calls.push(options.cmd);
+    return results.shift() ?? fallbackResult;
   }
+  return {
+    calls,
+    runNonInteractive,
+    startInteractive() { throw new Error("Interactive process is not used in Codex runtime tests"); },
+  };
 }
 
 describe("codex cli runtime", () => {
   test("reports missing bundled install with bun install guidance", async () => {
-    const runtime = new CodexCliRuntime({
+    const runtime = createCodexCliRuntime({
       getInstallation: () => ({
         installed: false,
         installCommand: "bun install",
@@ -45,14 +49,14 @@ describe("codex cli runtime", () => {
   });
 
   test("probes bundled executable path instead of global codex", async () => {
-    const processManager = new FakeCliProcessManager({
+    const processManager = createFakeCliProcessManager({
       stdout: "codex-cli 0.122.0\n",
       stderr: "",
       exitCode: 0,
       hangDetected: false,
       timedOut: false
     });
-    const runtime = new CodexCliRuntime({
+    const runtime = createCodexCliRuntime({
       processManager,
       getInstallation: () => ({
         installed: true,
@@ -73,7 +77,7 @@ describe("codex cli runtime", () => {
   });
 
   test("uses bundled executable path for interactive launch", () => {
-    const runtime = new CodexCliRuntime({
+    const runtime = createCodexCliRuntime({
       platform: "win32",
       getInstallation: () => ({
         installed: true,
@@ -105,14 +109,15 @@ describe("codex cli runtime", () => {
   });
 
   test("publishes codex-supported model list", () => {
-    expect(testExports.getCodexSupportedModelIds()).toContain("openai/gpt-5.5");
+    expect(testExports.getCodexSupportedModelIds()).toContain("openai/gpt-5.6-luna");
+    expect(testExports.isCodexSupportedModelId("openai/gpt-5.6-luna")).toBe(true);
     expect(testExports.isCodexSupportedModelId("openai/gpt-5.5")).toBe(true);
     expect(testExports.isCodexSupportedModelId("openai/gpt-5.4-nano")).toBe(false);
-    expect(testExports.resolveCodexModelId("openai/gpt-5.4-nano")).toBe("openai/gpt-5.5");
+    expect(testExports.resolveCodexModelId("openai/gpt-5.4-nano")).toBe("openai/gpt-5.6-sol");
   });
 
   test("discovers visible codex models from cli debug catalog", async () => {
-    const processManager = new FakeCliProcessManager({
+    const processManager = createFakeCliProcessManager({
       stdout: JSON.stringify({
         models: [
           { slug: "gpt-5.3-codex", visibility: "list" },
@@ -135,7 +140,7 @@ describe("codex cli runtime", () => {
   });
 
   test("falls back to baked codex models when debug catalog is unavailable", async () => {
-    const processManager = new FakeCliProcessManager({
+    const processManager = createFakeCliProcessManager({
       stdout: "not json",
       stderr: "",
       exitCode: 0,
@@ -145,6 +150,9 @@ describe("codex cli runtime", () => {
 
     await expect(testExports.discoverCodexModels(processManager, "codex")).resolves.toEqual({
       discoveredModels: [
+        "openai/gpt-5.6-sol",
+        "openai/gpt-5.6-terra",
+        "openai/gpt-5.6-luna",
         "openai/gpt-5.5",
         "openai/gpt-5.4",
         "openai/gpt-5.4-mini",
@@ -157,7 +165,7 @@ describe("codex cli runtime", () => {
   });
 
   test("reports exact discovered codex models in runtime capability", async () => {
-    const processManager = new FakeCliProcessManager([
+    const processManager = createFakeCliProcessManager([
       {
         stdout: "codex-cli 0.122.0\n",
         stderr: "",
@@ -175,7 +183,8 @@ describe("codex cli runtime", () => {
       {
         stdout: JSON.stringify({
           models: [
-            { slug: "gpt-5.4", visibility: "list" },
+            { slug: "gpt-5.6-sol", visibility: "list" },
+            { slug: "gpt-5.6-luna", visibility: "list" },
             { slug: "gpt-5.3-codex-spark", visibility: "list" }
           ]
         }),
@@ -185,7 +194,7 @@ describe("codex cli runtime", () => {
         timedOut: false
       }
     ]);
-    const runtime = new CodexCliRuntime({
+    const runtime = createCodexCliRuntime({
       processManager,
       getInstallation: () => ({
         installed: true,
@@ -198,12 +207,22 @@ describe("codex cli runtime", () => {
     });
 
     const capability = await runtime.refreshCapability();
-    expect(capability.discoveredModels).toEqual(["openai/gpt-5.4", "openai/gpt-5.3-codex-spark"]);
+    expect(capability.discoveredModels).toEqual([
+      "openai/gpt-5.6-sol",
+      "openai/gpt-5.6-luna",
+      "openai/gpt-5.3-codex-spark"
+    ]);
+    expect(capability.activeModel).toBe("openai/gpt-5.6-sol");
     expect(capability.modelDiscoveryConfidence).toBe("exact");
   });
 
   test("defaults subagents to gpt mini for gpt-5.4 family", () => {
-    const runtime = new CodexCliRuntime();
+    const runtime = createCodexCliRuntime();
     expect(runtime.getDefaultSubagentModelId("gpt", "openai/gpt-5.4")).toBe("openai/gpt-5.4-mini");
+  });
+
+  test("defaults gpt-5.6 codex subagents to Luna", () => {
+    const runtime = createCodexCliRuntime();
+    expect(runtime.getDefaultSubagentModelId("gpt", "openai/gpt-5.6-sol")).toBe("openai/gpt-5.6-luna");
   });
 });

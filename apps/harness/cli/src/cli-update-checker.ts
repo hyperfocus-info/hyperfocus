@@ -1,5 +1,5 @@
 import { $ } from "bun";
-import type { AgentRuntimeCapability, CliUpdateTargetId } from "../../shared/protocol";
+import type { AgentRuntimeCapability, CliUpdateTargetId } from "@hyperfocus/ai-core/protocol";
 
 const PI_PACKAGE_NAME = "@mariozechner/pi-coding-agent";
 const CODEX_PACKAGE_NAME = "@openai/codex";
@@ -199,8 +199,8 @@ async function fetchLatestGitHubReleaseVersion(owner: string, repo: string) {
       return undefined;
     }
 
-    const parsed = (await response.json()) as { tag_name?: unknown };
-    return typeof parsed.tag_name === "string" ? parseVersion(parsed.tag_name) : undefined;
+    const parsed: unknown = await response.json();
+    return isRecord(parsed) && typeof parsed.tag_name === "string" ? parseVersion(parsed.tag_name) : undefined;
   } catch {
     return undefined;
   }
@@ -222,8 +222,9 @@ function compareVersions(left: string, right: string) {
   return 0;
 }
 
-function splitVersion(value: string) {
-  return value.split(/[.-]/).slice(0, 3).map((part) => Number(part) || 0) as [number, number, number];
+function splitVersion(value: string): [number, number, number] {
+  const parts = value.split(/[.-]/).slice(0, 3).map((part) => Number(part) || 0);
+  return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
 }
 
 function formatShellOutput(stdout: string, stderr: string) {

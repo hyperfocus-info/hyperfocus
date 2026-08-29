@@ -4,12 +4,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { createHyperfocusProjectFiles } from "../../engine/src/project/index.ts";
-import { createStarterProject } from "../../engine/scripts/create-project.ts";
-import { createStandalonePlayableHtml } from "./src/playable-build.ts";
+import { createHyperfocusProjectFiles } from "@hyperfocus/engine/project";
+import { createStarterProject } from "@hyperfocus/engine/tooling/create-project";
+import { createStandalonePlayableHtml } from "@hyperfocus/engine/project";
+import { connectCdpSession, evaluateCdp, type CdpSession, type JsonRecord } from "./cdp-session.ts";
 
-type JsonRecord = Record<string, unknown>;
-type CdpTarget = { webSocketDebuggerUrl: string };
 type Verification = { name: string; passed: true; evidence: JsonRecord };
 
 const studioRoot = import.meta.dir;
@@ -17,90 +16,6 @@ const engineRoot = resolve(studioRoot, "..", "..", "engine");
 const outputDir = join(engineRoot, ".local", "editor");
 const chromePath = argumentValue("--chrome") ?? process.env.CHROME_PATH;
 const skipBuild = process.argv.includes("--skip-build");
-
-class CdpRouter {
-  private nextId = 1;
-  private readonly pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
-  private readonly listeners = new Map<string, Set<(params: unknown) => void>>();
-
-  request(method: string, params: JsonRecord, timeoutMs: number) {
-    const id = this.nextId++;
-    let resolvePromise!: (value: unknown) => void;
-    let rejectPromise!: (error: Error) => void;
-    const promise = new Promise<unknown>((resolve, reject) => { resolvePromise = resolve; rejectPromise = reject; });
-    const timer = setTimeout(() => {
-      this.pending.delete(id);
-      rejectPromise(new Error(`CDP command timed out: ${method}`));
-    }, timeoutMs);
-    this.pending.set(id, { resolve: resolvePromise, reject: rejectPromise, timer });
-    return { id, payload: JSON.stringify({ id, method, params }), promise };
-  }
-
-  accept(message: string) {
-    const packet = JSON.parse(message) as JsonRecord;
-    if (typeof packet.id === "number") {
-      const pending = this.pending.get(packet.id);
-      if (!pending) return;
-      clearTimeout(pending.timer);
-      this.pending.delete(packet.id);
-      if (packet.error) pending.reject(new Error(JSON.stringify(packet.error)));
-      else pending.resolve(packet.result);
-      return;
-    }
-    if (typeof packet.method !== "string") return;
-    for (const listener of this.listeners.get(packet.method) ?? []) listener(packet.params);
-  }
-
-  on(method: string, listener: (params: unknown) => void) {
-    const listeners = this.listeners.get(method) ?? new Set();
-    listeners.add(listener);
-    this.listeners.set(method, listeners);
-  }
-
-  close(error: Error) {
-    for (const pending of this.pending.values()) {
-      clearTimeout(pending.timer);
-      pending.reject(error);
-    }
-    this.pending.clear();
-  }
-}
-
-class CdpSession {
-  private readonly router = new CdpRouter();
-
-  private constructor(private readonly socket: WebSocket) {
-    socket.addEventListener("message", (event) => {
-      if (typeof event.data === "string") this.router.accept(event.data);
-    });
-    socket.addEventListener("error", () => this.router.close(new Error("CDP WebSocket error")));
-    socket.addEventListener("close", () => this.router.close(new Error("CDP WebSocket closed")));
-  }
-
-  static async connect(url: string) {
-    const socket = new WebSocket(url);
-    await new Promise<void>((resolvePromise, reject) => {
-      const timer = setTimeout(() => reject(new Error("Timed out connecting to CDP")), 10_000);
-      socket.addEventListener("open", () => { clearTimeout(timer); resolvePromise(); }, { once: true });
-      socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("Could not connect to CDP")); }, { once: true });
-    });
-    return new CdpSession(socket);
-  }
-
-  command(method: string, params: JsonRecord = {}, timeoutMs = 30_000) {
-    const request = this.router.request(method, params, timeoutMs);
-    this.socket.send(request.payload);
-    return request.promise;
-  }
-
-  on(method: string, listener: (params: unknown) => void) {
-    this.router.on(method, listener);
-  }
-
-  close() {
-    this.socket.close(1000, "Engine Editor verification complete");
-  }
-}
 
 async function main() {
   await mkdir(outputDir, { recursive: true });
@@ -125,7 +40,7 @@ async function main() {
     await waitForHttp(`http://127.0.0.1:${serverPort}/healthz`, server, "Engine Editor server");
     chrome = await launchChrome(cdpPort, profileDir, chromePath);
     const target = await firstPageTarget(cdpPort);
-    session = await CdpSession.connect(target.webSocketDebuggerUrl);
+    session = await connectCdpSession(target.webSocketDebuggerUrl);
     await Promise.all([
       session.command("Page.enable"),
       session.command("Runtime.enable"),
@@ -183,7 +98,7 @@ async function main() {
       passed: true,
       generatedAt: new Date().toISOString(),
       url: `http://127.0.0.1:${serverPort}/`,
-      chrome: await evaluate<string>(session, "navigator.userAgent"),
+      chrome: await evaluateString(session, "navigator.userAgent"),
       results,
       screenshots: {
         stage: stageScreenshot,
@@ -220,11 +135,7 @@ async function main() {
 }
 
 async function verifyAgentProtocol(session: CdpSession): Promise<Verification> {
-  const evidence = await evaluate<{
-    visualCompatibilityActions: string[];
-    changed: { ok: boolean; completedActions: number; name: string; dirty: boolean; mode: string; workspace: string; controls: number };
-    restored: { ok: boolean; completedActions: number; name: string };
-  }>(session, `(async () => {
+  const evidence = await evaluateRecord(session, `(async () => {
     const commands = globalThis.__hyperfocusEditorCommands;
     const visualBridge = globalThis.__hyperfocusEditorAgent;
     const originalName = commands.snapshot().project.name;
@@ -262,7 +173,11 @@ async function verifyAgentProtocol(session: CdpSession): Promise<Verification> {
       },
       originalName
     };
-  })()`, true);
+  })()`, {
+    visualCompatibilityActions: "string[]",
+    changed: { ok: "boolean", completedActions: "number", name: "string", dirty: "boolean", mode: "string", workspace: "string", controls: "number" },
+    restored: { ok: "boolean", completedActions: "number", name: "string" },
+  }, true);
   assert(evidence.visualCompatibilityActions.join(",") === "click,input,check,key,pointer,drag,upload,wait", "Visual compatibility bridge did not advertise its complete action set");
   assert(evidence.changed.ok && evidence.changed.completedActions === 1, "DOM-free command session did not complete the mutation plan");
   assert(evidence.changed.name === "Agent Protocol Acceptance" && evidence.changed.dirty, "Agent handoff did not capture the changed project state");
@@ -277,7 +192,7 @@ async function removeChromeProfile(profileDir: string) {
       await rm(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
       return;
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
+      const code = error !== null && typeof error === "object" ? Reflect.get(error, "code") : undefined;
       if (code !== "EBUSY" && code !== "EPERM") throw error;
       await delay(500);
     }
@@ -291,8 +206,7 @@ async function createNarrativeStandaloneFixture() {
     format: "iife",
     minify: true,
     target: "browser",
-    write: false,
-  } as Parameters<typeof Bun.build>[0]);
+  });
   if (!bundled.success || !bundled.outputs[0]) throw new Error("Narrative standalone fixture runtime failed to bundle.");
   const project = createStarterProject("narrative-rpg", "Narrative Acceptance", "2026-01-01T00:00:00.000Z");
   const files = await createHyperfocusProjectFiles(project, []);
@@ -310,7 +224,7 @@ async function verifyNarrativeStandaloneRuntime(session: CdpSession, html: strin
     return true;
   })()`);
   await waitForExpression(session, "document.querySelector('#narrative-verification')?.contentWindow?.__hyperfocusPlayable?.ready === true", 30_000, "narrative standalone readiness");
-  const first = await evaluate<{ greeting: string; accept: string; decline: string; savedState: string; completedState: string }>(session, `(async () => {
+  const first = await evaluateRecord(session, `(async () => {
     const iframe = document.querySelector('#narrative-verification');
     const runtime = iframe.contentWindow.__hyperfocusPlayable;
     const press = async (code, key) => {
@@ -329,7 +243,7 @@ async function verifyNarrativeStandaloneRuntime(session: CdpSession, html: strin
     await press('KeyR', 'r');
     const completedState = runtime.storySnapshot().quests[0].stateId;
     return { greeting, accept: choices[0].text, decline: choices[1].text, savedState, completedState };
-  })()`, true);
+  })()`, { greeting: "string", accept: "string", decline: "string", savedState: "string", completedState: "string" }, true);
   assert(first.greeting.includes("Mara") && first.greeting.startsWith("Bienvenida"), `Narrative locale variable substitution failed: ${JSON.stringify(first)}`);
   assert(first.accept === "I will recover it." && first.decline === "Todavía no.", `Narrative locale fallback failed: ${JSON.stringify(first)}`);
   assert(first.savedState === "searching" && first.completedState === "complete", `Narrative quest actions failed: ${JSON.stringify(first)}`);
@@ -343,13 +257,13 @@ async function verifyNarrativeStandaloneRuntime(session: CdpSession, html: strin
     return true;
   })()`);
   await waitForExpression(session, "document.querySelector('#narrative-verification')?.contentWindow?.__hyperfocusPlayable?.ready === true", 30_000, "narrative save restore");
-  const restored = await evaluate<{ state: string; dialogueNode: string; diagnostics: number }>(session, `(async () => {
+  const restored = await evaluateRecord(session, `(async () => {
     const runtime = document.querySelector('#narrative-verification').contentWindow.__hyperfocusPlayable;
     const result = { state: runtime.storySnapshot().quests[0].stateId, dialogueNode: runtime.storySnapshot().dialogue.nodeId, diagnostics: runtime.diagnostics.length };
     await runtime.deleteSaveProfile();
     document.querySelector('#narrative-verification').remove();
     return result;
-  })()`, true);
+  })()`, { state: "string", dialogueNode: "string", diagnostics: "number" }, true);
   assert(restored.state === "searching" && restored.dialogueNode === "end", `Narrative save did not atomically restore story state: ${JSON.stringify(restored)}`);
   assert(restored.diagnostics === 0, `Narrative standalone reported diagnostics: ${JSON.stringify(restored)}`);
   return { name: "Narrative Story/Localization/Quest Save Runtime", passed: true, evidence: { ...first, ...restored } };
@@ -377,12 +291,12 @@ async function dispatchKey(session:CdpSession,code:string,key:string,modifiers:n
 }
 
 async function verifyBootstrapAndLayout(session: CdpSession): Promise<Verification> {
-  const tabs = await evaluate<number>(session, "document.querySelectorAll('[data-workspace-tab]').length");
+  const tabs = await evaluateNumber(session, "document.querySelectorAll('[data-workspace-tab]').length");
   assert(tabs === 8, `Expected eight workspace tabs, received ${tabs}`);
   const ids = ["stage", "scene3d", "tilemap", "atlas", "script", "post", "motion", "diagnostics"] as const;
   const visibility: Record<string, boolean> = {};
   for (const id of ids) {
-    visibility[id] = await evaluate<boolean>(session, `(() => {
+    visibility[id] = await evaluateBoolean(session, `(() => {
       document.querySelector('[data-workspace-tab="${id}"]').click();
       const workspace = document.querySelector('#workspace-${id}');
       return !workspace.hidden && getComputedStyle(workspace).display !== 'none';
@@ -393,7 +307,7 @@ async function verifyBootstrapAndLayout(session: CdpSession): Promise<Verificati
 }
 
 async function verifyProjectFoundation(session:CdpSession):Promise<Verification>{
-  const evidence=await evaluate<{modes:number;resources:number;before:number;after:number;restored:number;recoveryFormat:string;dirty:boolean;tabSemantics:boolean}>(session,`(()=>{
+  const evidence=await evaluateRecord(session,`(()=>{
     const modes=document.querySelectorAll('button[data-editor-mode]').length;
     const resources=document.querySelectorAll('[data-workspace-tab]').length;
     const before=document.querySelectorAll('#project-entities [data-project-entity]').length;
@@ -405,7 +319,7 @@ async function verifyProjectFoundation(session:CdpSession):Promise<Verification>
     const restored=document.querySelectorAll('#project-entities [data-project-entity]').length;
     const tabSemantics=[...document.querySelectorAll('[data-workspace-tab]')].every(tab=>tab.getAttribute('role')==='tab'&&tab.hasAttribute('aria-selected'));
     return{modes,resources,before,after,restored,recoveryFormat:recovery.format,dirty,tabSemantics};
-  })()`);
+  })()`,{modes:"number",resources:"number",before:"number",after:"number",restored:"number",recoveryFormat:"string",dirty:"boolean",tabSemantics:"boolean"});
   assert(evidence.modes===4,`Editor modes are incomplete: ${JSON.stringify(evidence)}`);
   assert(evidence.resources===8,"Resource editor navigation is incomplete");
   assert(evidence.after===evidence.before+1&&evidence.restored===evidence.before,"Project entity create/undo did not round-trip");
@@ -432,7 +346,7 @@ async function verifyNeutralExportFallback(session: CdpSession): Promise<Verific
     return true;
   })()`);
   await waitForExpression(session, "globalThis.__capturedNeutralExports?.length === 1", 30_000, "neutral export ZIP fallback");
-  const evidence = await evaluate<{ name: string; bytes: number; signature: string; hasProject: boolean; hasManifest: boolean; hasFormat: boolean; diagnostics: number; success: boolean }>(session, `(async () => {
+  const evidence = await evaluateRecord(session, `(async () => {
     const blob = globalThis.__capturedNeutralExports[0];
     const bytes = new Uint8Array(await blob.arrayBuffer());
     const text = new TextDecoder().decode(bytes);
@@ -449,7 +363,7 @@ async function verifyNeutralExportFallback(session: CdpSession): Promise<Verific
       diagnostics: output.filter((line) => line.includes('[behavior-requires-port]') || line.includes('[extension-namespace]')).length,
       success: output.some((line) => line.includes('Neutral export downloaded') && line.includes('project SHA-256')),
     };
-  })()`, true);
+  })()`, { name: "string", bytes: "number", signature: "string", hasProject: "boolean", hasManifest: "boolean", hasFormat: "boolean", diagnostics: "number", success: "boolean" }, true);
   assert(evidence.name.endsWith("-neutral-export.zip"), `Neutral export fallback filename is not portable: ${JSON.stringify(evidence)}`);
   assert(evidence.bytes > 1_000 && evidence.signature === "504b0304", `Neutral export is not a standard non-empty ZIP: ${JSON.stringify(evidence)}`);
   assert(evidence.hasProject && evidence.hasManifest && evidence.hasFormat, `Neutral export omitted ordinary project/manifest evidence: ${JSON.stringify(evidence)}`);
@@ -467,11 +381,12 @@ async function verifyStandalonePlayableBuild(session: CdpSession): Promise<Verif
       return original(blob);
     };
     document.querySelector('[data-editor-action="build"]').click();
-    document.querySelector('[data-editor-action="download-build"]').click();
     return true;
   })()`);
+  await waitForExpression(session, "document.querySelector('[data-editor-action=\"download-build\"]') !== null", 10_000, "component-owned build controls");
+  await evaluate(session, `document.querySelector('[data-editor-action="download-build"]').click()`);
   await waitForExpression(session, "globalThis.__capturedStandaloneBuilds?.length === 1", 30_000, "standalone HTML build capture");
-  const embedded = await evaluate<{ bytes: number; externalReferences: boolean }>(session, `(async () => {
+  const embedded = await evaluateRecord(session, `(async () => {
     const html = await globalThis.__capturedStandaloneBuilds[0].text();
     globalThis.__standaloneVerificationHtml = html;
     const old = document.querySelector('#standalone-verification');
@@ -484,12 +399,12 @@ async function verifyStandalonePlayableBuild(session: CdpSession): Promise<Verif
     iframe.srcdoc = html;
     document.body.append(iframe);
     return { bytes: new Blob([html]).size, externalReferences: /<script\\s+src=|<link\\s+[^>]*href=|https?:\\/\\//i.test(html) };
-  })()`, true);
+  })()`, { bytes: "number", externalReferences: "boolean" }, true);
   assert(embedded.bytes > 1_000, `Standalone HTML is unexpectedly small: ${embedded.bytes} bytes`);
   assert(!embedded.externalReferences, "Standalone HTML contains an external script, stylesheet, or network URL");
   await waitForExpression(session, "document.querySelector('#standalone-verification')?.contentWindow?.__hyperfocusPlayable?.ready === true", 30_000, "standalone runtime readiness");
   await waitForExpression(session, "document.querySelector('#standalone-verification')?.contentWindow?.__hyperfocusPlayable?.frameCount > 1", 30_000, "standalone runtime animation frames");
-  const evidence = await evaluate<{ startX: number; endX: number; frames: number; assets: number; diagnostics: number; readyState: string; savedX: number }>(session, `(async () => {
+  const evidence = await evaluateRecord(session, `(async () => {
     const iframe = document.querySelector('#standalone-verification');
     const runtime = iframe.contentWindow.__hyperfocusPlayable;
     const startX = runtime.snapshot().entities.find((entity) => entity.id === 'player-01').x;
@@ -499,11 +414,11 @@ async function verifyStandalonePlayableBuild(session: CdpSession): Promise<Verif
     const endX = runtime.snapshot().entities.find((entity) => entity.id === 'player-01').x;
     await runtime.save();
     const savedX = runtime.snapshot().entities.find((entity) => entity.id === 'player-01').x;
-    return { startX, endX, frames: runtime.frameCount, assets: runtime.assetCount, diagnostics: runtime.diagnostics.length, readyState: iframe.contentDocument.body.dataset.hyperfocusReady, savedX };
-  })()`, true);
+    return { startX, endX, frames: runtime.frameCount, assets: runtime.assetCount, diagnostics: runtime.diagnostics, readyState: iframe.contentDocument.body.dataset.hyperfocusReady, savedX };
+  })()`, { startX: "number", endX: "number", frames: "number", assets: "number", diagnostics: "unknown[]", readyState: "string", savedX: "number" }, true);
   assert(evidence.readyState === "true" && evidence.frames > 1, `Standalone runtime did not render frames: ${JSON.stringify(evidence)}`);
   assert(evidence.endX > evidence.startX, `Standalone input did not move the player: ${JSON.stringify(evidence)}`);
-  assert(evidence.diagnostics === 0, `Default standalone build contains unsupported runtime behavior: ${JSON.stringify(evidence)}`);
+  assert(evidence.diagnostics.length === 0, `Default standalone build contains unsupported runtime behavior: ${JSON.stringify(evidence)}`);
   await evaluate(session, `(() => {
     document.querySelector('#standalone-verification')?.remove();
     const iframe = document.createElement('iframe');
@@ -514,14 +429,14 @@ async function verifyStandalonePlayableBuild(session: CdpSession): Promise<Verif
     return true;
   })()`);
   await waitForExpression(session, "document.querySelector('#standalone-verification')?.contentWindow?.__hyperfocusPlayable?.ready === true", 30_000, "standalone save restore after clean document boot");
-  const persistence = await evaluate<{ restoredX: number; schema: string; exportedBytes: number; checksum: boolean }>(session, `(async () => {
+  const persistence = await evaluateRecord(session, `(async () => {
     const runtime = document.querySelector('#standalone-verification').contentWindow.__hyperfocusPlayable;
     const restoredX = runtime.snapshot().entities.find((entity) => entity.id === 'player-01').x;
     const exported = await runtime.exportSaveProfile();
     const envelope = JSON.parse(exported);
     await runtime.deleteSaveProfile();
     return { restoredX, schema: runtime.savePolicy.schema, exportedBytes: new TextEncoder().encode(exported).byteLength, checksum: /^[0-9a-f]{64}$/.test(envelope.checksum) };
-  })()`, true);
+  })()`, { restoredX: "number", schema: "string", exportedBytes: "number", checksum: "boolean" }, true);
   assert(persistence.restoredX === evidence.savedX, `Standalone save did not restore across document recreation: ${JSON.stringify({ evidence, persistence })}`);
   assert(persistence.schema === "portable-world-snapshot-v1" && persistence.exportedBytes > 100 && persistence.checksum, `Standalone save export is incomplete: ${JSON.stringify(persistence)}`);
   await evaluate(session, "document.querySelector('#standalone-verification')?.remove(); document.querySelector('[data-editor-action=close-center]')?.click(); true");
@@ -530,40 +445,40 @@ async function verifyStandalonePlayableBuild(session: CdpSession): Promise<Verif
 
 async function verifyEditorPlayParity(session: CdpSession): Promise<Verification> {
   await dispatchKey(session, "F6", "F6", 0);
-  const start = await evaluate<{ x: number; y: number }>(session, "globalThis.__engineEditor.entityPosition('player-01')");
+  const start = await evaluateRecord(session, "globalThis.__engineEditor.entityPosition('player-01')", { x: "number", y: "number" });
   await session.command("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyD", key: "d", text: "d" });
   await delay(180);
   await session.command("Input.dispatchKeyEvent", { type: "keyUp", code: "KeyD", key: "d" });
-  const played = await evaluate<{ x: number; y: number }>(session, "globalThis.__engineEditor.entityPosition('player-01')");
+  const played = await evaluateRecord(session, "globalThis.__engineEditor.entityPosition('player-01')", { x: "number", y: "number" });
   assert(played.x > start.x, `Editor Play did not execute portable input movement: ${JSON.stringify({ start, played })}`);
   await dispatchKey(session, "F1", "F1", 0);
-  const restored = await evaluate<{ x: number; y: number }>(session, "globalThis.__engineEditor.entityPosition('player-01')");
+  const restored = await evaluateRecord(session, "globalThis.__engineEditor.entityPosition('player-01')", { x: "number", y: "number" });
   assert(restored.x === start.x && restored.y === start.y, `Leaving Play did not restore authored state: ${JSON.stringify({ start, restored })}`);
   return { name: "Editor Play/Build Runtime Parity", passed: true, evidence: { start, played, restored } };
 }
 
 async function verifyGlobalOrchestration(session:CdpSession):Promise<Verification>{
   await dispatchShortcut(session,"Digit3","3",2);
-  const hotkeyWorkspace=await evaluate<string>(session,"globalThis.__engineStudio.activeWorkspace");
+  const hotkeyWorkspace=await evaluateString(session,"globalThis.__engineStudio.activeWorkspace");
   assert(hotkeyWorkspace==="tilemap",`Ctrl+3 opened ${hotkeyWorkspace} instead of tilemap`);
   await dispatchShortcut(session,"KeyP","p",2);
-  const paletteOpen=await evaluate<boolean>(session,"globalThis.__engineStudio.commandPaletteOpen && !document.querySelector('#command-palette').hidden");
+  const paletteOpen=await evaluateBoolean(session,"globalThis.__engineStudio.commandPaletteOpen && !document.querySelector('#command-palette').hidden");
   assert(paletteOpen,"Ctrl+P did not open the command palette");
-  const resultCount=await evaluate<number>(session,`(()=>{const input=document.querySelector('#command-query');input.value='post process';input.dispatchEvent(new Event('input',{bubbles:true}));return document.querySelectorAll('.command-result[data-command-index]').length;})()`);
+  const resultCount=await evaluateNumber(session,`(()=>{const input=document.querySelector('#command-query');input.value='post process';input.dispatchEvent(new Event('input',{bubbles:true}));return document.querySelectorAll('.command-result[data-command-index]').length;})()`);
   assert(resultCount>0,"Command palette fuzzy search returned no Post-Process action");
   await dispatchKey(session,"Enter","Enter",0);
-  const paletteDestination=await evaluate<string>(session,"globalThis.__engineStudio.activeWorkspace");
+  const paletteDestination=await evaluateString(session,"globalThis.__engineStudio.activeWorkspace");
   assert(paletteDestination==="post",`Command palette navigated to ${paletteDestination} instead of post`);
   await dispatchKey(session,"Space"," ",0);
-  if (!await evaluate<boolean>(session,"globalThis.__engineEditor.loopPaused")) {
+  if (!await evaluateBoolean(session,"globalThis.__engineEditor.loopPaused")) {
     await evaluate(session,"document.body.dispatchEvent(new KeyboardEvent('keydown',{code:'Space',key:' ',bubbles:true,cancelable:true}))");
   }
-  const pauseEvidence=await evaluate<{paused:boolean;active:string;paletteHidden:boolean;playback:string}>(session,"({paused:globalThis.__engineEditor.loopPaused,active:document.activeElement?.outerHTML?.slice(0,120)??'',paletteHidden:document.querySelector('#command-palette').hidden,playback:document.querySelector('#playback-status').textContent})");
+  const pauseEvidence=await evaluateRecord(session,"({paused:globalThis.__engineEditor.loopPaused,active:document.activeElement?.outerHTML?.slice(0,120)??'',paletteHidden:document.querySelector('#command-palette').hidden,playback:document.querySelector('#playback-status').textContent})",{paused:"boolean",active:"string",paletteHidden:"boolean",playback:"string"});
   const paused=pauseEvidence.paused;
   assert(paused,`Space did not pause the engine loop: ${JSON.stringify(pauseEvidence)}`);
-  const beforeSteps=await evaluate<number>(session,"globalThis.__engineStudio.manualSteps");
+  const beforeSteps=await evaluateNumber(session,"globalThis.__engineStudio.manualSteps");
   await dispatchShortcut(session,"ArrowRight","ArrowRight",2);
-  const afterStep=await evaluate<{paused:boolean;steps:number}>(session,"({paused:globalThis.__engineStudio.loopPaused,steps:globalThis.__engineStudio.manualSteps})");
+  const afterStep=await evaluateRecord(session,"({paused:globalThis.__engineStudio.loopPaused,steps:globalThis.__engineStudio.manualSteps})",{paused:"boolean",steps:"number"});
   assert(afterStep.paused&&afterStep.steps===beforeSteps+1,"Ctrl+Right did not advance exactly one frame while remaining paused");
   await evaluate(session,"document.querySelector('#global-playback').click()");
   return{name:"Verification 3 — Global Navigation & Playback",passed:true,evidence:{hotkeyWorkspace,paletteOpen,resultCount,paletteDestination,manualStepDelta:afterStep.steps-beforeSteps}};
@@ -572,24 +487,24 @@ async function verifyGlobalOrchestration(session:CdpSession):Promise<Verificatio
 async function verifyAuthoringPowerTools(session:CdpSession):Promise<Verification>{
   await evaluate(session,"globalThis.__engineStudio.showWorkspace('tilemap');true");
   await dispatchKey(session,"KeyM","m",0);await dispatchKey(session,"KeyC","c",0);
-  const tile=await evaluate<{tool:string;rects:number}>(session,"({tool:globalThis.__engineStudio.tileTool,rects:globalThis.__engineStudio.extractedCollisionCount})");
+  const tile=await evaluateRecord(session,"({tool:globalThis.__engineStudio.tileTool,rects:globalThis.__engineStudio.extractedCollisionCount})",{tool:"string",rects:"number"});
   assert(tile.tool==="marquee","M did not activate the marquee tool");assert(tile.rects>0,"C did not extract collision rectangles");
-  const atlas=await evaluate<{frames:number;speed:string}>(session,`(()=>{globalThis.__engineStudio.showWorkspace('atlas');document.querySelector('#slice-width').value='64';document.querySelector('#slice-height').value='80';document.querySelector('#slice-grid').click();const speed=document.querySelector('#atlas-speed');speed.value='2';speed.dispatchEvent(new Event('input'));speed.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));return{frames:globalThis.__engineStudio.atlasFrameCount,speed:speed.value};})()`);
+  const atlas=await evaluateRecord(session,`(()=>{globalThis.__engineStudio.showWorkspace('atlas');document.querySelector('#slice-width').value='64';document.querySelector('#slice-height').value='80';document.querySelector('#slice-grid').click();const speed=document.querySelector('#atlas-speed');speed.value='2';speed.dispatchEvent(new Event('input'));speed.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));return{frames:globalThis.__engineStudio.atlasFrameCount,speed:speed.value};})()`,{frames:"number",speed:"string"});
   assert(atlas.frames===32,`Grid slicer produced ${atlas.frames} frames instead of 32`);assert(atlas.speed==="1","Atlas speed double-click did not reset to 1.0×");
-  const post=await evaluate<{before:string;after:string;bypassed:boolean}>(session,`(()=>{globalThis.__engineStudio.showWorkspace('post');const cards=[...document.querySelectorAll('.effect-card')];const before=cards.map(card=>card.dataset.effectId).join(',');cards[0].dispatchEvent(new DragEvent('dragstart',{bubbles:true}));cards[2].dispatchEvent(new DragEvent('drop',{bubbles:true}));const after=[...document.querySelectorAll('.effect-card')].map(card=>card.dataset.effectId).join(',');document.dispatchEvent(new KeyboardEvent('keydown',{code:'Backquote',key:'\`',bubbles:true}));return{before,after,bypassed:document.querySelector('.compare-stage').classList.contains('is-bypassed')};})()`);
+  const post=await evaluateRecord(session,`(()=>{globalThis.__engineStudio.showWorkspace('post');const cards=[...document.querySelectorAll('.effect-card')];const before=cards.map(card=>card.dataset.effectId).join(',');cards[0].dispatchEvent(new DragEvent('dragstart',{bubbles:true}));cards[2].dispatchEvent(new DragEvent('drop',{bubbles:true}));const after=[...document.querySelectorAll('.effect-card')].map(card=>card.dataset.effectId).join(',');document.dispatchEvent(new KeyboardEvent('keydown',{code:'Backquote',key:'\`',bubbles:true}));return{before,after,bypassed:document.querySelector('.compare-stage').classList.contains('is-bypassed')};})()`,{before:"string",after:"string",bypassed:"boolean"});
   assert(post.before!==post.after,"Post-process drag/drop did not reorder the effect stack");assert(post.bypassed,"Holding backtick did not activate A/B bypass");
   await evaluate(session,"document.dispatchEvent(new KeyboardEvent('keyup',{code:'Backquote',key:'`',bubbles:true}));true");
-  const latency=await evaluate<string>(session,`(()=>{globalThis.__engineStudio.showWorkspace('diagnostics');const slider=document.querySelector('#latency-slider');slider.value='240';slider.dispatchEvent(new Event('input'));slider.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));return slider.value;})()`);
+  const latency=await evaluateString(session,`(()=>{globalThis.__engineStudio.showWorkspace('diagnostics');const slider=document.querySelector('#latency-slider');slider.value='240';slider.dispatchEvent(new Event('input'));slider.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));return slider.value;})()`);
   assert(latency==="0","Latency slider double-click did not reset to 0 ms");
   await evaluate(session,"globalThis.__engineStudio.showWorkspace('motion');true");
-  const handle=await evaluate<{x:number;y:number}>(session,`(()=>{const canvas=document.querySelector('#rig-canvas');const rect=canvas.getBoundingClientRect();return{x:rect.left+(Number(canvas.dataset.rightHandX)/canvas.width)*rect.width,y:rect.top+(Number(canvas.dataset.rightHandY)/canvas.height)*rect.height};})()`);
+  const handle=await evaluateRecord(session,`(()=>{const canvas=document.querySelector('#rig-canvas');const rect=canvas.getBoundingClientRect();return{x:rect.left+(Number(canvas.dataset.rightHandX)/canvas.width)*rect.width,y:rect.top+(Number(canvas.dataset.rightHandY)/canvas.height)*rect.height};})()`,{x:"number",y:"number"});
   await session.command("Input.dispatchMouseEvent",{type:"mousePressed",x:handle.x,y:handle.y,button:"left",clickCount:1});await session.command("Input.dispatchMouseEvent",{type:"mouseMoved",x:handle.x+35,y:handle.y-22,button:"left"});await session.command("Input.dispatchMouseEvent",{type:"mouseReleased",x:handle.x+35,y:handle.y-22,button:"left",clickCount:1});
-  const ikSolved=await evaluate<boolean>(session,"document.querySelector('#rig-canvas').dataset.ikSolved === 'true'");assert(ikSolved,"Dragging a rig handle did not run IK solving");
+  const ikSolved=await evaluateBoolean(session,"document.querySelector('#rig-canvas').dataset.ikSolved === 'true'");assert(ikSolved,"Dragging a rig handle did not run IK solving");
   return{name:"Verification 4 — Authoring Power Tools",passed:true,evidence:{tile,atlas,post,latencyMs:Number(latency),ikSolved}};
 }
 
 async function verifyProductionSystems(session:CdpSession):Promise<Verification>{
-  const evidence=await evaluate<{modal:boolean;midi:string;automationKeys:number;trace:string;bones:number;poses:number;comments:number;webm:{bytes:number;type:string}}>(session,`(async()=>{
+  const evidence=await evaluateRecord(session,`(async()=>{
     const editor=globalThis.__engineEditor;
     editor.openProductionLab('reactive');
     const modal=!document.querySelector('#production-center').hidden;
@@ -614,7 +529,7 @@ async function verifyProductionSystems(session:CdpSession):Promise<Verification>
     editor.openProductionLab('export');
     const webm=await editor.exportSequencePreview();
     return{modal,midi,automationKeys,trace,bones:bones-bonesBefore,poses,comments,webm};
-  })()`,true,60_000);
+  })()`,{modal:"boolean",midi:"string",automationKeys:"number",trace:"string",bones:"number",poses:"number",comments:"number",webm:{bytes:"number",type:"string"}},true,60_000);
   assert(evidence.modal,"Production Lab did not open");
   assert(evidence.midi.includes("112"),`MIDI simulation did not reach the live monitor: ${evidence.midi}`);
   assert(evidence.automationKeys>0,"MIDI automation did not retain timeline keys");
@@ -626,7 +541,7 @@ async function verifyProductionSystems(session:CdpSession):Promise<Verification>
 }
 
 async function verifyPostBudget(session: CdpSession): Promise<Verification> {
-  const evidence = await evaluate<{ text: string; warningClass: boolean; visible: boolean; budgetOk: boolean }>(session, `(() => {
+  const evidence = await evaluateRecord(session, `(() => {
     globalThis.__engineStudio.showWorkspace('post');
     globalThis.__engineStudio.injectHeavyPostStack();
     const warning = document.querySelector('#budget-warning');
@@ -637,7 +552,7 @@ async function verifyPostBudget(session: CdpSession): Promise<Verification> {
       visible: !warning.hidden && getComputedStyle(warning).display !== 'none',
       budgetOk: globalThis.__engineStudio.postBudgetOk,
     };
-  })()`);
+  })()`, { text: "string", warningClass: "boolean", visible: "boolean", budgetOk: "boolean" });
   assert(evidence.text.includes("High Budget Warning"), "High Budget Warning text was not rendered");
   assert(evidence.warningClass, "Budget component did not receive the warning class");
   assert(evidence.visible, "Budget warning was not visible");
@@ -646,29 +561,29 @@ async function verifyPostBudget(session: CdpSession): Promise<Verification> {
 }
 
 async function verifyStageInteraction(session: CdpSession): Promise<Verification> {
-  const point = await evaluate<{ x: number; y: number }>(session, `(() => {
+  const point = await evaluateRecord(session, `(() => {
     globalThis.__engineStudio.showWorkspace('stage');
     globalThis.__engineStudio.selectEntity('sentinel-a');
     const canvas = document.querySelector('#stage-canvas');
     const rect = canvas.getBoundingClientRect();
     return { x: rect.left + (320 / 760) * rect.width, y: rect.top + (242 / 480) * rect.height };
-  })()`);
+  })()`, { x: "number", y: "number" });
   await session.command("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
   await session.command("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
-  if (await evaluate<string | null>(session, "globalThis.__engineEditor.selectedEntityId") !== "player-01") {
+  if (await evaluateNullableString(session, "globalThis.__engineEditor.selectedEntityId") !== "player-01") {
     await evaluate(session, `(()=>{const canvas=document.querySelector('#stage-canvas');const rect=canvas.getBoundingClientRect();const options={bubbles:true,pointerId:7,button:0,clientX:rect.left+(320/760)*rect.width,clientY:rect.top+(242/480)*rect.height};canvas.dispatchEvent(new PointerEvent('pointerdown',options));canvas.dispatchEvent(new PointerEvent('pointerup',options));return true;})()`);
   }
-  const selectedEntityId = await evaluate<string | null>(session, "globalThis.__engineStudio.selectedEntityId");
+  const selectedEntityId = await evaluateNullableString(session, "globalThis.__engineStudio.selectedEntityId");
   assert(selectedEntityId === "player-01", `Canvas hit test selected ${selectedEntityId ?? "nothing"} instead of player-01`);
   return { name: "Verification 6 — Stage Interaction", passed: true, evidence: { point, selectedEntityId } };
 }
 
 async function verifyWasmTelemetry(session: CdpSession): Promise<Verification> {
-  const evidence = await evaluate<{ wasmMs: number; typescriptMs: number; output: string }>(session, `(async () => {
+  const evidence = await evaluateRecord(session, `(async () => {
     globalThis.__engineStudio.showWorkspace('diagnostics');
     const values = await globalThis.__engineStudio.runBenchmark();
     return { ...values, output: document.querySelector('#benchmark-output').textContent.trim() };
-  })()`, true, 60_000);
+  })()`, { wasmMs: "number", typescriptMs: "number", output: "string" }, true, 60_000);
   assert(evidence.wasmMs > 0, `WASM latency must be > 0 ms; received ${evidence.wasmMs}`);
   assert(evidence.typescriptMs > 0, `TypeScript latency must be > 0 ms; received ${evidence.typescriptMs}`);
   const values = evidence.output.match(/\d+\.\d+\s*ms/g) ?? [];
@@ -677,7 +592,7 @@ async function verifyWasmTelemetry(session: CdpSession): Promise<Verification> {
 }
 
 async function verifyZeroClipRig(session: CdpSession): Promise<Verification> {
-  const evidence = await evaluate<{ footSlipMeters: number; status: string; phase: string; finite: string }>(session, `(() => {
+  const evidence = await evaluateRecord(session, `(() => {
     globalThis.__engineStudio.showWorkspace('motion');
     globalThis.__engineStudio.setProceduralWalk(true);
     globalThis.__engineStudio.stepMotion(120);
@@ -687,7 +602,7 @@ async function verifyZeroClipRig(session: CdpSession): Promise<Verification> {
       phase: document.querySelector('#rig-phase').textContent.trim(),
       finite: document.querySelector('#pose-finite').textContent.trim(),
     };
-  })()`);
+  })()`, { footSlipMeters: "number", status: "string", phase: "string", finite: "string" });
   assert(Number.isFinite(evidence.footSlipMeters), "Foot-slip telemetry is not finite");
   assert(evidence.footSlipMeters < 0.02, `Foot slip ${evidence.footSlipMeters} m violates the < 0.02 m boundary`);
   assert(evidence.status.includes("Within engine acceptance"), "Motion UI did not report the accepted foot-slip state");
@@ -696,23 +611,114 @@ async function verifyZeroClipRig(session: CdpSession): Promise<Verification> {
   return { name: "Verification 8 — Zero-Clip Rig Evaluation", passed: true, evidence };
 }
 
-async function evaluate<T>(session: CdpSession, expression: string, awaitPromise = false, timeoutMs = 30_000): Promise<T> {
-  const response = asRecord(await session.command("Runtime.evaluate", {
-    expression,
-    awaitPromise,
-    returnByValue: true,
-    userGesture: true,
-  }, timeoutMs));
-  if (response.exceptionDetails) throw new Error(`Runtime evaluation failed: ${JSON.stringify(response.exceptionDetails)}`);
-  const result = asRecord(response.result);
-  return result.value as T;
+type VerificationScalarSchema = "boolean" | "number" | "string" | "string[]" | "unknown[]";
+interface VerificationRecordSchema {
+  readonly [key: string]: VerificationScalarSchema | VerificationRecordSchema;
+}
+type DecodedVerificationValue<TSchema> =
+  TSchema extends "boolean" ? boolean
+    : TSchema extends "number" ? number
+      : TSchema extends "string" ? string
+        : TSchema extends "string[]" ? string[]
+          : TSchema extends "unknown[]" ? unknown[]
+            : TSchema extends VerificationRecordSchema ? DecodedVerificationRecord<TSchema>
+              : never;
+type DecodedVerificationRecord<TSchema extends VerificationRecordSchema> = {
+  [TKey in keyof TSchema]: DecodedVerificationValue<TSchema[TKey]>;
+};
+
+async function evaluate(session: CdpSession, expression: string, awaitPromise = false, timeoutMs = 30_000) {
+  return await evaluateCdp(session, expression, { awaitPromise, timeoutMs });
+}
+
+function evaluateRecord<const TSchema extends VerificationRecordSchema>(
+  session: CdpSession,
+  expression: string,
+  schema: TSchema,
+  awaitPromise?: boolean,
+  timeoutMs?: number,
+): Promise<DecodedVerificationRecord<TSchema>>;
+async function evaluateRecord(
+  session: CdpSession,
+  expression: string,
+  schema: VerificationRecordSchema,
+  awaitPromise = false,
+  timeoutMs = 30_000,
+) {
+  const value = await evaluate(session, expression, awaitPromise, timeoutMs);
+  return decodeVerificationRecord(value, schema, "Runtime.evaluate result");
+}
+
+async function evaluateBoolean(session: CdpSession, expression: string) {
+  return requireBoolean(await evaluate(session, expression), "Runtime.evaluate result");
+}
+
+async function evaluateNumber(session: CdpSession, expression: string) {
+  return requireNumber(await evaluate(session, expression), "Runtime.evaluate result");
+}
+
+async function evaluateString(session: CdpSession, expression: string) {
+  return requireString(await evaluate(session, expression), "Runtime.evaluate result");
+}
+
+async function evaluateNullableString(session: CdpSession, expression: string) {
+  const value = await evaluate(session, expression);
+  if (value === null) return null;
+  return requireString(value, "Runtime.evaluate result");
+}
+
+function decodeVerificationRecord(
+  value: unknown,
+  schema: VerificationRecordSchema,
+  label: string,
+) {
+  const record = requireRecord(value, label);
+  return Object.fromEntries(Object.entries(schema).map(([key, fieldSchema]) => [
+    key,
+    decodeVerificationValue(record[key], fieldSchema, `${label}.${key}`),
+  ]));
+}
+
+function decodeVerificationValue(value: unknown, schema: VerificationScalarSchema | VerificationRecordSchema, label: string): unknown {
+  if (schema === "boolean") return requireBoolean(value, label);
+  if (schema === "number") return requireNumber(value, label);
+  if (schema === "string") return requireString(value, label);
+  if (schema === "unknown[]") {
+    if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+    return [...value];
+  }
+  if (schema === "string[]") {
+    if (!Array.isArray(value) || !value.every((entry) => typeof entry === "string")) throw new Error(`${label} must be a string array`);
+    return [...value];
+  }
+  return decodeVerificationRecord(value, schema, label);
+}
+
+function requireRecord(value: unknown, label: string): JsonRecord {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
+  return Object.fromEntries(Object.entries(value));
+}
+
+function requireBoolean(value: unknown, label: string) {
+  if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
+  return value;
+}
+
+function requireNumber(value: unknown, label: string) {
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} must be a finite number`);
+  return value;
+}
+
+function requireString(value: unknown, label: string) {
+  if (typeof value !== "string") throw new Error(`${label} must be a string`);
+  return value;
 }
 
 async function waitForExpression(session: CdpSession, expression: string, timeoutMs: number, label: string) {
   const startedAt = performance.now();
   while (performance.now() - startedAt < timeoutMs) {
     try {
-      if (await evaluate<boolean>(session, expression)) return;
+      if (await evaluateBoolean(session, expression)) return;
     } catch {
       // Navigation can replace the execution context while it settles.
     }
@@ -771,9 +777,10 @@ function chromeCandidates(explicitPath?: string) {
 async function firstPageTarget(port: number) {
   const targets = await cdpFetch(port, "/json/list");
   assert(Array.isArray(targets), "CDP target list is not an array");
-  const target = targets.find((candidate) => asRecord(candidate).type === "page") as JsonRecord | undefined;
-  assert(target && typeof target.webSocketDebuggerUrl === "string", "CDP did not expose a page target");
-  return target as unknown as CdpTarget;
+  const target = targets.map(asRecord).find((candidate) => candidate.type === "page");
+  const webSocketDebuggerUrl = target?.webSocketDebuggerUrl;
+  assert(typeof webSocketDebuggerUrl === "string", "CDP did not expose a page target");
+  return { webSocketDebuggerUrl };
 }
 
 async function waitForCdp(port: number) {
@@ -787,7 +794,8 @@ async function waitForCdp(port: number) {
 async function cdpFetch(port: number, route: string) {
   const response = await fetch(`http://127.0.0.1:${port}${route}`);
   if (!response.ok) throw new Error(`CDP returned ${response.status}`);
-  return await response.json() as unknown;
+  const body: unknown = await response.json();
+  return body;
 }
 
 async function waitForHttp(url: string, child: ChildProcess, label: string) {
@@ -831,7 +839,7 @@ async function stopProcess(child: ChildProcess | undefined) {
 }
 
 function asRecord(value: unknown): JsonRecord {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : {};
 }
 
 function argumentValue(name: string) {

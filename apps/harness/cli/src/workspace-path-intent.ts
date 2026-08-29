@@ -29,9 +29,9 @@ const commonPosixRootSegments = new Set([
   "var"
 ]);
 
-export function extractWorkspaceRelativePathHints(content: string, cwd: string) {
+export function extractWorkspaceRelativePathHints(content: string, cwd: string): WorkspaceRelativePathHint[] {
   if (explicitAbsoluteCuePattern.test(content)) {
-    return [] as WorkspaceRelativePathHint[];
+    return [];
   }
 
   const hints = new Map<string, WorkspaceRelativePathHint>();

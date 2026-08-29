@@ -7,11 +7,11 @@ import { getPrimitivePortalRoot } from "./primitive-portal";
 
 createUiTest("portal overlay presentation", () => {
   beforeEach(() => {
-    (globalThis as typeof globalThis & { __padPilotDisablePortals?: boolean }).__padPilotDisablePortals = true;
+    globalThis.__padPilotDisablePortals = true;
   });
 
   afterEach(() => {
-    (globalThis as typeof globalThis & { __padPilotDisablePortals?: boolean }).__padPilotDisablePortals = false;
+    globalThis.__padPilotDisablePortals = false;
     document.querySelectorAll("[data-test-primitive-portal-root]").forEach((root) => root.remove());
   });
 
@@ -27,7 +27,7 @@ createUiTest("portal overlay presentation", () => {
   });
 
   it("reuses one document root per portal layer", () => {
-    (globalThis as typeof globalThis & { __padPilotDisablePortals?: boolean }).__padPilotDisablePortals = false;
+    globalThis.__padPilotDisablePortals = false;
 
     const firstPopoverRoot = getPrimitivePortalRoot("popover");
     const secondPopoverRoot = getPrimitivePortalRoot("popover");

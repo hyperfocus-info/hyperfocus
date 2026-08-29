@@ -1,4 +1,5 @@
 import type { HarnessLeftTab } from "../harness-store";
+import type { Hotkey } from "@tanstack/solid-hotkeys";
 
 export const currentTabItemHotkeyIds = [
   "selectCurrentItem1",
@@ -42,7 +43,7 @@ export type AppHotkeyId =
   | "ideToggleWordWrap"
   | CurrentTabItemHotkeyId;
 
-export type AppHotkeyPreferences = Record<AppHotkeyId, string[]>;
+export type AppHotkeyPreferences = Record<AppHotkeyId, Hotkey[]>;
 
 export const DEFAULT_APP_HOTKEY_PREFERENCES: AppHotkeyPreferences = {
   openProjectSwitcher: ["Mod+K", "Mod+Space"],
@@ -252,7 +253,7 @@ function ordinalSuffix(value: number) {
 
 const modifierNames = new Set(["mod", "control", "ctrl", "shift", "alt", "option", "meta", "cmd", "command"]);
 
-export function isValidAppHotkey(value: string) {
+export function isValidAppHotkey(value: string): value is Hotkey {
   const parts = value
     .split("+")
     .map((part) => part.trim())
@@ -276,7 +277,7 @@ export function normalizeAppHotkey(value: unknown, fallback: string) {
   return isValidAppHotkey(normalized) ? normalized : fallback;
 }
 
-export function normalizeAppHotkeys(value: unknown, fallback: string[]) {
+export function normalizeAppHotkeys(value: unknown, fallback: Hotkey[]): Hotkey[] {
   if (!Array.isArray(value) && typeof value !== "string") {
     return [...fallback];
   }
@@ -284,56 +285,55 @@ export function normalizeAppHotkeys(value: unknown, fallback: string[]) {
   const values = Array.isArray(value) ? value : [value];
   const normalized = values
     .map((entry) => normalizeAppHotkey(entry, ""))
-    .filter((entry) => entry && isValidAppHotkey(entry));
+    .filter(isValidAppHotkey);
 
   return [...new Set(normalized)];
 }
 
 export function normalizeAppHotkeyPreferences(input: unknown): AppHotkeyPreferences {
-  const parsed = input && typeof input === "object"
-    ? (input as Partial<Record<AppHotkeyId | "openProjectSwitcherAlternate", unknown>>)
-    : {};
+  const source = input && typeof input === "object" ? input : undefined;
+  const read = (key: AppHotkeyId | "openProjectSwitcherAlternate") => source ? Reflect.get(source, key) : undefined;
   const hasProjectSwitcherPreference =
-    Object.prototype.hasOwnProperty.call(parsed, "openProjectSwitcher") ||
-    Object.prototype.hasOwnProperty.call(parsed, "openProjectSwitcherAlternate");
+    Object.prototype.hasOwnProperty.call(source, "openProjectSwitcher") ||
+    Object.prototype.hasOwnProperty.call(source, "openProjectSwitcherAlternate");
 
   return {
     openProjectSwitcher: normalizeAppHotkeys(
-      hasProjectSwitcherPreference ? [parsed.openProjectSwitcher, parsed.openProjectSwitcherAlternate].flat() : undefined,
+      hasProjectSwitcherPreference ? [read("openProjectSwitcher"), read("openProjectSwitcherAlternate")].flat() : undefined,
       DEFAULT_APP_HOTKEY_PREFERENCES.openProjectSwitcher
     ),
-    openProjects: normalizeAppHotkeys(parsed.openProjects, DEFAULT_APP_HOTKEY_PREFERENCES.openProjects),
-    openAssistants: normalizeAppHotkeys(parsed.openAssistants, DEFAULT_APP_HOTKEY_PREFERENCES.openAssistants),
-    openJobs: normalizeAppHotkeys(parsed.openJobs, DEFAULT_APP_HOTKEY_PREFERENCES.openJobs),
-    openRuns: normalizeAppHotkeys(parsed.openRuns, DEFAULT_APP_HOTKEY_PREFERENCES.openRuns),
-    openPreferences: normalizeAppHotkeys(parsed.openPreferences, DEFAULT_APP_HOTKEY_PREFERENCES.openPreferences),
-    openIde: normalizeAppHotkeys(parsed.openIde, DEFAULT_APP_HOTKEY_PREFERENCES.openIde),
-    toggleTerminalDrawer: normalizeAppHotkeys(parsed.toggleTerminalDrawer, DEFAULT_APP_HOTKEY_PREFERENCES.toggleTerminalDrawer),
-    toggleTracePanel: normalizeAppHotkeys(parsed.toggleTracePanel, DEFAULT_APP_HOTKEY_PREFERENCES.toggleTracePanel),
-    createProjectChat: normalizeAppHotkeys(parsed.createProjectChat, DEFAULT_APP_HOTKEY_PREFERENCES.createProjectChat),
-    createAssistant: normalizeAppHotkeys(parsed.createAssistant, DEFAULT_APP_HOTKEY_PREFERENCES.createAssistant),
-    createBackgroundJob: normalizeAppHotkeys(parsed.createBackgroundJob, DEFAULT_APP_HOTKEY_PREFERENCES.createBackgroundJob),
-    focusCurrentSearch: normalizeAppHotkeys(parsed.focusCurrentSearch, DEFAULT_APP_HOTKEY_PREFERENCES.focusCurrentSearch),
-    ideCommandPalette: normalizeAppHotkeys(parsed.ideCommandPalette, DEFAULT_APP_HOTKEY_PREFERENCES.ideCommandPalette),
-    ideQuickOpen: normalizeAppHotkeys(parsed.ideQuickOpen, DEFAULT_APP_HOTKEY_PREFERENCES.ideQuickOpen),
-    ideFindInFile: normalizeAppHotkeys(parsed.ideFindInFile, DEFAULT_APP_HOTKEY_PREFERENCES.ideFindInFile),
-    ideFindInFiles: normalizeAppHotkeys(parsed.ideFindInFiles, DEFAULT_APP_HOTKEY_PREFERENCES.ideFindInFiles),
-    ideToggleTerminal: normalizeAppHotkeys(parsed.ideToggleTerminal, DEFAULT_APP_HOTKEY_PREFERENCES.ideToggleTerminal),
-    ideExplorer: normalizeAppHotkeys(parsed.ideExplorer, DEFAULT_APP_HOTKEY_PREFERENCES.ideExplorer),
-    ideSourceControl: normalizeAppHotkeys(parsed.ideSourceControl, DEFAULT_APP_HOTKEY_PREFERENCES.ideSourceControl),
-    ideSave: normalizeAppHotkeys(parsed.ideSave, DEFAULT_APP_HOTKEY_PREFERENCES.ideSave),
-    ideCloseEditor: normalizeAppHotkeys(parsed.ideCloseEditor, DEFAULT_APP_HOTKEY_PREFERENCES.ideCloseEditor),
-    ideToggleSidebar: normalizeAppHotkeys(parsed.ideToggleSidebar, DEFAULT_APP_HOTKEY_PREFERENCES.ideToggleSidebar),
-    ideCloseAllEditors: normalizeAppHotkeys(parsed.ideCloseAllEditors, DEFAULT_APP_HOTKEY_PREFERENCES.ideCloseAllEditors),
-    ideToggleWordWrap: normalizeAppHotkeys(parsed.ideToggleWordWrap, DEFAULT_APP_HOTKEY_PREFERENCES.ideToggleWordWrap),
-    selectCurrentItem1: normalizeAppHotkeys(parsed.selectCurrentItem1, DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem1),
-    selectCurrentItem2: normalizeAppHotkeys(parsed.selectCurrentItem2, DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem2),
-    selectCurrentItem3: normalizeAppHotkeys(parsed.selectCurrentItem3, DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem3),
-    selectCurrentItem4: normalizeAppHotkeys(parsed.selectCurrentItem4, DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem4),
-    selectCurrentItem5: normalizeAppHotkeys(parsed.selectCurrentItem5, DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem5),
-    selectCurrentItem6: normalizeAppHotkeys(parsed.selectCurrentItem6, DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem6),
-    selectCurrentItem7: normalizeAppHotkeys(parsed.selectCurrentItem7, DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem7),
-    selectCurrentItem8: normalizeAppHotkeys(parsed.selectCurrentItem8, DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem8),
-    selectCurrentItem9: normalizeAppHotkeys(parsed.selectCurrentItem9, DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem9)
+    openProjects: normalizeAppHotkeys(read("openProjects"), DEFAULT_APP_HOTKEY_PREFERENCES.openProjects),
+    openAssistants: normalizeAppHotkeys(read("openAssistants"), DEFAULT_APP_HOTKEY_PREFERENCES.openAssistants),
+    openJobs: normalizeAppHotkeys(read("openJobs"), DEFAULT_APP_HOTKEY_PREFERENCES.openJobs),
+    openRuns: normalizeAppHotkeys(read("openRuns"), DEFAULT_APP_HOTKEY_PREFERENCES.openRuns),
+    openPreferences: normalizeAppHotkeys(read("openPreferences"), DEFAULT_APP_HOTKEY_PREFERENCES.openPreferences),
+    openIde: normalizeAppHotkeys(read("openIde"), DEFAULT_APP_HOTKEY_PREFERENCES.openIde),
+    toggleTerminalDrawer: normalizeAppHotkeys(read("toggleTerminalDrawer"), DEFAULT_APP_HOTKEY_PREFERENCES.toggleTerminalDrawer),
+    toggleTracePanel: normalizeAppHotkeys(read("toggleTracePanel"), DEFAULT_APP_HOTKEY_PREFERENCES.toggleTracePanel),
+    createProjectChat: normalizeAppHotkeys(read("createProjectChat"), DEFAULT_APP_HOTKEY_PREFERENCES.createProjectChat),
+    createAssistant: normalizeAppHotkeys(read("createAssistant"), DEFAULT_APP_HOTKEY_PREFERENCES.createAssistant),
+    createBackgroundJob: normalizeAppHotkeys(read("createBackgroundJob"), DEFAULT_APP_HOTKEY_PREFERENCES.createBackgroundJob),
+    focusCurrentSearch: normalizeAppHotkeys(read("focusCurrentSearch"), DEFAULT_APP_HOTKEY_PREFERENCES.focusCurrentSearch),
+    ideCommandPalette: normalizeAppHotkeys(read("ideCommandPalette"), DEFAULT_APP_HOTKEY_PREFERENCES.ideCommandPalette),
+    ideQuickOpen: normalizeAppHotkeys(read("ideQuickOpen"), DEFAULT_APP_HOTKEY_PREFERENCES.ideQuickOpen),
+    ideFindInFile: normalizeAppHotkeys(read("ideFindInFile"), DEFAULT_APP_HOTKEY_PREFERENCES.ideFindInFile),
+    ideFindInFiles: normalizeAppHotkeys(read("ideFindInFiles"), DEFAULT_APP_HOTKEY_PREFERENCES.ideFindInFiles),
+    ideToggleTerminal: normalizeAppHotkeys(read("ideToggleTerminal"), DEFAULT_APP_HOTKEY_PREFERENCES.ideToggleTerminal),
+    ideExplorer: normalizeAppHotkeys(read("ideExplorer"), DEFAULT_APP_HOTKEY_PREFERENCES.ideExplorer),
+    ideSourceControl: normalizeAppHotkeys(read("ideSourceControl"), DEFAULT_APP_HOTKEY_PREFERENCES.ideSourceControl),
+    ideSave: normalizeAppHotkeys(read("ideSave"), DEFAULT_APP_HOTKEY_PREFERENCES.ideSave),
+    ideCloseEditor: normalizeAppHotkeys(read("ideCloseEditor"), DEFAULT_APP_HOTKEY_PREFERENCES.ideCloseEditor),
+    ideToggleSidebar: normalizeAppHotkeys(read("ideToggleSidebar"), DEFAULT_APP_HOTKEY_PREFERENCES.ideToggleSidebar),
+    ideCloseAllEditors: normalizeAppHotkeys(read("ideCloseAllEditors"), DEFAULT_APP_HOTKEY_PREFERENCES.ideCloseAllEditors),
+    ideToggleWordWrap: normalizeAppHotkeys(read("ideToggleWordWrap"), DEFAULT_APP_HOTKEY_PREFERENCES.ideToggleWordWrap),
+    selectCurrentItem1: normalizeAppHotkeys(read("selectCurrentItem1"), DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem1),
+    selectCurrentItem2: normalizeAppHotkeys(read("selectCurrentItem2"), DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem2),
+    selectCurrentItem3: normalizeAppHotkeys(read("selectCurrentItem3"), DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem3),
+    selectCurrentItem4: normalizeAppHotkeys(read("selectCurrentItem4"), DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem4),
+    selectCurrentItem5: normalizeAppHotkeys(read("selectCurrentItem5"), DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem5),
+    selectCurrentItem6: normalizeAppHotkeys(read("selectCurrentItem6"), DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem6),
+    selectCurrentItem7: normalizeAppHotkeys(read("selectCurrentItem7"), DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem7),
+    selectCurrentItem8: normalizeAppHotkeys(read("selectCurrentItem8"), DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem8),
+    selectCurrentItem9: normalizeAppHotkeys(read("selectCurrentItem9"), DEFAULT_APP_HOTKEY_PREFERENCES.selectCurrentItem9)
   };
 }

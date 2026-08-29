@@ -1,4 +1,4 @@
-import type { ChatMessage, ExecutionToolActivity } from "../../../shared/protocol";
+import type { ChatMessage, ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
 
 export type TimelineLiveMessage = {
   id: string;
@@ -29,6 +29,19 @@ type BuildChatTimelineRowsInput = {
   toolActivities?: ExecutionToolActivity[];
   activeRunId?: string;
 };
+
+export function buildExperienceTimelineRows(
+  mode: "simple" | "advanced",
+  input: BuildChatTimelineRowsInput
+): ChatTimelineRow[] {
+  if (mode === "advanced") return buildChatTimelineRows(input);
+  return buildChatTimelineRows({
+    ...input,
+    messages: input.messages.filter((message) => message.kind !== "run-milestones"),
+    liveMessages: input.liveMessages?.filter((message) => message.kind === "assistant"),
+    toolActivities: []
+  });
+}
 
 export function buildChatTimelineRows(input: BuildChatTimelineRowsInput): ChatTimelineRow[] {
   const baseRows: ChatTimelineRow[] = [

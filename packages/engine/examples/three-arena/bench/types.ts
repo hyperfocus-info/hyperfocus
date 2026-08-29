@@ -1,0 +1,32 @@
+export type BenchOptions = {
+  url: string;
+  warmupMs: number;
+  durationMs: number;
+  moveMs: number;
+  stressEnemies: number;
+  stressPickups: number;
+  stressEffects: number;
+  stressAllProps: boolean;
+  repeat: number;
+  disableGpu: boolean;
+  allowConsole: boolean;
+  stressCombat: boolean;
+  probeRequest: boolean;
+  selfTestCdp: boolean;
+  assertFrameP95Ms?: number;
+  assertUpdateP95Ms?: number;
+  assertRenderP95Ms?: number;
+  assertDrawCallsMax?: number;
+  assertTrianglesMax?: number;
+  assertProgramsMax?: number;
+  assertEnemies?: number;
+  assertPickups?: number;
+  assertParticles?: number;
+  assertAnimatedEnemiesMax?: number;
+  assertMeshDeltaMax?: number;
+  assertMaterialDeltaMax?: number;
+  assertHeapDeltaMaxMb?: number;
+  out?: string;
+};
+
+export type UnknownRecord = Record<string, unknown>;

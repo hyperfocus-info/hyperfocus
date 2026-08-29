@@ -1,22 +1,29 @@
 {
   "name": "@hyperfocus/ui",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Solid and StyleX UI primitives for Hyperfocus applications.",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
+  "sideEffects": ["**/*.css"],
   "exports": {
     ".": "./src/index.ts",
     "./primitives": "./src/primitives/index.ts",
+    "./preferences": "./src/preferences/index.ts",
+    "./preferences/storage": "./src/preferences/storage.ts",
     "./composer": "./src/composer/index.ts",
     "./transcript": "./src/transcript/index.ts",
     "./terminal": "./src/terminal/index.ts",
     "./workbench": "./src/workbench/index.ts",
+    "./workbench/layout": "./src/workbench/layout.ts",
     "./source-editor": "./src/source-editor/index.ts",
+    "./build/stylex-solid-plugin": "./build-tools/stylex-solid-plugin.ts",
+    "./stylex-entry.css": "./src/stylex-entry.css",
     "./tokens": "./src/theme/tokens.stylex.ts",
     "./tokens.stylex": "./src/theme/tokens.stylex.ts"
   },
-  "files": ["src", "dist", "README.md"],
+  "files": ["src", "dist", "build-tools", "README.md"],
   "scripts": {
+    "bench:measured-window": "bun benchmarks/measured-window-benchmark.ts",
     "build": "bun build.ts",
     "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json",
     "test": "bun test"
@@ -24,7 +31,14 @@
   "peerDependencies": {
     "solid-js": "^1.9.12"
   },
+  "devDependencies": {
+    "@hyperfocus/performance": "workspace:*",
+    "playwright": "^1.59.1"
+  },
   "dependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-typescript": "^7.28.5",
+    "@stylexjs/babel-plugin": "^0.19.0",
     "@codemirror/state": "^6.5.2",
     "@stylexjs/stylex": "^0.19.0",
     "@xterm/addon-fit": "^0.11.0",
@@ -33,6 +47,7 @@
     "rehype-sanitize": "^6.0.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
-    "solid-markdown": "^2.1.1"
+    "solid-markdown": "^2.1.1",
+    "babel-preset-solid": "^1.9.12"
   }
 }

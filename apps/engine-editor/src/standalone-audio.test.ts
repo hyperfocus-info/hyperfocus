@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AudioVoiceHandle } from "../../../engine/src/audio/index.ts";
-import type { PlayableAudioCommand } from "../../../engine/src/project/runtime-2d.ts";
+import type { AudioVoiceHandle } from "@hyperfocus/engine/audio";
+import type { PlayableAudioCommand } from "@hyperfocus/engine/project/runtime-2d";
 import { createStandaloneAudioController } from "./standalone-audio.ts";
 
 function play(sceneId: string, assetId = "tone"): PlayableAudioCommand {
@@ -11,12 +11,12 @@ describe("standalone first-party audio bridge", () => {
   test("queues until unlock, decodes once, and applies authored playback values", async () => {
     const events: unknown[] = [];
     const buffers = new Set<string>();
-    const voice = { active: true, stop: () => events.push("stop") } as AudioVoiceHandle;
+    const voice: AudioVoiceHandle = { active: true, stop: () => events.push("stop") };
     const engine = {
       unlock: async () => { events.push("unlock"); },
       setMasterGain: (gain: number) => { events.push(["master", gain]); },
       hasBuffer: (id: string) => buffers.has(id),
-      decode: async (id: string) => { events.push(["decode", id]); buffers.add(id); return {} as AudioBuffer; },
+      decode: async (id: string) => { events.push(["decode", id]); buffers.add(id); return {}; },
       playBuffer: (id: string, options: unknown) => { events.push(["play", id, options]); return { ok: true as const, voice }; },
       dispose: async () => { events.push("dispose"); },
     };
@@ -39,8 +39,8 @@ describe("standalone first-party audio bridge", () => {
       unlock: async () => undefined,
       setMasterGain: () => undefined,
       hasBuffer: () => true,
-      decode: async () => ({} as AudioBuffer),
-      playBuffer: () => ({ ok: true as const, voice: { active: true, stop: () => { stopped += 1; } } as AudioVoiceHandle }),
+      decode: async () => ({}),
+      playBuffer: () => ({ ok: true as const, voice: { active: true, stop: () => { stopped += 1; } } }),
       dispose: async () => undefined,
     };
     const controller = createStandaloneAudioController([{ id: "tone", mimeType: "audio/wav", bytes: new Uint8Array([1]) }], { engine });
@@ -60,7 +60,7 @@ describe("standalone first-party audio bridge", () => {
       unlock: async () => undefined,
       setMasterGain: () => undefined,
       hasBuffer: () => false,
-      decode: async () => ({} as AudioBuffer),
+      decode: async () => ({}),
       playBuffer: () => { plays += 1; return { ok: false as const, code: "missing-buffer" as const, message: "missing" }; },
       dispose: async () => undefined,
     };

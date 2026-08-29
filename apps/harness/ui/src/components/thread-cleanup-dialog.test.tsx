@@ -1,10 +1,10 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
-import { createProjectThreadSummary } from "../../../shared/protocol";
+import { createProjectThreadSummary } from "@hyperfocus/ai-core/protocol";
 import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
 import { clearBrowserStateForTests } from "../utils/tests/store-test-utils";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireButton } from "../utils/tests/test-harness";
 import { ThreadCleanupDialog } from "./thread-cleanup-dialog";
 
 createUiTest("ThreadCleanupDialog", () => {
@@ -54,7 +54,7 @@ createUiTest("ThreadCleanupDialog", () => {
     expect(document.querySelector("[data-test-thread-cleanup-dialog]")).not.toBeNull();
     await Promise.resolve();
     expect(screen.getByText("1 threads match")).not.toBeNull();
-    const submitButton = screen.getByRole("button", { name: "Archive old threads" }) as HTMLButtonElement;
+    const submitButton = requireButton(screen.getByRole("button", { name: "Archive old threads" }));
     expect(submitButton.disabled).toBe(false);
     fireEvent.click(submitButton);
 

@@ -7,11 +7,9 @@ if (process.env.HARNESS_TEST_SKIP_UI_PRELOAD !== "1") {
     import("@dschz/bun-plugin-solid"),
     import("solid-js/web/dist/web.js")
   ]);
-  const globalState = globalThis as typeof globalThis & { __padPilotHappyDomRegistered?: boolean };
-
-  if (!globalState.__padPilotHappyDomRegistered) {
+  if (!globalThis.__padPilotHappyDomRegistered) {
     GlobalRegistrator.register();
-    globalState.__padPilotHappyDomRegistered = true;
+    globalThis.__padPilotHappyDomRegistered = true;
   }
 
   const solidWebPath = fileURLToPath(import.meta.resolve("solid-js/web/dist/web.js"));
@@ -47,5 +45,5 @@ if (process.env.HARNESS_TEST_SKIP_UI_PRELOAD !== "1") {
     return { default: { create, attrs, defineVars, keyframes }, create, attrs, defineVars, keyframes };
   });
 
-  (globalThis as typeof globalThis & { __padPilotDisablePortals?: boolean }).__padPilotDisablePortals = true;
+  globalThis.__padPilotDisablePortals = true;
 }

@@ -18,8 +18,6 @@ import {
 } from "@tanstack/solid-hotkeys";
 import type { CreateHotkeyDefinition } from "@tanstack/solid-hotkeys";
 import {
-  Braces,
-  CaseSensitive,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -34,8 +32,6 @@ import {
   GitPullRequest,
   PanelLeftClose,
   PanelLeftOpen,
-  Regex,
-  Replace,
   Save,
   Search,
   Settings,
@@ -46,11 +42,10 @@ import {
   ContextMenu,
   type ContextMenuAction,
 } from "../components/primitives/context-menu";
-import { Input } from "../components/primitives/input";
 import { Tooltip } from "../components/primitives/tooltip";
 import { harnessStore } from "../harness-store";
 import {
-  normalizeAppHotkeyPreferences,
+  isValidAppHotkey, normalizeAppHotkeyPreferences,
   type AppHotkeyId,
 } from "../lib/app-hotkeys";
 import { cn } from "../lib/utils";
@@ -62,6 +57,7 @@ import {
   type IdeEditorFile,
 } from "./ide-store";
 import { ideStyles, ideUtilityStyles } from "./ide-workbench.styles";
+import { GlobalSearchView } from "./global-search-view";
 
 type IdeFile = Pick<
   IdeEditorFile,
@@ -97,6 +93,13 @@ type IdeContextMenu = {
   filePath?: string;
 };
 
+type IdeCommand = {
+  id: string;
+  label: string;
+  detail: string;
+  run: () => void;
+};
+
 type CompletionState = {
   x: number;
   y: number;
@@ -125,8 +128,7 @@ export type IdeWorkbenchProps = {
   windowMode?: "docked" | "popped-out";
 };
 
-export function IdeWorkbench(props?: IdeWorkbenchProps) {
-  const resolvedProps: IdeWorkbenchProps = props ?? {};
+function createIdeWorkbenchState(resolvedProps: IdeWorkbenchProps) {
   const [handledOpenRequestId, setHandledOpenRequestId] = createSignal("");
   const [restoredActiveFileKey, setRestoredActiveFileKey] = createSignal("");
   const [cursorLine, setCursorLine] = createSignal(5);
@@ -134,28 +136,22 @@ export function IdeWorkbench(props?: IdeWorkbenchProps) {
   const [contextMenu, setContextMenu] = createSignal<IdeContextMenu>();
   const [completionState, setCompletionState] = createSignal<CompletionState>();
   const [toasts, setToasts] = createSignal<IdeToast[]>([]);
-  const [sidebarOpen, setSidebarOpenSignal] = createSignal(
-    ideStore.state.sidebarOpen,
-  );
-  const [activityView, setActivityViewSignal] = createSignal<IdeActivityView>(
-    ideStore.state.activityView,
-  );
-  let workbenchRef: HTMLElement | undefined;
-  let documentFindInputRef: HTMLInputElement | undefined;
-  let globalSearchInputRef: HTMLInputElement | undefined;
-
+  const [sidebarOpen, setSidebarOpenSignal] = createSignal(ideStore.state.sidebarOpen);
+  const [activityView, setActivityViewSignal] = createSignal<IdeActivityView>(ideStore.state.activityView);
+  const refs: {
+    workbench?: HTMLElement;
+    documentFindInput?: HTMLInputElement;
+    globalSearchInput?: HTMLInputElement;
+  } = {};
   const activeProject = createMemo(() => {
     const project = harnessStore.state.workspace.projects.find(
-      (candidate) =>
-        candidate.id === harnessStore.state.workspace.activeProjectId,
+      (candidate) => candidate.id === harnessStore.state.workspace.activeProjectId,
     );
     return project ?? harnessStore.state.workspace.projects[0];
   });
   const fileForPath = (filePath: string): IdeFile => {
     const file = ideStore.state.filesByPath[filePath];
-    if (file) {
-      return { ...file, symbols: [] };
-    }
+    if (file) return { ...file, symbols: [] };
     const name = filePath.split("/").at(-1) ?? filePath;
     return {
       path: filePath,
@@ -167,204 +163,256 @@ export function IdeWorkbench(props?: IdeWorkbenchProps) {
       tooLarge: false,
       content: undefined,
       contentLines: [
-        ideStore.state.pendingReadPath === filePath
-          ? "Loading file..."
-          : "Read-only preview unavailable.",
+        ideStore.state.pendingReadPath === filePath ? "Loading file..." : "Read-only preview unavailable.",
       ],
     };
   };
-  const activeFile = createMemo(() =>
-    ideStore.state.activePath
-      ? fileForPath(ideStore.state.activePath)
-      : undefined,
-  );
+  const activeFile = createMemo(() => ideStore.state.activePath ? fileForPath(ideStore.state.activePath) : undefined);
   const openFiles = createMemo(() => ideStore.state.openPaths.map(fileForPath));
   const dirtyPaths = () => ideStore.state.dirtyPaths ?? [];
   const dirtyCount = createMemo(() => dirtyPaths().length);
-  const hotkeyPreferences = () =>
-    normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
-  const primaryHotkey = (id: AppHotkeyId) => hotkeyPreferences()[id][0];
-  const hotkeyHint = (id: AppHotkeyId) =>
-    formatHotkeyDisplay(primaryHotkey(id));
-  const commandPaletteCommands = createMemo(() => {
-    const commands = [
-      {
-        id: "save",
-        label: "File: Save",
-        detail: hotkeyHint("ideSave"),
-        run: () => ideStore.saveFile(),
-      },
-      {
-        id: "close-all",
-        label: "View: Close All Editors",
-        detail: "Close all open editor tabs",
-        run: () => closeAllTabs(),
-      },
-      {
-        id: "toggle-sidebar",
-        label: "View: Toggle Sidebar",
-        detail: "Collapse or restore file explorer",
-        run: () => toggleSidebar(),
-      },
-      {
-        id: "find",
-        label: "Search: Find in File",
-        detail: hotkeyHint("ideFindInFile"),
-        run: () => openDocumentFind(),
-      },
-      {
-        id: "search",
-        label: "Search: Find in Files",
-        detail: hotkeyHint("ideFindInFiles"),
-        run: () => openGlobalSearch(),
-      },
+  const hotkeyPreferences = () => normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
+  const hotkeyHint = (id: AppHotkeyId) => formatHotkeyDisplay(hotkeyPreferences()[id][0]);
+  return {
+    resolvedProps,
+    handledOpenRequestId, setHandledOpenRequestId, restoredActiveFileKey, setRestoredActiveFileKey,
+    cursorLine, setCursorLine, cursorColumn, setCursorColumn, contextMenu, setContextMenu,
+    completionState, setCompletionState, toasts, setToasts, sidebarOpen, setSidebarOpenSignal,
+    activityView, setActivityViewSignal, refs, activeProject, activeFile, openFiles, dirtyPaths,
+    dirtyCount, hotkeyPreferences, hotkeyHint,
+  };
+}
+
+function syncIdeActivityBarChrome(open: boolean, view: IdeActivityView) {
+  const activityBar = document.querySelector<HTMLElement>("[data-test-ide-activity-bar]");
+  if (!activityBar) return;
+  activityBar.dataset.sidebarOpen = open ? "true" : "false";
+  activityBar.querySelectorAll<HTMLButtonElement>("[data-activity-view]").forEach((button) => {
+    const active = open && button.dataset.activityView === view;
+    button.className = cn(
+      stylex.attrs(ideStyles.activityButton).class,
+      active ? stylex.attrs(ideStyles.activityButtonActive).class : undefined,
+    );
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function startIdeHorizontalResize(kind: "sidebar" | "editor", event: PointerEvent) {
+  event.preventDefault();
+  const startX = event.clientX;
+  const startSidebarWidth = ideStore.state.sidebarWidth;
+  const startEditorWidth = ideStore.state.primaryEditorWidth;
+  const onPointerMove = (moveEvent: PointerEvent) => {
+    const delta = moveEvent.clientX - startX;
+    if (kind === "sidebar") {
+      ideStore.setSidebarWidth(Math.max(220, Math.min(420, startSidebarWidth + delta)));
+      return;
+    }
+    ideStore.setPrimaryEditorWidth(Math.max(42, Math.min(72, startEditorWidth + delta / 12)));
+  };
+  const onPointerUp = () => {
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+  };
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp, { once: true });
+}
+
+function createIdeWorkbenchNavigation(state: ReturnType<typeof createIdeWorkbenchState>) {
+  const notify = (title: string, detail: string, tone: IdeToast["tone"] = "info") => {
+    const id = `ide-toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    state.setToasts((current) => [...current.slice(-2), { id, title, detail, tone }]);
+    if (tone === "error") pushToast(title, detail, "error");
+    window.setTimeout(() => {
+      state.setToasts((current) => current.filter((toast) => toast.id !== id));
+    }, 3200);
+  };
+  const setSidebarOpen = (open: boolean) => {
+    state.setSidebarOpenSignal(open);
+    ideStore.setSidebarOpen(open);
+    syncIdeActivityBarChrome(open, state.activityView());
+  };
+  const openActivityView = (view: IdeActivityView) => {
+    setSidebarOpen(true);
+    state.setActivityViewSignal(view);
+    ideStore.setActivityView(view);
+    syncIdeActivityBarChrome(true, view);
+  };
+  const toggleActivityView = (view: IdeActivityView) => {
+    if (state.sidebarOpen() && state.activityView() === view) {
+      setSidebarOpen(false);
+      return;
+    }
+    openActivityView(view);
+  };
+  const openFileByPath = (path: string, line?: number, column?: number) => {
+    ideStore.openFile(path.replace(/\\/g, "/"), line, column);
+    if (window.matchMedia?.("(max-width: 639px)").matches) setSidebarOpen(false);
+    if (line) state.setCursorLine(line);
+    if (column) state.setCursorColumn(column);
+  };
+  const closeIdeWindowIfEmpty = (paths: string[]) => {
+    if (paths.length === 0) queueMicrotask(() => state.resolvedProps.onRequestClose?.());
+  };
+  const closeTab = (path: string) => closeIdeWindowIfEmpty(ideStore.closeTab(path));
+  const closeCurrentTab = () => {
+    const currentPath = ideStore.state.activePath;
+    if (currentPath) closeTab(currentPath);
+  };
+  const closeAllTabs = () => {
+    ideStore.closeAllTabs();
+    closeIdeWindowIfEmpty([]);
+  };
+  const closeOtherTabs = (path: string) => ideStore.closeOtherTabs(path);
+  const openDocumentFind = () => {
+    ideStore.setDocumentFindOpen(true);
+    queueMicrotask(() => {
+      state.refs.documentFindInput?.focus();
+      state.refs.documentFindInput?.select();
+    });
+  };
+  const openGlobalSearch = () => {
+    openActivityView("search");
+    queueMicrotask(() => {
+      state.refs.globalSearchInput?.focus();
+      state.refs.globalSearchInput?.select();
+    });
+  };
+  const openContextMenu = (kind: IdeContextMenu["kind"], event: MouseEvent, filePath?: string) => {
+    event.preventDefault();
+    state.setContextMenu({ kind, x: event.clientX, y: event.clientY, filePath });
+  };
+  const goToDefinition = (file: IdeFile, line: number, column: number) => {
+    const symbol = getWordAtPosition(file.contentLines[line - 1] ?? "", column);
+    const targetLine = findDefinitionLine(file.contentLines, symbol);
+    if (!symbol || !targetLine) {
+      notify("Definition not found", "No matching symbol definition in the active file.", "warning");
+      return;
+    }
+    state.setCursorLine(targetLine);
+    state.setCursorColumn(1);
+    ideStore.setCursor(targetLine, 1);
+    document.querySelector(`[data-test-ide-code-line="${targetLine}"]`)?.scrollIntoView({ block: "center" });
+  };
+  return {
+    notify, setSidebarOpen, toggleSidebar: () => setSidebarOpen(!state.sidebarOpen()),
+    openActivityView, toggleActivityView, openFileByPath, closeTab, closeCurrentTab,
+    closeAllTabs, closeOtherTabs, openDocumentFind, openGlobalSearch,
+    startHorizontalResize: startIdeHorizontalResize, openContextMenu, goToDefinition,
+  };
+}
+
+type IdeWorkbenchNavigation = ReturnType<typeof createIdeWorkbenchNavigation>;
+
+function createIdeWorkbenchCommandPalette(
+  state: ReturnType<typeof createIdeWorkbenchState>,
+  actions: IdeWorkbenchNavigation,
+) {
+  return createMemo<IdeCommand[]>(() => {
+    const commands: IdeCommand[] = [
+      { id: "save", label: "File: Save", detail: state.hotkeyHint("ideSave"), run: () => ideStore.saveFile() },
+      { id: "close-all", label: "View: Close All Editors", detail: "Close all open editor tabs", run: actions.closeAllTabs },
+      { id: "toggle-sidebar", label: "View: Toggle Sidebar", detail: "Collapse or restore file explorer", run: actions.toggleSidebar },
+      { id: "find", label: "Search: Find in File", detail: state.hotkeyHint("ideFindInFile"), run: actions.openDocumentFind },
+      { id: "search", label: "Search: Find in Files", detail: state.hotkeyHint("ideFindInFiles"), run: actions.openGlobalSearch },
       {
         id: "window-mode",
-        label:
-          resolvedProps.windowMode === "popped-out"
-            ? "Window: Pop In"
-            : "Window: Pop Out",
+        label: state.resolvedProps.windowMode === "popped-out" ? "Window: Pop In" : "Window: Pop Out",
         detail: "Move IDE between main workspace and a separate window",
-        run: () => resolvedProps.onToggleWindowMode?.(),
+        run: () => state.resolvedProps.onToggleWindowMode?.(),
       },
     ];
     const query = ideStore.state.commandQuery.trim().toLowerCase();
     return query
-      ? commands.filter((command) =>
-          `${command.label} ${command.detail}`.toLowerCase().includes(query),
-        )
+      ? commands.filter((command) => `${command.label} ${command.detail}`.toLowerCase().includes(query))
       : commands;
   });
+}
 
-  const ideHotkeys = createMemo<CreateHotkeyDefinition[]>(() =>
-    [
-      ...hotkeyPreferences().ideCommandPalette.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => ideStore.setCommandPalette(true),
-        options: {
-          meta: {
-            name: "Command palette",
-            description: "Open editor commands",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideQuickOpen.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => ideStore.setCommandPalette(true),
-        options: {
-          meta: {
-            name: "Quick open",
-            description: "Open quick commands",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideFindInFile.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => openDocumentFind(),
-        options: {
-          meta: {
-            name: "Find in file",
-            description: "Search current document",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideFindInFiles.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => openGlobalSearch(),
-        options: {
-          meta: {
-            name: "Find in files",
-            description: "Open global search panel",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideToggleTerminal.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => terminalStore.toggleOpen(),
-        options: {
-          meta: {
-            name: "Integrated terminal",
-            description: "Toggle the bottom terminal drawer",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideExplorer.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => {
-          toggleActivityView("explorer");
-        },
-        options: {
-          meta: {
-            name: "Explorer",
-            description: "Open file explorer",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideSourceControl.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => {
-          toggleActivityView("source-control");
-        },
-        options: {
-          meta: {
-            name: "Source control",
-            description: "Open source control",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideSave.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => ideStore.saveFile(),
-        options: {
-          meta: {
-            name: "Save",
-            description: "Save current editor",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideCloseEditor.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => closeCurrentTab(),
-        options: {
-          meta: {
-            name: "Close tab",
-            description: "Close current tab",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideToggleSidebar.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () => toggleSidebar(),
-        options: {
-          meta: {
-            name: "Toggle sidebar",
-            description: "Collapse or restore the IDE sidebar",
-          },
-        },
-      })),
-      ...hotkeyPreferences().ideToggleWordWrap.map((hotkey) => ({
-        hotkey: hotkey as never,
-        callback: () =>
-          ideStore.setEditorSetting(
-            "wordWrap",
-            ideStore.state.editorSettings.wordWrap === "on" ? "off" : "on",
-          ),
-        options: {
-          meta: {
-            name: "Word wrap",
-            description: "Toggle editor word wrap",
-          },
-        },
-      })),
-    ].map((definition) => ({
-      ...definition,
+function createIdeWorkbenchContextMenu(
+  state: ReturnType<typeof createIdeWorkbenchState>,
+  actions: IdeWorkbenchNavigation,
+) {
+  return createMemo<ContextMenuAction[]>(() => {
+    const menu = state.contextMenu();
+    if (!menu) return [];
+    if (menu.kind === "tab") {
+      const filePath = menu.filePath ?? ideStore.state.activePath ?? "";
+      return [
+        { id: "close-tab", label: "Close", shortcut: formatForDisplay("Mod+W"), onSelect: () => actions.closeTab(filePath) },
+        { id: "close-others", label: "Close Others", onSelect: () => actions.closeOtherTabs(filePath) },
+        { id: "close-all", label: "Close All", onSelect: actions.closeAllTabs },
+      ];
+    }
+    if (menu.kind === "tree") {
+      return [
+        { id: "open", label: "Open", onSelect: () => menu.filePath && actions.openFileByPath(menu.filePath) },
+        { id: "copy-path", label: "Copy Path", onSelect: () => actions.notify("Path copied", menu.filePath ?? "Project path copied.") },
+        { id: "refresh", label: "Refresh Explorer", onSelect: () => {
+          const projectId = state.activeProject()?.id;
+          if (projectId) ideStore.loadProject(projectId);
+        } },
+        { id: "reveal", label: "Reveal in Explorer", onSelect: () => actions.openActivityView("explorer") },
+      ];
+    }
+    return [
+      { id: "format", label: "Format Document", shortcut: formatForDisplay("Shift+Alt+F"), onSelect: () => actions.notify("Formatted", "Document formatting queued.") },
+      { id: "symbol", label: "Go to Symbol", shortcut: formatForDisplay("Mod+Shift+O"), onSelect: () => ideStore.setCommandPalette(true) },
+      { id: "definition", label: "Go to Definition", shortcut: "F12", onSelect: () => {
+        const file = state.activeFile();
+        if (file) actions.goToDefinition(file, file.cursorLine ?? state.cursorLine(), file.cursorColumn ?? state.cursorColumn());
+      } },
+      { id: "run-selection", label: "Send Selection to Agent", onSelect: () => actions.notify("Selection attached", "Selection ready for active harness thread.") },
+    ];
+  });
+}
+
+function registerIdeWorkbenchHotkeys(options: {
+  hotkeyPreferences: ReturnType<typeof createIdeWorkbenchState>["hotkeyPreferences"];
+  openDocumentFind: () => void;
+  openGlobalSearch: () => void;
+  toggleActivityView: (view: IdeActivityView) => void;
+  closeCurrentTab: () => void;
+  closeAllTabs: () => void;
+  toggleSidebar: () => void;
+}) {
+  const groups: Array<{
+    id: AppHotkeyId;
+    name: string;
+    description: string;
+    callback: () => void;
+  }> = [
+    { id: "ideCommandPalette", name: "Command palette", description: "Open editor commands", callback: () => ideStore.setCommandPalette(true) },
+    { id: "ideQuickOpen", name: "Quick open", description: "Open quick commands", callback: () => ideStore.setCommandPalette(true) },
+    { id: "ideFindInFile", name: "Find in file", description: "Search current document", callback: options.openDocumentFind },
+    { id: "ideFindInFiles", name: "Find in files", description: "Open global search panel", callback: options.openGlobalSearch },
+    { id: "ideToggleTerminal", name: "Integrated terminal", description: "Toggle the bottom terminal drawer", callback: () => terminalStore.toggleOpen() },
+    { id: "ideExplorer", name: "Explorer", description: "Open file explorer", callback: () => options.toggleActivityView("explorer") },
+    { id: "ideSourceControl", name: "Source control", description: "Open source control", callback: () => options.toggleActivityView("source-control") },
+    { id: "ideSave", name: "Save", description: "Save current editor", callback: () => ideStore.saveFile() },
+    { id: "ideCloseEditor", name: "Close tab", description: "Close current editor", callback: options.closeCurrentTab },
+    { id: "ideToggleSidebar", name: "Toggle sidebar", description: "Collapse or restore the IDE sidebar", callback: options.toggleSidebar },
+    {
+      id: "ideToggleWordWrap",
+      name: "Word wrap",
+      description: "Toggle editor word wrap",
+      callback: () => ideStore.setEditorSetting(
+        "wordWrap",
+        ideStore.state.editorSettings.wordWrap === "on" ? "off" : "on",
+      ),
+    },
+  ];
+  const ideHotkeys = createMemo<CreateHotkeyDefinition[]>(() => groups.flatMap((group) =>
+    options.hotkeyPreferences()[group.id].map((hotkey) => ({
+      hotkey,
+      callback: group.callback,
       options: {
-        ...definition.options,
+        meta: { name: group.name, description: group.description },
         // IDE and workspace shortcuts are mutually exclusive by active surface.
         conflictBehavior: "allow" as const,
       },
     })),
-  );
+  ));
   createHotkeys(ideHotkeys, () => ({
     enabled: harnessStore.state.activeSurface === "ide",
     ignoreInputs: false,
@@ -372,11 +420,10 @@ export function IdeWorkbench(props?: IdeWorkbenchProps) {
     stopPropagation: true,
   }));
   createHotkeySequences(
-    () =>
-      hotkeyPreferences().ideCloseAllEditors.map((hotkey) => ({
-        sequence: closeAllEditorSequence(hotkey) as never,
-        callback: () => closeAllTabs(),
-      })),
+    () => options.hotkeyPreferences().ideCloseAllEditors.map((hotkey) => ({
+      sequence: closeAllEditorSequence(hotkey),
+      callback: options.closeAllTabs,
+    })),
     () => ({
       enabled: harnessStore.state.activeSurface === "ide",
       ignoreInputs: false,
@@ -384,40 +431,34 @@ export function IdeWorkbench(props?: IdeWorkbenchProps) {
       stopPropagation: true,
     }),
   );
+}
 
+function registerIdeWorkbenchDataEffects(
+  state: ReturnType<typeof createIdeWorkbenchState>,
+  openFileByPath: (path: string, line?: number, column?: number) => void,
+) {
   createEffect(() => {
     const request = harnessStore.state.ideFileOpenRequest;
-    if (!request || request.id === handledOpenRequestId()) {
-      return;
-    }
-    setHandledOpenRequestId(request.id);
+    if (!request || request.id === state.handledOpenRequestId()) return;
+    state.setHandledOpenRequestId(request.id);
     openFileByPath(request.path, request.line, request.column);
   });
-
   createEffect(() => {
-    const projectId = activeProject()?.id;
-    if (projectId) {
-      ideStore.loadProject(projectId);
-    }
+    const projectId = state.activeProject()?.id;
+    if (projectId) ideStore.loadProject(projectId);
   });
-
   createEffect(() => {
-    const projectId = activeProject()?.id;
+    const projectId = state.activeProject()?.id;
     const activePath = ideStore.state.activePath;
-    const restoreKey =
-      projectId && activePath ? `${projectId}:${activePath}` : "";
+    const restoreKey = projectId && activePath ? `${projectId}:${activePath}` : "";
     if (
-      projectId &&
-      activePath &&
-      restoreKey !== restoredActiveFileKey() &&
-      !ideStore.state.filesByPath[activePath] &&
-      ideStore.state.pendingReadPath !== activePath
+      projectId && activePath && restoreKey !== state.restoredActiveFileKey()
+      && !ideStore.state.filesByPath[activePath] && ideStore.state.pendingReadPath !== activePath
     ) {
-      setRestoredActiveFileKey(restoreKey);
+      state.setRestoredActiveFileKey(restoreKey);
       ideStore.openFile(activePath);
     }
   });
-
   createEffect(() => {
     const query = ideStore.state.searchQuery;
     const regex = ideStore.state.regexSearch;
@@ -432,896 +473,473 @@ export function IdeWorkbench(props?: IdeWorkbenchProps) {
     }, 220);
     onCleanup(() => window.clearTimeout(timeout));
   });
+}
 
+function consumeIdeShortcut(event: KeyboardEvent, action: () => void) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  action();
+}
+
+function registerIdeWorkbenchShortcutInterception(options: {
+  state: ReturnType<typeof createIdeWorkbenchState>;
+  closeCurrentTab: () => void;
+  closeAllTabs: () => void;
+  toggleSidebar: () => void;
+  openGlobalSearch: () => void;
+  openDocumentFind: () => void;
+  toggleActivityView: (view: IdeActivityView) => void;
+}) {
   onMount(() => {
     let closeAllChordUntil = 0;
     let closeAllChordTails: string[][] = [];
     const interceptBrowserShortcuts = (event: KeyboardEvent) => {
-      const targetNode =
-        event.target instanceof Node ? event.target : undefined;
-      const eventInsideWorkbench = Boolean(
-        targetNode && workbenchRef?.contains(targetNode),
-      );
+      const targetNode = event.target instanceof Node ? event.target : undefined;
+      const eventInsideWorkbench = Boolean(targetNode && options.state.refs.workbench?.contains(targetNode));
       if (
-        harnessStore.state.activeSurface !== "ide" &&
-        resolvedProps.windowMode !== "popped-out" &&
-        !eventInsideWorkbench
-      ) {
-        return;
-      }
-      const closeEditorHotkeys = hotkeyPreferences().ideCloseEditor;
-      if (eventMatchesHotkeys(event, closeEditorHotkeys)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        closeCurrentTab();
-        return;
-      }
-      if (eventMatchesHotkeys(event, hotkeyPreferences().ideToggleSidebar)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        toggleSidebar();
-        return;
-      }
-      if (eventMatchesHotkeys(event, hotkeyPreferences().ideFindInFiles)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        openGlobalSearch();
-        return;
-      }
-      if (eventMatchesHotkeys(event, hotkeyPreferences().ideFindInFile)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        openDocumentFind();
-        return;
-      }
-      if (eventMatchesHotkeys(event, hotkeyPreferences().ideExplorer)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        toggleActivityView("explorer");
-        return;
-      }
-      if (eventMatchesHotkeys(event, hotkeyPreferences().ideSourceControl)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        toggleActivityView("source-control");
-        return;
-      }
-      if (eventMatchesHotkeys(event, hotkeyPreferences().ideToggleTerminal)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        terminalStore.toggleOpen();
-        return;
-      }
-      if (eventMatchesHotkeys(event, hotkeyPreferences().ideSave)) {
-        ideStore.saveFile();
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        return;
-      }
-      if (
-        eventMatchesHotkeys(event, hotkeyPreferences().ideCommandPalette) ||
-        eventMatchesHotkeys(event, hotkeyPreferences().ideQuickOpen)
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        ideStore.setCommandPalette(true);
-        return;
-      }
-      if (eventMatchesHotkeys(event, hotkeyPreferences().ideToggleWordWrap)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        ideStore.setEditorSetting(
+        harnessStore.state.activeSurface !== "ide"
+        && options.state.resolvedProps.windowMode !== "popped-out"
+        && !eventInsideWorkbench
+      ) return;
+      const hotkeys = options.state.hotkeyPreferences();
+      const shortcuts: Array<[string[], () => void]> = [
+        [hotkeys.ideCloseEditor, options.closeCurrentTab],
+        [hotkeys.ideToggleSidebar, options.toggleSidebar],
+        [hotkeys.ideFindInFiles, options.openGlobalSearch],
+        [hotkeys.ideFindInFile, options.openDocumentFind],
+        [hotkeys.ideExplorer, () => options.toggleActivityView("explorer")],
+        [hotkeys.ideSourceControl, () => options.toggleActivityView("source-control")],
+        [hotkeys.ideToggleTerminal, () => terminalStore.toggleOpen()],
+        [hotkeys.ideSave, () => ideStore.saveFile()],
+        [[...hotkeys.ideCommandPalette, ...hotkeys.ideQuickOpen], () => ideStore.setCommandPalette(true)],
+        [hotkeys.ideToggleWordWrap, () => ideStore.setEditorSetting(
           "wordWrap",
           ideStore.state.editorSettings.wordWrap === "on" ? "off" : "on",
-        );
+        )],
+      ];
+      const shortcut = shortcuts.find(([bindings]) => eventMatchesHotkeys(event, bindings));
+      if (shortcut) {
+        consumeIdeShortcut(event, shortcut[1]);
         return;
       }
-      const closeAllSequences = hotkeyPreferences().ideCloseAllEditors.map(
-        closeAllEditorSequence,
+      const closeAllSequences = hotkeys.ideCloseAllEditors.map(closeAllEditorSequence);
+      const singleSequence = closeAllSequences.some(
+        (sequence) => sequence.length === 1 && eventMatchesHotkeys(event, sequence),
       );
-      if (
-        closeAllSequences.some(
-          (sequence) =>
-            sequence.length === 1 && eventMatchesHotkeys(event, sequence),
-        )
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        closeAllTabs();
+      if (singleSequence) {
+        consumeIdeShortcut(event, options.closeAllTabs);
         return;
       }
-      const matchedCloseAllPrefixes = closeAllSequences.filter(
-        (sequence) =>
-          sequence.length > 1 &&
-          eventMatchesHotkeys(event, sequence.slice(0, 1)),
+      const prefixes = closeAllSequences.filter(
+        (sequence) => sequence.length > 1 && eventMatchesHotkeys(event, sequence.slice(0, 1)),
       );
-      if (matchedCloseAllPrefixes.length > 0) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        if (
-          matchedCloseAllPrefixes.some((sequence) =>
-            isIdeProjectSwitcherModKHotkey(sequence[0] ?? ""),
-          ) &&
-          hotkeyPreferences().openProjectSwitcher.some(
-            isIdeProjectSwitcherModKHotkey,
-          )
-        ) {
-          harnessStore.openProjectSwitcher();
-          return;
-        }
-        closeAllChordUntil = Date.now() + 1200;
-        closeAllChordTails = matchedCloseAllPrefixes.map((sequence) =>
-          sequence.slice(1),
-        );
+      if (prefixes.length > 0) {
+        consumeIdeShortcut(event, () => {
+          if (
+            prefixes.some((sequence) => isIdeProjectSwitcherModKHotkey(sequence[0] ?? ""))
+            && hotkeys.openProjectSwitcher.some(isIdeProjectSwitcherModKHotkey)
+          ) {
+            harnessStore.openProjectSwitcher();
+            return;
+          }
+          closeAllChordUntil = Date.now() + 1200;
+          closeAllChordTails = prefixes.map((sequence) => sequence.slice(1));
+        });
         return;
       }
       if (
-        closeAllChordUntil > Date.now() &&
-        closeAllChordTails.some((sequence) =>
-          eventMatchesHotkeys(event, sequence),
-        )
+        closeAllChordUntil > Date.now()
+        && closeAllChordTails.some((sequence) => eventMatchesHotkeys(event, sequence))
       ) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        closeAllTabs();
-        closeAllChordUntil = 0;
-        closeAllChordTails = [];
-        return;
+        consumeIdeShortcut(event, options.closeAllTabs);
       }
       closeAllChordUntil = 0;
       closeAllChordTails = [];
     };
-    window.addEventListener("keydown", interceptBrowserShortcuts, {
-      capture: true,
-    });
-    document.addEventListener("keydown", interceptBrowserShortcuts, {
-      capture: true,
-    });
+    window.addEventListener("keydown", interceptBrowserShortcuts, { capture: true });
+    document.addEventListener("keydown", interceptBrowserShortcuts, { capture: true });
     onCleanup(() => {
-      window.removeEventListener("keydown", interceptBrowserShortcuts, {
-        capture: true,
-      });
-      document.removeEventListener("keydown", interceptBrowserShortcuts, {
-        capture: true,
-      });
+      window.removeEventListener("keydown", interceptBrowserShortcuts, { capture: true });
+      document.removeEventListener("keydown", interceptBrowserShortcuts, { capture: true });
     });
   });
+}
 
-  function notify(title: string, detail: string, tone?: IdeToast["tone"]) {
-    const id = `ide-toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const resolvedTone = tone ?? "info";
-    setToasts((current) => [
-      ...current.slice(-2),
-      { id, title, detail, tone: resolvedTone },
-    ]);
-    if (resolvedTone === "error") {
-      pushToast(title, detail, "error");
-    }
-    window.setTimeout(() => {
-      setToasts((current) => current.filter((toast) => toast.id !== id));
-    }, 3200);
-  }
+type IdeWorkbenchViewActions = {
+  setSidebarOpen: (open: boolean) => void;
+  toggleSidebar: () => void;
+  toggleActivityView: (view: IdeActivityView) => void;
+  openFileByPath: (path: string, line?: number, column?: number) => void;
+  openContextMenu: (kind: IdeContextMenu["kind"], event: MouseEvent, filePath?: string) => void;
+  startHorizontalResize: (kind: "sidebar" | "editor", event: PointerEvent) => void;
+  closeTab: (path: string) => void;
+  closeCurrentTab: () => void;
+  goToDefinition: (file: IdeFile, line: number, column: number) => void;
+};
 
-  function openFileByPath(path: string, line?: number, column?: number) {
-    const normalizedPath = path.replace(/\\/g, "/");
-    ideStore.openFile(normalizedPath, line, column);
-    if (window.matchMedia?.("(max-width: 639px)").matches) {
-      setSidebarOpen(false);
-    }
-    if (line) {
-      setCursorLine(line);
-    }
-    if (column) {
-      setCursorColumn(column);
-    }
-  }
+type IdeWorkbenchViewProps = {
+  state: ReturnType<typeof createIdeWorkbenchState>;
+  actions: IdeWorkbenchViewActions;
+  commandPaletteCommands: () => IdeCommand[];
+  contextMenuActions: () => ContextMenuAction[];
+};
 
-  function closeTab(path: string) {
-    const next = ideStore.closeTab(path);
-    closeIdeWindowIfEmpty(next);
-  }
-
-  function closeCurrentTab() {
-    const currentPath = ideStore.state.activePath;
-    if (currentPath) {
-      closeTab(currentPath);
-    }
-  }
-
-  function closeAllTabs() {
-    ideStore.closeAllTabs();
-    closeIdeWindowIfEmpty([]);
-  }
-
-  function closeOtherTabs(path: string) {
-    ideStore.closeOtherTabs(path);
-  }
-
-  function openDocumentFind() {
-    ideStore.setDocumentFindOpen(true);
-    queueMicrotask(() => {
-      documentFindInputRef?.focus();
-      documentFindInputRef?.select();
-    });
-  }
-
-  function openGlobalSearch() {
-    openActivityView("search");
-    queueMicrotask(() => {
-      globalSearchInputRef?.focus();
-      globalSearchInputRef?.select();
-    });
-  }
-
-  function openActivityView(view: IdeActivityView) {
-    setSidebarOpen(true);
-    setActivityViewSignal(view);
-    ideStore.setActivityView(view);
-    syncActivityBarChrome(true, view);
-  }
-
-  function toggleActivityView(view: IdeActivityView) {
-    if (sidebarOpen() && activityView() === view) {
-      setSidebarOpen(false);
-      return;
-    }
-    openActivityView(view);
-  }
-
-  function setSidebarOpen(open: boolean) {
-    setSidebarOpenSignal(open);
-    ideStore.setSidebarOpen(open);
-    syncActivityBarChrome(open, activityView());
-  }
-
-  function toggleSidebar() {
-    setSidebarOpen(!sidebarOpen());
-  }
-
-  function syncActivityBarChrome(open: boolean, view: IdeActivityView) {
-    const activityBar = document.querySelector<HTMLElement>(
-      "[data-test-ide-activity-bar]",
-    );
-    if (!activityBar) {
-      return;
-    }
-    activityBar.dataset.sidebarOpen = open ? "true" : "false";
-    activityBar
-      .querySelectorAll<HTMLButtonElement>("[data-activity-view]")
-      .forEach((button) => {
-        const active = open && button.dataset.activityView === view;
-        button.className = cn(
-          stylex.attrs(ideStyles.activityButton).class,
-          active
-            ? stylex.attrs(ideStyles.activityButtonActive).class
-            : undefined,
-        );
-        button.setAttribute("aria-pressed", active ? "true" : "false");
-      });
-  }
-
-  function startHorizontalResize(
-    kind: "sidebar" | "editor",
-    event: PointerEvent,
-  ) {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startSidebarWidth = ideStore.state.sidebarWidth;
-    const startEditorWidth = ideStore.state.primaryEditorWidth;
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const delta = moveEvent.clientX - startX;
-      if (kind === "sidebar") {
-        ideStore.setSidebarWidth(
-          Math.max(220, Math.min(420, startSidebarWidth + delta)),
-        );
-        return;
-      }
-      ideStore.setPrimaryEditorWidth(
-        Math.max(42, Math.min(72, startEditorWidth + delta / 12)),
-      );
-    };
-    const onPointerUp = () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-  }
-
-  function openContextMenu(
-    kind: IdeContextMenu["kind"],
-    event: MouseEvent,
-    filePath?: string,
-  ) {
-    event.preventDefault();
-    setContextMenu({ kind, x: event.clientX, y: event.clientY, filePath });
-  }
-
-  function closeIdeWindowIfEmpty(paths: string[]) {
-    if (paths.length > 0) {
-      return;
-    }
-    queueMicrotask(() => resolvedProps.onRequestClose?.());
-  }
-
-  const contextMenuActions = createMemo<ContextMenuAction[]>(() => {
-    const menu = contextMenu();
-    if (!menu) {
-      return [];
-    }
-    if (menu.kind === "tab") {
-      const filePath = menu.filePath ?? ideStore.state.activePath ?? "";
-      return [
-        {
-          id: "close-tab",
-          label: "Close",
-          shortcut: formatForDisplay("Mod+W"),
-          onSelect: () => closeTab(filePath),
-        },
-        {
-          id: "close-others",
-          label: "Close Others",
-          onSelect: () => closeOtherTabs(filePath),
-        },
-        { id: "close-all", label: "Close All", onSelect: closeAllTabs },
-      ];
-    }
-    if (menu.kind === "tree") {
-      return [
-        {
-          id: "open",
-          label: "Open",
-          onSelect: () => menu.filePath && openFileByPath(menu.filePath),
-        },
-        {
-          id: "copy-path",
-          label: "Copy Path",
-          onSelect: () =>
-            notify("Path copied", menu.filePath ?? "Project path copied."),
-        },
-        {
-          id: "refresh",
-          label: "Refresh Explorer",
-          onSelect: () =>
-            activeProject()?.id && ideStore.loadProject(activeProject()?.id),
-        },
-        {
-          id: "reveal",
-          label: "Reveal in Explorer",
-          onSelect: () => openActivityView("explorer"),
-        },
-      ];
-    }
-    return [
-      {
-        id: "format",
-        label: "Format Document",
-        shortcut: formatForDisplay("Shift+Alt+F"),
-        onSelect: () => notify("Formatted", "Document formatting queued."),
-      },
-      {
-        id: "symbol",
-        label: "Go to Symbol",
-        shortcut: formatForDisplay("Mod+Shift+O"),
-        onSelect: () => ideStore.setCommandPalette(true),
-      },
-      {
-        id: "definition",
-        label: "Go to Definition",
-        shortcut: "F12",
-        onSelect: () =>
-          activeFile() &&
-          goToDefinition(
-            activeFile()!,
-            activeFile()!.cursorLine ?? cursorLine(),
-            activeFile()!.cursorColumn ?? cursorColumn(),
-          ),
-      },
-      {
-        id: "run-selection",
-        label: "Send Selection to Agent",
-        onSelect: () =>
-          notify(
-            "Selection attached",
-            "Selection ready for active harness thread.",
-          ),
-      },
-    ];
-  });
-
-  function goToDefinition(file: IdeFile, line: number, column: number) {
-    const symbol = getWordAtPosition(file.contentLines[line - 1] ?? "", column);
-    const targetLine = findDefinitionLine(file.contentLines, symbol);
-    if (!symbol || !targetLine) {
-      notify(
-        "Definition not found",
-        "No matching symbol definition in the active file.",
-        "warning",
-      );
-      return;
-    }
-    setCursorLine(targetLine);
-    setCursorColumn(1);
-    ideStore.setCursor(targetLine, 1);
-    document
-      .querySelector(`[data-test-ide-code-line="${targetLine}"]`)
-      ?.scrollIntoView({ block: "center" });
-  }
-
+function IdeWorkbenchSidebar(props: Pick<IdeWorkbenchViewProps, "state" | "actions">) {
+  const { state, actions } = props;
   return (
-    <section
-      ref={workbenchRef}
-      data-test-ide-workbench=""
-      class={
-        stylex.attrs(
-          ideStyles.shell,
-          ideUtilityStyles.flex,
-          ideUtilityStyles.hFull,
-          ideUtilityStyles.minH0,
-          ideUtilityStyles.flexCol,
-          ideUtilityStyles.overflowHidden,
-          ideUtilityStyles.roundedNone,
-          ideUtilityStyles.border0,
-        ).class
-      }
-    >
-      <div
-        class={
-          stylex.attrs(
+    <>
+      <Show
+        when={state.sidebarOpen()}
+        fallback={<ActivityBar active={undefined} sidebarOpen={false} onSelect={actions.toggleActivityView} />}
+      >
+        <ActivityBar active={state.activityView()} sidebarOpen={true} onSelect={actions.toggleActivityView} />
+      </Show>
+      <Show when={state.sidebarOpen()}>
+        <aside
+          class={stylex.attrs(
+            ideStyles.sidebar,
             ideUtilityStyles.flex,
             ideUtilityStyles.minH0,
-            ideUtilityStyles.flex1,
-          ).class
-        }
-      >
-        <Show
-          when={sidebarOpen()}
-          fallback={
-            <ActivityBar
-              active={undefined}
-              sidebarOpen={false}
-              onSelect={toggleActivityView}
-            />
-          }
+            ideUtilityStyles.shrink0,
+            ideUtilityStyles.flexCol,
+          ).class}
+          style={{ width: `${ideStore.state.sidebarWidth}px` }}
         >
-          <ActivityBar
-            active={activityView()}
-            sidebarOpen={true}
-            onSelect={toggleActivityView}
+          <SidebarHeader
+            active={state.activityView()}
+            projectName={state.activeProject()?.name ?? "Workspace"}
+            onCollapse={() => actions.setSidebarOpen(false)}
+            onCollapseAll={ideStore.collapseAllFolders}
           />
-        </Show>
-
-        <Show when={sidebarOpen()}>
-          <aside
-            class={
-              stylex.attrs(
-                ideStyles.sidebar,
-                ideUtilityStyles.flex,
-                ideUtilityStyles.minH0,
-                ideUtilityStyles.shrink0,
-                ideUtilityStyles.flexCol,
-              ).class
-            }
-            style={{ width: `${ideStore.state.sidebarWidth}px` }}
-          >
-            <SidebarHeader
-              active={activityView()}
-              projectName={activeProject()?.name ?? "Workspace"}
-              onCollapse={() => setSidebarOpen(false)}
-              onCollapseAll={ideStore.collapseAllFolders}
+          <Show when={!ideStore.state.treeLoading} fallback={<SidebarSkeleton />}>
+            <SwitchSidebar
+              active={state.activityView()}
+              searchQuery={ideStore.state.searchQuery}
+              replaceQuery={ideStore.state.replaceQuery}
+              regexSearch={ideStore.state.regexSearch}
+              caseSensitiveSearch={ideStore.state.caseSensitiveSearch}
+              wholeWordSearch={ideStore.state.wholeWordSearch}
+              searchLoading={ideStore.state.searchLoading}
+              searchResults={ideStore.state.searchResults}
+              searchTruncated={ideStore.state.searchTruncated}
+              searchInputRef={(element) => { state.refs.globalSearchInput = element; }}
+              treeEntries={ideStore.state.treeEntries}
+              treeError={ideStore.state.treeError}
+              treeTruncated={ideStore.state.treeTruncated}
+              gitBranch={ideStore.state.gitBranch}
+              gitIsRepository={ideStore.state.gitIsRepository}
+              gitChanges={ideStore.state.gitChanges}
+              gitLoading={ideStore.state.gitLoading}
+              onSearchQuery={ideStore.setSearchQuery}
+              onReplaceQuery={ideStore.setReplaceQuery}
+              onRegexSearch={ideStore.setRegexSearch}
+              onCaseSensitiveSearch={ideStore.setCaseSensitiveSearch}
+              onWholeWordSearch={ideStore.setWholeWordSearch}
+              onOpenPath={actions.openFileByPath}
+              onContextMenu={actions.openContextMenu}
             />
-            <Show
-              when={!ideStore.state.treeLoading}
-              fallback={<SidebarSkeleton />}
-            >
-              <SwitchSidebar
-                active={activityView()}
-                searchQuery={ideStore.state.searchQuery}
-                replaceQuery={ideStore.state.replaceQuery}
-                regexSearch={ideStore.state.regexSearch}
-                caseSensitiveSearch={ideStore.state.caseSensitiveSearch}
-                wholeWordSearch={ideStore.state.wholeWordSearch}
-                searchLoading={ideStore.state.searchLoading}
-                searchResults={ideStore.state.searchResults}
-                searchTruncated={ideStore.state.searchTruncated}
-                searchInputRef={(element) => {
-                  globalSearchInputRef = element;
-                }}
-                treeEntries={ideStore.state.treeEntries}
-                treeError={ideStore.state.treeError}
-                treeTruncated={ideStore.state.treeTruncated}
-                gitBranch={ideStore.state.gitBranch}
-                gitIsRepository={ideStore.state.gitIsRepository}
-                gitChanges={ideStore.state.gitChanges}
-                gitLoading={ideStore.state.gitLoading}
-                onSearchQuery={ideStore.setSearchQuery}
-                onReplaceQuery={ideStore.setReplaceQuery}
-                onRegexSearch={ideStore.setRegexSearch}
-                onCaseSensitiveSearch={ideStore.setCaseSensitiveSearch}
-                onWholeWordSearch={ideStore.setWholeWordSearch}
-                onOpenPath={openFileByPath}
-                onContextMenu={openContextMenu}
-              />
-            </Show>
-          </aside>
-          <Sash
-            label="Resize IDE sidebar"
-            orientation="vertical"
-            onPointerDown={(event) => startHorizontalResize("sidebar", event)}
-          />
-        </Show>
-
-        <div
-          class={
-            stylex.attrs(
-              ideStyles.surface,
-              ideUtilityStyles.flex,
-              ideUtilityStyles.minW0,
-              ideUtilityStyles.flex1,
-              ideUtilityStyles.flexCol,
-            ).class
-          }
-        >
-          <div
-            class={
-              stylex.attrs(
-                ideStyles.chrome,
-                ideUtilityStyles.flex,
-                ideUtilityStyles.h10,
-                ideUtilityStyles.shrink0,
-                ideUtilityStyles.itemsCenter,
-                ideUtilityStyles.justifyBetween,
-                ideUtilityStyles.gap2,
-                ideUtilityStyles.px2,
-              ).class
-            }
-          >
-            <div
-              class={
-                stylex.attrs(
-                  ideUtilityStyles.flex,
-                  ideUtilityStyles.minW0,
-                  ideUtilityStyles.itemsCenter,
-                  ideUtilityStyles.gap15,
-                ).class
-              }
-            >
-              <ActionButton
-                tooltip={`Save active file (${hotkeyHint("ideSave")})`}
-                ariaLabel="Save active file"
-                icon={
-                  <Save
-                    class={
-                      stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
-                        .class
-                    }
-                  />
-                }
-                variant={
-                  dirtyPaths().includes(ideStore.state.activePath ?? "")
-                    ? "secondary"
-                    : "ghost"
-                }
-                size="icon"
-                class={
-                  stylex.attrs(
-                    ideUtilityStyles.h8,
-                    ideUtilityStyles.w8,
-                    ideUtilityStyles.roundedLg,
-                  ).class
-                }
-                onClick={() => ideStore.saveFile()}
-              />
-              <ActionButton
-                tooltip={`${sidebarOpen() ? "Hide" : "Show"} IDE sidebar (${hotkeyHint("ideToggleSidebar")})`}
-                ariaLabel={
-                  sidebarOpen() ? "Hide IDE sidebar" : "Show IDE sidebar"
-                }
-                icon={
-                  sidebarOpen() ? (
-                    <PanelLeftClose
-                      class={
-                        stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
-                          .class
-                      }
-                    />
-                  ) : (
-                    <PanelLeftOpen
-                      class={
-                        stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
-                          .class
-                      }
-                    />
-                  )
-                }
-                variant="ghost"
-                size="icon"
-                class={
-                  stylex.attrs(
-                    ideUtilityStyles.h8,
-                    ideUtilityStyles.w8,
-                    ideUtilityStyles.roundedLg,
-                  ).class
-                }
-                onClick={() => toggleSidebar()}
-              />
-              <ActionButton
-                tooltip={`Open command palette (${hotkeyHint("ideCommandPalette")})`}
-                ariaLabel="Open command palette"
-                icon={
-                  <Code2
-                    class={
-                      stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
-                        .class
-                    }
-                  />
-                }
-                variant="ghost"
-                size="icon"
-                class={
-                  stylex.attrs(
-                    ideUtilityStyles.h8,
-                    ideUtilityStyles.w8,
-                    ideUtilityStyles.roundedLg,
-                  ).class
-                }
-                onClick={() => ideStore.setCommandPalette(true)}
-              />
-              <ActionButton
-                tooltip={
-                  resolvedProps.windowMode === "popped-out"
-                    ? "Pop IDE into main window"
-                    : "Pop IDE out to new window"
-                }
-                ariaLabel={
-                  resolvedProps.windowMode === "popped-out"
-                    ? "Pop IDE into main window"
-                    : "Pop IDE out to new window"
-                }
-                icon={
-                  <ExternalLink
-                    class={
-                      stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4)
-                        .class
-                    }
-                  />
-                }
-                variant="ghost"
-                size="icon"
-                class={
-                  stylex.attrs(
-                    ideUtilityStyles.h8,
-                    ideUtilityStyles.w8,
-                    ideUtilityStyles.roundedLg,
-                  ).class
-                }
-                onClick={resolvedProps.onToggleWindowMode}
-              />
-              <Show when={ideStore.state.editorSettings.breadcrumbsEnabled}>
-                <Breadcrumbs file={activeFile()} />
-              </Show>
-            </div>
-          </div>
-
-          <div
-            class={
-              stylex.attrs(
-                ideStyles.chrome,
-                ideStyles.editorTabs,
-                ideUtilityStyles.flex,
-                ideUtilityStyles.h10,
-                ideUtilityStyles.shrink0,
-                ideUtilityStyles.itemsEnd,
-                ideUtilityStyles.overflowXAuto,
-                ideUtilityStyles.overflowYHidden,
-              ).class
-            }
-            data-test-ide-editor-tabs=""
-            data-open-count={openFiles().length}
-          >
-            <Show
-              when={openFiles().length > 0}
-              fallback={
-                <div
-                  class={
-                    stylex.attrs(
-                      ideUtilityStyles.px3,
-                      ideUtilityStyles.pb2,
-                      ideUtilityStyles.textXs,
-                      ideUtilityStyles.textMuted,
-                    ).class
-                  }
-                >
-                  No editors open
-                </div>
-              }
-            >
-              <For each={openFiles()}>
-                {(file) => (
-                  <button
-                    type="button"
-                    data-test-ide-editor-tab=""
-                    class={cn(
-                      stylex.attrs(ideStyles.editorTab).class,
-                      ideStore.state.activePath === file.path
-                        ? stylex.attrs(ideStyles.editorTabActive).class
-                        : undefined,
-                    )}
-                    aria-label={`Open ${file.name}`}
-                    onClick={() =>
-                      ideStore.state.filesByPath[file.path]
-                        ? ideStore.setActivePath(file.path)
-                        : ideStore.openFile(file.path)
-                    }
-                    onContextMenu={(event) =>
-                      openContextMenu("tab", event, file.path)
-                    }
-                  >
-                    <FileCode2
-                      class={
-                        stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35)
-                          .class
-                      }
-                    />
-                    <span class={stylex.attrs(ideUtilityStyles.truncate).class}>
-                      {dirtyPaths().includes(file.path)
-                        ? `${file.name} *`
-                        : file.name}
-                    </span>
-                    <X
-                      class={
-                        stylex.attrs(
-                          ideUtilityStyles.h35,
-                          ideUtilityStyles.w35,
-                          ideUtilityStyles.transition,
-                          ideStyles.tabClose,
-                        ).class
-                      }
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        closeTab(file.path);
-                      }}
-                    />
-                  </button>
-                )}
-              </For>
-            </Show>
-          </div>
-
-          <Show
-            when={!ideStore.state.treeLoading}
-            fallback={<EditorSkeleton />}
-          >
-            <div
-              class={
-                stylex.attrs(
-                  ideUtilityStyles.flex,
-                  ideUtilityStyles.minH0,
-                  ideUtilityStyles.flex1,
-                  ideUtilityStyles.flexCol,
-                ).class
-              }
-            >
-              <div
-                class={
-                  stylex.attrs(
-                    ideUtilityStyles.flex,
-                    ideUtilityStyles.minH0,
-                    ideUtilityStyles.flex1,
-                  ).class
-                }
-              >
-                <EditorSurface
-                  file={activeFile()}
-                  widthPercent={ideStore.state.primaryEditorWidth}
-                  documentFindOpen={ideStore.state.documentFindOpen}
-                  documentFindQuery={ideStore.state.documentFindQuery}
-                  findInputRef={(element) => {
-                    documentFindInputRef = element;
-                  }}
-                  onDocumentFindQuery={ideStore.setDocumentFindQuery}
-                  onDocumentFindClose={() =>
-                    ideStore.setDocumentFindOpen(false)
-                  }
-                  wordWrap={ideStore.state.editorSettings.wordWrap}
-                  tabSize={ideStore.state.editorSettings.tabSize}
-                  bracketPairColorization={
-                    ideStore.state.editorSettings.bracketPairColorization
-                  }
-                  dirty={dirtyPaths().includes(activeFile()?.path ?? "")}
-                  completionState={completionState()}
-                  onCompletionClose={() => setCompletionState(undefined)}
-                  onCompletionSelect={(value) => {
-                    const completion = completionState();
-                    const file = activeFile();
-                    if (!file || !completion) {
-                      return;
-                    }
-                    ideStore.updateFileContent(
-                      file.path,
-                      applyCompletionAt(
-                        file.content ?? file.contentLines.join("\n"),
-                        completion.position,
-                        completion.prefix,
-                        value,
-                      ),
-                    );
-                    setCompletionState(undefined);
-                  }}
-                  onContentChange={(path, content) =>
-                    ideStore.updateFileContent(path, content)
-                  }
-                  onSave={() => ideStore.saveFile()}
-                  onCloseTab={closeCurrentTab}
-                  onGoToDefinition={goToDefinition}
-                  onCompletionRequest={(x, y, path, position, prefix, items) =>
-                    setCompletionState({ x, y, path, position, prefix, items })
-                  }
-                  onCursor={(line, column) => {
-                    setCursorLine(line);
-                    setCursorColumn(column);
-                    ideStore.setCursor(line, column);
-                  }}
-                  onContextMenu={(event) => openContextMenu("editor", event)}
-                />
-              </div>
-            </div>
           </Show>
+        </aside>
+        <Sash
+          label="Resize IDE sidebar"
+          orientation="vertical"
+          onPointerDown={(event) => actions.startHorizontalResize("sidebar", event)}
+        />
+      </Show>
+    </>
+  );
+}
 
-          <StatusBar
-            branch={
-              ideStore.state.gitBranch ??
-              (ideStore.state.gitIsRepository ? "detached" : "no git")
-            }
-            dirtyCount={dirtyCount()}
-            line={cursorLine()}
-            column={cursorColumn()}
-            encoding={activeFile()?.encoding ?? "UTF-8"}
-            language={activeFile()?.language ?? "Plain Text"}
+function IdeWorkbenchToolbar(props: Pick<IdeWorkbenchViewProps, "state" | "actions">) {
+  const { state, actions } = props;
+  const iconClass = stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4).class;
+  const buttonClass = stylex.attrs(
+    ideUtilityStyles.h8,
+    ideUtilityStyles.w8,
+    ideUtilityStyles.roundedLg,
+  ).class;
+  const poppedOut = () => state.resolvedProps.windowMode === "popped-out";
+  return (
+    <div class={stylex.attrs(
+      ideStyles.chrome,
+      ideUtilityStyles.flex,
+      ideUtilityStyles.h10,
+      ideUtilityStyles.shrink0,
+      ideUtilityStyles.itemsCenter,
+      ideUtilityStyles.justifyBetween,
+      ideUtilityStyles.gap2,
+      ideUtilityStyles.px2,
+    ).class}>
+      <div class={stylex.attrs(
+        ideUtilityStyles.flex,
+        ideUtilityStyles.minW0,
+        ideUtilityStyles.itemsCenter,
+        ideUtilityStyles.gap15,
+      ).class}>
+        <ActionButton
+          tooltip={`Save active file (${state.hotkeyHint("ideSave")})`}
+          ariaLabel="Save active file"
+          icon={<Save class={iconClass} />}
+          variant={state.dirtyPaths().includes(ideStore.state.activePath ?? "") ? "secondary" : "ghost"}
+          size="icon"
+          class={buttonClass}
+          onClick={() => ideStore.saveFile()}
+        />
+        <ActionButton
+          tooltip={`${state.sidebarOpen() ? "Hide" : "Show"} IDE sidebar (${state.hotkeyHint("ideToggleSidebar")})`}
+          ariaLabel={state.sidebarOpen() ? "Hide IDE sidebar" : "Show IDE sidebar"}
+          icon={state.sidebarOpen() ? <PanelLeftClose class={iconClass} /> : <PanelLeftOpen class={iconClass} />}
+          variant="ghost"
+          size="icon"
+          class={buttonClass}
+          onClick={actions.toggleSidebar}
+        />
+        <ActionButton
+          tooltip={`Open command palette (${state.hotkeyHint("ideCommandPalette")})`}
+          ariaLabel="Open command palette"
+          icon={<Code2 class={iconClass} />}
+          variant="ghost"
+          size="icon"
+          class={buttonClass}
+          onClick={() => ideStore.setCommandPalette(true)}
+        />
+        <ActionButton
+          tooltip={poppedOut() ? "Pop IDE into main window" : "Pop IDE out to new window"}
+          ariaLabel={poppedOut() ? "Pop IDE into main window" : "Pop IDE out to new window"}
+          icon={<ExternalLink class={iconClass} />}
+          variant="ghost"
+          size="icon"
+          class={buttonClass}
+          onClick={state.resolvedProps.onToggleWindowMode}
+        />
+        <Show when={ideStore.state.editorSettings.breadcrumbsEnabled}>
+          <Breadcrumbs file={state.activeFile()} />
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+function IdeWorkbenchTabs(props: Pick<IdeWorkbenchViewProps, "state" | "actions">) {
+  const { state, actions } = props;
+  return (
+    <div
+      class={stylex.attrs(
+        ideStyles.chrome,
+        ideStyles.editorTabs,
+        ideUtilityStyles.flex,
+        ideUtilityStyles.h10,
+        ideUtilityStyles.shrink0,
+        ideUtilityStyles.itemsEnd,
+        ideUtilityStyles.overflowXAuto,
+        ideUtilityStyles.overflowYHidden,
+      ).class}
+      data-test-ide-editor-tabs=""
+      data-open-count={state.openFiles().length}
+    >
+      <Show
+        when={state.openFiles().length > 0}
+        fallback={<div class={stylex.attrs(
+          ideUtilityStyles.px3,
+          ideUtilityStyles.pb2,
+          ideUtilityStyles.textXs,
+          ideUtilityStyles.textMuted,
+        ).class}>No editors open</div>}
+      >
+        <For each={state.openFiles()}>
+          {(file) => (
+            <button
+              type="button"
+              data-test-ide-editor-tab=""
+              class={cn(
+                stylex.attrs(ideStyles.editorTab).class,
+                ideStore.state.activePath === file.path ? stylex.attrs(ideStyles.editorTabActive).class : undefined,
+              )}
+              aria-label={`Open ${file.name}`}
+              onClick={() => ideStore.state.filesByPath[file.path]
+                ? ideStore.setActivePath(file.path)
+                : ideStore.openFile(file.path)}
+              onContextMenu={(event) => actions.openContextMenu("tab", event, file.path)}
+            >
+              <FileCode2 class={stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class} />
+              <span class={stylex.attrs(ideUtilityStyles.truncate).class}>
+                {state.dirtyPaths().includes(file.path) ? `${file.name} *` : file.name}
+              </span>
+              <X
+                class={stylex.attrs(
+                  ideUtilityStyles.h35,
+                  ideUtilityStyles.w35,
+                  ideUtilityStyles.transition,
+                  ideStyles.tabClose,
+                ).class}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  actions.closeTab(file.path);
+                }}
+              />
+            </button>
+          )}
+        </For>
+      </Show>
+    </div>
+  );
+}
+
+function IdeWorkbenchEditorArea(props: Pick<IdeWorkbenchViewProps, "state" | "actions">) {
+  const { state, actions } = props;
+  return (
+    <Show when={!ideStore.state.treeLoading} fallback={<EditorSkeleton />}>
+      <div class={stylex.attrs(
+        ideUtilityStyles.flex,
+        ideUtilityStyles.minH0,
+        ideUtilityStyles.flex1,
+        ideUtilityStyles.flexCol,
+      ).class}>
+        <div class={stylex.attrs(ideUtilityStyles.flex, ideUtilityStyles.minH0, ideUtilityStyles.flex1).class}>
+          <EditorSurface
+            file={state.activeFile()}
+            widthPercent={ideStore.state.primaryEditorWidth}
+            documentFindOpen={ideStore.state.documentFindOpen}
+            documentFindQuery={ideStore.state.documentFindQuery}
+            findInputRef={(element) => { state.refs.documentFindInput = element; }}
+            onDocumentFindQuery={ideStore.setDocumentFindQuery}
+            onDocumentFindClose={() => ideStore.setDocumentFindOpen(false)}
+            wordWrap={ideStore.state.editorSettings.wordWrap}
+            tabSize={ideStore.state.editorSettings.tabSize}
+            bracketPairColorization={ideStore.state.editorSettings.bracketPairColorization}
+            dirty={state.dirtyPaths().includes(state.activeFile()?.path ?? "")}
+            completionState={state.completionState()}
+            onCompletionClose={() => state.setCompletionState(undefined)}
+            onCompletionSelect={(value) => {
+              const completion = state.completionState();
+              const file = state.activeFile();
+              if (!file || !completion) return;
+              ideStore.updateFileContent(
+                file.path,
+                applyCompletionAt(
+                  file.content ?? file.contentLines.join("\n"),
+                  completion.position,
+                  completion.prefix,
+                  value,
+                ),
+              );
+              state.setCompletionState(undefined);
+            }}
+            onContentChange={(path, content) => ideStore.updateFileContent(path, content)}
+            onSave={() => ideStore.saveFile()}
+            onCloseTab={actions.closeCurrentTab}
+            onGoToDefinition={actions.goToDefinition}
+            onCompletionRequest={(x, y, path, position, prefix, items) =>
+              state.setCompletionState({ x, y, path, position, prefix, items })}
+            onCursor={(line, column) => {
+              state.setCursorLine(line);
+              state.setCursorColumn(column);
+              ideStore.setCursor(line, column);
+            }}
+            onContextMenu={(event) => actions.openContextMenu("editor", event)}
           />
         </div>
       </div>
+    </Show>
+  );
+}
 
+function IdeWorkbenchView(props: IdeWorkbenchViewProps) {
+  const { state, actions } = props;
+  return (
+    <section
+      ref={(element) => { state.refs.workbench = element; }}
+      data-test-ide-workbench=""
+      class={stylex.attrs(
+        ideStyles.shell,
+        ideUtilityStyles.flex,
+        ideUtilityStyles.hFull,
+        ideUtilityStyles.minH0,
+        ideUtilityStyles.flexCol,
+        ideUtilityStyles.overflowHidden,
+        ideUtilityStyles.roundedNone,
+        ideUtilityStyles.border0,
+      ).class}
+    >
+      <div class={stylex.attrs(ideUtilityStyles.flex, ideUtilityStyles.minH0, ideUtilityStyles.flex1).class}>
+        <IdeWorkbenchSidebar state={state} actions={actions} />
+        <div class={stylex.attrs(
+          ideStyles.surface,
+          ideUtilityStyles.flex,
+          ideUtilityStyles.minW0,
+          ideUtilityStyles.flex1,
+          ideUtilityStyles.flexCol,
+        ).class}>
+          <IdeWorkbenchToolbar state={state} actions={actions} />
+          <IdeWorkbenchTabs state={state} actions={actions} />
+          <IdeWorkbenchEditorArea state={state} actions={actions} />
+          <StatusBar
+            branch={ideStore.state.gitBranch ?? (ideStore.state.gitIsRepository ? "detached" : "no git")}
+            dirtyCount={state.dirtyCount()}
+            line={state.cursorLine()}
+            column={state.cursorColumn()}
+            encoding={state.activeFile()?.encoding ?? "UTF-8"}
+            language={state.activeFile()?.language ?? "Plain Text"}
+          />
+        </div>
+      </div>
       <CommandPalette
         open={ideStore.state.commandPaletteOpen}
         query={ideStore.state.commandQuery}
-        commands={commandPaletteCommands()}
+        commands={props.commandPaletteCommands()}
         onQuery={ideStore.setCommandQuery}
-        onClose={() => {
-          ideStore.setCommandPalette(false, "");
-        }}
+        onClose={() => ideStore.setCommandPalette(false, "")}
       />
       <ContextMenu
-        open={Boolean(contextMenu())}
-        x={contextMenu()?.x ?? 0}
-        y={contextMenu()?.y ?? 0}
+        open={Boolean(state.contextMenu())}
+        x={state.contextMenu()?.x ?? 0}
+        y={state.contextMenu()?.y ?? 0}
         ariaLabel="IDE context menu"
-        actions={contextMenuActions()}
-        onClose={() => setContextMenu(undefined)}
+        actions={props.contextMenuActions()}
+        onClose={() => state.setContextMenu(undefined)}
       />
       <IdeToasts
-        toasts={toasts()}
-        onDismiss={(id) =>
-          setToasts((current) => current.filter((toast) => toast.id !== id))
-        }
+        toasts={state.toasts()}
+        onDismiss={(id) => state.setToasts((current) => current.filter((toast) => toast.id !== id))}
       />
     </section>
   );
 }
 
+export function IdeWorkbench(props?: IdeWorkbenchProps) {
+  const state = createIdeWorkbenchState(props ?? {});
+  const actions = createIdeWorkbenchNavigation(state);
+  const commandPaletteCommands = createIdeWorkbenchCommandPalette(state, actions);
+  const contextMenuActions = createIdeWorkbenchContextMenu(state, actions);
+  registerIdeWorkbenchHotkeys({
+    hotkeyPreferences: state.hotkeyPreferences,
+    openDocumentFind: actions.openDocumentFind,
+    openGlobalSearch: actions.openGlobalSearch,
+    toggleActivityView: actions.toggleActivityView,
+    closeCurrentTab: actions.closeCurrentTab,
+    closeAllTabs: actions.closeAllTabs,
+    toggleSidebar: actions.toggleSidebar,
+  });
+  registerIdeWorkbenchDataEffects(state, actions.openFileByPath);
+  registerIdeWorkbenchShortcutInterception({
+    state,
+    closeCurrentTab: actions.closeCurrentTab,
+    closeAllTabs: actions.closeAllTabs,
+    toggleSidebar: actions.toggleSidebar,
+    openGlobalSearch: actions.openGlobalSearch,
+    openDocumentFind: actions.openDocumentFind,
+    toggleActivityView: actions.toggleActivityView,
+  });
+  return (
+    <IdeWorkbenchView
+      state={state}
+      actions={actions}
+      commandPaletteCommands={commandPaletteCommands}
+      contextMenuActions={contextMenuActions}
+    />
+  );
+}
 function ActivityBar(props: {
   active: IdeActivityView | undefined;
   sidebarOpen: boolean;
@@ -1549,15 +1167,15 @@ function SwitchSidebar(props: {
   caseSensitiveSearch: boolean;
   wholeWordSearch: boolean;
   searchLoading: boolean;
-  searchResults: import("../../../shared/protocol").IdeSearchResult[];
+  searchResults: import("@hyperfocus/ai-core/protocol").IdeSearchResult[];
   searchTruncated: boolean;
   searchInputRef: (element: HTMLInputElement | undefined) => void;
-  treeEntries: import("../../../shared/protocol").IdeFileTreeEntry[];
+  treeEntries: import("@hyperfocus/ai-core/protocol").IdeFileTreeEntry[];
   treeError?: string;
   treeTruncated: boolean;
   gitBranch?: string;
   gitIsRepository: boolean;
-  gitChanges: import("../../../shared/protocol").IdeGitChange[];
+  gitChanges: import("@hyperfocus/ai-core/protocol").IdeGitChange[];
   gitLoading: boolean;
   onSearchQuery: (value: string) => void;
   onReplaceQuery: (value: string) => void;
@@ -1602,10 +1220,10 @@ function SwitchSidebar(props: {
 }
 
 function ExplorerView(props: {
-  entries: import("../../../shared/protocol").IdeFileTreeEntry[];
+  entries: import("@hyperfocus/ai-core/protocol").IdeFileTreeEntry[];
   error?: string;
   truncated: boolean;
-  gitChanges: import("../../../shared/protocol").IdeGitChange[];
+  gitChanges: import("@hyperfocus/ai-core/protocol").IdeGitChange[];
   onOpenPath: (path: string) => void;
   onContextMenu: (
     kind: IdeContextMenu["kind"],
@@ -1715,7 +1333,7 @@ function ExplorerView(props: {
 }
 
 function FileRow(props: {
-  entry: import("../../../shared/protocol").IdeFileTreeEntry;
+  entry: import("@hyperfocus/ai-core/protocol").IdeFileTreeEntry;
   expanded: boolean;
   loading: boolean;
   gitStatus?: GitStatusBadge;
@@ -1834,7 +1452,7 @@ type GitStatusBadge = {
 };
 
 function createGitStatusByPath(
-  changes: import("../../../shared/protocol").IdeGitChange[],
+  changes: import("@hyperfocus/ai-core/protocol").IdeGitChange[],
 ) {
   const statuses = new Map<string, GitStatusBadge>();
   for (const change of changes) {
@@ -1863,7 +1481,7 @@ function createGitStatusByPath(
 
 function findGitStatusForTreeEntry(
   statuses: Map<string, GitStatusBadge>,
-  entry: import("../../../shared/protocol").IdeFileTreeEntry,
+  entry: import("@hyperfocus/ai-core/protocol").IdeFileTreeEntry,
 ) {
   const exact = statuses.get(normalizeGitStatusPath(entry.path));
   if (!exact) {
@@ -1891,7 +1509,7 @@ function normalizeGitStatusPath(path: string) {
 }
 
 function toGitStatusBadge(
-  change: import("../../../shared/protocol").IdeGitChange,
+  change: import("@hyperfocus/ai-core/protocol").IdeGitChange,
 ): GitStatusBadge | undefined {
   if (change.status === "untracked" || change.status === "added") {
     return { label: change.shortStatus, tone: "added", source: "file" };
@@ -1903,20 +1521,20 @@ function toGitStatusBadge(
 }
 
 function flattenVisibleTree(
-  entries: import("../../../shared/protocol").IdeFileTreeEntry[],
+  entries: import("@hyperfocus/ai-core/protocol").IdeFileTreeEntry[],
   expandedFolderPaths: string[],
 ) {
   const expanded = new Set(expandedFolderPaths);
   const byParent = new Map<
     string,
-    import("../../../shared/protocol").IdeFileTreeEntry[]
+    import("@hyperfocus/ai-core/protocol").IdeFileTreeEntry[]
   >();
   for (const entry of entries) {
     const parent = entry.parentPath ?? "";
     byParent.set(parent, [...(byParent.get(parent) ?? []), entry]);
   }
   const sortEntries = (
-    items: import("../../../shared/protocol").IdeFileTreeEntry[],
+    items: import("@hyperfocus/ai-core/protocol").IdeFileTreeEntry[],
   ) =>
     [...items].sort(
       (left, right) =>
@@ -1924,7 +1542,7 @@ function flattenVisibleTree(
           Number(left.kind === "directory") ||
         left.name.localeCompare(right.name),
     );
-  const output: import("../../../shared/protocol").IdeFileTreeEntry[] = [];
+  const output: import("@hyperfocus/ai-core/protocol").IdeFileTreeEntry[] = [];
   const visit = (parentPath: string, depth: number) => {
     for (const entry of sortEntries(byParent.get(parentPath) ?? [])) {
       output.push({ ...entry, depth });
@@ -1937,254 +1555,10 @@ function flattenVisibleTree(
   return output;
 }
 
-function GlobalSearchView(props: {
-  searchQuery: string;
-  replaceQuery: string;
-  regexSearch: boolean;
-  caseSensitiveSearch: boolean;
-  wholeWordSearch: boolean;
-  searchLoading: boolean;
-  searchResults: import("../../../shared/protocol").IdeSearchResult[];
-  searchTruncated: boolean;
-  searchInputRef: (element: HTMLInputElement | undefined) => void;
-  onOpenPath: (path: string, line?: number, column?: number) => void;
-  onSearchQuery: (value: string) => void;
-  onReplaceQuery: (value: string) => void;
-  onRegexSearch: (value: boolean) => void;
-  onCaseSensitiveSearch: (value: boolean) => void;
-  onWholeWordSearch: (value: boolean) => void;
-}) {
-  const resultCount = createMemo(() =>
-    props.searchResults.reduce((sum, result) => sum + result.matches.length, 0),
-  );
-  return (
-    <div
-      class={
-        stylex.attrs(
-          ideUtilityStyles.flex,
-          ideUtilityStyles.minH0,
-          ideUtilityStyles.flex1,
-          ideUtilityStyles.flexCol,
-          ideUtilityStyles.gap3,
-          ideUtilityStyles.overflowAuto,
-          ideUtilityStyles.p3,
-        ).class
-      }
-    >
-      <div
-        class={
-          stylex.attrs(
-            ideUtilityStyles.flex,
-            ideUtilityStyles.flexCol,
-            ideUtilityStyles.gap2,
-          ).class
-        }
-      >
-        <Input
-          ref={props.searchInputRef}
-          aria-label="Find in files"
-          placeholder="Find"
-          value={props.searchQuery}
-          onInput={(event) => props.onSearchQuery(event.currentTarget.value)}
-          class={stylex.attrs(ideStyles.input).class}
-        />
-        <Input
-          aria-label="Replace in files"
-          placeholder="Replace"
-          value={props.replaceQuery}
-          onInput={(event) => props.onReplaceQuery(event.currentTarget.value)}
-          class={stylex.attrs(ideStyles.input).class}
-        />
-        <div
-          class={
-            stylex.attrs(
-              ideUtilityStyles.flex,
-              ideUtilityStyles.itemsCenter,
-              ideUtilityStyles.gap1,
-            ).class
-          }
-        >
-          <ActionButton
-            tooltip="Use regular expression search"
-            ariaLabel="Use regular expression search"
-            icon={
-              <Regex
-                class={
-                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
-                }
-              />
-            }
-            variant={props.regexSearch ? "secondary" : "ghost"}
-            size="icon"
-            class={
-              stylex.attrs(
-                ideUtilityStyles.h8,
-                ideUtilityStyles.w8,
-                ideUtilityStyles.roundedLg,
-              ).class
-            }
-            onClick={() => props.onRegexSearch(!props.regexSearch)}
-          />
-          <ActionButton
-            tooltip="Match case"
-            ariaLabel="Match case"
-            icon={
-              <CaseSensitive
-                class={
-                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
-                }
-              />
-            }
-            variant={props.caseSensitiveSearch ? "secondary" : "ghost"}
-            size="icon"
-            class={
-              stylex.attrs(
-                ideUtilityStyles.h8,
-                ideUtilityStyles.w8,
-                ideUtilityStyles.roundedLg,
-              ).class
-            }
-            onClick={() =>
-              props.onCaseSensitiveSearch(!props.caseSensitiveSearch)
-            }
-          />
-          <ActionButton
-            tooltip="Match whole word"
-            ariaLabel="Match whole word"
-            icon={
-              <Braces
-                class={
-                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
-                }
-              />
-            }
-            variant={props.wholeWordSearch ? "secondary" : "ghost"}
-            size="icon"
-            class={
-              stylex.attrs(
-                ideUtilityStyles.h8,
-                ideUtilityStyles.w8,
-                ideUtilityStyles.roundedLg,
-              ).class
-            }
-            onClick={() => props.onWholeWordSearch(!props.wholeWordSearch)}
-          />
-          <ActionButton
-            tooltip="Replace is planned for the editing pass"
-            icon={
-              <Replace
-                class={
-                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
-                }
-              />
-            }
-            variant="secondary"
-            size="sm"
-          >
-            Replace
-          </ActionButton>
-        </div>
-      </div>
-      <div
-        class={
-          stylex.attrs(
-            ideUtilityStyles.text065,
-            ideUtilityStyles.fontSemibold,
-            ideUtilityStyles.uppercase,
-            ideUtilityStyles.textIdeMuted,
-          ).class
-        }
-      >
-        {props.searchLoading
-          ? "Searching..."
-          : `${resultCount()} results${props.searchTruncated ? " (truncated)" : ""}`}
-      </div>
-      <Show
-        when={resultCount() > 0}
-        fallback={
-          <div
-            class={
-              stylex.attrs(
-                ideUtilityStyles.roundedLg,
-                ideUtilityStyles.border,
-                ideUtilityStyles.borderDashed,
-                ideUtilityStyles.borderIde,
-                ideUtilityStyles.p3,
-                ideUtilityStyles.textXs,
-                ideUtilityStyles.textIdeMuted,
-              ).class
-            }
-          >
-            Type to search files.
-          </div>
-        }
-      >
-        <For each={props.searchResults}>
-          {(result) => (
-            <div
-              class={
-                stylex.attrs(
-                  ideUtilityStyles.roundedLg,
-                  ideUtilityStyles.border,
-                  ideUtilityStyles.borderIde,
-                  ideUtilityStyles.bgIdeRow,
-                  ideUtilityStyles.p2,
-                ).class
-              }
-            >
-              <button
-                type="button"
-                class={
-                  stylex.attrs(
-                    ideUtilityStyles.block,
-                    ideUtilityStyles.wFull,
-                    ideUtilityStyles.truncate,
-                    ideUtilityStyles.textLeft,
-                    ideUtilityStyles.textXs,
-                    ideUtilityStyles.fontSemibold,
-                    ideUtilityStyles.textIdeText,
-                  ).class
-                }
-                onClick={() => props.onOpenPath(result.path)}
-              >
-                {result.path}
-              </button>
-              <For each={result.matches}>
-                {(match) => (
-                  <button
-                    type="button"
-                    class={
-                      stylex.attrs(
-                        ideUtilityStyles.mt1,
-                        ideUtilityStyles.block,
-                        ideUtilityStyles.wFull,
-                        ideUtilityStyles.truncate,
-                        ideUtilityStyles.textLeft,
-                        ideUtilityStyles.fontMono,
-                        ideUtilityStyles.text07,
-                        ideUtilityStyles.textIdeMuted,
-                      ).class
-                    }
-                    onClick={() =>
-                      props.onOpenPath(result.path, match.line, match.column)
-                    }
-                  >
-                    {match.line}:{match.column} {match.preview}
-                  </button>
-                )}
-              </For>
-            </div>
-          )}
-        </For>
-      </Show>
-    </div>
-  );
-}
-
 function SourceControlView(props: {
   branch?: string;
   isRepository: boolean;
-  changes: import("../../../shared/protocol").IdeGitChange[];
+  changes: import("@hyperfocus/ai-core/protocol").IdeGitChange[];
   loading: boolean;
   onOpenPath: (path: string) => void;
 }) {
@@ -2318,7 +1692,7 @@ function Breadcrumbs(props: { file?: IdeFile }) {
   );
 }
 
-function EditorSurface(props: {
+type EditorSurfaceProps = {
   file?: IdeFile;
   widthPercent: number;
   documentFindOpen: boolean;
@@ -2347,7 +1721,9 @@ function EditorSurface(props: {
   onCompletionClose: () => void;
   onCursor: (line: number, column: number) => void;
   onContextMenu: (event: MouseEvent) => void;
-}) {
+};
+
+function createEditorSurfaceModel(props: EditorSurfaceProps) {
   const [scrollPosition, setScrollPosition] = createSignal({ left: 0, top: 0 });
   const [symbolHover, setSymbolHover] = createSignal<SymbolHoverState>();
   const [draft, setDraft] = createSignal<EditorDraft>({
@@ -2514,6 +1890,382 @@ function EditorSurface(props: {
     }, 200);
   }
 
+  return {
+    scrollPosition,
+    setScrollPosition,
+    symbolHover,
+    displayedText,
+    displayedLines,
+    matchCount,
+    setTextareaRef: (element: HTMLTextAreaElement) => {
+      textareaRef = element;
+    },
+    updateCursor,
+    handleInput,
+    handleDefinition,
+    showCompletions,
+    clearSymbolHover,
+    scheduleSymbolHover,
+  };
+}
+
+type EditorSurfaceModel = ReturnType<typeof createEditorSurfaceModel>;
+
+function EditorFindControl(props: {
+  editor: EditorSurfaceProps;
+  model: EditorSurfaceModel;
+}) {
+  return (
+    <Show when={props.editor.documentFindOpen}>
+      <div class={stylex.attrs(
+        ideStyles.commandSurface,
+        ideUtilityStyles.absolute,
+        ideUtilityStyles.right3,
+        ideUtilityStyles.top3,
+        ideUtilityStyles.z10,
+        ideUtilityStyles.flex,
+        ideUtilityStyles.itemsCenter,
+        ideUtilityStyles.gap1,
+        ideUtilityStyles.roundedLg,
+        ideUtilityStyles.border,
+        ideUtilityStyles.borderIde,
+        ideUtilityStyles.bgIdeSurface,
+        ideUtilityStyles.p1,
+        ideUtilityStyles.shadowXl,
+      ).class}>
+        <Search class={stylex.attrs(
+          ideUtilityStyles.h35,
+          ideUtilityStyles.w35,
+          ideUtilityStyles.textIdeMuted,
+        ).class} />
+        <input
+          ref={props.editor.findInputRef}
+          class={stylex.attrs(
+            ideUtilityStyles.h7,
+            ideUtilityStyles.w44,
+            ideUtilityStyles.bgTransparent,
+            ideUtilityStyles.px1,
+            ideUtilityStyles.textXs,
+            ideUtilityStyles.textIdeText,
+            ideUtilityStyles.outlineNone,
+          ).class}
+          aria-label="Find in current document"
+          value={props.editor.documentFindQuery}
+          placeholder="Find"
+          onInput={(event) => props.editor.onDocumentFindQuery(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") props.editor.onDocumentFindClose();
+          }}
+        />
+        <span class={stylex.attrs(
+          ideUtilityStyles.minW10,
+          ideUtilityStyles.textRight,
+          ideUtilityStyles.text065,
+          ideUtilityStyles.textIdeMuted,
+        ).class}>
+          {props.model.matchCount()}
+        </span>
+        <ActionButton
+          tooltip="Close document search"
+          ariaLabel="Close document search"
+          icon={<X class={stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class} />}
+          variant="ghost"
+          size="icon"
+          class={stylex.attrs(
+            ideUtilityStyles.h7,
+            ideUtilityStyles.w7,
+            ideUtilityStyles.roundedMd,
+          ).class}
+          onClick={props.editor.onDocumentFindClose}
+        />
+      </div>
+    </Show>
+  );
+}
+
+function EditorCodeLayer(props: {
+  file: IdeFile;
+  editor: EditorSurfaceProps;
+  model: EditorSurfaceModel;
+}) {
+  return (
+    <div
+      class={stylex.attrs(
+        ideUtilityStyles.pointerEventsNone,
+        ideUtilityStyles.absolute,
+        ideUtilityStyles.inset0,
+        ideUtilityStyles.minHFull,
+        ideUtilityStyles.p3,
+        ideUtilityStyles.pr6,
+      ).class}
+      style={{
+        transform: `translate(${-props.model.scrollPosition().left}px, ${-props.model.scrollPosition().top}px)`,
+      }}
+    >
+      <For each={props.model.displayedLines()}>
+        {(line, index) => (
+          <div
+            data-test-ide-code-line={String(index() + 1)}
+            data-word-wrap={props.editor.wordWrap}
+            class={cn(
+              stylex.attrs(ideStyles.codeLine, ideUtilityStyles.grid, ideUtilityStyles.gridCode).class,
+              props.editor.wordWrap === "on" ? stylex.attrs(ideStyles.codeLineWrap).class : undefined,
+            )}
+          >
+            <span class={stylex.attrs(
+              ideUtilityStyles.selectNone,
+              ideUtilityStyles.pr3,
+              ideUtilityStyles.textRight,
+              ideUtilityStyles.textIdeMuted,
+            ).class}>
+              {index() + 1}
+            </span>
+            <span
+              data-test-ide-code-text={String(index() + 1)}
+              class={cn(
+                stylex.attrs(ideStyles.codeCell, ideUtilityStyles.whitespacePre).class,
+                props.editor.wordWrap === "on" ? stylex.attrs(ideStyles.codeCellWrap).class : undefined,
+                props.editor.bracketPairColorization ? stylex.attrs(ideStyles.codeColorized).class : undefined,
+              )}
+            >
+              <For each={syntaxHighlightLine(line, props.file.language)}>
+                {(token) => <span class={tokenClass(token.kind)}>{token.text}</span>}
+              </For>
+            </span>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
+function EditorTextarea(props: {
+  file: IdeFile;
+  editor: EditorSurfaceProps;
+  model: EditorSurfaceModel;
+}) {
+  const handleKeyDown = (event: KeyboardEvent) => {
+    props.model.clearSymbolHover();
+    if (eventMatchesHotkeys(
+      event,
+      normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences).ideCloseEditor,
+    )) {
+      event.preventDefault();
+      event.stopPropagation();
+      props.editor.onCloseTab();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      props.editor.onSave();
+      return;
+    }
+    if (event.key === "F12") {
+      props.model.handleDefinition(event);
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === " ") {
+      event.preventDefault();
+      props.model.showCompletions();
+      return;
+    }
+    props.editor.onCompletionClose();
+  };
+  return (
+    <textarea
+      ref={props.model.setTextareaRef}
+      aria-label={`Edit ${props.file.name}`}
+      data-word-wrap={props.editor.wordWrap}
+      spellcheck={false}
+      class={cn(
+        stylex.attrs(
+          ideStyles.codeInput,
+          ideUtilityStyles.absolute,
+          ideUtilityStyles.inset0,
+          ideUtilityStyles.hFull,
+          ideUtilityStyles.wFull,
+          ideUtilityStyles.resizeNone,
+          ideUtilityStyles.p3,
+          ideUtilityStyles.pr6,
+          ideUtilityStyles.fontMono,
+          ideUtilityStyles.text078,
+          ideUtilityStyles.leading6,
+          ideUtilityStyles.outlineNone,
+        ).class,
+        props.editor.wordWrap === "on" ? stylex.attrs(ideStyles.codeInputWrap).class : undefined,
+      )}
+      value={props.model.displayedText()}
+      onInput={(event) => props.model.handleInput(event.currentTarget)}
+      onScroll={(event) => {
+        props.model.setScrollPosition({
+          left: event.currentTarget.scrollLeft,
+          top: event.currentTarget.scrollTop,
+        });
+        props.model.clearSymbolHover();
+      }}
+      onMouseMove={props.model.scheduleSymbolHover}
+      onMouseLeave={props.model.clearSymbolHover}
+      onClick={(event) => {
+        props.model.clearSymbolHover();
+        props.model.updateCursor();
+        props.model.handleDefinition(event);
+      }}
+      onKeyUp={props.model.updateCursor}
+      onSelect={props.model.updateCursor}
+      onKeyDown={handleKeyDown}
+    />
+  );
+}
+
+function EditorOverlays(props: {
+  editor: EditorSurfaceProps;
+  model: EditorSurfaceModel;
+}) {
+  return (
+    <>
+      <Show when={props.editor.completionState}>
+        {(completion) => (
+          <div
+            class={stylex.attrs(
+              ideStyles.completion,
+              ideUtilityStyles.absolute,
+              ideUtilityStyles.z20,
+              ideUtilityStyles.w56,
+              ideUtilityStyles.overflowHidden,
+              ideUtilityStyles.roundedLg,
+              ideUtilityStyles.border,
+              ideUtilityStyles.borderIde,
+              ideUtilityStyles.bgIdeSurface,
+              ideUtilityStyles.shadowXl,
+            ).class}
+            style={{ left: `${completion().x}px`, top: `${completion().y}px` }}
+          >
+            <For each={completion().items}>
+              {(item) => (
+                <button
+                  type="button"
+                  class={stylex.attrs(ideStyles.completionRow).class}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => props.editor.onCompletionSelect(item)}
+                >
+                  {item}
+                </button>
+              )}
+            </For>
+          </div>
+        )}
+      </Show>
+      <Show when={props.model.symbolHover()}>
+        {(hover) => (
+          <div
+            data-test-ide-symbol-tooltip=""
+            class={stylex.attrs(
+              ideStyles.tooltip,
+              ideUtilityStyles.fixed,
+              ideUtilityStyles.z30,
+              ideUtilityStyles.maxWSm,
+              ideUtilityStyles.overflowHidden,
+              ideUtilityStyles.roundedLg,
+              ideUtilityStyles.border,
+              ideUtilityStyles.borderIde,
+              ideUtilityStyles.bgIdeSurface,
+              ideUtilityStyles.p3,
+              ideUtilityStyles.textXs,
+              ideUtilityStyles.shadowXl,
+            ).class}
+            style={{ left: `${hover().x - 48}px`, top: `${hover().y - 88}px` }}
+          >
+            <div class={stylex.attrs(
+              ideUtilityStyles.fontMono,
+              ideUtilityStyles.text072,
+              ideUtilityStyles.fontSemibold,
+              ideUtilityStyles.textIdeText,
+            ).class}>
+              {hover().symbol}
+            </div>
+            <div class={stylex.attrs(
+              ideUtilityStyles.mt1,
+              ideUtilityStyles.whitespacePreWrap,
+              ideUtilityStyles.text068,
+              ideUtilityStyles.leading5,
+              ideUtilityStyles.textIdeMuted,
+            ).class}>
+              {hover().detail}
+            </div>
+          </div>
+        )}
+      </Show>
+    </>
+  );
+}
+
+function EditorDocument(props: {
+  file?: IdeFile;
+  editor: EditorSurfaceProps;
+  model: EditorSurfaceModel;
+}) {
+  return (
+    <Show
+      when={props.file}
+      fallback={<div class={stylex.attrs(
+        ideUtilityStyles.flex,
+        ideUtilityStyles.hFull,
+        ideUtilityStyles.itemsCenter,
+        ideUtilityStyles.justifyCenter,
+        ideUtilityStyles.textXs,
+        ideUtilityStyles.textIdeMuted,
+      ).class}>Open a file from Explorer.</div>}
+    >
+      {(file) => (
+        <div
+          class={stylex.attrs(
+            ideUtilityStyles.relative,
+            ideUtilityStyles.hFull,
+            ideUtilityStyles.minW0,
+            ideUtilityStyles.overflowHidden,
+            ideUtilityStyles.fontMono,
+            ideUtilityStyles.text078,
+            ideUtilityStyles.leading6,
+          ).class}
+          style={{ "tab-size": String(props.editor.tabSize) }}
+        >
+          <Show
+            when={!file().isBinary && !file().tooLarge}
+            fallback={<div class={stylex.attrs(
+              ideUtilityStyles.p3,
+              ideUtilityStyles.textXs,
+              ideUtilityStyles.textIdeMuted,
+            ).class}>Binary or oversized file preview is unavailable.</div>}
+          >
+            <EditorCodeLayer file={file()} editor={props.editor} model={props.model} />
+            <EditorTextarea file={file()} editor={props.editor} model={props.model} />
+            <EditorOverlays editor={props.editor} model={props.model} />
+          </Show>
+          <Show when={props.editor.dirty}>
+            <div class={stylex.attrs(
+              ideUtilityStyles.absolute,
+              ideUtilityStyles.bottom3,
+              ideUtilityStyles.right3,
+              ideUtilityStyles.roundedMd,
+              ideUtilityStyles.border,
+              ideUtilityStyles.borderIde,
+              ideUtilityStyles.bgIdeSurface,
+              ideUtilityStyles.px2,
+              ideUtilityStyles.py1,
+              ideUtilityStyles.text065,
+              ideUtilityStyles.fontSemibold,
+              ideUtilityStyles.textIdeMuted,
+            ).class}>Unsaved</div>
+          </Show>
+        </div>
+      )}
+    </Show>
+  );
+}
+
+function EditorSurface(props: EditorSurfaceProps) {
+  const model = createEditorSurfaceModel(props);
+
   return (
     <div
       class={
@@ -2528,409 +2280,8 @@ function EditorSurface(props: {
       style={{ width: `${props.widthPercent}%` }}
       onContextMenu={props.onContextMenu}
     >
-      <Show when={props.documentFindOpen}>
-        <div
-          class={
-            stylex.attrs(
-              ideStyles.commandSurface,
-              ideUtilityStyles.absolute,
-              ideUtilityStyles.right3,
-              ideUtilityStyles.top3,
-              ideUtilityStyles.z10,
-              ideUtilityStyles.flex,
-              ideUtilityStyles.itemsCenter,
-              ideUtilityStyles.gap1,
-              ideUtilityStyles.roundedLg,
-              ideUtilityStyles.border,
-              ideUtilityStyles.borderIde,
-              ideUtilityStyles.bgIdeSurface,
-              ideUtilityStyles.p1,
-              ideUtilityStyles.shadowXl,
-            ).class
-          }
-        >
-          <Search
-            class={
-              stylex.attrs(
-                ideUtilityStyles.h35,
-                ideUtilityStyles.w35,
-                ideUtilityStyles.textIdeMuted,
-              ).class
-            }
-          />
-          <input
-            ref={props.findInputRef}
-            class={
-              stylex.attrs(
-                ideUtilityStyles.h7,
-                ideUtilityStyles.w44,
-                ideUtilityStyles.bgTransparent,
-                ideUtilityStyles.px1,
-                ideUtilityStyles.textXs,
-                ideUtilityStyles.textIdeText,
-                ideUtilityStyles.outlineNone,
-              ).class
-            }
-            aria-label="Find in current document"
-            value={props.documentFindQuery}
-            placeholder="Find"
-            onInput={(event) =>
-              props.onDocumentFindQuery(event.currentTarget.value)
-            }
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                props.onDocumentFindClose();
-              }
-            }}
-          />
-          <span
-            class={
-              stylex.attrs(
-                ideUtilityStyles.minW10,
-                ideUtilityStyles.textRight,
-                ideUtilityStyles.text065,
-                ideUtilityStyles.textIdeMuted,
-              ).class
-            }
-          >
-            {matchCount()}
-          </span>
-          <ActionButton
-            tooltip="Close document search"
-            ariaLabel="Close document search"
-            icon={
-              <X
-                class={
-                  stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class
-                }
-              />
-            }
-            variant="ghost"
-            size="icon"
-            class={
-              stylex.attrs(
-                ideUtilityStyles.h7,
-                ideUtilityStyles.w7,
-                ideUtilityStyles.roundedMd,
-              ).class
-            }
-            onClick={props.onDocumentFindClose}
-          />
-        </div>
-      </Show>
-      <Show
-        when={props.file}
-        fallback={
-          <div
-            class={
-              stylex.attrs(
-                ideUtilityStyles.flex,
-                ideUtilityStyles.hFull,
-                ideUtilityStyles.itemsCenter,
-                ideUtilityStyles.justifyCenter,
-                ideUtilityStyles.textXs,
-                ideUtilityStyles.textIdeMuted,
-              ).class
-            }
-          >
-            Open a file from Explorer.
-          </div>
-        }
-      >
-        {(file) => (
-          <div
-            class={
-              stylex.attrs(
-                ideUtilityStyles.relative,
-                ideUtilityStyles.hFull,
-                ideUtilityStyles.minW0,
-                ideUtilityStyles.overflowHidden,
-                ideUtilityStyles.fontMono,
-                ideUtilityStyles.text078,
-                ideUtilityStyles.leading6,
-              ).class
-            }
-            style={{ "tab-size": String(props.tabSize) }}
-          >
-            <Show
-              when={!file().isBinary && !file().tooLarge}
-              fallback={
-                <div
-                  class={
-                    stylex.attrs(
-                      ideUtilityStyles.p3,
-                      ideUtilityStyles.textXs,
-                      ideUtilityStyles.textIdeMuted,
-                    ).class
-                  }
-                >
-                  Binary or oversized file preview is unavailable.
-                </div>
-              }
-            >
-              <div
-                class={
-                  stylex.attrs(
-                    ideUtilityStyles.pointerEventsNone,
-                    ideUtilityStyles.absolute,
-                    ideUtilityStyles.inset0,
-                    ideUtilityStyles.minHFull,
-                    ideUtilityStyles.p3,
-                    ideUtilityStyles.pr6,
-                  ).class
-                }
-                style={{
-                  transform: `translate(${-scrollPosition().left}px, ${-scrollPosition().top}px)`,
-                }}
-              >
-                <For each={displayedLines()}>
-                  {(line, index) => (
-                    <div
-                      data-test-ide-code-line={String(index() + 1)}
-                      data-word-wrap={props.wordWrap}
-                      class={cn(
-                        stylex.attrs(
-                          ideStyles.codeLine,
-                          ideUtilityStyles.grid,
-                          ideUtilityStyles.gridCode,
-                        ).class,
-                        props.wordWrap === "on"
-                          ? stylex.attrs(ideStyles.codeLineWrap).class
-                          : undefined,
-                      )}
-                    >
-                      <span
-                        class={
-                          stylex.attrs(
-                            ideUtilityStyles.selectNone,
-                            ideUtilityStyles.pr3,
-                            ideUtilityStyles.textRight,
-                            ideUtilityStyles.textIdeMuted,
-                          ).class
-                        }
-                      >
-                        {index() + 1}
-                      </span>
-                      <span
-                        data-test-ide-code-text={String(index() + 1)}
-                        class={cn(
-                          stylex.attrs(
-                            ideStyles.codeCell,
-                            ideUtilityStyles.whitespacePre,
-                          ).class,
-                          props.wordWrap === "on"
-                            ? stylex.attrs(ideStyles.codeCellWrap).class
-                            : undefined,
-                          props.bracketPairColorization
-                            ? stylex.attrs(ideStyles.codeColorized).class
-                            : undefined,
-                        )}
-                      >
-                        <For each={syntaxHighlightLine(line, file().language)}>
-                          {(token) => (
-                            <span class={tokenClass(token.kind)}>
-                              {token.text}
-                            </span>
-                          )}
-                        </For>
-                      </span>
-                    </div>
-                  )}
-                </For>
-              </div>
-              <textarea
-                ref={textareaRef}
-                aria-label={`Edit ${file().name}`}
-                data-word-wrap={props.wordWrap}
-                spellcheck={false}
-                class={cn(
-                  stylex.attrs(
-                    ideStyles.codeInput,
-                    ideUtilityStyles.absolute,
-                    ideUtilityStyles.inset0,
-                    ideUtilityStyles.hFull,
-                    ideUtilityStyles.wFull,
-                    ideUtilityStyles.resizeNone,
-                    ideUtilityStyles.p3,
-                    ideUtilityStyles.pr6,
-                    ideUtilityStyles.fontMono,
-                    ideUtilityStyles.text078,
-                    ideUtilityStyles.leading6,
-                    ideUtilityStyles.outlineNone,
-                  ).class,
-                  props.wordWrap === "on"
-                    ? stylex.attrs(ideStyles.codeInputWrap).class
-                    : undefined,
-                )}
-                value={displayedText()}
-                onInput={(event) => handleInput(event.currentTarget)}
-                onScroll={(event) => {
-                  setScrollPosition({
-                    left: event.currentTarget.scrollLeft,
-                    top: event.currentTarget.scrollTop,
-                  });
-                  clearSymbolHover();
-                }}
-                onMouseMove={scheduleSymbolHover}
-                onMouseLeave={clearSymbolHover}
-                onClick={(event) => {
-                  clearSymbolHover();
-                  updateCursor();
-                  handleDefinition(event);
-                }}
-                onKeyUp={updateCursor}
-                onSelect={updateCursor}
-                onKeyDown={(event) => {
-                  clearSymbolHover();
-                  if (
-                    eventMatchesHotkeys(
-                      event,
-                      normalizeAppHotkeyPreferences(
-                        harnessStore.state.appHotkeyPreferences,
-                      ).ideCloseEditor,
-                    )
-                  ) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    props.onCloseTab();
-                    return;
-                  }
-                  if (
-                    (event.ctrlKey || event.metaKey) &&
-                    event.key.toLowerCase() === "s"
-                  ) {
-                    event.preventDefault();
-                    props.onSave();
-                    return;
-                  }
-                  if (event.key === "F12") {
-                    handleDefinition(event);
-                    return;
-                  }
-                  if ((event.ctrlKey || event.metaKey) && event.key === " ") {
-                    event.preventDefault();
-                    showCompletions();
-                    return;
-                  }
-                  props.onCompletionClose();
-                }}
-              />
-              <Show when={props.completionState}>
-                {(completion) => (
-                  <div
-                    class={
-                      stylex.attrs(
-                        ideStyles.completion,
-                        ideUtilityStyles.absolute,
-                        ideUtilityStyles.z20,
-                        ideUtilityStyles.w56,
-                        ideUtilityStyles.overflowHidden,
-                        ideUtilityStyles.roundedLg,
-                        ideUtilityStyles.border,
-                        ideUtilityStyles.borderIde,
-                        ideUtilityStyles.bgIdeSurface,
-                        ideUtilityStyles.shadowXl,
-                      ).class
-                    }
-                    style={{
-                      left: `${completion().x}px`,
-                      top: `${completion().y}px`,
-                    }}
-                  >
-                    <For each={completion().items}>
-                      {(item) => (
-                        <button
-                          type="button"
-                          class={stylex.attrs(ideStyles.completionRow).class}
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => props.onCompletionSelect(item)}
-                        >
-                          {item}
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                )}
-              </Show>
-              <Show when={symbolHover()}>
-                {(hover) => (
-                  <div
-                    data-test-ide-symbol-tooltip=""
-                    class={
-                      stylex.attrs(
-                        ideStyles.tooltip,
-                        ideUtilityStyles.fixed,
-                        ideUtilityStyles.z30,
-                        ideUtilityStyles.maxWSm,
-                        ideUtilityStyles.overflowHidden,
-                        ideUtilityStyles.roundedLg,
-                        ideUtilityStyles.border,
-                        ideUtilityStyles.borderIde,
-                        ideUtilityStyles.bgIdeSurface,
-                        ideUtilityStyles.p3,
-                        ideUtilityStyles.textXs,
-                        ideUtilityStyles.shadowXl,
-                      ).class
-                    }
-                    style={{
-                      left: `${hover().x - 48}px`,
-                      top: `${hover().y - 88}px`,
-                    }}
-                  >
-                    <div
-                      class={
-                        stylex.attrs(
-                          ideUtilityStyles.fontMono,
-                          ideUtilityStyles.text072,
-                          ideUtilityStyles.fontSemibold,
-                          ideUtilityStyles.textIdeText,
-                        ).class
-                      }
-                    >
-                      {hover().symbol}
-                    </div>
-                    <div
-                      class={
-                        stylex.attrs(
-                          ideUtilityStyles.mt1,
-                          ideUtilityStyles.whitespacePreWrap,
-                          ideUtilityStyles.text068,
-                          ideUtilityStyles.leading5,
-                          ideUtilityStyles.textIdeMuted,
-                        ).class
-                      }
-                    >
-                      {hover().detail}
-                    </div>
-                  </div>
-                )}
-              </Show>
-            </Show>
-            <Show when={props.dirty}>
-              <div
-                class={
-                  stylex.attrs(
-                    ideUtilityStyles.absolute,
-                    ideUtilityStyles.bottom3,
-                    ideUtilityStyles.right3,
-                    ideUtilityStyles.roundedMd,
-                    ideUtilityStyles.border,
-                    ideUtilityStyles.borderIde,
-                    ideUtilityStyles.bgIdeSurface,
-                    ideUtilityStyles.px2,
-                    ideUtilityStyles.py1,
-                    ideUtilityStyles.text065,
-                    ideUtilityStyles.fontSemibold,
-                    ideUtilityStyles.textIdeMuted,
-                  ).class
-                }
-              >
-                Unsaved
-              </div>
-            </Show>
-          </div>
-        )}
-      </Show>
+      <EditorFindControl editor={props} model={model} />
+      <EditorDocument file={props.file} editor={props} model={model} />
     </div>
   );
 }
@@ -3601,9 +2952,9 @@ function closeAllEditorSequence(hotkey: string | undefined) {
   const normalized = hotkey?.replace(/\s+/g, "") || "Mod+K+W";
   const parts = normalized.split("+").filter(Boolean);
   if (parts.length >= 3 && parts.at(-2)?.toLowerCase() === "k") {
-    return [`${parts.slice(0, -1).join("+")}`, parts.at(-1) ?? "W"];
+    return [`${parts.slice(0, -1).join("+")}`, parts.at(-1) ?? "W"].filter(isValidAppHotkey);
   }
-  return [normalized];
+  return [normalized].filter(isValidAppHotkey);
 }
 
 function eventMatchesHotkeys(event: KeyboardEvent, hotkeys: string[]) {

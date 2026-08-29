@@ -1,31 +1,32 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { WorkspaceRepository } from "./workspace-repository";
+import { createWorkspaceRepository, type WorkspaceRepository } from "./workspace-repository";
+import { createHarnessTestTempPath, resolveHarnessTestTempRoot } from "./test-support/test-temp-root";
 
 const createCalls: unknown[] = [];
 
 mock.module("@google/genai", () => ({
-  GoogleGenAI: class {
-    caches = {
+  GoogleGenAI: function GoogleGenAI() {
+    return { caches: {
       create: async (input: unknown) => {
         createCalls.push(input);
         return { name: `cachedContents/test-${createCalls.length}` };
       }
-    };
+    } };
   }
 }));
 
 function createRepository() {
-  const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+  const tempRoot = resolveHarnessTestTempRoot();
   mkdirSync(tempRoot, { recursive: true });
-  return new WorkspaceRepository(path.join(tempRoot, `gemini-cache-${crypto.randomUUID()}.sqlite`), process.cwd(), {
+  return createWorkspaceRepository(path.join(tempRoot, `gemini-cache-${crypto.randomUUID()}.sqlite`), process.cwd(), {
     durability: "test-fast"
   });
 }
 
 function addProject(repository: WorkspaceRepository) {
-  const rootPath = path.join(process.cwd(), ".tmp-test-data", `project-${crypto.randomUUID()}`);
+  const rootPath = createHarnessTestTempPath("project");
   mkdirSync(rootPath, { recursive: true });
   return repository.addProject(rootPath);
 }

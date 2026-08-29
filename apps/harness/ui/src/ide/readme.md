@@ -8,6 +8,7 @@ The IDE surface is a local-first workbench for project navigation, search, sourc
 - Collapsible, resizable sidebar and resizable terminal/editor groups.
 - Editor tabs with dirty state, breadcrumbs, status bar, command palette, context menus, skeleton loading, local theme switching, shortcut interception, and bottom-right IDE notifications.
 - Real project file tree, read-only file previews, terminal-to-file navigation, global content search, and Git branch/change status through typed local backend contracts.
+- Project switches clear project-owned trees, tabs, buffers, and pending operations; delayed reads, writes, searches, and Git responses are accepted only by the project and request that initiated them.
 - Global search includes find/replace layout, regex, case-sensitive, and whole-word toggles. Replace remains reserved for the editing pass.
 - Browser save is intercepted and reports read-only scope instead of writing to disk.
 

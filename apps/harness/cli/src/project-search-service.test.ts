@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { clearProjectSearchCacheForTests, searchProjectFolders } from "./project-search-service";
+import { createHarnessTestTempPath } from "./test-support/test-temp-root";
 
 describe("project search service", () => {
   afterEach(() => {
@@ -124,7 +125,7 @@ describe("project search service", () => {
 });
 
 function createTempDir(label: string) {
-  const root = path.join(process.cwd(), ".tmp-test-data", `project-search-${label}-${crypto.randomUUID()}`);
+  const root = createHarnessTestTempPath(`project-search-${label}`);
   mkdirSync(root, { recursive: true });
   return root;
 }

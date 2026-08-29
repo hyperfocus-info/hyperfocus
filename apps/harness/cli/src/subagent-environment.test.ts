@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { discoverRepoSkillPaths } from "./subagent-environment";
+import { createHarnessTestTempPath } from "./test-support/test-temp-root";
 
 describe("subagent environment skill discovery", () => {
   test("includes global skills for projects without repo-local skills", () => {
-    const root = path.join(process.cwd(), ".tmp-test-data", `subagent-skills-${crypto.randomUUID()}`);
+    const root = createHarnessTestTempPath("subagent-skills");
     const projectRoot = path.join(root, "project");
     const globalSkillsRoot = path.join(root, "home", "skills");
     const previousHome = Bun.env.AI_HARNESS_TEMPLATE_HOME;

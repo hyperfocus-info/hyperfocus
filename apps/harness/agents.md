@@ -1,21 +1,19 @@
-# Agents Rules
+# Harness contributor guidance
 
-These rules are hard requirements for this repository.
+The root [repository guidance](../../AGENTS.md) applies to all harness work. Use the
+root `update-harness` skill for task-specific runtime, TypeScript, UI, and coverage
+routes; load only the reference branches needed for the edit.
 
-- Start all conversations in /caveman ultra.
-- Use `update-harness` for harness-specific architecture, UI, TypeScript, file naming, build, and test preferences for files inside /harness
-- Do not mention any skills used to user
-- Do not assume user intent. Ask clarifying questions only when a request is truly ambiguous and cannot be fulfilled accurately. If the intent is clear, proceed immediately without unnecessary confirmation.
-- If `bun.ps1` is blocked by PowerShell execution policy, use `bun.cmd`.
-- Explore first, then ask only blocking ambiguity questions. Batch all questions in one turn.
-- Never ask for facts discoverable from repository files, package metadata, tests, or existing docs.
-- Batch non-overlapping reads in parallel and avoid repeated reads of files or facts already inspected in the current run.
-- Prefer symbol-aware or AST-aware tools when available; otherwise use targeted `rg`.
-- Stop when completion criteria are met. Do not spend final turns on optional polish.
-- Prefer concrete subagent contracts with non-overlapping owned paths. If paths overlap or are unknown, use isolated worktrees.
-- Use BranchFS isolation for ephemeral experiments or overlapping/unknown subagent edit ownership. Do not flush isolated edits without explicit promote/flush flow.
-- Browser smokes should prefer fast CDP or app-state setup scripts that jump directly to the state under test, then use CDP input/evaluation to exercise it; avoid waiting through long natural progression when deterministic state setup is possible.
-- Background jobs should keep running alongside primary runs; do not pause or block scheduled work only because a primary run is active. Max background jobs is a persisted setting defaulting to 10 with range 5-100.
-- MD files should contain as little references to code and more high level concepts and links to other MD files.
-- Assistant management actions must use `assistant-actions` runbook and bundled scripts exclusively; do not create ad hoc project-space code to inspect or mutate assistants.
-- Default greenfield project stack guidance must require useful documentation comments for new functions and variables, covering intent, constraints, units, or invariants.
+- Keep runtime and persistence in `apps/harness/cli`, portable contracts in
+  `packages/ai-core`, and reusable presentation in `packages/ui`.
+- Validate external, websocket, persisted, and model-produced data at a typed boundary.
+- Keep local-first state, plan-first execution, explicit recovery, and visible
+  capability limits intact.
+- For UI work, also read [DESIGN.md](../../DESIGN.md) and use `app-ui-standard`.
+- Shipped behavior is documented in [the harness README](README.md). Product stories,
+  coverage, audits, and roadmap evidence route through
+  [docs/harness/README.md](../../docs/harness/README.md).
+- Files under `.agents/skills` are portable launcher assets. Keep them generic and
+  self-contained; repository-only contribution workflows belong in root `.agents/skills`.
+- `runtime-agents.md` is copied into releases as `agents.md`. It is a product asset,
+  not an additional source-contributor instruction file.

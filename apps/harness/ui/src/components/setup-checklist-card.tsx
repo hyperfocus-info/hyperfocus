@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import type { SetupAction, SetupCheck } from "../../../shared/protocol";
+import type { SetupAction, SetupCheck } from "@hyperfocus/ai-core/protocol";
 import { ActionButton } from "./action-button";
 import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 

@@ -1,31 +1,27 @@
-import type { AgentRuntimeCapability, ProviderBrand } from "../../../shared/protocol";
+import type { AgentRuntimeCapability, ProviderBrand } from "@hyperfocus/ai-core/protocol";
 import { getDefaultExecutionModelId, getDefaultPlanningModelId, getDefaultSubagentModelId } from "../pi-planner";
 import type { PiAgentAdapter } from "../pi-agent-adapter";
 import type { AgentRuntime } from "./agent-runtime";
 import { buildCliCapability } from "./cli-health";
 
-export class PiRuntime implements AgentRuntime {
-  readonly id = "pi" as const;
-  readonly label = "Pi";
-
-  private capability: AgentRuntimeCapability | undefined;
-
-  constructor(private readonly adapter: PiAgentAdapter) {}
-
-  getAdapter() {
-    return this.adapter;
+export function createPiRuntime(adapter: PiAgentAdapter): AgentRuntime {
+  const id: "pi" = "pi";
+  const label = "Pi";
+  let capability: AgentRuntimeCapability | undefined;
+  function getAdapter() {
+    return adapter;
   }
 
-  getCapability() {
-    return this.capability;
+  function getCapability() {
+    return capability;
   }
 
-  async refreshCapability() {
-    this.capability = buildCliCapability({
+  async function refreshCapability() {
+    capability = buildCliCapability({
       agentId: "pi",
-      label: this.label,
+      label,
       installed: true,
-      authenticated: this.adapter.hasApiKey("openai") || this.adapter.hasApiKey("google") || this.adapter.hasApiKey("anthropic"),
+      authenticated: adapter.hasApiKey("openai") || adapter.hasApiKey("google") || adapter.hasApiKey("anthropic"),
       supportsInteractive: false,
       interactivePipeCompatible: false,
       supportsPlanning: true,
@@ -33,23 +29,34 @@ export class PiRuntime implements AgentRuntime {
       supportsReasoningStrengthControl: true,
       supportsFastModeControl: true,
       healthMessage:
-        this.adapter.hasApiKey("openai") || this.adapter.hasApiKey("google") || this.adapter.hasApiKey("anthropic")
+        adapter.hasApiKey("openai") || adapter.hasApiKey("google") || adapter.hasApiKey("anthropic")
           ? undefined
           : "Add OpenAI, Google, or Anthropic API key to use Pi runtime.",
       docsUrl: "https://platform.openai.com/docs"
     });
-    return this.capability;
+    return capability;
   }
 
-  getDefaultPlanningModelId(providerBrand: ProviderBrand) {
+  function resolveDefaultPlanningModelId(providerBrand: ProviderBrand) {
     return getDefaultPlanningModelId(providerBrand);
   }
 
-  getDefaultExecutionModelId(providerBrand: ProviderBrand) {
+  function resolveDefaultExecutionModelId(providerBrand: ProviderBrand) {
     return getDefaultExecutionModelId(providerBrand);
   }
 
-  getDefaultSubagentModelId(providerBrand: ProviderBrand, executionModelId?: string) {
+  function resolveDefaultSubagentModelId(providerBrand: ProviderBrand, executionModelId?: string) {
     return getDefaultSubagentModelId(providerBrand, executionModelId);
   }
+
+  return {
+    id,
+    label,
+    getAdapter,
+    getCapability,
+    refreshCapability,
+    getDefaultPlanningModelId: resolveDefaultPlanningModelId,
+    getDefaultExecutionModelId: resolveDefaultExecutionModelId,
+    getDefaultSubagentModelId: resolveDefaultSubagentModelId,
+  };
 }

@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "exceptions": {
+    "apps/engine-editor/src/client.ts": {
+      "maxLines": 3616,
+      "owner": "apps/engine-editor",
+      "reason": "Legacy editor source predates the source-structure limit.",
+      "boundary": "Separate editor transport, project state, and presentation concerns.",
+      "removalTarget": "Remove as the editor workstream decomposes this file below 1000 lines."
+    },
+    "apps/engine-editor/src/editor-shell.ts": {
+      "maxLines": 2588,
+      "owner": "apps/engine-editor",
+      "reason": "Legacy editor source predates the source-structure limit.",
+      "boundary": "Separate editor transport, project state, and presentation concerns.",
+      "removalTarget": "Remove as the editor workstream decomposes this file below 1000 lines."
+    },
+    "apps/harness/cli/src/pi-orchestrator.ts": {
+      "maxLines": 1958,
+      "owner": "apps/harness/cli",
+      "reason": "Legacy harness backend source predates the source-structure limit.",
+      "boundary": "Separate orchestration policy, continuation handling, and runtime translation.",
+      "removalTarget": "Remove after orchestration responsibilities are split below 1000 lines."
+    },
+    "apps/harness/cli/src/workspace-repository.test.ts": {
+      "maxLines": 3289,
+      "owner": "apps/harness/cli",
+      "reason": "Legacy repository test suite predates the test source-structure limit.",
+      "boundary": "Split persistence tests by repository domain while retaining shared database fixtures.",
+      "removalTarget": "Remove after the suite is split below 1500 lines."
+    },
+    "apps/harness/ui/src/components/background-jobs-panel.tsx": {
+      "maxLines": 2313,
+      "owner": "apps/harness/ui",
+      "reason": "Legacy harness UI source predates the source-structure limit.",
+      "boundary": "Separate job views, editor flows, filtering, and reusable presentation.",
+      "removalTarget": "Remove as the UI workstream decomposes this file below 1000 lines."
+    },
+    "apps/harness/ui/src/components/chat-panel.test.tsx": {
+      "maxLines": 2653,
+      "owner": "apps/harness/ui",
+      "reason": "Legacy UI test suite predates the test source-structure limit.",
+      "boundary": "Split component tests by chat behavior while retaining shared fixtures.",
+      "removalTarget": "Remove as the UI workstream splits this suite below 1500 lines."
+    },
+    "apps/harness/ui/src/components/chat-panel.tsx": {
+      "maxLines": 3184,
+      "owner": "apps/harness/ui",
+      "reason": "Legacy harness UI source predates the source-structure limit.",
+      "boundary": "Separate message rendering, composer behavior, run controls, and dialogs.",
+      "removalTarget": "Remove as the UI workstream decomposes this file below 1000 lines."
+    },
+    "apps/harness/ui/src/harness-store.ts": {
+      "maxLines": 4772,
+      "owner": "apps/harness/ui",
+      "reason": "Legacy harness UI state source predates the source-structure limit.",
+      "boundary": "Separate transport, normalized state, selectors, and domain actions.",
+      "removalTarget": "Remove as the UI workstream decomposes this file below 1000 lines."
+    },
+    "apps/harness/ui/src/ide/ide-workbench.tsx": {
+      "maxLines": 3225,
+      "owner": "apps/harness/ui",
+      "reason": "Legacy harness UI source predates the source-structure limit.",
+      "boundary": "Separate workbench layout, editor state, file operations, and panels.",
+      "removalTarget": "Remove as the UI workstream decomposes this file below 1000 lines."
+    },
+    "apps/harness/ui/src/store/store.test.ts": {
+      "maxLines": 3649,
+      "owner": "apps/harness/ui",
+      "reason": "Legacy UI state test suite predates the test source-structure limit.",
+      "boundary": "Split store tests by state domain while retaining shared fixtures.",
+      "removalTarget": "Remove as the UI workstream splits this suite below 1500 lines."
+    },
+    "packages/engine/src/render/3d.ts": {
+      "maxLines": 2632,
+      "owner": "engine",
+      "reason": "Legacy engine source predates the source-structure limit.",
+      "boundary": "Keep renderer orchestration separate from resources, passes, and backend adapters.",
+      "removalTarget": "Remove after the subsystem is split below 1000 lines."
+    }
+  },
+  "directoryExceptions": {
+    "apps/engine-editor/src": {
+      "maxFiles": 55,
+      "owner": "apps/engine-editor",
+      "reason": "The legacy editor source directory predates the directory structure limit and is owned by a separate active workstream.",
+      "boundary": "Group editor transport, project state, commands, and presentation into owned feature directories.",
+      "removalTarget": "Ratchet this count as the editor workstream organizes the directory, then remove it at 25 files."
+    },
+    "apps/harness/cli/src": {
+      "maxFiles": 153,
+      "owner": "apps/harness/cli",
+      "reason": "The legacy harness backend root predates the directory structure limit.",
+      "boundary": "Move assistant, runtime, job, persistence, and support domains into cohesive owned directories.",
+      "removalTarget": "Ratchet this count with each backend organization change, then remove it at 25 files."
+    },
+    "apps/harness/ui/src/components": {
+      "maxFiles": 68,
+      "owner": "apps/harness/ui",
+      "reason": "The legacy harness component directory predates the directory structure limit and is owned by a separate active workstream.",
+      "boundary": "Group components by product feature while keeping reusable primitives separately owned.",
+      "removalTarget": "Ratchet this count as the UI workstream organizes components, then remove it at 25 files."
+    },
+    "apps/harness/ui/src/components/primitives": {
+      "maxFiles": 31,
+      "owner": "apps/harness/ui",
+      "reason": "The legacy harness primitive directory predates the directory structure limit and is owned by a separate active workstream.",
+      "boundary": "Separate primitive families only where ownership and dependency direction remain clear.",
+      "removalTarget": "Ratchet this count as the UI workstream organizes primitives, then remove it at 25 files."
+    },
+    "apps/harness/ui/src/lib": {
+      "maxFiles": 29,
+      "owner": "apps/harness/ui",
+      "reason": "The legacy harness UI utility directory predates the directory structure limit and is owned by a separate active workstream.",
+      "boundary": "Move feature-specific utilities beside their owners and retain only genuinely shared UI utilities here.",
+      "removalTarget": "Ratchet this count as the UI workstream assigns ownership, then remove it at 25 files."
+    },
+    "packages/engine/examples/mmo-skill-demo/src": {
+      "maxFiles": 52,
+      "owner": "packages/engine/examples/mmo-skill-demo",
+      "reason": "The directly playable example predates the directory structure limit and its module delivery strategy is deferred for follow-up.",
+      "boundary": "Group shared gameplay, server composition, data, and client entry concerns without requiring a file server.",
+      "removalTarget": "Ratchet this count after the offline-compatible example module plan is implemented, then remove it at 25 files."
+    },
+    "packages/engine/examples/mmo-skill-demo/src/client": {
+      "maxFiles": 28,
+      "owner": "packages/engine/examples/mmo-skill-demo",
+      "reason": "The directly playable example client predates the directory structure limit and its module delivery strategy is deferred for follow-up.",
+      "boundary": "Group client input, rendering, UI, audio, and network responsibilities while preserving direct playability.",
+      "removalTarget": "Ratchet this count after the offline-compatible example module plan is implemented, then remove it at 25 files."
+    },
+    "packages/engine/examples/three-arena/src/client": {
+      "maxFiles": 56,
+      "owner": "packages/engine/examples/three-arena",
+      "reason": "The directly playable example client predates the directory structure limit and its module delivery strategy is deferred for follow-up.",
+      "boundary": "Group rendering, input, game state, and presentation without sacrificing the example's standalone launch path.",
+      "removalTarget": "Ratchet this count after the offline-compatible example module plan is implemented, then remove it at 25 files."
+    },
+    "packages/engine/scripts": {
+      "maxFiles": 38,
+      "owner": "engine",
+      "reason": "The legacy engine tooling directory predates the directory structure limit.",
+      "boundary": "Group packaging, verification, benchmarks, and release utilities by workflow ownership.",
+      "removalTarget": "Ratchet this count as tooling is organized, then remove it at 25 files."
+    },
+    "packages/engine/src/mmo": {
+      "maxFiles": 33,
+      "owner": "engine",
+      "reason": "The legacy MMO source directory predates the directory structure limit.",
+      "boundary": "Group protocol, state, simulation, persistence, and client adaptation around stable domain ownership.",
+      "removalTarget": "Ratchet this count as the MMO package is organized, then remove it at 25 files."
+    },
+    "packages/engine/src/render": {
+      "maxFiles": 35,
+      "owner": "engine",
+      "reason": "The legacy rendering source directory predates the directory structure limit.",
+      "boundary": "Group renderer backends, scene preparation, reusable primitives, and post-processing by responsibility.",
+      "removalTarget": "Ratchet this count as rendering modules are organized, then remove it at 25 files."
+    }
+  },
+  "declarationExceptions": {},
+  "declarationWarningBaselines": {},
+  "declarationDeferrals": [
+    {
+      "pathPrefix": "apps/engine-editor/",
+      "owner": "apps/engine-editor",
+      "reason": "Editor declaration decomposition is owned by a separate active workstream.",
+      "boundary": "That workstream will separate editor transport, state, and presentation concerns.",
+      "removalTarget": "Remove this staged deferral when the editor workstream enables declaration enforcement."
+    },
+    {
+      "pathPrefix": "apps/harness/ui/",
+      "owner": "apps/harness/ui",
+      "reason": "Harness UI declaration decomposition is owned by a separate active workstream.",
+      "boundary": "That workstream will separate feature state, workflows, and presentation components.",
+      "removalTarget": "Remove this staged deferral when the UI workstream enables declaration enforcement."
+    }
+  ]
+}

@@ -1,36 +1,52 @@
 import { Buffer } from "node:buffer";
-import { detectChatDocumentType } from "../../../shared/chat-attachments";
-import type { ChatAttachment } from "../../../shared/protocol";
+import { detectChatDocumentType } from "@hyperfocus/ai-core/chat-attachments";
+import type { ChatAttachment } from "@hyperfocus/ai-core/protocol";
 import { extractDocxText } from "./extract-docx";
 import { extractOdtText } from "./extract-odt";
 import { extractPptxText } from "./extract-pptx";
 import { extractXlsxText } from "./extract-xlsx";
-import type { DocumentExtractionResult } from "./types";
+import type { DocumentExtractionOptions, DocumentExtractionResult } from "./types";
+import { getHarnessCapacityGovernor } from "../execution-runtime";
 
-export async function extractDocumentText(attachment: ChatAttachment, input: ArrayBuffer | Uint8Array | Buffer) {
+export type { DocumentExtractionOptions, DocumentExtractionResult } from "./types";
+
+export async function extractDocumentText(
+  attachment: ChatAttachment,
+  input: ArrayBuffer | Uint8Array | Buffer,
+  options: DocumentExtractionOptions = {}
+): Promise<DocumentExtractionResult> {
+  return getHarnessCapacityGovernor().run({ resources: { document: 1 }, signal: options.signal }, () =>
+    extractDocumentTextWithinCapacity(attachment, input, options));
+}
+
+async function extractDocumentTextWithinCapacity(
+  attachment: ChatAttachment,
+  input: ArrayBuffer | Uint8Array | Buffer,
+  options: DocumentExtractionOptions
+): Promise<DocumentExtractionResult> {
   const documentType = attachment.documentType ?? detectChatDocumentType(attachment);
   if (!documentType) {
     return {
       status: "no-text",
       reason: `Unsupported document type for ${attachment.name}.`
-    } satisfies DocumentExtractionResult;
+    };
   }
 
   switch (documentType) {
     case "pdf":
-      return extractPdfText(input);
+      return extractPdfText(input, options);
     case "docx":
-      return extractDocxText(input);
+      return extractDocxText(input, options);
     case "xlsx":
-      return extractXlsxText(input);
+      return extractXlsxText(input, options);
     case "pptx":
-      return extractPptxText(input);
+      return extractPptxText(input, options);
     case "odt":
-      return extractOdtText(input);
+      return extractOdtText(input, options);
   }
 }
 
-async function extractPdfText(input: ArrayBuffer | Uint8Array | Buffer) {
+async function extractPdfText(input: ArrayBuffer | Uint8Array | Buffer, options: DocumentExtractionOptions) {
   const { extractPdfText } = await import("./extract-pdf");
-  return extractPdfText(input);
+  return extractPdfText(input, options);
 }

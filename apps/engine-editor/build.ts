@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { copyFile, mkdir } from "node:fs/promises";
-import { buildExampleBundles } from "../../engine/examples/build-utils.ts";
-import { stylexSolidPlugin } from "../../scripts/stylex-solid-plugin.ts";
+import { buildExampleBundles } from "@hyperfocus/engine/tooling/example-build";
+import { stylexSolidPlugin } from "@hyperfocus/ui/build/stylex-solid-plugin";
 
 const root = import.meta.dir;
 
@@ -10,8 +10,7 @@ const standalone = await Bun.build({
   format: "iife",
   minify: true,
   target: "browser",
-  write: false,
-} as Parameters<typeof Bun.build>[0]);
+});
 if (!standalone.success) {
   throw new Error(`Standalone playable runtime build failed:\n${standalone.logs.map((log) => log.message).join("\n")}`);
 }
@@ -42,6 +41,6 @@ await buildExampleBundles("editor", join(root, "dist"), [
 ]);
 
 await mkdir(join(root, "wasm"), { recursive: true });
-await copyFile(join(root, "..", "..", "engine", "wasm", "collision-kernel.wasm"), join(root, "wasm", "collision-kernel.wasm"));
+await copyFile(join(root, "..", "..", "packages", "engine", "wasm", "collision-kernel.wasm"), join(root, "wasm", "collision-kernel.wasm"));
 
 console.log(`Hyperfocus Editor built: apps/engine-editor/dist/main.js (embedded standalone runtime: ${standaloneRuntimeSource.length} bytes)`);

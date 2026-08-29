@@ -1,12 +1,15 @@
-import { Buffer } from "node:buffer";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import {
+  MAX_CHAT_ATTACHMENT_DOCUMENT_BYTES,
+  MAX_CHAT_ATTACHMENT_IMAGE_BYTES,
   MAX_CHAT_ATTACHMENT_IMAGES_PER_PROMPT,
+  MAX_CHAT_ATTACHMENT_TEXT_BYTES,
   MAX_CHAT_ATTACHMENT_TEXT_CHARS,
   MAX_CHAT_ATTACHMENT_TOTAL_NON_IMAGE_CHARS
-} from "../../shared/chat-attachments";
-import type { ChatAttachment, ChatMessage } from "../../shared/protocol";
-import { extractDocumentText } from "./document-extractors";
+} from "@hyperfocus/ai-core/chat-attachments";
+import type { ChatAttachment, ChatMessage } from "@hyperfocus/ai-core/protocol";
+import { readBoundedResponseBody } from "./bounded-output-buffer";
+import { extractDocumentText, type DocumentExtractionOptions, type DocumentExtractionResult } from "./document-extractors";
 import type { CacheableUserBlock } from "./prompt-cache-assembly";
 import type { GeminiCachedAttachmentContext } from "./gemini-cached-contents";
 
@@ -26,9 +29,72 @@ type AttachmentPromptPart = {
   cacheableUserBlock?: CacheableUserBlock;
 };
 
+type CachedAttachmentContent =
+  | { kind: "document"; result: DocumentExtractionResult }
+  | { kind: "text"; text: string };
+
+export type BoundedAsyncCache<Key, Value> = {
+  getOrCreate(key: Key, load: () => Promise<Value>): Promise<Value>;
+  clear(): void;
+  readonly size: number;
+};
+
+export function createBoundedAsyncCache<Key, Value>(
+  options: { maxEntries?: number } = {}
+): BoundedAsyncCache<Key, Value> {
+  const maxEntries = options.maxEntries ?? 32;
+  if (!Number.isSafeInteger(maxEntries) || maxEntries <= 0) {
+    throw new RangeError("maxEntries must be a positive safe integer");
+  }
+
+  const entries = new Map<Key, Promise<Value>>();
+  return {
+    getOrCreate(key, load) {
+      const existing = entries.get(key);
+      if (existing) {
+        entries.delete(key);
+        entries.set(key, existing);
+        return existing;
+      }
+      const pending = load();
+      entries.set(key, pending);
+      while (entries.size > maxEntries) {
+        const oldestKey = entries.keys().next().value;
+        if (oldestKey === undefined) break;
+        entries.delete(oldestKey);
+      }
+      void pending.then(undefined, () => {
+        if (entries.get(key) === pending) entries.delete(key);
+      });
+      return pending;
+    },
+    clear() {
+      entries.clear();
+    },
+    get size() {
+      return entries.size;
+    }
+  };
+}
+
+export type AttachmentContentCache = BoundedAsyncCache<string, CachedAttachmentContent>;
+
+export type AttachmentPromptOptions = {
+  geminiCachedAttachmentContext?: GeminiCachedAttachmentContext;
+  attachmentCache?: AttachmentContentCache;
+  documentExtraction?: DocumentExtractionOptions;
+  signal?: AbortSignal;
+};
+
+const defaultAttachmentCache = createAttachmentContentCache();
+
+export function createAttachmentContentCache(options: { maxEntries?: number } = {}): AttachmentContentCache {
+  return createBoundedAsyncCache(options);
+}
+
 export async function buildPromptAttachmentContext(
   messages: ChatMessage[],
-  options: { geminiCachedAttachmentContext?: GeminiCachedAttachmentContext } = {}
+  options: AttachmentPromptOptions = {}
 ): Promise<PromptAttachmentContext> {
   const visibleMessages = messages.filter((message) => message.role !== "system");
   if (visibleMessages.length === 0) {
@@ -76,7 +142,7 @@ async function describeAttachment(
   attachment: ChatAttachment,
   imageOrdinal: number,
   textBudget: TextBudget,
-  options: { geminiCachedAttachmentContext?: GeminiCachedAttachmentContext }
+  options: AttachmentPromptOptions
 ): Promise<AttachmentPromptPart> {
   if (attachment.kind === "image") {
     if (imageOrdinal > MAX_CHAT_ATTACHMENT_IMAGES_PER_PROMPT) {
@@ -86,12 +152,16 @@ async function describeAttachment(
     }
 
     try {
-      const response = await fetch(attachment.url);
+      const response = await fetch(attachment.url, { signal: options.signal });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const imageBuffer = Buffer.from(await response.arrayBuffer());
+      const imageBuffer = await readBoundedResponseBody(response, {
+        maxBytes: MAX_CHAT_ATTACHMENT_IMAGE_BYTES,
+        label: `Attachment ${attachment.name}`,
+        signal: options.signal
+      });
       return {
         transcript: `[Attachment image ${imageOrdinal}] ${role} attached ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes).`,
         image: {
@@ -115,14 +185,18 @@ async function describeAttachment(
     };
   }
 
-  try {
-    const response = await fetch(attachment.url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+  if (textBudget.remainingChars <= 0) {
+    return formatExhaustedAttachmentTranscript(role, attachment);
+  }
 
-    if (attachment.kind === "document") {
-      const extractionResult = await extractDocumentText(attachment, await response.arrayBuffer());
+  try {
+    const cache = options.attachmentCache ?? defaultAttachmentCache;
+    const content = await cache.getOrCreate(
+      buildAttachmentCacheKey(attachment),
+      () => loadNonImageAttachment(attachment, options)
+    );
+    if (content.kind === "document") {
+      const extractionResult = content.result;
       if (extractionResult.status === "ocr-required") {
         return {
           transcript: `[Attachment document OCR required] ${attachment.name}: ${extractionResult.reason}`
@@ -144,12 +218,11 @@ async function describeAttachment(
         }, textBudget);
     }
 
-    const text = (await response.text()).trim();
     return formatNonImageAttachmentTranscript({
         role,
         attachment,
         label: "Attachment text",
-        content: text,
+        content: content.text,
         emptyText: "Attachment contents: (empty file)"
       }, textBudget);
   } catch (error) {
@@ -160,6 +233,60 @@ async function describeAttachment(
       }.`
     };
   }
+}
+
+async function loadNonImageAttachment(
+  attachment: ChatAttachment,
+  options: AttachmentPromptOptions
+): Promise<CachedAttachmentContent> {
+  const response = await fetch(attachment.url, { signal: options.signal });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const maxBytes = attachment.kind === "document"
+    ? MAX_CHAT_ATTACHMENT_DOCUMENT_BYTES
+    : MAX_CHAT_ATTACHMENT_TEXT_BYTES;
+  const body = await readBoundedResponseBody(response, {
+    maxBytes,
+    label: `Attachment ${attachment.name}`,
+    signal: options.signal
+  });
+  if (attachment.kind === "document") {
+    return {
+      kind: "document",
+      result: await extractDocumentText(attachment, body, {
+        ...options.documentExtraction,
+        maxInputBytes: options.documentExtraction?.maxInputBytes ?? MAX_CHAT_ATTACHMENT_DOCUMENT_BYTES,
+        signal: options.signal ?? options.documentExtraction?.signal
+      })
+    };
+  }
+
+  return { kind: "text", text: body.toString("utf8").trim() };
+}
+
+function buildAttachmentCacheKey(attachment: ChatAttachment) {
+  return [
+    attachment.key,
+    attachment.kind,
+    attachment.documentType ?? "",
+    attachment.mimeType,
+    attachment.sizeBytes
+  ].join(":");
+}
+
+function formatExhaustedAttachmentTranscript(
+  role: ChatMessage["role"],
+  attachment: ChatAttachment
+): AttachmentPromptPart {
+  const label = attachment.kind === "document"
+    ? `Attachment document ${attachment.documentType ?? "unknown"}`
+    : "Attachment text";
+  const header = `[${label}] ${role} attached ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes).`;
+  return {
+    transcript: [header, "Attachment contents: text budget exhausted before this attachment."].join("\n")
+  };
 }
 
 function formatNonImageAttachmentTranscript(

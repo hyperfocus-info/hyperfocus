@@ -1,11 +1,13 @@
-import { createAudioEngine, type AudioEngine, type AudioVoiceHandle } from "../../../engine/src/audio/index.ts";
-import type { PlayableAudioCommand } from "../../../engine/src/project/runtime-2d.ts";
+import { createAudioEngine, type AudioEngine, type AudioVoiceHandle } from "@hyperfocus/engine/audio";
+import type { PlayableAudioCommand } from "@hyperfocus/engine/project/runtime-2d";
 
 const MAX_PENDING_COMMANDS = 4_096;
 
 export type StandaloneAudioAsset = { id: string; mimeType: string; bytes: Uint8Array };
 
-type StandaloneAudioEngine = Pick<AudioEngine, "decode" | "dispose" | "hasBuffer" | "playBuffer" | "setMasterGain" | "unlock">;
+type StandaloneAudioEngine = Omit<Pick<AudioEngine, "decode" | "dispose" | "hasBuffer" | "playBuffer" | "setMasterGain" | "unlock">, "decode"> & {
+  decode(id: string, bytes: Uint8Array): Promise<unknown>;
+};
 
 export type StandaloneAudioControllerOptions = {
   engine?: StandaloneAudioEngine;

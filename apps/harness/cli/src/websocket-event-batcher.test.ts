@@ -1,25 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { parseServerEventFrame, type ServerEvent } from "../../shared/protocol";
+import { parseServerEventFrame, type ServerEvent } from "@hyperfocus/ai-core/protocol";
 import { createWebsocketEventBatcher } from "./websocket-event-batcher";
-import type { GuardedWebSocket } from "./websocket-send-guard";
 
-class FakeGuardedSocket implements GuardedWebSocket {
-  closeCalls: Array<{ code?: number; reason?: string }> = [];
-  sendStatuses: Array<number | void>;
-  sent: Array<string | Uint8Array> = [];
-
-  constructor(sendStatuses: Array<number | void> = []) {
-    this.sendStatuses = sendStatuses;
-  }
-
-  send(data: string | Uint8Array) {
-    this.sent.push(data);
-    return this.sendStatuses.shift() ?? 1;
-  }
-
-  close(code?: number, reason?: string) {
-    this.closeCalls.push({ code, reason });
-  }
+function createFakeGuardedSocket(sendStatuses: Array<number | void> = []) {
+  const closeCalls: Array<{ code?: number; reason?: string }> = [];
+  const sent: Array<string | Uint8Array> = [];
+  return {
+    closeCalls,
+    sendStatuses,
+    sent,
+    send(data: string | Uint8Array) {
+      sent.push(data);
+      return sendStatuses.shift() ?? 1;
+    },
+    close(code?: number, reason?: string) {
+      closeCalls.push({ code, reason });
+    },
+  };
 }
 
 function assistantDelta(index: number): ServerEvent {
@@ -36,7 +33,7 @@ function assistantDelta(index: number): ServerEvent {
 
 describe("websocket event batcher", () => {
   test("sends queued control events as one typed batch frame", () => {
-    const socket = new FakeGuardedSocket();
+    const socket = createFakeGuardedSocket();
     const batcher = createWebsocketEventBatcher({ maxQueuedBytes: 1024 * 1024, flushDelayMs: 60_000 });
 
     expect(batcher.send(socket, assistantDelta(1))).toBe(true);
@@ -59,7 +56,7 @@ describe("websocket event batcher", () => {
   });
 
   test("flushes queued events before immediate heartbeat responses", () => {
-    const socket = new FakeGuardedSocket();
+    const socket = createFakeGuardedSocket();
     const batcher = createWebsocketEventBatcher({ maxQueuedBytes: 1024 * 1024, flushDelayMs: 60_000 });
 
     batcher.send(socket, assistantDelta(1));
@@ -72,12 +69,12 @@ describe("websocket event batcher", () => {
     });
 
     expect(socket.sent).toHaveLength(2);
-    expect(JSON.parse(socket.sent[0] as string).type).toBe("assistant.chat.delta");
-    expect(JSON.parse(socket.sent[1] as string).type).toBe("connection.pong");
+    expect(JSON.parse(requireStringPayload(socket.sent[0])).type).toBe("assistant.chat.delta");
+    expect(JSON.parse(requireStringPayload(socket.sent[1])).type).toBe("connection.pong");
   });
 
   test("flushes when batch event limit is reached", () => {
-    const socket = new FakeGuardedSocket();
+    const socket = createFakeGuardedSocket();
     const batcher = createWebsocketEventBatcher({
       maxQueuedBytes: 1024 * 1024,
       maxBatchEvents: 2,
@@ -88,12 +85,12 @@ describe("websocket event batcher", () => {
     batcher.send(socket, assistantDelta(2));
 
     expect(socket.sent).toHaveLength(1);
-    const events = parseServerEventFrame(JSON.parse(socket.sent[0] as string));
+    const events = parseServerEventFrame(JSON.parse(requireStringPayload(socket.sent[0])));
     expect(events).toHaveLength(2);
   });
 
   test("reuses guarded slow-client close behavior for batch frames", () => {
-    const socket = new FakeGuardedSocket([-1]);
+    const socket = createFakeGuardedSocket([-1]);
     const batcher = createWebsocketEventBatcher({
       maxQueuedBytes: 64,
       flushDelayMs: 60_000,
@@ -106,4 +103,16 @@ describe("websocket event batcher", () => {
 
     expect(socket.closeCalls).toEqual([{ code: 1011, reason: "Control websocket client is too slow" }]);
   });
+
+  test("rejects a control event above the explicit frame budget before send", () => {
+    const socket = createFakeGuardedSocket(); const batcher = createWebsocketEventBatcher({ maxQueuedBytes: 1024,
+      maxEventBytes: 100, flushDelayMs: 60_000 });
+    expect(() => batcher.send(socket, assistantDelta(1))).toThrow("Control event exceeds 100 byte limit");
+    expect(socket.sent).toEqual([]);
+  });
 });
+
+function requireStringPayload(value: string | Uint8Array | undefined): string {
+  if (typeof value !== "string") throw new TypeError("Expected string websocket payload");
+  return value;
+}

@@ -1,13 +1,13 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { createEmptyAssistantsState, createInitialViewState, harnessStore, readBrowserUiSession, type HarnessViewState } from "../harness-store";
-import type { AssistantLearning, AssistantLogEntry, AssistantTodo, BackgroundJob, BackgroundJobRun } from "../../../shared/protocol";
+import { createEmptyAssistantsState, createInitialViewState, harnessStore, readBrowserUiSession, type AssistantWorkloadPageState, type HarnessViewState } from "../harness-store";
+import type { AssistantLearning, AssistantLogEntry, AssistantTodo, BackgroundJob, BackgroundJobRun, BackgroundJobsState, ClientCommand } from "@hyperfocus/ai-core/protocol";
 import { formatShortTimestamp } from "../lib/time-format";
 import { toastStore } from "../toast-store";
-import { createUiTest } from "../utils/tests/test-harness";
-import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
-import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
+import { createUiTest, requireElement, requireTextArea } from "../utils/tests/test-harness";
+import { captureDispatchedCommands, clearBrowserStateForTests, requireCommand, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
+import { createBackgroundJobFixture, createBackgroundJobRunFixture, createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
 import { AssistantsPanel } from "./assistants-panel";
 
 function defineScrollMetrics(scrollHeight: number, clientHeight: number) {
@@ -45,6 +45,10 @@ function seedAssistantDetailState(input: {
   learnings?: AssistantLearning[];
   logs?: AssistantLogEntry[];
   todos?: AssistantTodo[];
+  jobs?: BackgroundJob[];
+  runs?: BackgroundJobRun[];
+  workloadPage?: AssistantWorkloadPageState;
+  backgroundJobs?: BackgroundJobsState;
   selectedTab?: "chat" | "todos" | "questions" | "jobs" | "log" | "config" | "learnings";
 }) {
   const now = new Date().toISOString();
@@ -81,12 +85,29 @@ function seedAssistantDetailState(input: {
           }
         ],
         selectedAssistantId: input.assistantId,
+        loadedDetailAssistantIds: [input.assistantId],
         selectedTab: input.selectedTab ?? "learnings",
         learnings: input.learnings ?? [],
         logs: input.logs ?? [],
-        todos: input.todos ?? []
-      }
+        todos: input.todos ?? [],
+        jobs: input.jobs ?? [],
+        runs: input.runs ?? [],
+        workloadPagesByAssistantId: input.workloadPage
+          ? { [input.assistantId]: input.workloadPage }
+          : {}
+      },
+      ...(input.backgroundJobs ? { backgroundJobs: input.backgroundJobs } : {})
     })
+  );
+}
+
+function getAssistantJobsListCommands(commands: unknown[]) {
+  return commands.filter(
+    (command): command is Extract<ClientCommand, { type: "assistant.workloads.list" }> =>
+      typeof command === "object" &&
+      command !== null &&
+      "type" in command &&
+      command.type === "assistant.workloads.list"
   );
 }
 
@@ -94,7 +115,6 @@ createUiTest("AssistantsPanel", () => {
   beforeEach(() => {
     clearBrowserStateForTests();
   });
-
   it("uses shared left pane shell and empty-state hooks", () => {
     seedHarnessStoreForTests(
       createHarnessStateFixture({
@@ -582,8 +602,9 @@ createUiTest("AssistantsPanel", () => {
         }
       }
     });
-    expect((commands[0] as { payload: { todo?: unknown; todoId?: string } }).payload.todo).toBeUndefined();
-    expect(typeof (commands[0] as { payload: { todoId?: string } }).payload.todoId).toBe("string");
+    const command = requireCommand(commands, 0, "assistant.todo.update");
+    expect("todo" in command.payload).toBe(false);
+    expect(typeof command.payload.todoId).toBe("string");
   });
 
   it("renders and updates assistant todo work metadata", () => {
@@ -867,8 +888,7 @@ createUiTest("AssistantsPanel", () => {
     const restoreScrollMetrics = defineScrollMetrics(1000, 200);
     render(() => <AssistantsPanel variant="detail" />);
 
-    const viewport = document.querySelector("[data-test-assistant-chat-scroll]") as HTMLElement;
-    expect(viewport).not.toBeNull();
+    requireElement(document.querySelector("[data-test-assistant-chat-scroll]"));
 
     await waitFor(() => expect(screen.getByText("Streaming status")).not.toBeNull());
     restoreScrollMetrics();
@@ -930,7 +950,7 @@ createUiTest("AssistantsPanel", () => {
 
     const composer = document.querySelector("[data-test-chat-composer]");
     expect(composer).not.toBeNull();
-    const textarea = screen.getByPlaceholderText("Ask Repo helper something.") as HTMLTextAreaElement;
+    const textarea = requireTextArea(screen.getByPlaceholderText("Ask Repo helper something."));
     fireEvent.input(textarea, { target: { value: "Need status" } });
     fireEvent.click(screen.getByRole("button", { name: "Send message to assistant" }));
 
@@ -1002,7 +1022,7 @@ createUiTest("AssistantsPanel", () => {
 
     render(() => <AssistantsPanel />);
 
-    const textarea = screen.getByPlaceholderText("Ask Repo helper something.") as HTMLTextAreaElement;
+    const textarea = requireTextArea(screen.getByPlaceholderText("Ask Repo helper something."));
     fireEvent.input(textarea, { target: { value: "Need status" } });
     fireEvent.click(screen.getByRole("button", { name: "Send message to assistant" }));
 
@@ -1103,7 +1123,7 @@ createUiTest("AssistantsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(commands.map((command) => (command as { type: string }).type)).toEqual(["assistant.circuit-breaker.retry"]);
+    expect(commands.map((command) => command.type)).toEqual(["assistant.circuit-breaker.retry"]);
   });
 
   it("opens assistant log details in a dialog", async () => {
@@ -1275,7 +1295,131 @@ createUiTest("AssistantsPanel", () => {
     expect(harnessStore.state.assistants.selectedLogDetailsId).toBeUndefined();
   });
 
-  it("shows assistant job failure tracking and run diagnostics", () => {
+  it("requests assistant workloads only when the Jobs tab opens", async () => {
+    const commands: unknown[] = [];
+    const assistantId = "assistant-jobs-on-demand";
+    seedAssistantDetailState({
+      assistantId,
+      projectId: "project-jobs-on-demand",
+      selectedTab: "chat"
+    });
+    captureDispatchedCommands(commands);
+
+    render(() => <AssistantsPanel variant="detail" />);
+
+    expect(getAssistantJobsListCommands(commands)).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Jobs" }));
+
+    expect(harnessStore.state.assistants.selectedTab).toBe("jobs");
+    await waitFor(() => expect(getAssistantJobsListCommands(commands)).toHaveLength(1));
+    expect(getAssistantJobsListCommands(commands)[0]).toMatchObject({
+      payload: {
+        assistantId,
+        jobs: { limit: 60 },
+        runs: { limit: 60 }
+      }
+    });
+  });
+
+  it("shows cached refresh, initial loading, and scoped empty results truthfully", async () => {
+    const assistantId = "assistant-jobs-loading";
+    const cachedJob = createBackgroundJobFixture({ id: "cached-job", assistantId, name: "Cached job" });
+    seedAssistantDetailState({ assistantId, projectId: "project-jobs-loading", selectedTab: "jobs", jobs: [cachedJob],
+      workloadPage: { jobs: { status: "stale" }, runs: { status: "loaded" } } });
+    render(() => <AssistantsPanel variant="detail" />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Assistant jobs · Refreshing..." })).not.toBeNull());
+    expect(screen.getByText("Cached job")).not.toBeNull();
+    cleanup();
+    seedAssistantDetailState({ assistantId, projectId: "project-jobs-loading", selectedTab: "jobs", jobs: [cachedJob], workloadPage: {
+      jobs: { status: "loading", request: { id: "request-jobs", kind: "load-more" } }, runs: { status: "loading", request: { id: "request-runs", kind: "retry" } }
+    } });
+
+    render(() => <AssistantsPanel variant="detail" />);
+    await waitFor(() => {
+      expect(screen.getByText("Loading assistant runs...")).not.toBeNull();
+      expect(screen.getByRole("heading", { name: "Assistant jobs · Loading more..." })).not.toBeNull();
+      expect(screen.getByRole("heading", { name: "Recent runs · Retrying..." })).not.toBeNull();
+    });
+    expect(screen.queryByText("No assistant-owned background jobs.")).toBeNull();
+    expect(screen.queryByText("Bootstrap jobs")).toBeNull();
+    cleanup();
+    seedAssistantDetailState({ assistantId, projectId: "project-jobs-loading", selectedTab: "jobs",
+      workloadPage: { jobs: { status: "loaded" }, runs: { status: "loaded" } } });
+    render(() => <AssistantsPanel variant="detail" />);
+
+    expect(screen.getByText("No assistant-owned background jobs.")).not.toBeNull();
+    expect(screen.getByText("No assistant-owned job runs.")).not.toBeNull();
+    expect(screen.queryByText("Loading assistant jobs...")).toBeNull();
+    expect(screen.getByText("Bootstrap jobs")).not.toBeNull();
+  });
+
+  it("requests independent cursor pages from the assistant workload cache", async () => {
+    const commands: unknown[] = [];
+    const assistantId = "assistant-jobs-load-more";
+    seedAssistantDetailState({
+      assistantId,
+      projectId: "project-jobs-load-more",
+      selectedTab: "jobs",
+      workloadPage: {
+        jobs: { status: "loaded", nextCursor: "jobs-cursor-1" },
+        runs: { status: "loaded", nextCursor: "runs-cursor-1" }
+      }
+    });
+    captureDispatchedCommands(commands);
+
+    render(() => <AssistantsPanel variant="detail" />);
+
+    expect(getAssistantJobsListCommands(commands)).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Load more jobs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load more runs" }));
+
+    await waitFor(() => {
+      expect(getAssistantJobsListCommands(commands)).toHaveLength(2);
+      expect(harnessStore.state.assistants.workloadPagesByAssistantId[assistantId]?.jobs.request?.kind).toBe("load-more");
+      expect(harnessStore.state.assistants.workloadPagesByAssistantId[assistantId]?.runs.request?.kind).toBe("load-more");
+    });
+    expect(getAssistantJobsListCommands(commands)[0]).toMatchObject({
+      payload: {
+        assistantId,
+        jobs: { cursor: "jobs-cursor-1", limit: 60 },
+        runs: undefined
+      }
+    });
+    expect(getAssistantJobsListCommands(commands)[1]).toMatchObject({
+      payload: {
+        assistantId,
+        jobs: undefined,
+        runs: { cursor: "runs-cursor-1", limit: 60 }
+      }
+    });
+  });
+
+  it("shows and retries nonempty page failures per workload collection", async () => {
+    const commands: unknown[] = [];
+    const assistantId = "assistant-jobs-retry";
+    const cachedJob = createBackgroundJobFixture({ id: "cached-job", assistantId, name: "Cached job" });
+    const cachedRun = createBackgroundJobRunFixture({ id: "cached-run", assistantId, jobId: cachedJob.id, updatedAt: cachedJob.updatedAt });
+    seedAssistantDetailState({ assistantId, projectId: "project-jobs-retry", selectedTab: "jobs", jobs: [cachedJob], runs: [cachedRun], workloadPage: {
+      jobs: { status: "error", error: "Invalid page cursor" },
+      runs: { status: "error", retryCursor: "runs-retry-cursor", error: "Runs request failed" }
+    } });
+    captureDispatchedCommands(commands);
+
+    render(() => <AssistantsPanel variant="detail" />);
+    expect(screen.getByText("Jobs failed: Invalid page cursor").getAttribute("role")).toBe("alert");
+    expect(screen.getByText("Runs failed: Runs request failed").getAttribute("role")).toBe("alert");
+    fireEvent.click(screen.getByRole("button", { name: "Retry jobs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry runs" }));
+
+    await waitFor(() => expect(getAssistantJobsListCommands(commands)).toHaveLength(2));
+    expect(getAssistantJobsListCommands(commands)[0]).toMatchObject({ payload: { assistantId, jobs: { cursor: undefined, limit: 60 }, runs: undefined } });
+    expect(getAssistantJobsListCommands(commands)[1]).toMatchObject({ payload: { assistantId, jobs: undefined, runs: { cursor: "runs-retry-cursor", limit: 60 } } });
+    expect(harnessStore.state.assistants.workloadPagesByAssistantId[assistantId]?.jobs).toMatchObject({ status: "loading", request: { cursor: undefined } });
+    expect(harnessStore.state.assistants.workloadPagesByAssistantId[assistantId]?.runs).toMatchObject({ status: "loading", request: { cursor: "runs-retry-cursor" } });
+  });
+
+  it("shows assistant job failure tracking and run diagnostics without falling back to the global snapshot", () => {
     const now = new Date().toISOString();
     const project = createViewProjectFixture({ id: "project-assistant-jobs" });
     const assistantId = "assistant-jobs";
@@ -1329,50 +1473,28 @@ createUiTest("AssistantsPanel", () => {
       updatedAt: now,
       events: []
     };
-    seedHarnessStoreForTests(
-      createHarnessStateFixture({
-        activeLeftTab: "assistants",
-        activeSurface: "assistants",
-        workspace: {
-          activeProjectId: project.id,
-          projects: [project]
-        },
-        assistants: {
-          ...createEmptyAssistantsState(),
-          selectedAssistantId: assistantId,
-          selectedTab: "jobs",
-          assistants: [
-            {
-              id: assistantId,
-              name: "Release watcher",
-              scope: "project",
-              projectId: project.id,
-              description: "Tracks release risk.",
-              personalityPrompt: "Be direct.",
-              jobPrompt: "Watch release blockers.",
-              agentId: "pi",
-              runState: "active",
-              bootstrapState: "completed",
-              failureStreakCount: 0,
-              circuitBreakerState: "closed",
-              unreadQuestionCount: 0,
-              createdAt: now,
-              updatedAt: now
-            }
-          ]
-        },
-        backgroundJobs: {
-          jobs: [job],
-          runs: [run],
-          templates: []
-        }
-      })
-    );
-
+    seedAssistantDetailState({
+      assistantId,
+      projectId: project.id,
+      selectedTab: "jobs",
+      jobs: [job],
+      runs: [run],
+      workloadPage: {
+        jobs: { status: "loaded" },
+        runs: { status: "loaded" }
+      },
+      backgroundJobs: {
+        jobs: [{ ...job, id: "global-job-decoy", name: "Global snapshot decoy" }],
+        runs: [{ ...run, id: "global-run-decoy", summary: "Global run decoy" }],
+        templates: []
+      }
+    });
     render(() => <AssistantsPanel variant="detail" />);
 
     expect(screen.getByText(/Failure streak 3/)).not.toBeNull();
     expect(screen.getByText(/Failure category: controller lost/)).not.toBeNull();
     expect(screen.getByText(/Prompt: 1800 chars, hash hash-assistant/)).not.toBeNull();
+    expect(screen.queryByText("Global snapshot decoy")).toBeNull();
+    expect(screen.queryByText("Global run decoy")).toBeNull();
   });
 });

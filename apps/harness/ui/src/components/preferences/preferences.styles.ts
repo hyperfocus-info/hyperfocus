@@ -9,7 +9,9 @@ export const preferenceStyles = stylex.create({
   flex: { display: "flex" },
   inlineFlex: { display: "inline-flex" },
   grid: { display: "grid" },
-  flex1: { flex: "1 1 0%" },
+  flex1: { flexBasis: '0%',
+ flexGrow: '1',
+ flexShrink: '1', },
   flexColumn: { flexDirection: "column" },
   flexWrap: { flexWrap: "wrap" },
   shrink0: { flexShrink: 0 },
@@ -140,6 +142,7 @@ export const preferenceStyles = stylex.create({
   leading5: { lineHeight: "1.25rem" },
   leading6: { lineHeight: "1.5rem" },
   truncate: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  wrapText: { overflowWrap: "anywhere", whiteSpace: "normal" },
   shadowSm: { boxShadow: "0 1px 2px rgb(0 0 0 / 0.05)" },
   shadowMd: { boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)" },
   transition: {
@@ -166,24 +169,24 @@ export const preferenceStyles = stylex.create({
   xlGridColumns3: { gridTemplateColumns: { default: null, "@media (min-width: 1280px)": "repeat(3, minmax(0, 1fr))" } },
   xlGridColumns4: { gridTemplateColumns: { default: null, "@media (min-width: 1280px)": "repeat(4, minmax(0, 1fr))" } },
   panelShell: {
-    backdropFilter: "blur(12px)",
-    backgroundColor: "var(--panel)",
     borderColor: "var(--border)",
     borderRadius: "0.75rem",
     borderStyle: "solid",
     borderWidth: "1px",
-    boxShadow: "0 8px 24px #0f172a0f",
     overflow: "auto",
-    position: "relative"
+    backdropFilter: "blur(12px)",
+    backgroundColor: "var(--panel)",
+    boxShadow: "0 8px 24px #0f172a0f",
+    position: "relative",
   },
   segmentSelected: {
     backgroundColor: { default: "var(--accent)", ":hover": "var(--accent)" },
     boxShadow: "0 1px 2px rgb(0 0 0 / 0.05)",
     color: "#fff"
   },
-  providerStatusReady: { backgroundColor: "var(--panel)", borderColor: "var(--success)", color: "var(--success-strong)" },
-  providerStatusFailed: { backgroundColor: "var(--panel)", borderColor: "var(--danger)", color: "var(--danger-strong)" },
-  providerStatusIdle: { backgroundColor: "color-mix(in srgb, var(--panel) 60%, transparent)", borderColor: "var(--border)", color: "var(--muted)" },
+  providerStatusReady: { borderColor: "var(--success)", backgroundColor: "var(--panel)", color: "var(--success-strong)", },
+  providerStatusFailed: { borderColor: "var(--danger)", backgroundColor: "var(--panel)", color: "var(--danger-strong)", },
+  providerStatusIdle: { borderColor: "var(--border)", backgroundColor: "color-mix(in srgb, var(--panel) 60%, transparent)", color: "var(--muted)", },
   disclosureOpen: { transform: "rotate(180deg)" },
   navigationSelected: { backgroundColor: "color-mix(in srgb, var(--panel) 75%, transparent)", boxShadow: "0 1px 2px rgb(0 0 0 / 0.05)", color: "var(--foreground)" }
 });

@@ -3,9 +3,10 @@ import { onMount } from "solid-js";
 import { render } from "solid-js/web";
 import { createHarnessStore, harnessStore, setActiveHarnessStore } from "../harness-store";
 import { createToastStoreForProvider, setActiveToastStore } from "../toast-store";
-import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
+import { createBackgroundJobFixture, createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
 import { AssistantsPanel } from "./assistants-panel";
 import { createAssistantChatBrowserMessages } from "./chat-panel.browser-data";
+import type { ClientCommand } from "@hyperfocus/ai-core/protocol";
 import "../global-styles";
 
 setActiveHarnessStore(createHarnessStore());
@@ -16,8 +17,12 @@ const project = createViewProjectFixture({ id: "browser-assistant-chat-project" 
 const assistantId = "browser-assistant-chat-assistant";
 const threadId = "browser-assistant-chat-thread";
 const messages = createAssistantChatBrowserMessages("browser-assistant-chat-message");
+const sourceJob = createBackgroundJobFixture({ id: "browser-assistant-source-job", projectId: project.id, assistantId,
+  automationThreadId: "browser-assistant-job-thread", name: "Browser source job",
+  definition: { kind: "ai-routine", prompt: "Exercise source pending feedback." },
+  schedule: { type: "one-off", runAt: now, sourceText: now }, scheduleInput: now, createdAt: now, updatedAt: now });
 
-harnessStore.actions.setCommandDispatcher(() => undefined);
+harnessStore.actions.setCommandDispatcher(dispatchFixtureCommand);
 
 function FixtureApp() {
   let host: HTMLDivElement | undefined;
@@ -41,7 +46,8 @@ function FixtureApp() {
   return (
     <main
       style={{
-        width: "980px",
+        width: "100%",
+        "max-width": "980px",
         height: "700px",
         padding: "16px",
         "box-sizing": "border-box",
@@ -122,6 +128,11 @@ function seedAssistantChatState(withMessages: boolean) {
         questions: [],
         logs: [],
         assetRefs: [],
+        jobs: [sourceJob],
+        runs: [],
+        workloadPagesByAssistantId: { [assistantId]: {
+          jobs: { status: "loaded", nextCursor: "browser-jobs-more" }, runs: { status: "loaded" }
+        } },
         selectedAssistantId: assistantId,
         selectedTab: "chat",
         selectedLogDetailsId: undefined,
@@ -133,11 +144,21 @@ function seedAssistantChatState(withMessages: boolean) {
         providerBrandFilter: undefined,
         projectIdFilter: undefined,
         rosterSort: "updated",
-        streamingByAssistantId: {}
+        streamingByAssistantId: {}, provisionalReconnectAssistantIds: [],
+        rosterPage: { status: "idle", firstPageAssistantIds: [] }, loadedDetailAssistantIds: [assistantId], pendingDetailRequestByAssistantId: {}, detailPagesByAssistantId: {},
+        queuedDetailRequestByAssistantId: {}
       }
     })
   );
-  harnessStore.actions.setCommandDispatcher(() => undefined);
+  harnessStore.actions.setCommandDispatcher(dispatchFixtureCommand);
+}
+
+function dispatchFixtureCommand(command: ClientCommand) {
+  if (command.type !== "assistant.workloads.list") return;
+  setTimeout(() => harnessStore.applyServerEvent({ type: "assistant.workloads.listed", requestId: command.requestId,
+    payload: { assistantId: command.payload.assistantId, jobsCursor: command.payload.jobs?.cursor,
+      runsCursor: command.payload.runs?.cursor, ...(command.payload.jobs ? { jobs: { items: [] } } : {}),
+      ...(command.payload.runs ? { runs: { items: [] } } : {}) } }), 50);
 }
 
 render(() => <FixtureApp />, document.getElementById("root")!);

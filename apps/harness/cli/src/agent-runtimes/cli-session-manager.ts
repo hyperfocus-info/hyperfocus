@@ -1,9 +1,10 @@
-import { createRequestId, createSessionId, type CliAttachToken, type CliSession, type ProjectId, type ThreadId } from "../../../shared/protocol";
+import { createRequestId, createSessionId, type CliAttachToken, type CliSession, type ProjectId, type ThreadId } from "@hyperfocus/ai-core/protocol";
 import type { WorkspaceRuntimeStore } from "../workspace-runtime-store";
 import type { AgentRuntime } from "./agent-runtime";
 import { createSecureToken } from "./cli-health";
-import { CliProcessManager, type InteractiveCliProcess } from "./cli-process-manager";
-import { StreamPump } from "../stream-pump";
+import { createAttachTokenStore } from "../server/transport/attach-ownership";
+import { createCliProcessManager, type CliProcessManager, type InteractiveCliProcess } from "./cli-process-manager";
+import { cancelStreamPumps, createStreamPump, DEFAULT_STREAM_MAX_QUEUED_BYTES, drainStreamPumps, type StreamPump } from "../stream-pump";
 import { guardedWebsocketSend } from "../websocket-send-guard";
 
 export const STREAM_HEARTBEAT = 0x00;
@@ -49,19 +50,219 @@ type CliSessionManagerOptions = {
     threadId: ThreadId;
     sessionId: string;
     attachToken: CliAttachToken;
+    connectionId: string;
   }) => void;
   onWriteFailed?: (input: { requestId: string; projectId: ProjectId; threadId: ThreadId; session: CliSession; error: unknown }) => void;
 };
 
-export class CliSessionManager {
-  private readonly processManager = new CliProcessManager();
-  private readonly sessions = new Map<string, SessionRecord>();
-  private readonly attachTokens = new Map<string, AttachTokenRecord>();
-  private readonly sessionKeyToId = new Map<string, string>();
+export function createCliSessionManager(options: CliSessionManagerOptions) {
+  const processManager = createCliProcessManager();
+  const sessions = new Map<string, SessionRecord>();
+  const attachTokens = createAttachTokenStore<AttachTokenRecord>();
+  const sessionKeyToId = new Map<string, string>();
+  const {
+    handleChunk,
+    handleExit,
+    markWriteFailed,
+    requireSession,
+    getOwnedSession,
+    requireOwnedSession,
+    cancelPendingSessionUpdate,
+  } = createCliSessionManagerInternals(options, sessions, sessionKeyToId);
 
-  constructor(private readonly options: CliSessionManagerOptions) {}
+  const startSession = createCliSessionStarter({
+    options, processManager, sessions, sessionKeyToId,
+    handleChunk, handleExit, issueAttachToken: (input) => issueCliAttachToken(attachTokens, input), stopSession
+  });
+  async function stopSession(input: { projectId: ProjectId; threadId: ThreadId; sessionId: string }) {
+    const record = getOwnedSession(input);
+    if (!record) {
+      return;
+    }
 
-  async startSession(input: {
+    cancelPendingSessionUpdate(record);
+    record.session = {
+      ...record.session,
+      status: "stopped",
+      updatedAt: new Date().toISOString()
+    };
+    options.runtimeStore.setProjectCliSession(input.projectId, record.session);
+    options.onSessionUpdated({
+      requestId: createRequestId(),
+      projectId: input.projectId,
+      threadId: input.threadId,
+      session: record.session
+    });
+    await record.process.stop();
+  }
+
+  function resizeSession(input: { requestId: string; projectId: ProjectId; threadId: ThreadId; sessionId: string; cols: number; rows: number }) {
+    requireOwnedSession(input);
+    throw new Error("CLI session resize is not supported by the current transport");
+  }
+
+  function attachSession(input: { requestId: string; projectId: ProjectId; threadId: ThreadId; sessionId: string; clientId: string; connectionId?: string }) {
+    requireOwnedSession(input);
+    const attachToken = issueCliAttachToken(attachTokens, {
+      sessionId: input.sessionId,
+      projectId: input.projectId,
+      threadId: input.threadId,
+      clientId: input.clientId
+    });
+    options.onAttachReady({
+      requestId: input.requestId, projectId: input.projectId, threadId: input.threadId,
+      sessionId: input.sessionId, attachToken,
+      connectionId: input.connectionId ?? input.clientId
+    });
+  }
+
+  function captureVisibleBuffer(input: { projectId: ProjectId; threadId: ThreadId; sessionId: string; visibleBuffer: string; stderrTail?: string }) {
+    const record = requireOwnedSession(input);
+    record.visibleBuffer = input.visibleBuffer;
+    if (input.stderrTail) {
+      record.stderrTail = input.stderrTail.slice(-32_000);
+    }
+    options.runtimeStore.setThreadCapturedCliContext(record.session.projectId, record.session.threadId, {
+      sessionId: record.session.id,
+      capturedAt: new Date().toISOString(),
+      visibleBuffer: input.visibleBuffer,
+      stderrTail: input.stderrTail
+    });
+  }
+
+  function consumeAttachToken(token: string, clientId: string) {
+    return attachTokens.consume(token, clientId);
+  }
+
+  function invalidateClientAttachTokens(clientId: string) {
+    attachTokens.invalidateClient(clientId);
+  }
+
+  function attachSocket(input: {
+    sessionId: string;
+    clientId: string;
+    socket: Bun.ServerWebSocket<{ clientId: string; kind: "control" | "pty" | "terminal"; sessionId?: string }>;
+  }) {
+    const record = requireSession(input.sessionId);
+    cancelPendingSessionUpdate(record);
+    cancelPtyTransport(record);
+    record.attachedClientId = input.clientId;
+    record.attachedSocket = input.socket;
+    record.lastPtyPongAt = Date.now();
+    record.session = {
+      ...record.session,
+      attachState: "attached",
+      updatedAt: new Date().toISOString()
+    };
+    options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
+    options.onSessionUpdated({
+      requestId: createRequestId(),
+      projectId: record.session.projectId,
+      threadId: record.session.threadId,
+      session: record.session
+    });
+    startCliPtyHeartbeat(record, detachSocket);
+  }
+
+  function detachSocket(sessionId: string) {
+    const record = sessions.get(sessionId);
+    if (!record) {
+      return;
+    }
+
+    cancelPendingSessionUpdate(record);
+    cancelPtyTransport(record);
+    record.session = {
+      ...record.session,
+      attachState: "detached",
+      updatedAt: new Date().toISOString()
+    };
+    options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
+    options.onSessionUpdated({
+      requestId: createRequestId(),
+      projectId: record.session.projectId,
+      threadId: record.session.threadId,
+      session: record.session
+    });
+  }
+
+  function detachClient(clientId: string) {
+    invalidateClientAttachTokens(clientId);
+    for (const record of sessions.values()) {
+      if (record.attachedClientId === clientId) {
+        detachSocket(record.session.id);
+      }
+    }
+  }
+
+  function recordPtyPong(sessionId: string, clientId: string) {
+    const record = sessions.get(sessionId);
+    if (!record || record.attachedClientId !== clientId) {
+      return false;
+    }
+    record.lastPtyPongAt = Date.now();
+    return true;
+  }
+
+  async function writeToSession(sessionId: string, data: Uint8Array) {
+    const record = requireSession(sessionId);
+    try {
+      await record.process.write(data);
+    } catch (error) {
+      markWriteFailed(record, error);
+      throw error;
+    }
+  }
+
+  function getSession(sessionId: string) {
+    return sessions.get(sessionId)?.session;
+  }
+
+  function getCapturedContext(sessionId: string) {
+    const record = sessions.get(sessionId);
+    if (!record?.visibleBuffer) {
+      return undefined;
+    }
+
+    return {
+      sessionId,
+      visibleBuffer: record.visibleBuffer,
+      stderrTail: record.stderrTail
+    };
+  }
+
+  return {
+    startSession,
+    stopSession,
+    resizeSession,
+    attachSession,
+    captureVisibleBuffer,
+    consumeAttachToken,
+    invalidateClientAttachTokens,
+    attachSocket,
+    detachSocket,
+    detachClient,
+    recordPtyPong,
+    writeToSession,
+    getSession,
+    getCapturedContext
+  };
+}
+
+export type CliSessionManager = ReturnType<typeof createCliSessionManager>;
+
+function createCliSessionStarter(input: {
+  options: CliSessionManagerOptions;
+  processManager: CliProcessManager;
+  sessions: Map<string, SessionRecord>;
+  sessionKeyToId: Map<string, string>;
+  handleChunk: (sessionId: string, stream: "stdout" | "stderr", chunk: Uint8Array) => void;
+  handleExit: (sessionId: string, exitCode: number) => Promise<void>;
+  issueAttachToken: (input: { sessionId: string; projectId: ProjectId; threadId: ThreadId; clientId: string }) => AttachTokenRecord;
+  stopSession: (input: { projectId: ProjectId; threadId: ThreadId; sessionId: string }) => Promise<void>;
+}) {
+  const { options, processManager, sessions, sessionKeyToId, handleChunk, handleExit, issueAttachToken, stopSession } = input;
+  async function startSession(input: {
     requestId: string;
     projectId: ProjectId;
     threadId: ThreadId;
@@ -72,10 +273,11 @@ export class CliSessionManager {
     prompt?: string;
     runId?: string;
     clientId: string;
+    connectionId?: string;
   }) {
-    const existingSessionId = this.sessionKeyToId.get(getSessionKey(input.projectId, input.threadId, input.agentRuntime.id));
+    const existingSessionId = sessionKeyToId.get(getSessionKey(input.projectId, input.threadId, input.agentRuntime.id));
     if (existingSessionId) {
-      await this.stopSession({
+      await stopSession({
         projectId: input.projectId,
         threadId: input.threadId,
         sessionId: existingSessionId
@@ -110,16 +312,16 @@ export class CliSessionManager {
       updatedAt: now
     };
 
-    const process = this.processManager.startInteractive({
+    const process = processManager.startInteractive({
       cmd: launch.cmd,
       cwd: input.cwd,
       cols: input.cols,
       rows: input.rows,
       env: launch.env,
-      onStdout: (chunk) => this.handleChunk(sessionId, "stdout", chunk),
-      onStderr: (chunk) => this.handleChunk(sessionId, "stderr", chunk),
+      onStdout: (chunk) => handleChunk(sessionId, "stdout", chunk),
+      onStderr: (chunk) => handleChunk(sessionId, "stderr", chunk),
       onExit: (exitCode) => {
-        void this.handleExit(sessionId, exitCode);
+        void handleExit(sessionId, exitCode);
       }
     });
 
@@ -133,222 +335,40 @@ export class CliSessionManager {
       stderrTail: ""
     };
 
-    this.sessions.set(sessionId, record);
-    this.sessionKeyToId.set(getSessionKey(input.projectId, input.threadId, input.agentRuntime.id), sessionId);
-    this.options.runtimeStore.setProjectCliSession(input.projectId, record.session);
-    this.options.onSessionStarted({
+    sessions.set(sessionId, record);
+    sessionKeyToId.set(getSessionKey(input.projectId, input.threadId, input.agentRuntime.id), sessionId);
+    options.runtimeStore.setProjectCliSession(input.projectId, record.session);
+    options.onSessionStarted({
       requestId: input.requestId,
       projectId: input.projectId,
       threadId: input.threadId,
       session: record.session
     });
 
-    const attachToken = this.issueAttachToken({
+    const attachToken = issueAttachToken({
       sessionId,
       projectId: input.projectId,
       threadId: input.threadId,
       clientId: input.clientId
     });
-    this.options.onAttachReady({
-      requestId: input.requestId,
-      projectId: input.projectId,
-      threadId: input.threadId,
-      sessionId,
-      attachToken
+    options.onAttachReady({
+      requestId: input.requestId, projectId: input.projectId, threadId: input.threadId,
+      sessionId, attachToken,
+      connectionId: input.connectionId ?? input.clientId
     });
 
     return record.session;
   }
 
-  async stopSession(input: { projectId: ProjectId; threadId: ThreadId; sessionId: string }) {
-    const record = this.getOwnedSession(input);
-    if (!record) {
-      return;
-    }
-
-    this.cancelPendingSessionUpdate(record);
-    record.session = {
-      ...record.session,
-      status: "stopped",
-      updatedAt: new Date().toISOString()
-    };
-    this.options.runtimeStore.setProjectCliSession(input.projectId, record.session);
-    this.options.onSessionUpdated({
-      requestId: createRequestId(),
-      projectId: input.projectId,
-      threadId: input.threadId,
-      session: record.session
-    });
-    await record.process.stop();
-  }
-
-  resizeSession(input: { requestId: string; projectId: ProjectId; threadId: ThreadId; sessionId: string; cols: number; rows: number }) {
-    this.requireOwnedSession(input);
-    throw new Error("CLI session resize is not supported by the current transport");
-  }
-
-  attachSession(input: { requestId: string; projectId: ProjectId; threadId: ThreadId; sessionId: string; clientId: string }) {
-    this.requireOwnedSession(input);
-    const attachToken = this.issueAttachToken({
-      sessionId: input.sessionId,
-      projectId: input.projectId,
-      threadId: input.threadId,
-      clientId: input.clientId
-    });
-    this.options.onAttachReady({
-      requestId: input.requestId,
-      projectId: input.projectId,
-      threadId: input.threadId,
-      sessionId: input.sessionId,
-      attachToken
-    });
-  }
-
-  captureVisibleBuffer(input: { projectId: ProjectId; threadId: ThreadId; sessionId: string; visibleBuffer: string; stderrTail?: string }) {
-    const record = this.requireOwnedSession(input);
-    record.visibleBuffer = input.visibleBuffer;
-    if (input.stderrTail) {
-      record.stderrTail = input.stderrTail.slice(-32_000);
-    }
-    this.options.runtimeStore.setThreadCapturedCliContext(record.session.projectId, record.session.threadId, {
-      sessionId: record.session.id,
-      capturedAt: new Date().toISOString(),
-      visibleBuffer: input.visibleBuffer,
-      stderrTail: input.stderrTail
-    });
-  }
-
-  consumeAttachToken(token: string, clientId: string) {
-    const record = this.attachTokens.get(token);
-    if (!record) {
-      return undefined;
-    }
-
-    if (record.usedAt || Date.parse(record.expiresAt) < Date.now() || record.clientId !== clientId) {
-      this.attachTokens.delete(token);
-      return undefined;
-    }
-
-    record.usedAt = new Date().toISOString();
-    this.attachTokens.delete(token);
-    return record;
-  }
-
-  invalidateClientAttachTokens(clientId: string) {
-    for (const [token, record] of this.attachTokens.entries()) {
-      if (record.clientId === clientId && !record.usedAt) {
-        this.attachTokens.delete(token);
-      }
-    }
-  }
-
-  attachSocket(input: {
-    sessionId: string;
-    clientId: string;
-    socket: Bun.ServerWebSocket<{ clientId: string; kind: "control" | "pty" | "terminal"; sessionId?: string }>;
-  }) {
-    const record = this.requireSession(input.sessionId);
-    this.cancelPendingSessionUpdate(record);
-    record.attachedClientId = input.clientId;
-    record.attachedSocket = input.socket;
-    record.lastPtyPongAt = Date.now();
-    record.session = {
-      ...record.session,
-      attachState: "attached",
-      updatedAt: new Date().toISOString()
-    };
-    this.options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
-    this.options.onSessionUpdated({
-      requestId: createRequestId(),
-      projectId: record.session.projectId,
-      threadId: record.session.threadId,
-      session: record.session
-    });
-    this.startPtyHeartbeat(record);
-  }
-
-  detachSocket(sessionId: string) {
-    const record = this.sessions.get(sessionId);
-    if (!record) {
-      return;
-    }
-
-    this.cancelPendingSessionUpdate(record);
-    this.clearPtyTransport(record);
-    record.session = {
-      ...record.session,
-      attachState: "detached",
-      updatedAt: new Date().toISOString()
-    };
-    this.options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
-    this.options.onSessionUpdated({
-      requestId: createRequestId(),
-      projectId: record.session.projectId,
-      threadId: record.session.threadId,
-      session: record.session
-    });
-  }
-
-  detachClient(clientId: string) {
-    this.invalidateClientAttachTokens(clientId);
-    for (const record of this.sessions.values()) {
-      if (record.attachedClientId === clientId) {
-        this.detachSocket(record.session.id);
-      }
-    }
-  }
-
-  recordPtyPong(sessionId: string, clientId: string) {
-    const record = this.sessions.get(sessionId);
-    if (!record || record.attachedClientId !== clientId) {
-      return false;
-    }
-    record.lastPtyPongAt = Date.now();
-    return true;
-  }
-
-  async writeToSession(sessionId: string, data: Uint8Array) {
-    const record = this.requireSession(sessionId);
-    try {
-      await record.process.write(data);
-    } catch (error) {
-      this.markWriteFailed(record, error);
-      throw error;
-    }
-  }
-
-  getSession(sessionId: string) {
-    return this.sessions.get(sessionId)?.session;
-  }
-
-  getCapturedContext(sessionId: string) {
-    const record = this.sessions.get(sessionId);
-    if (!record?.visibleBuffer) {
-      return undefined;
-    }
-
-    return {
-      sessionId,
-      visibleBuffer: record.visibleBuffer,
-      stderrTail: record.stderrTail
-    };
-  }
-
-  private issueAttachToken(input: { sessionId: string; projectId: ProjectId; threadId: ThreadId; clientId: string }) {
-    const token: AttachTokenRecord = {
-      token: createSecureToken(),
-      sessionId: input.sessionId,
-      projectId: input.projectId,
-      threadId: input.threadId,
-      clientId: input.clientId,
-      expiresAt: new Date(Date.now() + ATTACH_TOKEN_TTL_MS).toISOString()
-    };
-    this.attachTokens.set(token.token, token);
-    return token;
-  }
-
-  private handleChunk(sessionId: string, stream: "stdout" | "stderr", chunk: Uint8Array) {
-    const record = this.sessions.get(sessionId);
+  return startSession;
+}
+function createCliSessionManagerInternals(
+  options: CliSessionManagerOptions,
+  sessions: Map<string, SessionRecord>,
+  sessionKeyToId: Map<string, string>
+) {
+  function handleChunk(sessionId: string, stream: "stdout" | "stderr", chunk: Uint8Array) {
+    const record = sessions.get(sessionId);
     if (!record) {
       return;
     }
@@ -363,49 +383,49 @@ export class CliSessionManager {
     if (stream === "stderr") {
       record.stderrTail = `${record.stderrTail}${new TextDecoder().decode(chunk)}`.slice(-32_000);
     }
-    this.scheduleSessionUpdate(record);
+    scheduleSessionUpdate(record);
 
     const socket = record.attachedSocket;
     if (!socket) {
       return;
     }
 
-    const pump = this.getTerminalPump(record, stream);
+    const pump = getTerminalPump(record, stream);
     pump.push(new TextDecoder().decode(normalizeTerminalChunk(chunk)));
   }
 
-  private async handleExit(sessionId: string, exitCode: number) {
-    const record = this.sessions.get(sessionId);
+  async function handleExit(sessionId: string, exitCode: number) {
+    const record = sessions.get(sessionId);
     if (!record) {
       return;
     }
 
-    this.flushPendingSessionUpdate(record);
+    flushPendingSessionUpdate(record);
+    const drainErrors = await drainPtyTransport(record);
     const now = new Date().toISOString();
     record.session = {
       ...record.session,
-      status: exitCode === 0 ? "exited" : "failed",
+      status: exitCode === 0 && drainErrors.length === 0 ? "exited" : "failed",
       attachState: "detached",
       exitCode,
       exitedAt: now,
       updatedAt: now
     };
-    this.options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
-    this.options.onSessionExited({
+    options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
+    options.onSessionExited({
       requestId: createRequestId(),
       projectId: record.session.projectId,
       threadId: record.session.threadId,
       session: record.session
     });
-    this.sessionKeyToId.delete(getSessionKey(record.session.projectId, record.session.threadId, record.session.agentId));
-    this.clearPtyTransport(record);
-    this.sessions.delete(sessionId);
+    sessionKeyToId.delete(getSessionKey(record.session.projectId, record.session.threadId, record.session.agentId));
+    sessions.delete(sessionId);
   }
 
-  private markWriteFailed(record: SessionRecord, error: unknown) {
+  function markWriteFailed(record: SessionRecord, error: unknown) {
     const now = new Date().toISOString();
-    this.cancelPendingSessionUpdate(record);
-    this.clearPtyTransport(record);
+    cancelPendingSessionUpdate(record);
+    cancelPtyTransport(record);
     record.session = {
       ...record.session,
       status: "failed",
@@ -413,22 +433,22 @@ export class CliSessionManager {
       exitedAt: now,
       updatedAt: now
     };
-    this.options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
+    options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
     const event = {
       requestId: createRequestId(),
       projectId: record.session.projectId,
       threadId: record.session.threadId,
       session: record.session
     };
-    this.options.onSessionUpdated(event);
-    this.options.onWriteFailed?.({
+    options.onSessionUpdated(event);
+    options.onWriteFailed?.({
       ...event,
       error
     });
   }
 
-  private requireSession(sessionId: string) {
-    const record = this.sessions.get(sessionId);
+  function requireSession(sessionId: string) {
+    const record = sessions.get(sessionId);
     if (!record) {
       throw new Error(`Unknown CLI session: ${sessionId}`);
     }
@@ -436,8 +456,8 @@ export class CliSessionManager {
     return record;
   }
 
-  private getOwnedSession(input: { projectId: ProjectId; threadId: ThreadId; sessionId: string }) {
-    const record = this.sessions.get(input.sessionId);
+  function getOwnedSession(input: { projectId: ProjectId; threadId: ThreadId; sessionId: string }) {
+    const record = sessions.get(input.sessionId);
     if (!record) {
       return undefined;
     }
@@ -449,8 +469,8 @@ export class CliSessionManager {
     return record;
   }
 
-  private requireOwnedSession(input: { projectId: ProjectId; threadId: ThreadId; sessionId: string }) {
-    const record = this.getOwnedSession(input);
+  function requireOwnedSession(input: { projectId: ProjectId; threadId: ThreadId; sessionId: string }) {
+    const record = getOwnedSession(input);
     if (!record) {
       throw new Error(`Unknown CLI session: ${input.sessionId}`);
     }
@@ -458,17 +478,18 @@ export class CliSessionManager {
     return record;
   }
 
-  private getTerminalPump(record: SessionRecord, stream: "stdout" | "stderr") {
+  function getTerminalPump(record: SessionRecord, stream: "stdout" | "stderr") {
     record.terminalPumps ??= {};
-    record.terminalPumps[stream] ??= new StreamPump({
+    const socket = record.attachedSocket;
+    record.terminalPumps[stream] ??= createStreamPump({
       flushIntervalMs: PTY_STREAM_FLUSH_MS,
-      maxBufferedBytes: PTY_STREAM_MAX_BUFFERED_BYTES,
-      onFlush: (text) => this.sendTerminalFrame(record, stream, text)
+      maxBufferedBytes: PTY_STREAM_MAX_BUFFERED_BYTES, maxQueuedBytes: DEFAULT_STREAM_MAX_QUEUED_BYTES,
+      onFlush: (text) => sendTerminalFrame(socket, stream, text), onError: () => { void record.process.stop().catch(() => undefined); }
     });
     return record.terminalPumps[stream];
   }
 
-  private scheduleSessionUpdate(record: SessionRecord) {
+  function scheduleSessionUpdate(record: SessionRecord) {
     record.metadataUpdatePending = true;
     if (record.metadataUpdateTimer) {
       return;
@@ -479,11 +500,11 @@ export class CliSessionManager {
         return;
       }
       record.metadataUpdatePending = false;
-      this.emitSessionUpdated(record);
+      emitSessionUpdated(record);
     }, CLI_SESSION_METADATA_THROTTLE_MS);
   }
 
-  private cancelPendingSessionUpdate(record: SessionRecord) {
+  function cancelPendingSessionUpdate(record: SessionRecord) {
     if (record.metadataUpdateTimer) {
       clearTimeout(record.metadataUpdateTimer);
       record.metadataUpdateTimer = undefined;
@@ -491,19 +512,19 @@ export class CliSessionManager {
     record.metadataUpdatePending = false;
   }
 
-  private flushPendingSessionUpdate(record: SessionRecord) {
+  function flushPendingSessionUpdate(record: SessionRecord) {
     if (!record.metadataUpdatePending) {
-      this.cancelPendingSessionUpdate(record);
+      cancelPendingSessionUpdate(record);
       return;
     }
 
-    this.cancelPendingSessionUpdate(record);
-    this.emitSessionUpdated(record);
+    cancelPendingSessionUpdate(record);
+    emitSessionUpdated(record);
   }
 
-  private emitSessionUpdated(record: SessionRecord) {
-    this.options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
-    this.options.onSessionUpdated({
+  function emitSessionUpdated(record: SessionRecord) {
+    options.runtimeStore.setProjectCliSession(record.session.projectId, record.session);
+    options.onSessionUpdated({
       requestId: createRequestId(),
       projectId: record.session.projectId,
       threadId: record.session.threadId,
@@ -511,50 +532,80 @@ export class CliSessionManager {
     });
   }
 
-  private sendTerminalFrame(record: SessionRecord, stream: "stdout" | "stderr", text: string) {
+  return {
+    handleChunk,
+    handleExit,
+    markWriteFailed,
+    requireSession,
+    getOwnedSession,
+    requireOwnedSession,
+    getTerminalPump,
+    scheduleSessionUpdate,
+    cancelPendingSessionUpdate,
+    flushPendingSessionUpdate
+  };
+}
+
+function issueCliAttachToken(
+  attachTokens: ReturnType<typeof createAttachTokenStore<AttachTokenRecord>>,
+  input: { sessionId: string; projectId: ProjectId; threadId: ThreadId; clientId: string }
+) {
+  const token: AttachTokenRecord = {
+    token: createSecureToken(),
+    sessionId: input.sessionId,
+    projectId: input.projectId,
+    threadId: input.threadId,
+    clientId: input.clientId,
+    expiresAt: new Date(Date.now() + ATTACH_TOKEN_TTL_MS).toISOString()
+  };
+  attachTokens.issue(token);
+  return token;
+}
+
+function startCliPtyHeartbeat(record: SessionRecord, detachSocket: (sessionId: string) => void) {
+  if (record.ptyHeartbeatTimer) clearInterval(record.ptyHeartbeatTimer);
+  record.ptyHeartbeatTimer = setInterval(() => {
     const socket = record.attachedSocket;
-    if (!socket) {
+    if (!socket || !record.attachedClientId) return;
+    if (Date.now() - (record.lastPtyPongAt ?? 0) > PTY_STALE_TIMEOUT_MS) {
+      socket.close(4000, "PTY heartbeat missed");
+      detachSocket(record.session.id);
       return;
     }
-    const payload = new TextEncoder().encode(text);
-    const frame = new Uint8Array(payload.length + 1);
-    frame[0] = stream === "stdout" ? STREAM_STDOUT : STREAM_STDERR;
-    frame.set(payload, 1);
-    guardedWebsocketSend(socket, frame, { maxQueuedBytes: PTY_SEND_QUEUE_CAP_BYTES });
-  }
+    guardedWebsocketSend(socket, new Uint8Array([STREAM_HEARTBEAT]), { maxQueuedBytes: PTY_SEND_QUEUE_CAP_BYTES });
+  }, PTY_HEARTBEAT_INTERVAL_MS);
+}
 
-  private startPtyHeartbeat(record: SessionRecord) {
-    if (record.ptyHeartbeatTimer) {
-      clearInterval(record.ptyHeartbeatTimer);
-    }
-    record.ptyHeartbeatTimer = setInterval(() => {
-      const socket = record.attachedSocket;
-      if (!socket || !record.attachedClientId) {
-        return;
-      }
-      if (Date.now() - (record.lastPtyPongAt ?? 0) > PTY_STALE_TIMEOUT_MS) {
-        socket.close(4000, "PTY heartbeat missed");
-        this.detachSocket(record.session.id);
-        return;
-      }
-      guardedWebsocketSend(socket, new Uint8Array([STREAM_HEARTBEAT]), { maxQueuedBytes: PTY_SEND_QUEUE_CAP_BYTES });
-    }, PTY_HEARTBEAT_INTERVAL_MS);
-  }
+function cancelPtyTransport(record: SessionRecord) {
+  cancelStreamPumps(takePtyTransport(record));
+}
 
-  private clearPtyTransport(record: SessionRecord) {
-    if (record.ptyHeartbeatTimer) {
-      clearInterval(record.ptyHeartbeatTimer);
-      record.ptyHeartbeatTimer = undefined;
-    }
-    for (const pump of Object.values(record.terminalPumps ?? {})) {
-      void pump.flush();
-      pump.close();
-    }
-    record.terminalPumps = undefined;
-    record.attachedSocket = undefined;
-    record.attachedClientId = undefined;
-    record.lastPtyPongAt = undefined;
-  }
+async function drainPtyTransport(record: SessionRecord) {
+  return drainStreamPumps(takePtyTransport(record));
+}
+
+function takePtyTransport(record: SessionRecord) {
+  clearPtyHeartbeat(record);
+  const pumps = Object.values(record.terminalPumps ?? {});
+  clearPtyTransportReferences(record);
+  return pumps;
+}
+
+function clearPtyHeartbeat(record: SessionRecord) {
+  if (record.ptyHeartbeatTimer) clearInterval(record.ptyHeartbeatTimer);
+  record.ptyHeartbeatTimer = undefined;
+}
+
+function clearPtyTransportReferences(record: SessionRecord) {
+  record.terminalPumps = undefined; record.attachedSocket = undefined;
+  record.attachedClientId = undefined; record.lastPtyPongAt = undefined;
+}
+
+function sendTerminalFrame(socket: SessionRecord["attachedSocket"], stream: "stdout" | "stderr", text: string) {
+  if (!socket) return;
+  const payload = new TextEncoder().encode(text), frame = new Uint8Array(payload.length + 1);
+  frame[0] = stream === "stdout" ? STREAM_STDOUT : STREAM_STDERR; frame.set(payload, 1);
+  guardedWebsocketSend(socket, frame, { maxQueuedBytes: PTY_SEND_QUEUE_CAP_BYTES });
 }
 
 function getSessionKey(projectId: ProjectId, threadId: ThreadId, agentId: string) {

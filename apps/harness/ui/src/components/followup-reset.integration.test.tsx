@@ -13,7 +13,7 @@ import {
   createTraceFixture,
   createViewProjectFixture
 } from "../utils/tests/test-fixtures";
-import { createChatMessage } from "../../../shared/protocol";
+import { createChatMessage } from "@hyperfocus/ai-core/protocol";
 
 createUiTest("Followup reset integration", () => {
   beforeEach(() => {

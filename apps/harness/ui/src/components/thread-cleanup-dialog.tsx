@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import type { WorkspaceProjectState } from "../../../shared/protocol";
+import type { WorkspaceProjectState } from "@hyperfocus/ai-core/protocol";
 import { getThreadCleanupCandidates, parseThreadCleanupDuration } from "../lib/thread-cleanup";
 import { Button } from "./primitives/button";
 import { Dialog } from "./primitives/dialog";

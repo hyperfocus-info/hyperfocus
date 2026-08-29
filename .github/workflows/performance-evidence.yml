@@ -1,0 +1,121 @@
+name: Performance evidence
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 7 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  structural-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HYPERFOCUS_BENCH_POWER_PROFILE: hosted-runner
+      HYPERFOCUS_BENCH_THERMAL_STATE: unrecorded
+      HYPERFOCUS_BENCH_CONTENTION: isolated-job
+      HYPERFOCUS_BENCH_DEVICE_PROFILE: github-hosted-ubuntu
+      HYPERFOCUS_BENCH_ACTIVE_AGENTS: 1
+      HYPERFOCUS_BENCH_NOTES: GitHub-hosted structural evidence lane
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - uses: actions/cache/restore@v4
+        with:
+          path: .local/performance-history
+          key: performance-history-structural-${{ github.run_id }}
+          restore-keys: performance-history-structural-
+      - run: bun run --cwd packages/engine build:wasm
+      - run: bun test packages/ai-core/src/capacity-governor.test.ts apps/harness/cli/src/pi-subagents.test.ts
+      - run: bun packages/engine/benchmarks/protocol-input-ownership.ts
+      - run: bun apps/harness/scripts/subagent-scheduler-benchmark.ts
+      - run: bun apps/engine-editor/src/performance/project-history-benchmark.ts --checkpoint-interval=32
+      - run: bun packages/performance/record-history.ts .local/engine-perf/protocol-input-ownership.json .local/harness-performance/subagent-scheduler.json .local/editor-performance/project-history.json
+      - run: bun run --cwd packages/engine build
+      - run: bun run --cwd packages/engine check:bundle-size
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .local/performance-history
+          key: performance-history-structural-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: structural-performance-evidence
+          path: .local
+          if-no-files-found: warn
+          retention-days: 90
+
+  browser-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PERFORMANCE_REQUIRE_BROWSERS: chromium,firefox,webkit
+      HYPERFOCUS_BENCH_POWER_PROFILE: hosted-runner
+      HYPERFOCUS_BENCH_THERMAL_STATE: unrecorded
+      HYPERFOCUS_BENCH_CONTENTION: isolated-job
+      HYPERFOCUS_BENCH_DEVICE_PROFILE: github-hosted-ubuntu-browser
+      HYPERFOCUS_BENCH_ACTIVE_AGENTS: 1
+      HYPERFOCUS_BENCH_NOTES: Cross-browser production-artifact evidence lane
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - uses: actions/cache/restore@v4
+        with:
+          path: .local/performance-history
+          key: performance-history-browser-${{ github.run_id }}
+          restore-keys: performance-history-browser-
+      - run: bunx playwright install --with-deps chromium firefox webkit
+      - run: bun run --cwd packages/engine build:wasm
+      - run: bun run --cwd packages/engine bench:wasm-browser-variants
+      - run: bun packages/performance/record-history.ts .local/engine-perf/wasm-browser-variants.json
+      - run: bun test packages/ui/src/transcript/chat-transcript.browser.test.ts
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .local/performance-history
+          key: performance-history-browser-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cross-browser-performance-evidence
+          path: .local
+          if-no-files-found: warn
+          retention-days: 90
+
+  cpu-profile-evidence:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      HYPERFOCUS_BENCH_POWER_PROFILE: hosted-runner
+      HYPERFOCUS_BENCH_THERMAL_STATE: unrecorded
+      HYPERFOCUS_BENCH_CONTENTION: isolated-job
+      HYPERFOCUS_BENCH_DEVICE_PROFILE: github-hosted-${{ matrix.os }}
+      HYPERFOCUS_BENCH_ACTIVE_AGENTS: 1
+      HYPERFOCUS_BENCH_NOTES: Bun CPU profile operating-system matrix
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd packages/engine bench:cpu-profile
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cpu-profile-${{ matrix.os }}
+          path: packages/engine/.local/engine-perf/cpu-profile
+          if-no-files-found: error
+          retention-days: 90

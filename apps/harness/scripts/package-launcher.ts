@@ -1,7 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { buildUiBundle } from "../cli/src/ui-build";
-import { CliUsageError, parseCliOptions } from "../cli/src/cli-options";
+import { createCliUsageError, isCliUsageError, parseCliOptions } from "../cli/src/cli-options";
 import { copyLauncherRuntimeAssets } from "./launcher-assets";
 
 const HELP = `Usage: bun run package:launcher [--all|--target <target>] [--help]`;
@@ -27,7 +27,7 @@ try {
     conflicts: [["--all", "--target"]]
   });
 } catch (error) {
-  if (error instanceof CliUsageError) {
+  if (isCliUsageError(error)) {
     console.error(error.message);
     process.exit(2);
   }
@@ -46,7 +46,7 @@ let targets: LauncherTarget[];
 try {
   targets = resolveRequestedTargets();
 } catch (error) {
-  if (error instanceof CliUsageError) {
+  if (isCliUsageError(error)) {
     console.error(error.message);
     process.exit(2);
   }
@@ -75,7 +75,7 @@ async function packageLauncherTarget(target: LauncherTarget) {
     sourcemap: "none",
     bytecode: true,
     compile: {
-      target: target as never,
+      target,
       outfile: binaryPath
     }
   });
@@ -114,7 +114,7 @@ function resolveRequestedTargets(): LauncherTarget[] {
 
   if (targetArg) {
     if (!isLauncherTarget(targetArg)) {
-      throw new CliUsageError(`Unsupported launcher target: ${targetArg}`);
+      throw createCliUsageError(`Unsupported launcher target: ${targetArg}`);
     }
 
     return [targetArg];
@@ -124,5 +124,5 @@ function resolveRequestedTargets(): LauncherTarget[] {
 }
 
 function isLauncherTarget(value: string): value is LauncherTarget {
-  return ALL_LAUNCHER_TARGETS.includes(value as LauncherTarget);
+  return new Set<string>(ALL_LAUNCHER_TARGETS).has(value);
 }

@@ -1,0 +1,437 @@
+{
+  "name": "@hyperfocus/engine",
+  "version": "0.0.1",
+  "packageManager": "bun@1.4.0",
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "private": false,
+  "description": "Small TypeScript and WASM primitives for browser-playable catalog games.",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "types": "./dist/src/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "LICENSE",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "browser/",
+    "dist/core.js",
+    "dist/wasm-runtime.js",
+    "dist/experimental.js",
+    "dist/net.js",
+    "dist/protocol.js",
+    "dist/server.js",
+    "dist/mmo.js",
+    "dist/render.js",
+    "dist/render-3d.js",
+    "dist/render-3d-core.js",
+    "dist/render-3d-scene.js",
+    "dist/render-3d-webgl2.js",
+    "dist/physics-3d.js",
+    "dist/physics-2d.js",
+    "dist/physics-rigid-3d.js",
+    "dist/motion.js",
+    "dist/motion-three.js",
+    "dist/migrations.js",
+    "dist/project.js",
+    "dist/project-runtime-2d.js",
+    "dist/project-runtime-timeline-2d.js",
+    "dist/project-runtime-navigation-2d.js",
+    "dist/project-runtime-save-2d.js",
+    "dist/project-runtime-story-2d.js",
+    "dist/project-runtime-3d.js",
+    "dist/project-filesystem.js",
+    "dist/project-neutral-export.js",
+    "dist/navigation.js",
+    "dist/content.js",
+    "dist/save.js",
+    "dist/save-browser.js",
+    "dist/audio.js",
+    "dist/effects.js",
+    "dist/ui.js",
+    "dist/ui-core.js",
+    "dist/assets/loader.js",
+    "dist/assets/gltf-static.js",
+    "dist/assets/gltf-skin-animation.js",
+    "dist/assets/templates.js",
+    "dist/post-processing-prototype.js",
+    "dist/src/",
+    "docs/README.md",
+    "docs/architectural-resilience-matrix.md",
+    "docs/schema/editor-project-v2.schema.json",
+    "docs/compatibility-policy.md",
+    "docs/production-readiness.md",
+    "docs/browser-support.md",
+    "docs/public-api-v0.0.json",
+    "docs/licensing-model.md",
+    "wasm/collision-kernel.wasm",
+    "wasm/collision-kernel.wasm.d.ts",
+    "wasm/collision-kernel.scalar.wasm",
+    "wasm/collision-kernel.simd.wasm",
+    "tooling/cdp-client.ts",
+    "tooling/create-project.ts",
+    "tooling/example-build.ts",
+    "tooling/server.ts",
+    "readme.md",
+    "third-party-notices.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./browser/engine.js"
+    },
+    "./core": {
+      "types": "./dist/src/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./wasm": {
+      "types": "./dist/src/wasm/index.d.ts",
+      "import": "./dist/wasm-runtime.js"
+    },
+    "./experimental": {
+      "types": "./dist/src/experimental/index.d.ts",
+      "import": "./dist/experimental.js"
+    },
+    "./browser": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./browser/engine.js"
+    },
+    "./net": {
+      "types": "./dist/src/net/index.d.ts",
+      "import": "./dist/net.js"
+    },
+    "./protocol": {
+      "types": "./dist/src/protocol/index.d.ts",
+      "import": "./dist/protocol.js"
+    },
+    "./server": {
+      "types": "./dist/src/server/index.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./tooling/cdp-client": {
+      "types": "./tooling/cdp-client.ts",
+      "import": "./tooling/cdp-client.ts"
+    },
+    "./tooling/example-build": {
+      "types": "./tooling/example-build.ts",
+      "import": "./tooling/example-build.ts"
+    },
+    "./tooling/create-project": {
+      "types": "./tooling/create-project.ts",
+      "import": "./tooling/create-project.ts"
+    },
+    "./tooling/server": {
+      "types": "./tooling/server.ts",
+      "import": "./tooling/server.ts"
+    },
+    "./mmo": {
+      "types": "./dist/src/mmo/index.d.ts",
+      "import": "./dist/mmo.js"
+    },
+    "./render": {
+      "types": "./dist/src/render/index.d.ts",
+      "import": "./dist/render.js"
+    },
+    "./render/3d": {
+      "types": "./dist/src/render/3d.d.ts",
+      "import": "./dist/render-3d.js"
+    },
+    "./render/3d-core": {
+      "types": "./dist/src/render/3d-core.d.ts",
+      "import": "./dist/render-3d-core.js"
+    },
+    "./render/3d-scene": {
+      "types": "./dist/src/render/3d-scene.d.ts",
+      "import": "./dist/render-3d-scene.js"
+    },
+    "./render/3d-webgl2": {
+      "types": "./dist/src/render/3d-webgl2.d.ts",
+      "import": "./dist/render-3d-webgl2.js"
+    },
+    "./physics/3d": {
+      "types": "./dist/src/physics/3d.d.ts",
+      "import": "./dist/physics-3d.js"
+    },
+    "./physics/2d": {
+      "types": "./dist/src/physics/2d.d.ts",
+      "import": "./dist/physics-2d.js"
+    },
+    "./physics/rigid-3d": {
+      "types": "./dist/src/physics/rigid-3d.d.ts",
+      "import": "./dist/physics-rigid-3d.js"
+    },
+    "./motion": {
+      "types": "./dist/src/motion/index.d.ts",
+      "import": "./dist/motion.js"
+    },
+    "./motion/three": {
+      "types": "./dist/src/motion/three.d.ts",
+      "import": "./dist/motion-three.js"
+    },
+    "./migrations": {
+      "types": "./dist/src/migrations/index.d.ts",
+      "import": "./dist/migrations.js"
+    },
+    "./project": {
+      "types": "./dist/src/project/index.d.ts",
+      "import": "./dist/project.js"
+    },
+    "./project/runtime-2d": {
+      "types": "./dist/src/project/runtime-2d.d.ts",
+      "import": "./dist/project-runtime-2d.js"
+    },
+    "./project/runtime-timeline-2d": {
+      "types": "./dist/src/project/runtime-timeline-2d.d.ts",
+      "import": "./dist/project-runtime-timeline-2d.js"
+    },
+    "./project/runtime-navigation-2d": {
+      "types": "./dist/src/project/runtime-navigation-2d.d.ts",
+      "import": "./dist/project-runtime-navigation-2d.js"
+    },
+    "./project/runtime-save-2d": {
+      "types": "./dist/src/project/runtime-save-2d.d.ts",
+      "import": "./dist/project-runtime-save-2d.js"
+    },
+    "./project/runtime-story-2d": {
+      "types": "./dist/src/project/runtime-story-2d.d.ts",
+      "import": "./dist/project-runtime-story-2d.js"
+    },
+    "./project/runtime-3d": {
+      "types": "./dist/src/project/runtime-3d.d.ts",
+      "import": "./dist/project-runtime-3d.js"
+    },
+    "./project/filesystem": {
+      "types": "./dist/src/project/filesystem.d.ts",
+      "import": "./dist/project-filesystem.js"
+    },
+    "./project/neutral-export": {
+      "types": "./dist/src/project/neutral-export.d.ts",
+      "import": "./dist/project-neutral-export.js"
+    },
+    "./schema/editor-project-v2.json": {
+      "default": "./docs/schema/editor-project-v2.schema.json"
+    },
+    "./navigation": {
+      "types": "./dist/src/navigation/index.d.ts",
+      "import": "./dist/navigation.js"
+    },
+    "./content": {
+      "types": "./dist/src/content/index.d.ts",
+      "import": "./dist/content.js"
+    },
+    "./save": {
+      "types": "./dist/src/save/index.d.ts",
+      "import": "./dist/save.js"
+    },
+    "./save/browser": {
+      "types": "./dist/src/save/browser.d.ts",
+      "import": "./dist/save-browser.js"
+    },
+    "./audio": {
+      "types": "./dist/src/audio/index.d.ts",
+      "import": "./dist/audio.js"
+    },
+    "./effects": {
+      "types": "./dist/src/effects/index.d.ts",
+      "import": "./dist/effects.js"
+    },
+    "./ui": {
+      "types": "./dist/src/ui/index.d.ts",
+      "import": "./dist/ui.js"
+    },
+    "./ui/core": {
+      "types": "./dist/src/ui/core.d.ts",
+      "import": "./dist/ui-core.js"
+    },
+    "./assets/templates": {
+      "types": "./dist/src/assets/templates/index.d.ts",
+      "import": "./dist/assets/templates.js"
+    },
+    "./assets/loader": {
+      "types": "./dist/src/assets/loader.d.ts",
+      "import": "./dist/assets/loader.js"
+    },
+    "./assets/gltf-static": {
+      "types": "./dist/src/assets/gltf-static.d.ts",
+      "import": "./dist/assets/gltf-static.js"
+    },
+    "./assets/gltf-skin-animation": {
+      "types": "./dist/src/assets/gltf-skin-animation.d.ts",
+      "import": "./dist/assets/gltf-skin-animation.js"
+    },
+    "./post-processing/prototype": {
+      "types": "./dist/src/canvas/post-processing-prototype.d.ts",
+      "import": "./dist/post-processing-prototype.js"
+    },
+    "./wasm/collision-kernel.wasm": {
+      "types": "./wasm/collision-kernel.wasm.d.ts",
+      "default": "./wasm/collision-kernel.wasm"
+    },
+    "./wasm/collision-kernel.wasm?url": {
+      "types": "./wasm/collision-kernel.wasm.d.ts",
+      "default": "./wasm/collision-kernel.wasm"
+    },
+    "./wasm/collision-kernel.scalar.wasm": {
+      "types": "./wasm/collision-kernel.wasm.d.ts",
+      "default": "./wasm/collision-kernel.scalar.wasm"
+    },
+    "./wasm/collision-kernel.scalar.wasm?url": {
+      "types": "./wasm/collision-kernel.wasm.d.ts",
+      "default": "./wasm/collision-kernel.scalar.wasm"
+    },
+    "./wasm/collision-kernel.simd.wasm": {
+      "types": "./wasm/collision-kernel.wasm.d.ts",
+      "default": "./wasm/collision-kernel.simd.wasm"
+    },
+    "./wasm/collision-kernel.simd.wasm?url": {
+      "types": "./wasm/collision-kernel.wasm.d.ts",
+      "default": "./wasm/collision-kernel.simd.wasm"
+    }
+  },
+  "scripts": {
+    "build": "bun ./scripts/build-package.ts",
+    "build:browser": "esbuild ./src/index.ts --bundle --minify --format=esm --outfile=./browser/engine.js",
+    "build:core": "esbuild ./src/core.ts --bundle --minify --format=esm --outfile=./dist/core.js",
+    "build:wasm-runtime": "esbuild ./src/wasm/index.ts --bundle --minify --format=esm --outfile=./dist/wasm-runtime.js",
+    "build:experimental": "esbuild ./src/experimental/index.ts --bundle --minify --format=esm --outfile=./dist/experimental.js",
+    "build:net": "esbuild ./src/net/index.ts --bundle --minify --format=esm --outfile=./dist/net.js",
+    "build:protocol": "esbuild ./src/protocol/index.ts --bundle --minify --format=esm --outfile=./dist/protocol.js",
+    "build:server": "esbuild ./src/server/index.ts --bundle --minify --format=esm --platform=node --external:bun:sqlite --outfile=./dist/server.js",
+    "build:mmo": "esbuild ./src/mmo/index.ts --bundle --minify --format=esm --outfile=./dist/mmo.js",
+    "build:render": "esbuild ./src/render/index.ts --bundle --minify --format=esm --outfile=./dist/render.js",
+    "build:render-3d": "esbuild ./src/render/3d.ts --bundle --minify --format=esm --external:three --outfile=./dist/render-3d.js",
+    "build:render-3d-core": "esbuild ./src/render/3d-core.ts --bundle --minify --format=esm --outfile=./dist/render-3d-core.js",
+    "build:render-3d-scene": "esbuild ./src/render/3d-scene.ts --bundle --minify --format=esm --outfile=./dist/render-3d-scene.js",
+    "build:render-3d-webgl2": "esbuild ./src/render/3d-webgl2.ts --bundle --minify --format=esm --outfile=./dist/render-3d-webgl2.js",
+    "build:physics-3d": "esbuild ./src/physics/3d.ts --bundle --minify --format=esm --outfile=./dist/physics-3d.js",
+    "build:physics-2d": "esbuild ./src/physics/2d.ts --bundle --minify --format=esm --outfile=./dist/physics-2d.js",
+    "build:physics-rigid-3d": "esbuild ./src/physics/rigid-3d.ts --bundle --minify --format=esm --outfile=./dist/physics-rigid-3d.js",
+    "build:motion": "esbuild ./src/motion/index.ts --bundle --minify --format=esm --outfile=./dist/motion.js",
+    "build:motion-three": "esbuild ./src/motion/three.ts --bundle --minify --format=esm --external:three --outfile=./dist/motion-three.js",
+    "build:migrations": "esbuild ./src/migrations/index.ts --bundle --minify --format=esm --outfile=./dist/migrations.js",
+    "build:project": "esbuild ./src/project/index.ts --bundle --minify --format=esm --outfile=./dist/project.js",
+    "build:project-runtime-2d": "esbuild ./src/project/runtime-2d.ts --bundle --minify --format=esm --outfile=./dist/project-runtime-2d.js",
+    "build:project-runtime-timeline-2d": "esbuild ./src/project/runtime-timeline-2d.ts --bundle --minify --format=esm --outfile=./dist/project-runtime-timeline-2d.js",
+    "build:project-runtime-navigation-2d": "esbuild ./src/project/runtime-navigation-2d.ts --bundle --minify --format=esm --outfile=./dist/project-runtime-navigation-2d.js",
+    "build:project-runtime-save-2d": "esbuild ./src/project/runtime-save-2d.ts --bundle --minify --format=esm --outfile=./dist/project-runtime-save-2d.js",
+    "build:project-runtime-story-2d": "esbuild ./src/project/runtime-story-2d.ts --bundle --minify --format=esm --outfile=./dist/project-runtime-story-2d.js",
+    "build:project-runtime-3d": "esbuild ./src/project/runtime-3d.ts --bundle --minify --format=esm --outfile=./dist/project-runtime-3d.js",
+    "build:project-filesystem": "esbuild ./src/project/filesystem.ts --bundle --minify --format=esm --platform=node --outfile=./dist/project-filesystem.js",
+    "build:project-neutral-export": "esbuild ./src/project/neutral-export.ts --bundle --minify --format=esm --outfile=./dist/project-neutral-export.js",
+    "create:project": "bun ./scripts/create-project.ts",
+    "export:project": "bun ./scripts/export-project.ts",
+    "dev:game": "bun ./scripts/dev-project.ts",
+    "edit:project": "bun ./scripts/edit-project.ts",
+    "verify:beginner": "bun ./scripts/beginner-journey.ts",
+    "verify:3d-action": "bun test ./scripts/3d-action-acceptance.test.ts",
+    "verify:browsers": "bun test ./scripts/browser-device-matrix.test.ts",
+    "verify:incident": "bun ./scripts/production-incident-drill.ts",
+    "soak:production": "bun ./scripts/authoritative-soak.ts",
+    "certify:package": "bun ./scripts/production-readiness.ts --claim=package",
+    "certify:mmo": "bun ./scripts/production-readiness.ts --claim=mmo",
+    "build:game": "bun ./scripts/build-project.ts",
+    "build:navigation": "esbuild ./src/navigation/index.ts --bundle --minify --format=esm --outfile=./dist/navigation.js",
+    "build:content": "esbuild ./src/content/index.ts --bundle --minify --format=esm --outfile=./dist/content.js",
+    "build:save": "esbuild ./src/save/index.ts --bundle --minify --format=esm --outfile=./dist/save.js",
+    "build:save-browser": "esbuild ./src/save/browser.ts --bundle --minify --format=esm --outfile=./dist/save-browser.js",
+    "build:audio": "esbuild ./src/audio/index.ts --bundle --minify --format=esm --outfile=./dist/audio.js",
+    "build:effects": "esbuild ./src/effects/index.ts --bundle --minify --format=esm --outfile=./dist/effects.js",
+    "build:ui": "esbuild ./src/ui/index.ts --bundle --minify --format=esm --outfile=./dist/ui.js",
+    "build:ui-core": "esbuild ./src/ui/core.ts --bundle --minify --format=esm --outfile=./dist/ui-core.js",
+    "build:assets-loader": "esbuild ./src/assets/loader.ts --bundle --minify --format=esm --outfile=./dist/assets/loader.js",
+    "build:assets-gltf-static": "esbuild ./src/assets/gltf-static.ts --bundle --minify --format=esm --outfile=./dist/assets/gltf-static.js",
+    "build:assets-gltf-skin-animation": "esbuild ./src/assets/gltf-skin-animation.ts --bundle --minify --format=esm --outfile=./dist/assets/gltf-skin-animation.js",
+    "build:assets-templates": "esbuild ./src/assets/templates/index.ts --bundle --minify --format=esm --outfile=./dist/assets/templates.js",
+    "build:post-processing-prototype": "esbuild ./src/canvas/post-processing-prototype.ts --bundle --minify --format=esm --outfile=./dist/post-processing-prototype.js",
+    "build:types": "bun ./scripts/build-types.ts",
+    "build:wasm": "bun run build:wasm:source",
+    "build:wasm:source": "bun ./scripts/build-package.ts --wasm-only",
+    "bench": "bun test ./src/wasm/collision-kernel.bench.test.ts",
+    "check": "bun run typecheck && bun run typecheck:tests && bun run typecheck:tooling && bun run typecheck:examples && bun run typecheck:editor && bun run check:compatibility && bun run build && bun run check:bundle-size && bun run build:examples && bun run build:editor && bun run smoke:package && bun run test:all",
+    "check:compatibility": "bun test ./scripts/compatibility-contract.test.ts ./scripts/production-readiness.test.ts",
+    "check:bundle-size": "bun ./scripts/bundle-size-budget.ts",
+    "release:package-consumer": "bun run smoke:package:consumer",
+    "release:verify": "bun run check && bun run bench && bun run release:package-consumer && bun run release:wasm-asset && bun run release:wasm-hosting",
+    "release:wasm-asset": "bun run smoke:vite-wasm-asset",
+    "release:wasm-hosting": "bun run smoke:wasm-hosting",
+    "smoke:package": "bun ./scripts/package-consumer-smoke.ts",
+    "smoke:package:consumer": "bun ./scripts/package-consumer-smoke.ts --external-consumer",
+    "smoke:vite-wasm-asset": "bun ./scripts/vite-wasm-asset-smoke.ts",
+    "smoke:vite-wasm-asset:current": "bun ./scripts/vite-wasm-asset-smoke.ts --current",
+    "smoke:wasm-hosting": "bun ./scripts/wasm-hosting-smoke.ts",
+    "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc --noEmit -p ./tsconfig.test.json",
+    "typecheck:tooling": "tsc --noEmit -p ./tsconfig.tooling.json",
+    "typecheck:examples": "tsc --noEmit -p ./examples/tsconfig.json",
+    "typecheck:examples:integration": "tsc --noEmit -p ./examples/tsconfig.integration.json",
+    "typecheck:editor": "tsc --noEmit -p ../../apps/engine-editor/tsconfig.json",
+    "test": "bun test ./src",
+    "test:all": "bun test",
+    "test:net": "bun test ./src/net ./src/sync ./src/runtime/rollback.test.ts",
+    "test:server": "bun test ./src/server ./src/protocol",
+    "bench:rollback": "bun test ./src/runtime/rollback.bench.test.ts",
+    "bench:protocol": "bun test ./src/protocol/protocol.bench.test.ts && bun ./benchmarks/protocol-input-ownership.ts",
+    "bench:server": "bun test ./src/server/replication/mmo-load.bench.test.ts ./src/server/replication/mmo-scale.bench.test.ts",
+    "bench:mmo": "bun test ./src/server/replication/mmo-load.bench.test.ts",
+    "bench:candidates": "bun ./scripts/engine-candidate-bench.ts",
+    "bench:spatial-index": "bun ./scripts/spatial-index-bench.ts",
+    "bench:cpu-profile": "bun --cpu-prof --cpu-prof-md --cpu-prof-dir=./.local/engine-perf/cpu-profile ./scripts/spatial-index-bench.ts --out=./.local/engine-perf/cpu-profile/spatial-index.json",
+    "bench:low-level-spikes": "bun ./benchmarks/low-level-performance-spikes.ts",
+    "bench:wasm-browser-variants": "bun ./benchmarks/wasm-browser-variants.ts",
+    "bench:projectile-spatial": "bun ./benchmarks/projectile-spatial-matrix.ts",
+    "bench:render-draw-cache": "bun ./scripts/render-draw-cache-bench.ts",
+    "bench:render-2d": "bun ./scripts/render-2d-bench.ts --assert-max-regression-pct 25 --assert-stage-cull-improvement-pct 25",
+    "bench:example:mmo-render": "bun ./examples/mmo-skill-demo/scripts/render-call-bench.ts",
+    "bench:example:mmo-render:reference": "bun ./examples/mmo-skill-demo/scripts/render-call-bench.ts --reference-p95-ms=12",
+    "example:mmo-field": "bun run build:example:mmo-field && bun run ./examples/mmo-field/server.ts",
+    "build:example:mmo-field": "bun run ./examples/mmo-field/build.ts",
+    "build:examples": "bun run build:example:magic-map-shmup && bun run build:example:mmo-field && bun run build:example:mmo-skill-demo && bun run build:example:three-arena && bun run build:example:motion-lab && bun run build:example:first-party-3d-webgl",
+    "build:example:magic-map-shmup": "bun run ./examples/magic-map-shmup/build.ts",
+    "build:example:mmo-skill-demo": "bun run ./examples/mmo-skill-demo/build.ts",
+    "example:mmo-skill-demo": "bun run ./examples/mmo-skill-demo/server.ts",
+    "build:example:three-arena": "bun run ./examples/three-arena/build.ts",
+    "example:three-arena": "bun run ./examples/three-arena/server.ts",
+    "build:example:motion-lab": "bun run ./examples/motion-lab/build.ts",
+    "build:example:first-party-3d-webgl": "bun run ./examples/first-party-3d-webgl/build.ts",
+    "example:motion-lab": "bun run ./examples/motion-lab/dev.ts",
+    "build:editor": "bun run ../../apps/engine-editor/build.ts",
+    "editor": "bun run ../../apps/engine-editor/server.ts",
+    "verify:editor": "bun run ../../apps/engine-editor/verify-client.ts",
+    "verify:system:editor": "bun run ../../apps/engine-editor/verify-system.ts",
+    "bench:example:three-arena": "bun run ./examples/three-arena/bench.ts",
+    "bench:example:motion-lab": "bun run ./examples/motion-lab/bench.ts --characters 15 --frames 600 --warmup 120 --assert-p95-ms 2",
+    "proof:example:motion-lab": "bun run ./examples/motion-lab/browser-proof.ts",
+    "verify:examples": "bun run typecheck:examples && bun run typecheck:examples:integration && bun test ./examples/example-manifest.test.ts ./examples/public-alias.test.ts && bun run build:examples",
+    "bench:example:three-arena:network": "bun run ./examples/three-arena/network-bench.ts",
+    "bench:example:three-arena:stress500": "bun run ./examples/three-arena/bench.ts --stress-enemies 500 --stress-pickups 500 --stress-effects 1000 --stress-all-props --duration-ms 10000 --assert-enemies 500 --assert-pickups 500 --assert-particles 1000 --assert-animated-enemies-max 4 --assert-frame-p95-ms 16.7 --assert-update-p95-ms 8 --assert-render-p95-ms 10 --assert-triangles-max 45000 --assert-programs-max 48 --assert-mesh-delta-max 8 --assert-material-delta-max 8"
+  },
+  "devDependencies": {
+    "@hyperfocus/performance": "workspace:*",
+    "@happy-dom/global-registrator": "20.11.6",
+    "@types/bun": "1.4.0",
+    "@types/three": "0.163.0",
+    "assemblyscript": "0.28.17",
+    "esbuild": "0.28.1",
+    "flatbush": "^4.6.0",
+    "kdbush": "^4.1.0",
+    "meshoptimizer": "0.18.1",
+    "playwright": "^1.59.1",
+    "puppeteer-core": "^25.8.0",
+    "rbush": "^4.0.1",
+    "three": "^0.163.0",
+    "typescript": "7.0.2"
+  },
+  "peerDependencies": {
+    "@types/three": "^0.163.0",
+    "three": "^0.163.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/three": {
+      "optional": true
+    },
+    "three": {
+      "optional": true
+    }
+  }
+}

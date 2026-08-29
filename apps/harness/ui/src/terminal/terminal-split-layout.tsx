@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { createRequestId, type TerminalPaneLayout, type TerminalSession } from "../../../shared/protocol";
+import { createRequestId, type TerminalPaneLayout, type TerminalSession } from "@hyperfocus/ai-core/protocol";
 import { harnessStore } from "../harness-store";
 import { terminalStore } from "./terminal-store";
 import { TerminalPane } from "./terminal-pane";
@@ -36,7 +36,8 @@ export function TerminalSplitLayout(props: { sessions: TerminalSession[] }) {
       return;
     }
     event.preventDefault();
-    const container = (event.currentTarget as HTMLElement | null)?.parentElement;
+    const target = event.currentTarget;
+    const container = target instanceof HTMLElement ? target.parentElement : undefined;
     if (!container) {
       return;
     }

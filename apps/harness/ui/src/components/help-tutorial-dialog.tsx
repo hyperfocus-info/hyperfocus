@@ -1,6 +1,6 @@
 import { For } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import type { SetupState } from "../../../shared/protocol";
+import type { SetupState } from "@hyperfocus/ai-core/protocol";
 import { tutorialDefinitions } from "./tutorial-definitions";
 import { Dialog } from "./primitives/dialog";
 import { ActionButton } from "./action-button";
@@ -11,6 +11,7 @@ type HelpTutorialDialogProps = {
   setup: SetupState;
   completedTutorialIds: string[];
   dismissedTutorialIds: string[];
+  satisfiedTutorialIds: string[];
   onClose: () => void;
   onStartTutorial: (tutorialId: string) => void;
 };
@@ -41,9 +42,11 @@ export function HelpTutorialDialog(props: HelpTutorialDialogProps) {
             const status = () =>
               props.completedTutorialIds.includes(tutorial.id)
                 ? "Completed"
+                : props.satisfiedTutorialIds.includes(tutorial.id)
+                ? "Goal reached"
                 : props.dismissedTutorialIds.includes(tutorial.id)
                 ? "Dismissed"
-                : "Ready";
+                : "Available";
 
             return (
               <article {...stylex.attrs(styles.tutorialCard)}>

@@ -1,7 +1,7 @@
 ---
 name: db-data-harnessing
 description: >
-  Investigate harness SQLite data for `/lookup-thread <id>` and nearby
+  Investigate harness SQLite data for `/lookup-thread` requests and nearby
   persistence questions. Use when Codex needs to trace a project or assistant
   thread through `~/.ai-harness-template/harness.db` (or `HARNESS_DB_PATH`), explain which
   tables and records belong to a thread id, debug missing history, runs,
@@ -60,5 +60,6 @@ When updating:
 
 ## Source Of Truth
 
-- Schema and migrations: `harness/cli/src/workspace-repository.ts`
-- DB path and recovery behavior: `harness/cli/src/dev-db-recovery.ts`
+- In a Hyperfocus source checkout, schema and migrations live in
+  `apps/harness/cli/src/workspace-repository.ts`; DB recovery lives in
+  `apps/harness/cli/src/dev-db-recovery.ts`.

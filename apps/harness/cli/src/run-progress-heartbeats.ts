@@ -1,4 +1,4 @@
-import type { AgentRunState } from "../../shared/protocol";
+import type { AgentRunState } from "@hyperfocus/ai-core/protocol";
 
 const PLANNING_HEARTBEAT_LINES = [
   "Planner still working. Scoping execution plan.",

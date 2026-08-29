@@ -1,4 +1,4 @@
-import { parseServerEventFrame, type ServerEvent } from "../shared/protocol";
+import { parseServerEventFrame, type ServerEvent } from "@hyperfocus/ai-core/protocol";
 
 type BenchArgs = {
   events: number;

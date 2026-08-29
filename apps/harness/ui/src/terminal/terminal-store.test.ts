@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { TerminalSession } from "../../../shared/protocol";
+import type { TerminalSession } from "@hyperfocus/ai-core/protocol";
 import { terminalStore } from "./terminal-store";
 
 const preferences = {

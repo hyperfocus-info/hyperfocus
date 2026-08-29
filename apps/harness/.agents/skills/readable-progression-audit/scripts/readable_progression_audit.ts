@@ -187,10 +187,17 @@ function appendLearning(report: { entries: Array<{ claims: ClaimGuardrail[] }> }
   const line = `- Progression audit: keep one reachable goal and one concrete next step visible when claim coverage is weak.\n`;
   const repoRoot = path.resolve(import.meta.dir, "../../../..");
   const learningsPath = path.join(repoRoot, ".agents", "skills", "readable-progression-audit", "LEARNINGS.md");
-  appendFileSync(learningsPath, line, "utf8");
+  appendUniqueLine(learningsPath, line);
   const localLearningPath = path.join(repoRoot, ".local", "kojima", "learnings.md");
   if (existsSync(localLearningPath)) {
-    appendFileSync(localLearningPath, line, "utf8");
+    appendUniqueLine(localLearningPath, line);
+  }
+}
+
+function appendUniqueLine(filePath: string, line: string) {
+  const existing = existsSync(filePath) ? readFileSync(filePath, "utf8") : "";
+  if (!existing.includes(line.trim())) {
+    appendFileSync(filePath, line, "utf8");
   }
 }
 

@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { createAssistantId, createBackgroundJobId, createThreadId, type BackgroundJob } from "../../shared/protocol";
-import { BackgroundJobScheduler } from "./background-job-scheduler";
-import { WorkspaceRepository } from "./workspace-repository";
+import { createAssistantId, createBackgroundJobId, createThreadId, type BackgroundJob } from "@hyperfocus/ai-core/protocol";
+import { createBackgroundJobScheduler } from "./background-job-scheduler";
+import { createWorkspaceRepository, type WorkspaceRepository } from "./workspace-repository";
+import { resolveHarnessTestTempRoot } from "./test-support/test-temp-root";
 
 function createTempDir() {
-  const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+  const tempRoot = resolveHarnessTestTempRoot();
   mkdirSync(tempRoot, { recursive: true });
   return tempRoot;
 }
@@ -15,13 +16,13 @@ function createTempDir() {
 function createRepository() {
   const tempRoot = createTempDir();
   const dbPath = path.join(tempRoot, `background-jobs-${crypto.randomUUID()}.sqlite`);
-  return new WorkspaceRepository(dbPath, process.cwd());
+  return createWorkspaceRepository(dbPath, process.cwd());
 }
 
 function createRepositoryWithPath() {
   const tempRoot = createTempDir();
   const dbPath = path.join(tempRoot, `background-jobs-${crypto.randomUUID()}.sqlite`);
-  return { repository: new WorkspaceRepository(dbPath, process.cwd()), dbPath };
+  return { repository: createWorkspaceRepository(dbPath, process.cwd()), dbPath };
 }
 
 function addProject(repository: WorkspaceRepository) {
@@ -129,7 +130,7 @@ describe("background job scheduler", () => {
     });
 
     const queuedRunIds: string[] = [];
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       onRunQueued(run) {
         queuedRunIds.push(run.id);
@@ -154,7 +155,7 @@ describe("background job scheduler", () => {
     repository.setBackgroundJobApprovalPolicyDefault("allow-all");
     saveDueJob(repository, project.id);
     const queuedRunIds: string[] = [];
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       intervalMs: 60_000,
       onRunQueued(run) {
@@ -187,7 +188,7 @@ describe("background job scheduler", () => {
     }
 
     const queuedRunIds: string[] = [];
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       onRunQueued(run) {
         queuedRunIds.push(run.id);
@@ -216,7 +217,7 @@ describe("background job scheduler", () => {
     repository.setAgentRunStatus(project.id, foregroundRunId!, "running-main");
     expect(repository.hasActiveForegroundAgentRun()).toBe(true);
     const queuedRunIds: string[] = [];
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       onRunQueued(run) {
         queuedRunIds.push(run.id);
@@ -264,7 +265,7 @@ describe("background job scheduler", () => {
       updatedAt: createdAt
     });
 
-    const firstScheduler = new BackgroundJobScheduler({ repository });
+    const firstScheduler = createBackgroundJobScheduler({ repository });
     await firstScheduler.tick(true);
     await firstScheduler.tick(false);
 
@@ -278,7 +279,7 @@ describe("background job scheduler", () => {
     });
     expect(afterFirstPass.jobs[0]?.lastRunAt).toBeDefined();
 
-    const restartedScheduler = new BackgroundJobScheduler({ repository });
+    const restartedScheduler = createBackgroundJobScheduler({ repository });
     await restartedScheduler.tick(true);
 
     const afterRestart = repository.loadBackgroundJobsState();
@@ -295,7 +296,7 @@ describe("background job scheduler", () => {
     const job = saveDueJob(repository, project.id, { assistantId: assistant.id });
     repository.setGlobalExecutionPaused(true);
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     const state = repository.loadBackgroundJobsState();
@@ -310,7 +311,7 @@ describe("background job scheduler", () => {
     repository.setBackgroundJobApprovalPolicyDefault("always-ask");
     saveDueJob(repository, project.id, { riskLevel: "unsafe" });
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     let state = repository.loadBackgroundJobsState();
@@ -348,7 +349,7 @@ describe("background job scheduler", () => {
       approvalStatus: "approved"
     });
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     expect(repository.loadBackgroundJobsState().runs).toHaveLength(1);
@@ -359,7 +360,7 @@ describe("background job scheduler", () => {
     const project = addProject(repository);
     repository.setBackgroundJobApprovalPolicyDefault("allow-all");
     saveDueJob(repository, project.id);
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       onRunQueued() {
         return new Promise<void>(() => undefined);
@@ -392,7 +393,7 @@ describe("background job scheduler", () => {
       approvalStatus: "approved"
     });
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     const blockedJob = repository.getBackgroundJob(job.id)!;
@@ -428,7 +429,7 @@ describe("background job scheduler", () => {
       approvalStatus: "approved"
     });
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     const nextJob = repository.getBackgroundJob(blockedJob.id)!;
@@ -472,7 +473,7 @@ describe("background job scheduler", () => {
     });
     repository.setBackgroundJobRunStatus(interruptedRun.id, "running", { linkedAgentRunId: linkedRunId });
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       repairActiveRuns(now) {
         return repository.repairInterruptedBackgroundJobRuns({
@@ -525,7 +526,7 @@ describe("background job scheduler", () => {
     });
     repository.setBackgroundJobRunStatus(activeRun.id, "running", { linkedAgentRunId: linkedRunId });
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       repairActiveRuns(now) {
         return repository.repairInterruptedBackgroundJobRuns({
@@ -573,7 +574,7 @@ describe("background job scheduler", () => {
       now: startedAt
     });
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       repairActiveRuns() {
         return repository.repairInterruptedBackgroundJobRuns({
@@ -616,7 +617,7 @@ describe("background job scheduler", () => {
       controllerLeaseExpiresAt: "2026-05-01T15:05:00.000Z"
     });
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       repairActiveRuns() {
         return repository.repairInterruptedBackgroundJobRuns({
@@ -654,7 +655,7 @@ describe("background job scheduler", () => {
     });
     repository.setBackgroundJobRunStatus(staleRun.id, "running", { linkedAgentRunId: linkedRunId });
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       repairActiveRuns(now) {
         return repository.repairStaleRunningBackgroundJobRuns({
@@ -698,7 +699,7 @@ describe("background job scheduler", () => {
     });
     const timedOut: string[] = [];
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       isRunLive: () => true,
       onRunsTimingOut(runs) {
@@ -752,7 +753,7 @@ describe("background job scheduler", () => {
     );
     db.close();
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       isRunLive: () => true,
       repairActiveRuns(now) {
@@ -796,7 +797,7 @@ describe("background job scheduler", () => {
     });
     const timedOut: string[] = [];
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       isRunLive: () => true,
       onRunsTimingOut(runs) {
@@ -851,7 +852,7 @@ describe("background job scheduler", () => {
       nextRunAt: new Date(now - 20 * 60 * 1000).toISOString()
     });
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     const reviewRuns = repository.getActiveBackgroundJobRuns(veryOverdue.id);
@@ -880,7 +881,7 @@ describe("background job scheduler", () => {
     db.query(`DELETE FROM project_threads WHERE id = ?1`).run(staleThreadId);
     db.close();
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     const queuedRun = repository.getActiveBackgroundJobRuns(job.id)[0];
@@ -929,7 +930,7 @@ describe("background job scheduler", () => {
     }
     db.close();
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     const refreshedJob = repository.getBackgroundJob(job.id);
@@ -978,7 +979,7 @@ describe("background job scheduler", () => {
     db.close();
 
     const queuedRunIds: string[] = [];
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       onRunQueued(run) {
         queuedRunIds.push(run.id);
@@ -1054,7 +1055,7 @@ describe("background job scheduler", () => {
     }
     db.close();
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     const refreshedDueJob = repository.getBackgroundJob(dueJob.id);
@@ -1084,7 +1085,7 @@ describe("background job scheduler", () => {
     });
     repository.setBackgroundJobRunStatus(staleRun.id, "running", { linkedAgentRunId: linkedRunId });
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     const state = repository.loadBackgroundJobsState();
@@ -1119,7 +1120,7 @@ describe("background job scheduler", () => {
     });
     repository.setBackgroundJobRunStatus(activeRun.id, "running", { linkedAgentRunId: linkedRunId });
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       onRunsRepaired(runs) {
         for (const run of runs) {
@@ -1173,7 +1174,7 @@ describe("background job scheduler", () => {
     });
     saveDueJob(repository, project.id, { assistantId });
 
-    const scheduler = new BackgroundJobScheduler({ repository });
+    const scheduler = createBackgroundJobScheduler({ repository });
     await scheduler.tick(false);
 
     expect(repository.loadBackgroundJobsState().runs).toHaveLength(0);
@@ -1185,7 +1186,7 @@ describe("background job scheduler", () => {
     repository.setBackgroundJobApprovalPolicyDefault("allow-all");
     const job = saveDueJob(repository, project.id);
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       async onRunQueued() {
         throw new Error("launch failed");
@@ -1206,9 +1207,9 @@ describe("background job scheduler", () => {
     const repository = createRepository();
     const project = addProject(repository);
     repository.setBackgroundJobApprovalPolicyDefault("allow-all");
-    const job = saveDueJob(repository, project.id);
+    saveDueJob(repository, project.id);
 
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       async onRunQueued(run) {
         repository.setBackgroundJobRunStatus(run.id, "failed", {
@@ -1234,12 +1235,12 @@ describe("background job scheduler", () => {
   test("reports asynchronous tick failures from the scheduler loop", async () => {
     const repository = createRepository();
     const failures: unknown[] = [];
-    Object.defineProperty(repository, "loadBackgroundJobsState", {
+    Object.defineProperty(repository, "listEnabledBackgroundJobsForScheduler", {
       value() {
         throw new Error("tick failed");
       }
     });
-    const scheduler = new BackgroundJobScheduler({
+    const scheduler = createBackgroundJobScheduler({
       repository,
       onTickFailed(error) {
         failures.push(error);
@@ -1253,4 +1254,15 @@ describe("background job scheduler", () => {
     expect(failures).toHaveLength(1);
     expect(failures[0]).toBeInstanceOf(Error);
   });
+
+  test("evaluates enabled jobs beyond the 512-item presentation window", async () => {
+    const repository = createRepository(); const project = addProject(repository);
+    for (let index = 0; index < 513; index += 1) saveDueJob(repository, project.id,
+      { name: `Boundary ${index}`, createdAt: new Date(Date.now() + index).toISOString(),
+        updatedAt: new Date(Date.now() + index).toISOString() });
+    let queued = 0; const scheduler = createBackgroundJobScheduler({ repository, maxScheduledActiveRuns: 600,
+      onRunQueued: () => { queued += 1; } });
+    await scheduler.tick(false);
+    expect(repository.loadBackgroundJobsState().jobs).toHaveLength(512); expect(queued).toBe(513);
+  }, 30_000);
 });

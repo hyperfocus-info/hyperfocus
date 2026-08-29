@@ -1,9 +1,9 @@
 import { For, createEffect, createSignal } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { ClipboardList, FolderOpen, Play, RefreshCcw } from "lucide-solid";
-import type { ModeDefinition } from "../../../shared/protocol";
+import type { ModeDefinition } from "@hyperfocus/ai-core/protocol";
 import { ActionButton } from "./action-button";
-import { DropdownControl } from "./primitives/dropdown";
+import { DropdownControl, type DropdownOption } from "./primitives/dropdown";
 import { Input } from "./primitives/input";
 import { Textarea } from "./primitives/textarea";
 import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
@@ -47,6 +47,52 @@ const modePillClass = stylex.attrs(styles.modePill).class ?? "";
 const selectedModePillClass = stylex.attrs(styles.modePillSelected).class ?? "";
 const idleModePillClass = stylex.attrs(styles.modePillIdle).class ?? "";
 
+function modeDraftFromDefinition(mode: ModeDefinition): ModeDraft {
+  return {
+    id: mode.id,
+    label: mode.label,
+    description: mode.description,
+    plannerPrompt: mode.plannerPrompt,
+    executionPrompt: mode.executionPrompt,
+    toolPolicy: mode.toolPolicy,
+    executionAccess: mode.executionAccess,
+    planExecutionModeDefault: mode.planExecutionModeDefault ?? "countdown",
+    subagentWorktreeStrategyDefault: mode.subagentWorktreeStrategyDefault ?? "same-worktree",
+    correctnessIterationModeDefault: mode.correctnessIterationModeDefault ?? "ask-before-iterate"
+  };
+}
+
+function toolPolicyOptions(): DropdownOption<ModeDraft["toolPolicy"]>[] {
+  return [
+    { value: "full-access", label: "Full access", description: "Allow full implementation and broader tool use." },
+    { value: "read-heavy", label: "Read heavy", description: "Bias toward reading, analysis, and lighter changes." },
+    { value: "review-only", label: "Review only", description: "Focus on findings and review instead of edits." }
+  ];
+}
+
+function executionAccessOptions(): DropdownOption<ModeDraft["executionAccess"]>[] {
+  return [
+    { value: "workspace-write", label: "Workspace write", description: "Mode may edit files in current workspace." },
+    { value: "read-only", label: "Read only", description: "Mode may inspect but should avoid editing files." }
+  ];
+}
+
+function planGateOptions(): DropdownOption<NonNullable<ModeDraft["planExecutionModeDefault"]>>[] {
+  return [
+    { value: "countdown", label: "Countdown", description: "Pause briefly before execution begins." },
+    { value: "approve", label: "Approve first", description: "Require explicit approval before execution begins." },
+    { value: "immediate", label: "Immediate", description: "Start execution immediately after planning." }
+  ];
+}
+
+function correctnessOptions(): DropdownOption<NonNullable<ModeDraft["correctnessIterationModeDefault"]>>[] {
+  return [
+    { value: "ask-before-iterate", label: "Ask before iterate", description: "Pause before any automatic follow-up pass." },
+    { value: "auto-once", label: "Auto once", description: "Run one automatic correctness follow-up pass." },
+    { value: "auto-until-clean", label: "Auto until clean", description: "Keep iterating until correctness issues clear." }
+  ];
+}
+
 export function ModeEditorPanel(props: ModeEditorPanelProps) {
   const [selectedModeId, setSelectedModeId] = createSignal<string>();
   const [draft, setDraft] = createSignal<ModeDraft>(EMPTY_MODE_DRAFT);
@@ -61,18 +107,7 @@ export function ModeEditorPanel(props: ModeEditorPanelProps) {
     }
 
     setSelectedModeId(selected.id);
-    setDraft({
-      id: selected.id,
-      label: selected.label,
-      description: selected.description,
-      plannerPrompt: selected.plannerPrompt,
-      executionPrompt: selected.executionPrompt,
-      toolPolicy: selected.toolPolicy,
-      executionAccess: selected.executionAccess,
-      planExecutionModeDefault: selected.planExecutionModeDefault ?? "countdown",
-      subagentWorktreeStrategyDefault: selected.subagentWorktreeStrategyDefault ?? "same-worktree",
-      correctnessIterationModeDefault: selected.correctnessIterationModeDefault ?? "ask-before-iterate"
-    });
+    setDraft(modeDraftFromDefinition(selected));
   });
 
   const updateDraft = <K extends keyof ModeDraft>(key: K, value: ModeDraft[K]) => {
@@ -83,26 +118,6 @@ export function ModeEditorPanel(props: ModeEditorPanelProps) {
   };
 
   const customModes = () => props.modes.filter((mode): mode is ModeDefinition & { scope: "workspace" | "project" } => mode.scope === props.scope);
-  const toolPolicyOptions = () => [
-    { value: "full-access", label: "Full access", description: "Allow full implementation and broader tool use." },
-    { value: "read-heavy", label: "Read heavy", description: "Bias toward reading, analysis, and lighter changes." },
-    { value: "review-only", label: "Review only", description: "Focus on findings and review instead of edits." }
-  ];
-  const executionAccessOptions = () => [
-    { value: "workspace-write", label: "Workspace write", description: "Mode may edit files in current workspace." },
-    { value: "read-only", label: "Read only", description: "Mode may inspect but should avoid editing files." }
-  ];
-  const planGateOptions = () => [
-    { value: "countdown", label: "Countdown", description: "Pause briefly before execution begins." },
-    { value: "approve", label: "Approve first", description: "Require explicit approval before execution begins." },
-    { value: "immediate", label: "Immediate", description: "Start execution immediately after planning." }
-  ];
-  const correctnessOptions = () => [
-    { value: "ask-before-iterate", label: "Ask before iterate", description: "Pause before any automatic follow-up pass." },
-    { value: "auto-once", label: "Auto once", description: "Run one automatic correctness follow-up pass." },
-    { value: "auto-until-clean", label: "Auto until clean", description: "Keep iterating until correctness issues clear." }
-  ];
-
   const handleNewMode = () => {
     const slugBase = props.scope === "workspace" ? "workspace-mode" : "project-mode";
     const nextId = `${slugBase}-${Date.now().toString(36)}`;
@@ -224,7 +239,7 @@ export function ModeEditorPanel(props: ModeEditorPanelProps) {
             class={stylex.attrs(styles.fullWidth).class}
             value={draft().toolPolicy}
             options={toolPolicyOptions()}
-            onChange={(value) => updateDraft("toolPolicy", value as ModeDraft["toolPolicy"])}
+            onChange={(value) => updateDraft("toolPolicy", value)}
           />
         </label>
         <label {...stylex.attrs(styles.field)}>
@@ -237,7 +252,7 @@ export function ModeEditorPanel(props: ModeEditorPanelProps) {
             class={stylex.attrs(styles.fullWidth).class}
             value={draft().executionAccess}
             options={executionAccessOptions()}
-            onChange={(value) => updateDraft("executionAccess", value as ModeDraft["executionAccess"])}
+            onChange={(value) => updateDraft("executionAccess", value)}
           />
         </label>
         <label {...stylex.attrs(styles.field)}>
@@ -250,7 +265,7 @@ export function ModeEditorPanel(props: ModeEditorPanelProps) {
             class={stylex.attrs(styles.fullWidth).class}
             value={draft().planExecutionModeDefault ?? "countdown"}
             options={planGateOptions()}
-            onChange={(value) => updateDraft("planExecutionModeDefault", value as ModeDraft["planExecutionModeDefault"])}
+            onChange={(value) => updateDraft("planExecutionModeDefault", value)}
           />
         </label>
         <label {...stylex.attrs(styles.field)}>
@@ -263,13 +278,10 @@ export function ModeEditorPanel(props: ModeEditorPanelProps) {
             class={stylex.attrs(styles.fullWidth).class}
             value={draft().correctnessIterationModeDefault ?? "ask-before-iterate"}
             options={correctnessOptions()}
-            onChange={(value) =>
-              updateDraft("correctnessIterationModeDefault", value as ModeDraft["correctnessIterationModeDefault"])
-            }
+            onChange={(value) => updateDraft("correctnessIterationModeDefault", value)}
           />
         </label>
       </div>
     </section>
   );
 }
-

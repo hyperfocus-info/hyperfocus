@@ -1,63 +1,60 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createStartupTelemetrySession, type StartupTelemetryEvent } from "./startup-telemetry";
+import { createStartupTelemetrySession, parseStartupTelemetryEventJson } from "./startup-telemetry";
+import { createHarnessTestTempPath } from "./test-support/test-temp-root";
 
-class FakeClock {
-  private nextTimerId = 1;
-  private readonly timers = new Map<number, { runAt: number; callback: () => void }>();
-  nowMs = 0;
-
-  now = () => this.nowMs;
-
-  setTimeout = ((callback: TimerHandler, delay?: number) => {
-    const timerId = this.nextTimerId++;
-    this.timers.set(timerId, {
-      runAt: this.nowMs + Number(delay ?? 0),
-      callback: () => {
-        if (typeof callback === "function") {
-          callback();
-          return;
-        }
-
-        throw new Error("String timer callbacks are not supported in tests");
-      }
-    });
-    return timerId as unknown as ReturnType<typeof setTimeout>;
-  }) as unknown as typeof globalThis.setTimeout;
-
-  clearTimeout = ((timerId: ReturnType<typeof setTimeout>) => {
-    this.timers.delete(Number(timerId));
-  }) as unknown as typeof globalThis.clearTimeout;
-
-  advanceBy(durationMs: number) {
-    const targetMs = this.nowMs + durationMs;
+function createFakeClock() {
+  let nextTimerId = 1;
+  let nowMs = 0;
+  const timers = new Map<number, { runAt: number; callback: () => void }>();
+  const now = () => nowMs;
+  function setTimeout(callback: () => void, delay?: number) {
+    const timerId = nextTimerId++;
+    timers.set(timerId, { runAt: nowMs + Number(delay ?? 0), callback });
+    return timerId;
+  }
+  function clearTimeout(timerId: number) {
+    timers.delete(timerId);
+  }
+  function advanceBy(durationMs: number) {
+    const targetMs = nowMs + durationMs;
     while (true) {
-      const nextTimer = [...this.timers.entries()].sort((left, right) => left[1].runAt - right[1].runAt)[0];
+      const nextTimer = [...timers.entries()].sort((left, right) => left[1].runAt - right[1].runAt)[0];
       if (!nextTimer || nextTimer[1].runAt > targetMs) {
         break;
       }
 
-      this.nowMs = nextTimer[1].runAt;
-      this.timers.delete(nextTimer[0]);
+      nowMs = nextTimer[1].runAt;
+      timers.delete(nextTimer[0]);
       nextTimer[1].callback();
     }
 
-    this.nowMs = targetMs;
+    nowMs = targetMs;
   }
+
+  return {
+    get nowMs() { return nowMs; },
+    set nowMs(value: number) { nowMs = value; },
+    now,
+    setTimeout,
+    clearTimeout,
+    advanceBy,
+  };
 }
 
 const tempRoots: string[] = [];
 
 afterEach(() => {
   while (tempRoots.length > 0) {
-    rmSync(tempRoots.pop()!, { recursive: true, force: true });
+    const root = tempRoots.pop();
+    if (root) rmSync(root, { recursive: true, force: true });
   }
 });
 
 describe("startup telemetry", () => {
   test("computes normalized progress with ui-assets included", () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     const tempRoot = createTempRoot();
     const session = createStartupTelemetrySession({
       now: clock.now,
@@ -82,7 +79,7 @@ describe("startup telemetry", () => {
   });
 
   test("computes normalized progress with serverOnly skipping ui-assets", () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     const tempRoot = createTempRoot();
     const session = createStartupTelemetrySession({
       now: clock.now,
@@ -107,7 +104,7 @@ describe("startup telemetry", () => {
   });
 
   test("renders normal ETA before estimate overrun", () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     const tempRoot = createTempRoot();
     const session = createStartupTelemetrySession({
       now: clock.now,
@@ -134,7 +131,7 @@ describe("startup telemetry", () => {
   });
 
   test("flips to lower-bound ETA after estimate overrun", () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     const tempRoot = createTempRoot();
     const session = createStartupTelemetrySession({
       now: clock.now,
@@ -167,7 +164,7 @@ describe("startup telemetry", () => {
   });
 
   test("emits phase-slow once threshold crosses", () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     const tempRoot = createTempRoot();
     const session = createStartupTelemetrySession({
       now: clock.now,
@@ -189,7 +186,7 @@ describe("startup telemetry", () => {
   });
 
   test("uses log-safe line output without ANSI control chars", () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     const tempRoot = createTempRoot();
     const lines: string[] = [];
     const session = createStartupTelemetrySession({
@@ -212,7 +209,7 @@ describe("startup telemetry", () => {
   });
 
   test("writes jsonl events with required fields", () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     const tempRoot = createTempRoot();
     const session = createStartupTelemetrySession({
       now: clock.now,
@@ -257,7 +254,7 @@ describe("startup telemetry", () => {
   });
 
   test("prunes temp logs by age and count", () => {
-    const clock = new FakeClock();
+    const clock = createFakeClock();
     clock.nowMs = Date.parse("2026-04-22T12:00:00.000Z");
     const tempRoot = createTempRoot();
     const logDir = path.join(tempRoot, "pi-harness-startup");
@@ -292,7 +289,7 @@ describe("startup telemetry", () => {
 });
 
 function createTempRoot() {
-  const tempRoot = path.join(process.cwd(), ".tmp-test-data", `startup-telemetry-${crypto.randomUUID()}`);
+  const tempRoot = createHarnessTestTempPath("startup-telemetry");
   mkdirSync(tempRoot, { recursive: true });
   tempRoots.push(tempRoot);
   return tempRoot;
@@ -303,5 +300,5 @@ function readEvents(logPath: string) {
     .trim()
     .split("\n")
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as StartupTelemetryEvent);
+    .map(parseStartupTelemetryEventJson);
 }

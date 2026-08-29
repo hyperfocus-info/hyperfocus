@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { ExperimentInspection, ExperimentRun, ProjectSearchResult } from "../../../shared/protocol";
+import type { ExperimentInspection, ExperimentRun } from "@hyperfocus/ai-core/protocol";
 import type { BranchfsExperimentLease } from "../branchfs-manager";
 import type { HarnessBranchfsManager, HarnessServerOsAdapters } from "../server";
 
@@ -23,7 +23,7 @@ export function createFastHarnessServerOsAdapters(): HarnessServerOsAdapters {
           rootPath,
           repoKind: "git-repo",
           matchKind: path.basename(rootPath).toLowerCase().startsWith(normalizedQuery) ? "name-prefix" : "substring"
-        })) satisfies ProjectSearchResult[];
+        }));
     },
     async runGitPreflight() {
       return {
@@ -39,33 +39,47 @@ export function createFastHarnessServerOsAdapters(): HarnessServerOsAdapters {
       };
     },
     branchfsManagerFactory(context) {
-      return new FastBranchfsManager(context.rootPath, context.runId);
+      return createFastBranchfsManager(context.rootPath, context.runId);
     }
   };
 }
 
-class FastBranchfsManager implements HarnessBranchfsManager {
-  constructor(
-    private readonly rootPath: string,
-    private readonly runId: string
-  ) {}
-
-  async prepareExperimentLease(): Promise<BranchfsExperimentLease> {
-    const experiment = this.createExperiment("prepared");
+function createFastBranchfsManager(rootPath: string, runId: string): HarnessBranchfsManager {
+  function createExperiment(status: ExperimentRun["status"]): ExperimentRun {
+    const now = new Date().toISOString();
+    const mountPath = path.join(rootPath, ".local", "branchfs-fast", runId, "mount");
     return {
-      experiment,
-      repoRoot: this.rootPath,
-      projectRelativePath: "",
-      repoMountPath: experiment.repoMountPath,
-      projectMountPath: experiment.projectMountPath,
-      baseProjectPath: this.rootPath,
-      manifestPath: path.join(this.rootPath, ".local", "branchfs", this.runId, "meta", "manifest.json"),
-      dirtySeedPath: path.join(this.rootPath, ".local", "branchfs", this.runId, "dirty-seed"),
-      upperPath: path.join(this.rootPath, ".local", "branchfs", this.runId, "upper")
+      id: `experiment-${runId}`,
+      runId,
+      status,
+      virtualBranchName: `fast-${runId}`,
+      repoMountPath: mountPath,
+      projectMountPath: mountPath,
+      baseDirtyFingerprint: "fast-clean",
+      filesChanged: 0,
+      insertions: 0,
+      deletions: 0,
+      createdAt: now,
+      updatedAt: now
     };
   }
 
-  async readInspection(lease: BranchfsExperimentLease): Promise<ExperimentInspection> {
+  async function prepareExperimentLease(): Promise<BranchfsExperimentLease> {
+    const experiment = createExperiment("prepared");
+    return {
+      experiment,
+      repoRoot: rootPath,
+      projectRelativePath: "",
+      repoMountPath: experiment.repoMountPath,
+      projectMountPath: experiment.projectMountPath,
+      baseProjectPath: rootPath,
+      manifestPath: path.join(rootPath, ".local", "branchfs", runId, "meta", "manifest.json"),
+      dirtySeedPath: path.join(rootPath, ".local", "branchfs", runId, "dirty-seed"),
+      upperPath: path.join(rootPath, ".local", "branchfs", runId, "upper")
+    };
+  }
+
+  async function readInspection(lease: BranchfsExperimentLease): Promise<ExperimentInspection> {
     return {
       experiment: lease.experiment,
       diffText: "",
@@ -78,30 +92,15 @@ class FastBranchfsManager implements HarnessBranchfsManager {
     };
   }
 
-  async flushExperiment(lease: BranchfsExperimentLease): Promise<ExperimentInspection> {
-    return this.readInspection(lease);
+  async function flushExperiment(lease: BranchfsExperimentLease): Promise<ExperimentInspection> {
+    return readInspection(lease);
   }
 
-  async discardExperiment() {}
-
-  async unmountExperiment() {}
-
-  private createExperiment(status: ExperimentRun["status"]): ExperimentRun {
-    const now = new Date().toISOString();
-    const mountPath = path.join(this.rootPath, ".local", "branchfs-fast", this.runId, "mount");
-    return {
-      id: `experiment-${this.runId}`,
-      runId: this.runId,
-      status,
-      virtualBranchName: `fast-${this.runId}`,
-      repoMountPath: mountPath,
-      projectMountPath: mountPath,
-      baseDirtyFingerprint: "fast-clean",
-      filesChanged: 0,
-      insertions: 0,
-      deletions: 0,
-      createdAt: now,
-      updatedAt: now
-    };
-  }
+  return {
+    prepareExperimentLease,
+    readInspection,
+    flushExperiment,
+    async discardExperiment() {},
+    async unmountExperiment() {},
+  };
 }

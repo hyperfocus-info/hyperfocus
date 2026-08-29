@@ -8,7 +8,6 @@ import {
   type ComposerReasoningStrength,
   type CorrectnessIterationMode,
   type ExecutionPlan,
-  type MemorySummary,
   type ModeDefinition,
   type PlanExecutionMode,
   type PlanPrerequisite,
@@ -22,15 +21,15 @@ import {
   type SubagentContract,
   type SubagentWorktreeStrategy,
   type WorkspaceRuleSource
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import type { ManagedExecutionState, ManagedRefreshAction } from "./execution-runtime";
+import type { ManagedExecutionState } from "./execution-runtime";
 import { debugLog } from "./logging";
 import { runManagedAgentExecution } from "./managed-agent-execution";
-import type { PiAgentAdapter, PiAgentExecutionEvent } from "./pi-agent-adapter";
-import { modeUsesReadOnlyExecution } from "../../shared/modes";
+import type { PiAgentAdapter, PiAgentExecutionEvent, PiAgentMemorySearchInput, PiAgentMemorySearchResult } from "./pi-agent-adapter";
+import { modeUsesReadOnlyExecution } from "@hyperfocus/ai-core/modes";
 import {
   discardBranchfsIntegrationLease,
   discardBranchfsSnapshots,
@@ -45,7 +44,7 @@ import {
 import { buildWorkspacePathGuidance, normalizeWorkspaceRelativePaths } from "./workspace-path-intent";
 import {
   executeSubagents,
-  MAX_SUBAGENT_CONCURRENCY,
+  resolveSubagentConcurrency,
   scheduleSubagentTasks,
   type SubagentResult
 } from "./pi-subagents";
@@ -62,6 +61,7 @@ import {
   SUBAGENT_MILESTONE_INSTRUCTION
 } from "./subagent-environment";
 import { buildGitRepositoryPromptContext, resolveGitRepositoryPromptContext } from "./git-context";
+import { buildExecutionSkillContext } from "./prompts/execution-skill-context";
 
 export type PiOrchestratorCallbacks = {
   onPlan?: (plan: AgentPlan) => void;
@@ -72,7 +72,7 @@ export type PiOrchestratorCallbacks = {
   onSubagentRetry?: (task: PlannerSubtask, attempt: number, error: Error) => void;
   onSubagentResult?: (result: SubagentResult) => void;
   onRunMilestone?: (line: string) => void;
-  closeRunMilestones?: () => void;
+  closeRunMilestones?: () => void | Promise<void>;
   onAggregationStart?: () => void;
   setExecutionState?: (state: ManagedExecutionState) => void;
   getExecutionState?: (input: Pick<ManagedExecutionState, "runId" | "kind" | "subagentId">) => ManagedExecutionState | undefined;
@@ -89,6 +89,10 @@ export type PiOrchestratorCallbacks = {
     toolName: string;
     args: unknown;
   }) => Promise<{ approved: boolean }>;
+  searchMemory?: (input: PiAgentMemorySearchInput & {
+    owner: "planner" | "main" | "subagent" | "aggregator";
+    subagentId?: string;
+  }) => Promise<PiAgentMemorySearchResult>;
 };
 
 export type PlannerTurnOutcome = {
@@ -137,7 +141,6 @@ export async function runPlannerTurn(
     correctnessIterationMode: CorrectnessIterationMode;
     mode?: ModeDefinition;
     ruleSources?: WorkspaceRuleSource[];
-    memorySummaries?: MemorySummary[];
     iteration?: number;
     origin?: ExecutionPlan["origin"];
     priorQuestions?: PlanningQuestion[];
@@ -168,7 +171,7 @@ export async function runPlannerTurn(
     executionModelId: options.executionModelId,
     mode: options.mode,
     ruleSources: options.ruleSources,
-    memorySummaries: options.memorySummaries,
+    memorySearch: createMemorySearchCallback(options.callbacks, "planner"),
     priorQuestions: options.priorQuestions,
     abortSignal: options.abortSignal,
     reasoningStrength: options.reasoningStrength,
@@ -207,7 +210,6 @@ export async function runPlannerTurn(
     correctnessIterationMode: options.correctnessIterationMode,
     mode: options.mode,
     ruleSources: options.ruleSources,
-    memorySummaries: options.memorySummaries,
     iteration: options.iteration ?? 1,
     origin: options.origin ?? "initial"
   });
@@ -260,97 +262,34 @@ export async function runPlannerTurn(
   };
 }
 
-export async function executeReadyRun(
-  adapter: PiAgentAdapter,
-  options: {
-    cwd: string;
-    runId: string;
-    sessionId: string;
-    messages: ChatMessage[];
-    agentId?: AgentId;
-    providerBrand: ProviderBrand;
-    readyPlan: PlannerReadyTurn;
-    debugEnabled: boolean;
-    abortSignal?: AbortSignal;
-    callbacks?: PiOrchestratorCallbacks;
-    existingSubagentResults?: SubagentResult[];
-    tasksToRun?: PlannerSubtask[];
-    resumeNote?: string;
-    executionPlan?: ExecutionPlan;
-    reasoningStrength?: ComposerReasoningStrength;
-    fastMode?: boolean;
-    promptCacheIdentity?: PromptCacheIdentity;
-    geminiCachedAttachmentContext?: GeminiCachedAttachmentContext;
-    singleAgentModelPreference?: RunModelPreference;
-    subagentModelPreference?: RunModelPreference;
-  }
-): Promise<ExecutionOutcome> {
+type ExecuteReadyRunOptions = {
+  cwd: string;
+  runId: string;
+  sessionId: string;
+  messages: ChatMessage[];
+  agentId?: AgentId;
+  providerBrand: ProviderBrand;
+  readyPlan: PlannerReadyTurn;
+  debugEnabled: boolean;
+  abortSignal?: AbortSignal;
+  callbacks?: PiOrchestratorCallbacks;
+  existingSubagentResults?: SubagentResult[];
+  tasksToRun?: PlannerSubtask[];
+  resumeNote?: string;
+  executionPlan?: ExecutionPlan;
+  reasoningStrength?: ComposerReasoningStrength;
+  fastMode?: boolean;
+  promptCacheIdentity?: PromptCacheIdentity;
+  geminiCachedAttachmentContext?: GeminiCachedAttachmentContext;
+  singleAgentModelPreference?: RunModelPreference;
+  subagentModelPreference?: RunModelPreference;
+};
+export async function executeReadyRun(adapter: PiAgentAdapter, options: ExecuteReadyRunOptions): Promise<ExecutionOutcome> {
   if (!options.readyPlan.usesSubagents) {
-    const singleAgentModelId = resolveSingleAgentModelId({
-      agentId: options.agentId,
-      providerBrand: options.providerBrand,
-      executionModelId: options.readyPlan.executionModelId,
-      modelPreference: options.singleAgentModelPreference
-    });
-    return {
-      assistantMessage: await executeMainAgent(
-        adapter,
-        {
-          cwd: options.cwd,
-          runId: options.runId,
-          sessionId: options.sessionId,
-          messages: options.messages,
-          agentId: options.agentId,
-          executionPlan: options.executionPlan,
-          reasoningStrength: options.reasoningStrength,
-          fastMode: options.fastMode,
-          promptCacheIdentity: options.promptCacheIdentity,
-          geminiCachedAttachmentContext: options.geminiCachedAttachmentContext,
-          abortSignal: options.abortSignal,
-          callbacks: options.callbacks
-        },
-        singleAgentModelId,
-        options.readyPlan.finalExecutionBrief
-      ),
-      subagentResults: [],
-      partial: false
-    };
+    return executeSingleAgentReadyRun(adapter, options);
   }
-
   if (options.executionPlan?.subagentWorktreeStrategy === "same-worktree") {
-    const freshResults = await executeSameWorktreeSubagents(adapter, options);
-    const mergedResults = mergeSubagentResults(
-      options.readyPlan.subtasks,
-      options.existingSubagentResults ?? [],
-      freshResults
-    );
-    const assistantMessage = await aggregateSubagentResults(
-      adapter,
-      {
-        cwd: options.cwd,
-        runId: options.runId,
-        sessionId: options.sessionId,
-        messages: options.messages,
-        executionPlan: options.executionPlan,
-        reasoningStrength: options.reasoningStrength,
-        fastMode: options.fastMode,
-        promptCacheIdentity: options.promptCacheIdentity,
-        geminiCachedAttachmentContext: options.geminiCachedAttachmentContext,
-        abortSignal: options.abortSignal,
-        callbacks: options.callbacks
-      },
-      options.readyPlan.executionModelId,
-      options.readyPlan.finalExecutionBrief,
-      options.readyPlan.subtasks,
-      mergedResults,
-      options.resumeNote
-    );
-
-    return {
-      assistantMessage,
-      subagentResults: mergedResults,
-      partial: mergedResults.some((result) => result.status === "failed")
-    };
+    return executeSameWorktreeReadyRun(adapter, options);
   }
 
   const subagentModelId = resolveSubagentModelId({
@@ -438,7 +377,8 @@ export async function executeReadyRun(
       },
       onSettled(result) {
         options.callbacks?.onSubagentResult?.(result);
-      }
+      },
+      searchMemory: options.callbacks?.searchMemory
     }
   });
 
@@ -517,31 +457,80 @@ export async function executeReadyRun(
     partialReason
   };
 }
+async function executeSingleAgentReadyRun(adapter: PiAgentAdapter, options: ExecuteReadyRunOptions): Promise<ExecutionOutcome> {
+  const singleAgentModelId = resolveSingleAgentModelId({
+    agentId: options.agentId,
+    providerBrand: options.providerBrand,
+    executionModelId: options.readyPlan.executionModelId,
+    modelPreference: options.singleAgentModelPreference
+  });
+  return {
+    assistantMessage: await executeMainAgent(
+      adapter,
+      {
+        cwd: options.cwd,
+        runId: options.runId,
+        sessionId: options.sessionId,
+        messages: options.messages,
+        agentId: options.agentId,
+        executionPlan: options.executionPlan,
+        reasoningStrength: options.reasoningStrength,
+        fastMode: options.fastMode,
+        promptCacheIdentity: options.promptCacheIdentity,
+        geminiCachedAttachmentContext: options.geminiCachedAttachmentContext,
+        abortSignal: options.abortSignal,
+        callbacks: options.callbacks
+      },
+      singleAgentModelId,
+      options.readyPlan.finalExecutionBrief
+    ),
+    subagentResults: [],
+    partial: false
+  };
+}
+async function executeSameWorktreeReadyRun(adapter: PiAgentAdapter, options: ExecuteReadyRunOptions): Promise<ExecutionOutcome> {
+  const freshResults = await executeSameWorktreeSubagents(adapter, options);
+  const mergedResults = mergeSubagentResults(
+    options.readyPlan.subtasks,
+    options.existingSubagentResults ?? [],
+    freshResults
+  );
+  const assistantMessage = await aggregateSubagentResults(
+    adapter,
+    {
+      cwd: options.cwd,
+      runId: options.runId,
+      sessionId: options.sessionId,
+      messages: options.messages,
+      executionPlan: options.executionPlan,
+      reasoningStrength: options.reasoningStrength,
+      fastMode: options.fastMode,
+      promptCacheIdentity: options.promptCacheIdentity,
+      geminiCachedAttachmentContext: options.geminiCachedAttachmentContext,
+      abortSignal: options.abortSignal,
+      callbacks: options.callbacks
+    },
+    options.readyPlan.executionModelId,
+    options.readyPlan.finalExecutionBrief,
+    options.readyPlan.subtasks,
+    mergedResults,
+    options.resumeNote
+  );
+  return {
+    assistantMessage,
+    subagentResults: mergedResults,
+    partial: mergedResults.some((result) => result.status === "failed")
+  };
+}
+type SameWorktreeTaskEntry = {
+  task: PlannerSubtask;
+  startingAttempt: number;
+  recoveryAttempt: number;
+  recoveryPrompt?: string;
+  contractSettings: TaskContractSettings;
+};
 
-async function executeSameWorktreeSubagents(
-  adapter: PiAgentAdapter,
-  options: {
-    cwd: string;
-    runId: string;
-    sessionId: string;
-    messages: ChatMessage[];
-    agentId?: AgentId;
-    providerBrand: ProviderBrand;
-    readyPlan: PlannerReadyTurn;
-    debugEnabled: boolean;
-    abortSignal?: AbortSignal;
-    callbacks?: PiOrchestratorCallbacks;
-    existingSubagentResults?: SubagentResult[];
-    tasksToRun?: PlannerSubtask[];
-    resumeNote?: string;
-    executionPlan?: ExecutionPlan;
-    reasoningStrength?: ComposerReasoningStrength;
-    fastMode?: boolean;
-    promptCacheIdentity?: PromptCacheIdentity;
-    geminiCachedAttachmentContext?: GeminiCachedAttachmentContext;
-    subagentModelPreference?: RunModelPreference;
-  }
-) {
+async function executeSameWorktreeSubagents(adapter: PiAgentAdapter, options: ExecuteReadyRunOptions) {
   const tasks = options.tasksToRun ?? options.readyPlan.subtasks;
   const contracts = options.executionPlan?.contracts ?? options.readyPlan.contracts ?? [];
   const subagentModelId = resolveSubagentModelId({
@@ -559,24 +548,18 @@ async function executeSameWorktreeSubagents(
   });
   return (
     await scheduleSubagentTasks<
-      {
-        task: PlannerSubtask;
-        startingAttempt: number;
-        recoveryAttempt: number;
-        recoveryPrompt?: string;
-        contractSettings: TaskContractSettings;
-      },
+      SameWorktreeTaskEntry,
       SubagentResult,
       never
     >({
-      tasks: orderSameWorktreeTasks(tasks, contracts).map((task) => ({
+      tasks: orderSameWorktreeTasks(tasks, contracts).map((task): SameWorktreeTaskEntry => ({
         task,
         startingAttempt: 1,
         recoveryAttempt: 0,
-        recoveryPrompt: undefined as string | undefined,
+        recoveryPrompt: undefined,
         contractSettings: resolveTaskContractSettings(task.id, contracts)
       })),
-      maxConcurrency: MAX_SUBAGENT_CONCURRENCY,
+      maxConcurrency: resolveSubagentConcurrency(),
       getTaskId(entry) {
         return entry.task.id;
       },
@@ -597,97 +580,14 @@ async function executeSameWorktreeSubagents(
         const startedAt = Date.now();
 
         try {
-          const basePrompt = [
-            "You are a focused implementation subagent.",
-            "Start in the provided cwd and apply the assigned file plan exactly.",
-            "Create missing directories and the first listed missing file immediately when the assignment names new paths.",
-            "Use owned paths as the primary work area; edit integration files when the assignment requires wiring.",
-            "Do not run browser, Playwright, dev server, python -m http.server, visible app smoke tests, or commands that can open windows.",
-            "Do not use Start-Process for verification.",
-            "Do not perform broad verification unless this subtask explicitly names a verification command.",
-            "On Windows, use PowerShell-compatible syntax only; do not use Bash heredocs like <<'EOF'.",
-            "Prefer bundled rg for search. If rg is unavailable, use Get-ChildItem plus Select-String.",
-            "Return a concise changed-file summary.",
-            SUBAGENT_MILESTONE_INSTRUCTION,
-            entry.recoveryPrompt?.trim() ? entry.recoveryPrompt.trim() : "",
-            subagentEnvironmentBrief,
-            entry.contractSettings.explicitOwnedPaths.length > 0
-              ? `Owned paths: ${entry.contractSettings.explicitOwnedPaths.join(", ")}`
-              : "Owned paths: planner did not specify paths.",
-            "",
-            `Shared brief: ${options.readyPlan.finalExecutionBrief}`,
-            `Subtask title: ${entry.task.title}`,
-            `Subtask instruction: ${entry.task.instruction}`
-          ]
-            .filter(Boolean)
-            .join("\n");
-          const milestoneParser = createMilestoneDeltaParser((line) => options.callbacks?.onRunMilestone?.(`Subagent ${entry.task.title}: ${line}`));
-          const response = await runManagedAgentExecution(adapter, {
-            runId: options.runId,
-            kind: "subagent",
-            subagentId: entry.task.id,
-            originalRequest: {
-              kind: "subagent",
-              cwd: options.cwd,
-              modelId: subagentModelId,
-              prompt: basePrompt,
-              reasoningStrength: subagentReasoningStrength,
-              fastMode: options.fastMode,
-              promptCacheIdentity: options.promptCacheIdentity,
-              onTextDelta(delta: string) {
-                milestoneParser.push(delta);
-              },
-              onExecutionEvent(event: PiAgentExecutionEvent) {
-                void options.callbacks?.onExecutionEvent?.({
-                  owner: "subagent",
-                  subagentId: entry.task.id,
-                  event
-                });
-              },
-              requestBrowserApproval(input: { toolCallId: string; toolName: string; args: unknown }) {
-                return options.callbacks?.requestBrowserApproval?.({
-                  owner: "subagent",
-                  subagentId: entry.task.id,
-                  ...input
-                }) ?? Promise.resolve({ approved: true });
-              }
-            },
-            continuationRequest: {
-              kind: "subagent",
-              cwd: options.cwd,
-              modelId: subagentModelId,
-              prompt: ["continue", "", basePrompt].join("\n"),
-              reasoningStrength: subagentReasoningStrength,
-              fastMode: options.fastMode,
-              promptCacheIdentity: options.promptCacheIdentity,
-              onTextDelta(delta: string) {
-                milestoneParser.push(delta);
-              },
-              onExecutionEvent(event: PiAgentExecutionEvent) {
-                void options.callbacks?.onExecutionEvent?.({
-                  owner: "subagent",
-                  subagentId: entry.task.id,
-                  event
-                });
-              },
-              requestBrowserApproval(input: { toolCallId: string; toolName: string; args: unknown }) {
-                return options.callbacks?.requestBrowserApproval?.({
-                  owner: "subagent",
-                  subagentId: entry.task.id,
-                  ...input
-                }) ?? Promise.resolve({ approved: true });
-              }
-            },
-            abortSignal: options.abortSignal,
-            store: createExecutionStore(options.callbacks, options.runId, "subagent", entry.task.id)
-          });
-          milestoneParser.flush();
-          if (!milestoneParser.hasEmitted()) {
-            for (const line of extractMilestoneLines(response.text)) {
-              options.callbacks?.onRunMilestone?.(`Subagent ${entry.task.title}: ${line}`);
-            }
-          }
-          const output = stripMilestoneLines(response.text);
+          const output = await runSameWorktreeAgent(
+            adapter,
+            options,
+            entry,
+            subagentModelId,
+            subagentReasoningStrength,
+            subagentEnvironmentBrief
+          );
           const contractDriftPaths = await inspectSameWorktreeSubagentDrift(
             options.cwd,
             beforeSnapshot,
@@ -781,6 +681,84 @@ async function executeSameWorktreeSubagents(
   ).results;
 }
 
+async function runSameWorktreeAgent(
+  adapter: PiAgentAdapter,
+  options: ExecuteReadyRunOptions,
+  entry: SameWorktreeTaskEntry,
+  subagentModelId: ProviderModelId,
+  reasoningStrength: ComposerReasoningStrength | undefined,
+  environmentBrief: string
+) {
+  const basePrompt = [
+    "You are a focused implementation subagent.",
+    "Start in the provided cwd and apply the assigned file plan exactly.",
+    "Create missing directories and the first listed missing file immediately when the assignment names new paths.",
+    "Use owned paths as the primary work area; edit integration files when the assignment requires wiring.",
+    "Do not run browser, Playwright, dev server, python -m http.server, visible app smoke tests, or commands that can open windows.",
+    "Do not use Start-Process for verification.",
+    "Do not perform broad verification unless this subtask explicitly names a verification command.",
+    "On Windows, use PowerShell-compatible syntax only; do not use Bash heredocs like <<'EOF'.",
+    "Prefer bundled rg for search. If rg is unavailable, use Get-ChildItem plus Select-String.",
+    "Return a concise changed-file summary.",
+    SUBAGENT_MILESTONE_INSTRUCTION,
+    entry.recoveryPrompt?.trim() ? entry.recoveryPrompt.trim() : "",
+    environmentBrief,
+    entry.contractSettings.explicitOwnedPaths.length > 0
+      ? `Owned paths: ${entry.contractSettings.explicitOwnedPaths.join(", ")}`
+      : "Owned paths: planner did not specify paths.",
+    "",
+    `Shared brief: ${options.readyPlan.finalExecutionBrief}`,
+    `Subtask title: ${entry.task.title}`,
+    `Subtask instruction: ${entry.task.instruction}`
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const milestoneParser = createMilestoneDeltaParser((line) => options.callbacks?.onRunMilestone?.(`Subagent ${entry.task.title}: ${line}`));
+  const request = {
+    kind: "subagent" as const,
+    cwd: options.cwd,
+    modelId: subagentModelId,
+    prompt: basePrompt,
+    reasoningStrength,
+    fastMode: options.fastMode,
+    promptCacheIdentity: options.promptCacheIdentity,
+    memorySearch: createMemorySearchCallback(options.callbacks, "subagent", entry.task.id),
+    onTextDelta(delta: string) {
+      milestoneParser.push(delta);
+    },
+    onExecutionEvent(event: PiAgentExecutionEvent) {
+      void options.callbacks?.onExecutionEvent?.({
+        owner: "subagent",
+        subagentId: entry.task.id,
+        event
+      });
+    },
+    requestBrowserApproval(input: { toolCallId: string; toolName: string; args: unknown }) {
+      return options.callbacks?.requestBrowserApproval?.({
+        owner: "subagent",
+        subagentId: entry.task.id,
+        ...input
+      }) ?? Promise.resolve({ approved: true });
+    }
+  };
+  const response = await runManagedAgentExecution(adapter, {
+    runId: options.runId,
+    kind: "subagent",
+    subagentId: entry.task.id,
+    originalRequest: request,
+    continuationRequest: { ...request, prompt: ["continue", "", basePrompt].join("\n") },
+    abortSignal: options.abortSignal,
+    store: createExecutionStore(options.callbacks, options.runId, "subagent", entry.task.id)
+  });
+  milestoneParser.flush();
+  if (!milestoneParser.hasEmitted()) {
+    for (const line of extractMilestoneLines(response.text)) {
+      options.callbacks?.onRunMilestone?.(`Subagent ${entry.task.title}: ${line}`);
+    }
+  }
+  return stripMilestoneLines(response.text);
+}
+
 async function executeMainAgent(
   adapter: PiAgentAdapter,
   options: {
@@ -834,6 +812,7 @@ async function executeMainAgent(
     readOnly: shouldUseReadOnlyExecutionTools(options.executionPlan),
     reasoningStrength: options.reasoningStrength,
     fastMode: options.fastMode,
+    memorySearch: createMemorySearchCallback(options.callbacks, "main"),
     onTextDelta(delta: string) {
       options.callbacks?.onDelta?.(delta);
     },
@@ -903,7 +882,7 @@ async function listChangedFiles(cwd: string) {
 
   const tracked = await runProcess(cwd, ["git", "diff", "--name-only", "--relative"]);
   const untracked = await runProcess(cwd, ["git", "ls-files", "--others", "--exclude-standard"]);
-  return [...tracked.split(/\r?\n/), ...untracked.split(/\r?\n/)].map((value) => value.trim()).filter(Boolean);
+  return [...tracked.split(/\n?\n/), ...untracked.split(/\n?\n/)].map((value) => value.trim()).filter(Boolean);
 }
 
 export async function executePlanPrerequisites(
@@ -972,6 +951,7 @@ export async function executePlanPrerequisites(
       readOnly: shouldUseReadOnlyExecutionTools(executionPlan),
       reasoningStrength: options.reasoningStrength,
       fastMode: options.fastMode,
+      memorySearch: createMemorySearchCallback(options.callbacks, "main"),
       promptCacheIdentity: options.promptCacheIdentity,
       geminiCachedContentName: options.geminiCachedAttachmentContext?.cachedContentName,
       abortSignal: options.abortSignal
@@ -1224,7 +1204,7 @@ function isMissingFileError(error: unknown) {
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    (error as { code?: unknown }).code === "ENOENT"
+    Reflect.get(error, "code") === "ENOENT"
   );
 }
 
@@ -1342,6 +1322,7 @@ export async function aggregateSubagentResults(
       readOnly: shouldUseReadOnlyExecutionTools(options.executionPlan),
       reasoningStrength: options.reasoningStrength,
       fastMode: options.fastMode,
+      memorySearch: createMemorySearchCallback(options.callbacks, "aggregator"),
       onTextDelta(delta: string) {
         options.callbacks?.onDelta?.(delta);
       },
@@ -1374,6 +1355,7 @@ export async function aggregateSubagentResults(
       readOnly: shouldUseReadOnlyExecutionTools(options.executionPlan),
       reasoningStrength: options.reasoningStrength,
       fastMode: options.fastMode,
+      memorySearch: createMemorySearchCallback(options.callbacks, "aggregator"),
       onTextDelta(delta: string) {
         options.callbacks?.onDelta?.(delta);
       },
@@ -1484,12 +1466,6 @@ function buildExecutionWorkspaceContext(
     executionPlan?.ruleSources && executionPlan.ruleSources.length > 0
       ? ["Rule sources:", ...executionPlan.ruleSources.map((rule) => `[${rule.scope}] ${rule.label}: ${rule.content}`)].join("\n")
       : "",
-    executionPlan?.memorySummaries && executionPlan.memorySummaries.length > 0
-      ? [
-          "Memory summaries:",
-          ...executionPlan.memorySummaries.map((memory) => `[${memory.scope}] ${memory.label}: ${memory.content}`)
-        ].join("\n")
-      : "",
     cwd ? buildGitRepositoryPromptContext(cwd) : "",
     cwd ? buildExecutionSkillContext(cwd) : "",
     workspacePathGuidance ?? "",
@@ -1497,32 +1473,18 @@ function buildExecutionWorkspaceContext(
   ].filter(Boolean).join("\n");
 }
 
-function buildExecutionSkillContext(cwd: string) {
-  const repoRoot = resolveRepoRoot(cwd);
-  const availableSkillPaths = discoverRepoSkillPaths(repoRoot);
-  if (availableSkillPaths.length === 0) {
-    return "Available repository/global skill files: none discovered.";
-  }
-
-  return [
-    "Available repository/global skill files:",
-    ...availableSkillPaths.map((skillPath) => `- ${skillPath}`),
-    "If the user asks what skills are available, include these repository/global skills in the answer."
-  ].join("\n");
+function createMemorySearchCallback(
+  callbacks: PiOrchestratorCallbacks | undefined,
+  owner: "planner" | "main" | "subagent" | "aggregator",
+  subagentId?: string
+) {
+  const searchMemory = callbacks?.searchMemory;
+  if (!searchMemory) return undefined;
+  return (input: PiAgentMemorySearchInput) => searchMemory({ owner, subagentId, ...input });
 }
 
 export function shouldUseReadOnlyExecutionTools(executionPlan?: Pick<ExecutionPlan, "mode">) {
   return modeUsesReadOnlyExecution(executionPlan?.mode);
-}
-
-function buildContinuationPrompt(
-  prefix: string,
-  cwd: string,
-  messages: ChatMessage[],
-  finalExecutionBrief: string,
-  executionPlan?: ExecutionPlan
-) {
-  return [prefix, "", buildExecutionPrompt(messages, finalExecutionBrief, executionPlan, cwd)].join("\n");
 }
 
 function buildPrerequisitePrompt(
@@ -1688,7 +1650,7 @@ export function executionPlanToTasks(executionPlan: ExecutionPlan): PlannerSubta
         executionPlan.contracts,
         executionPlan.actualSubagentCount,
         executionPlan.subagentWorktreeStrategy
-      ).map((bucket, index) => {
+      ).map((bucket) => {
         const taskId = bucket.length === 1 ? bucket[0]!.taskId : bucket.map((contract) => contract.taskId).join("+");
         const title =
           bucket.length === 1
@@ -1725,7 +1687,6 @@ export function buildExecutionPlan(input: {
   correctnessIterationMode: CorrectnessIterationMode;
   mode?: ModeDefinition;
   ruleSources?: WorkspaceRuleSource[];
-  memorySummaries?: MemorySummary[];
   iteration: number;
   origin: ExecutionPlan["origin"];
 }): ExecutionPlan {
@@ -1759,7 +1720,6 @@ export function buildExecutionPlan(input: {
     },
     mode: input.mode,
     ruleSources: input.ruleSources,
-    memorySummaries: input.memorySummaries,
     prerequisites,
     contracts,
     correctnessPolicy: input.correctnessIterationMode
@@ -1996,4 +1956,3 @@ export function applyAssistantMessage(state: ChatSessionState, assistantMessage:
     isStreaming: false
   };
 }
-

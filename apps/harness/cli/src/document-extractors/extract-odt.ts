@@ -1,5 +1,6 @@
 import {
   collectByLocalName,
+  enforceExtractedTextBudget,
   getChildObject,
   getChildObjects,
   getNodeText,
@@ -7,10 +8,16 @@ import {
   parseXmlDocument,
   readOfficeZipEntries
 } from "./extract-office-zip";
-import type { DocumentExtractionResult } from "./types";
+import type { DocumentExtractionOptions, DocumentExtractionResult } from "./types";
 
-export async function extractOdtText(input: ArrayBuffer | Uint8Array | Buffer): Promise<DocumentExtractionResult> {
-  const entries = await readOfficeZipEntries(input);
+export async function extractOdtText(
+  input: ArrayBuffer | Uint8Array | Buffer,
+  options: DocumentExtractionOptions = {}
+): Promise<DocumentExtractionResult> {
+  const entries = await readOfficeZipEntries(input, {
+    ...options,
+    includeEntry: (path) => path === "content.xml"
+  });
   const contentXml = entries.get("content.xml");
   if (!contentXml) {
     throw new Error("Missing content.xml");
@@ -40,7 +47,7 @@ export async function extractOdtText(input: ArrayBuffer | Uint8Array | Buffer): 
     })
     .filter((value) => value.length > 0);
 
-  const text = normalizeExtractedText(blocks.join("\n"));
+  const text = enforceExtractedTextBudget(normalizeExtractedText(blocks.join("\n")), options);
   if (!text) {
     return {
       status: "no-text",

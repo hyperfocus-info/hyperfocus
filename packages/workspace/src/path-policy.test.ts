@@ -8,7 +8,13 @@ describe("workspace path policy", () => {
   });
 
   test("rejects absolute paths and traversal", () => {
-    for (const path of ["../secret", "a/../../secret", "/etc/passwd", "C:\\secret", "\\\\server\\share"]) {
+    for (const path of ["../secret", "a/../../secret", "/etc/passwd", "C:\\secret", "C:secret", "\\\\server\\share"]) {
+      expect(() => normalizeWorkspacePath(path)).toThrow();
+    }
+  });
+
+  test("rejects portable-host aliases and unsafe segments", () => {
+    for (const path of ["save.dat:metadata", "src/CON", "src/com1.txt", "src/trailing. ", `src/${"x".repeat(256)}`]) {
       expect(() => normalizeWorkspacePath(path)).toThrow();
     }
   });
@@ -18,4 +24,3 @@ describe("workspace path policy", () => {
     expect(resolveWorkspacePath("/repo/", "src/index.ts")).toBe("/repo/src/index.ts");
   });
 });
-

@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 import { afterEach, beforeEach, expect, it } from "bun:test";
-import { createUiTest } from "../../utils/tests/test-harness";
+import { createUiTest, requireElement } from "../../utils/tests/test-harness";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { clearBrowserStateForTests } from "../../utils/tests/store-test-utils";
 import { clearOverlayStackForTests } from "./overlay-stack";
@@ -11,11 +11,11 @@ createUiTest("SheetContent", () => {
   beforeEach(() => {
     clearBrowserStateForTests();
     clearOverlayStackForTests();
-    (globalThis as typeof globalThis & { __padPilotDisablePortals?: boolean }).__padPilotDisablePortals = true;
+    globalThis.__padPilotDisablePortals = true;
   });
 
   afterEach(() => {
-    (globalThis as typeof globalThis & { __padPilotDisablePortals?: boolean }).__padPilotDisablePortals = true;
+    globalThis.__padPilotDisablePortals = true;
     document.querySelectorAll("[data-test-primitive-portal-root]").forEach((root) => root.remove());
   });
 
@@ -63,10 +63,7 @@ createUiTest("SheetContent", () => {
     ));
 
     const sheet = screen.getByText("Closable sheet").closest("aside");
-    const backdrop = sheet?.previousElementSibling as HTMLElement | null;
-    if (!backdrop) {
-      throw new Error("Expected sheet backdrop");
-    }
+    const backdrop = requireElement(sheet?.previousElementSibling);
 
     fireEvent.click(backdrop);
     fireEvent.click(screen.getByRole("button", { name: "Close sheet" }));
@@ -83,7 +80,7 @@ createUiTest("SheetContent", () => {
     ));
 
     const sheet = await screen.findByText("Escapable sheet");
-    fireEvent.keyDown(sheet.closest("aside") as HTMLElement, { key: "Escape" });
+    fireEvent.keyDown(requireElement(sheet.closest("aside")), { key: "Escape" });
     expect(closed).toBe(true);
   });
 

@@ -5,6 +5,10 @@ import { onCleanup, onMount } from "solid-js";
 import { tokens } from "../theme/tokens.stylex";
 import type { SourceDiagnostic, SourceDocument } from "./document";
 
+const styles = stylex.create({
+  root: { overflow: "hidden", backgroundColor: tokens.background, color: tokens.foreground, fontSize: "0.78rem", height: "100%", minHeight: "10rem", width: "100%", }
+});
+
 export function SourceEditor(props: { document: SourceDocument; diagnostics?: readonly SourceDiagnostic[]; readOnly?: boolean; onSaveError?: (error: unknown) => void }) {
   let host: HTMLDivElement | undefined;
   let view: EditorView | undefined;
@@ -47,7 +51,3 @@ export function SourceEditor(props: { document: SourceDocument; diagnostics?: re
   });
   return <div ref={host} {...stylex.attrs(styles.root)} data-test-source-editor="" data-diagnostic-count={props.diagnostics?.length ?? 0} />;
 }
-
-const styles = stylex.create({
-  root: { overflow: "hidden", backgroundColor: tokens.background, color: tokens.foreground, fontSize: "0.78rem", height: "100%", minHeight: "10rem", width: "100%", }
-});

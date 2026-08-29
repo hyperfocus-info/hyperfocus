@@ -33,6 +33,7 @@ type ButtonTooltipProps =
 type ButtonProps = {
   class?: string;
   as?: "button" | "span";
+  tooltipDisabled?: boolean;
   tooltipTriggerClass?: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
@@ -40,54 +41,26 @@ type ButtonProps = {
   JSX.IntrinsicElements["button"] &
   ButtonTooltipProps;
 
-export function Button(props: ButtonProps) {
-  const [local, rest] = splitProps(props, [
-    "class",
-    "as",
-    "variant",
-    "size",
-    "children",
-    "tooltip",
-    "tooltipTriggerClass",
-    "justificationForNoTooltip"
-  ]);
-  const component = () => local.as ?? "button";
-
-  return (
-    <Tooltip content={local.tooltip} triggerClass={local.tooltipTriggerClass}>
-      <Dynamic
-        component={component()}
-        {...rest}
-        data-test-button=""
-        class={cn(buttonVariants({ variant: local.variant, size: local.size }), local.class)}
-        type={local.as === "span" ? undefined : props.type ?? "button"}
-      >
-        {local.children}
-      </Dynamic>
-    </Tooltip>
-  );
-}
-
 const styles = stylex.create({
   base: {
-    alignItems: "center",
+    borderRadius: "0.75rem",
     borderStyle: "solid",
     borderWidth: 0,
-    borderRadius: "0.75rem",
+    gap: "0.5rem",
+    outline: { default: null, ":focus-visible": "none" },
+    alignItems: "center",
+    boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--bg), 0 0 0 4px var(--ring)" },
     cursor: { default: "pointer", ":disabled": "not-allowed" },
     display: "inline-flex",
     fontSize: "0.75rem",
     fontWeight: 500,
-    gap: "0.5rem",
     justifyContent: "center",
     lineHeight: "1rem",
-    transitionProperty: "color, background-color, border-color, box-shadow",
-    transitionDuration: "150ms",
-    whiteSpace: "nowrap",
-    boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--bg), 0 0 0 4px var(--ring)" },
     opacity: { default: 1, ":disabled": 0.45 },
-    outline: { default: null, ":focus-visible": "none" },
-    pointerEvents: { default: "auto", ":disabled": "none" }
+    pointerEvents: { default: "auto", ":disabled": "none" },
+    transitionDuration: "150ms",
+    transitionProperty: "color, background-color, border-color, box-shadow",
+    whiteSpace: "nowrap",
   },
   default: {
     backgroundColor: {
@@ -98,13 +71,13 @@ const styles = stylex.create({
     color: "white"
   },
   secondary: {
+    borderColor: "var(--border)",
+    borderWidth: "1px",
     backgroundColor: {
       default: "var(--panel-strong)",
       ":hover": "var(--panel)"
     },
-    borderColor: "var(--border)",
-    borderWidth: "1px",
-    color: "var(--foreground)"
+    color: "var(--foreground)",
   },
   ghost: {
     backgroundColor: {
@@ -129,16 +102,46 @@ const styles = stylex.create({
     color: "white"
   },
   defaultSize: {
+    paddingBlock: '0.5rem',
+    paddingInline: '0.75rem',
     height: "2.25rem",
-    padding: "0.5rem 0.75rem"
   },
   small: {
     borderRadius: "0.5rem",
+    paddingInline: "0.75rem",
     height: "2rem",
-    paddingInline: "0.75rem"
   },
   icon: {
     height: "2.25rem",
     width: "2.25rem"
   }
 });
+
+export function Button(props: ButtonProps) {
+  const [local, rest] = splitProps(props, [
+    "class",
+    "as",
+    "variant",
+    "size",
+    "children",
+    "tooltip",
+    "tooltipDisabled",
+    "tooltipTriggerClass",
+    "justificationForNoTooltip"
+  ]);
+  const component = () => local.as ?? "button";
+
+  return (
+    <Tooltip content={local.tooltip} disabled={local.tooltipDisabled} triggerClass={local.tooltipTriggerClass}>
+      <Dynamic
+        component={component()}
+        {...rest}
+        data-test-button=""
+        class={cn(buttonVariants({ variant: local.variant, size: local.size }), local.class)}
+        type={local.as === "span" ? undefined : props.type ?? "button"}
+      >
+        {local.children}
+      </Dynamic>
+    </Tooltip>
+  );
+}

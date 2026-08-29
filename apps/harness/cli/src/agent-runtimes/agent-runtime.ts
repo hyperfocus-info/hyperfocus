@@ -1,4 +1,4 @@
-import type { AgentId, AgentRuntimeCapability, ProviderBrand } from "../../../shared/protocol";
+import type { AgentId, AgentRuntimeCapability, ProviderBrand } from "@hyperfocus/ai-core/protocol";
 import type { PiAgentAdapter } from "../pi-agent-adapter";
 
 export type InteractiveCliLaunch = {

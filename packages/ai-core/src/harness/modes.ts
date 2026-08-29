@@ -1,8 +1,8 @@
-import type { ModeDefinition, ModeId } from "./protocol";
+import type { ModeDefinition } from "./protocol/conversation";
 
-export const DEFAULT_MODE_ID: ModeId = "implement";
+export const DEFAULT_MODE_ID = "implement";
 
-export const builtinModes: ModeDefinition[] = [
+export const builtinModes = [
   {
     id: "ask",
     scope: "builtin",
@@ -69,7 +69,7 @@ export const builtinModes: ModeDefinition[] = [
     correctnessIterationModeDefault: "ask-before-iterate",
     updatedAt: "builtin"
   }
-];
+] as const;
 
 export function resolveModeExecutionAccess(
   mode: Pick<ModeDefinition, "toolPolicy"> & { executionAccess?: ModeDefinition["executionAccess"] } | undefined
@@ -91,8 +91,8 @@ export function modeUsesReadOnlyExecution(
   return resolveModeExecutionAccess(mode) === "read-only";
 }
 
-export function resolveModeCatalog(workspaceModes: ModeDefinition[] = [], projectModes: ModeDefinition[] = []) {
-  const merged = new Map<ModeId, ModeDefinition>();
+export function resolveModeCatalog(workspaceModes: readonly ModeDefinition[] = [], projectModes: readonly ModeDefinition[] = []) {
+  const merged = new Map<ModeDefinition["id"], ModeDefinition>();
   for (const mode of builtinModes) {
     merged.set(mode.id, mode);
   }
@@ -105,7 +105,11 @@ export function resolveModeCatalog(workspaceModes: ModeDefinition[] = [], projec
   return [...merged.values()];
 }
 
-export function resolveModeById(modeId: string | undefined, workspaceModes: ModeDefinition[] = [], projectModes: ModeDefinition[] = []) {
+export function resolveModeById(
+  modeId: string | undefined,
+  workspaceModes: readonly ModeDefinition[] = [],
+  projectModes: readonly ModeDefinition[] = []
+) {
   const catalog = resolveModeCatalog(workspaceModes, projectModes);
   return catalog.find((mode) => mode.id === modeId) ?? catalog.find((mode) => mode.id === DEFAULT_MODE_ID) ?? catalog[0];
 }

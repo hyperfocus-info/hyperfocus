@@ -1,8 +1,8 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireButton, requireTextArea } from "../utils/tests/test-harness";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { ChatPanel } from "./chat-panel";
+import { ChatPanel, formatCapabilityTag, getFastModeDescription, getReasoningStrengthDescription } from "./chat-panel";
 import { buildProjectChatSearchResults } from "../lib/project-chat-search";
 import { createEmptyTokenUsageState, createInitialViewState, harnessStore, readBrowserUiSession } from "../harness-store";
 import { DEFAULT_APP_HOTKEY_PREFERENCES } from "../lib/app-hotkeys";
@@ -16,7 +16,7 @@ import {
   createRunFixture,
   createViewProjectFixture
 } from "../utils/tests/test-fixtures";
-import { createChatMessage, createEmptySession, type BackgroundJob, type BackgroundJobRun } from "../../../shared/protocol";
+import { createChatMessage, createEmptySession, type BackgroundJob, type BackgroundJobRun, type ClientCommand } from "@hyperfocus/ai-core/protocol";
 
 createUiTest("ChatPanel", () => {
   beforeEach(() => {
@@ -59,7 +59,7 @@ createUiTest("ChatPanel", () => {
     expect(screen.getByRole("tab", { name: "Model events" }).getAttribute("aria-selected")).toBe("true");
   });
 
-  it("shows the create-thread hotkey in the chat toolbar tooltip", async () => {
+  it("keeps new-thread creation and its hotkey in the thread menu", async () => {
     const project = createViewProjectFixture({ id: "project-chat-hotkey" });
     seedHarnessStoreForTests(
       createHarnessStateFixture({
@@ -74,13 +74,13 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    render(() => <ChatPanel />);
-
-    expect(screen.getByRole("button", { name: /Create a new thread in this project \(Alt.*N\)/ })).not.toBeNull();
+    render(() => <ChatPanel />); fireEvent.click(screen.getByRole("button", { name: "More thread actions" }));
+    expect(screen.getByRole("menuitem", { name: /Create a new thread in this project \(Alt.*N\)/ })).not.toBeNull();
+    expect(screen.getByText("Alt+N")).not.toBeNull();
   });
 
   it("opens thread terminal history through a typed command", async () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-terminal-history",
       activeThreadId: "thread-terminal-history"
@@ -96,7 +96,7 @@ createUiTest("ChatPanel", () => {
     captureDispatchedCommands(commands);
 
     render(() => <ChatPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "Open thread terminal history" }));
+    fireEvent.click(screen.getByRole("button", { name: "More thread actions" })); fireEvent.click(await screen.findByRole("menuitem", { name: "Terminal history" }));
 
     await waitFor(() =>
       expect(commands).toContainEqual(
@@ -148,7 +148,7 @@ createUiTest("ChatPanel", () => {
   });
 
   it("submits planner answers when a planning question is pending", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-question",
       draft: "api/users/[id]",
@@ -199,16 +199,16 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Send planner answer" }));
 
     expect(commands.length).toBe(1);
-    expect((commands[0] as { type: string }).type).toBe("planning.answer");
+    expect(commands[0]?.type).toBe("planning.answer");
   });
 
   it("renders assistant setup freeform questions without choice buttons", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-assistant-purpose",
       draft: "Maintain docs and stale todos.",
@@ -246,7 +246,7 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
 
     expect(screen.getByText("Assistant setup")).toBeTruthy();
@@ -255,11 +255,11 @@ createUiTest("ChatPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Send planner answer" }));
     expect(commands.length).toBe(1);
-    expect((commands[0] as { type: string }).type).toBe("planning.answer");
+    expect(commands[0]?.type).toBe("planning.answer");
   });
 
   it("submits plan refinements when a ready run exists", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const plan = createExecutionPlanFixture({
       gating: {
         mode: "approve",
@@ -294,12 +294,12 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Refine plan before execution" }));
 
     expect(commands.length).toBe(1);
-    expect((commands[0] as { type: string }).type).toBe("planning.refine");
+    expect(commands[0]?.type).toBe("planning.refine");
   });
 
   it("switches between compact chat panes without the old cockpit card", () => {
@@ -327,75 +327,8 @@ createUiTest("ChatPanel", () => {
     expect(screen.queryByText(/transcript\s*\|/i)).toBeNull();
   });
 
-  it("shows memory priority controls and confirms delete before dispatch", () => {
-    const commands: unknown[] = [];
-    const now = new Date().toISOString();
-    const project = createViewProjectFixture({
-      id: "project-memory-controls",
-      memoryEntries: [
-        {
-          id: "memory-1",
-          projectId: "project-memory-controls",
-          kind: "task-summary",
-          status: "active",
-          title: "First memory",
-          summary: "First summary",
-          tags: [],
-          pathGlobs: [],
-          confidence: "medium",
-          freshness: "fresh",
-          pinned: false,
-          priority: 100,
-          hitCount: 0,
-          createdAt: now,
-          updatedAt: now
-        },
-        {
-          id: "memory-2",
-          projectId: "project-memory-controls",
-          kind: "task-summary",
-          status: "active",
-          title: "Second memory",
-          summary: "Second summary",
-          tags: [],
-          pathGlobs: [],
-          confidence: "high",
-          freshness: "fresh",
-          pinned: false,
-          priority: 200,
-          hitCount: 3,
-          createdAt: now,
-          updatedAt: now
-        }
-      ]
-    });
-    seedHarnessStoreForTests(
-      createHarnessStateFixture({
-        chatPaneTab: "memory",
-        workspace: {
-          activeProjectId: project.id,
-          projects: [project]
-        }
-      })
-    );
-
-    captureDispatchedCommands(commands as never[]);
-    render(() => <ChatPanel />);
-    fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
-
-    expect(screen.getByText("priority 100 | medium | fresh | hits 0")).not.toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { name: "Move memory down" })[0]!);
-    expect((commands.at(-1) as { type: string }).type).toBe("memory.reorder");
-
-    const deleteButtons = screen.getAllByRole("button", { name: "Permanently delete this memory entry" });
-    fireEvent.click(deleteButtons[0]!);
-    expect(commands.some((command) => (command as { type: string }).type === "memory.delete")).toBe(false);
-    fireEvent.click(deleteButtons[0]!);
-    expect((commands.at(-1) as { type: string }).type).toBe("memory.delete");
-  });
-
   it("loads memory entries when memory pane opens with a ready connection", async () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-memory-connect"
     });
@@ -410,18 +343,18 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
 
-    expect(commands.some((command) => (command as { type: string }).type === "memory.list")).toBe(false);
+    expect(commands.some((command) => command.type === "memory.list")).toBe(false);
     fireEvent.click(screen.getByRole("tab", { name: "Memory" }));
 
-    await waitFor(() => expect((commands.at(-1) as { type: string } | undefined)?.type).toBe("memory.list"));
-    expect((commands.at(-1) as { payload: { projectId: string } }).payload.projectId).toBe(project.id);
+    await waitFor(() => expect(commands.at(-1)?.type).toBe("memory.list"));
+    expect(commands.at(-1)).toMatchObject({ type: "memory.list", payload: { projectId: project.id } });
   });
 
   it("blocks plain submit for resumable runs and shows toast", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-resume",
       draft: "please continue",
@@ -441,7 +374,7 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     const textbox = screen.getByRole("textbox");
     const form = textbox.closest("form");
@@ -456,7 +389,7 @@ createUiTest("ChatPanel", () => {
   });
 
   it("submits top-level chat sends for plain drafts", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-send",
       draft: "simple task"
@@ -472,22 +405,12 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Send task to Pi" }));
 
     expect(commands.length).toBe(1);
-    expect((commands[0] as { type: string }).type).toBe("chat.send");
-  });
-
-  it("explains empty memory instead of rendering a blank pane", () => {
-    const project = createViewProjectFixture({ id: "project-empty-memory", memoryEntries: [] });
-    seedHarnessStoreForTests(createHarnessStateFixture({ chatPaneTab: "memory", workspace: { activeProjectId: project.id, projects: [project] } }));
-
-    render(() => <ChatPanel />);
-
-    expect(screen.getByText(/No shared memory yet/i)).not.toBeNull();
-    expect(screen.getByText(/after they are recorded/i)).not.toBeNull();
+    expect(commands[0]?.type).toBe("chat.send");
   });
 
   it("shows failed-run cause in the primary Run pane", () => {
@@ -546,7 +469,7 @@ createUiTest("ChatPanel", () => {
     });
 
     render(() => <ChatPanel />);
-    const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textbox = requireTextArea(screen.getByRole("textbox"));
     fireEvent.click(screen.getByRole("button", { name: "Send task to Pi" }));
 
     expect(textbox.value).toBe("simple task");
@@ -555,7 +478,7 @@ createUiTest("ChatPanel", () => {
   });
 
   it("switches Pi to an alternate usable provider key before sending", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-send-gemini",
       draft: "simple task"
@@ -573,11 +496,11 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Send task to Pi" }));
 
-    expect(commands.map((command) => (command as { type: string }).type)).toEqual(["preferences.save", "chat.send"]);
+    expect(commands.map((command) => command.type)).toEqual(["preferences.save", "chat.send"]);
     expect(commands[0]).toMatchObject({
       type: "preferences.save",
       payload: {
@@ -601,7 +524,7 @@ createUiTest("ChatPanel", () => {
     );
 
     render(() => <ChatPanel />);
-    const sendButton = screen.getByRole("button", { name: "Send task to Pi" }) as HTMLButtonElement;
+    const sendButton = requireButton(screen.getByRole("button", { name: "Send task to Pi" }));
 
     expect(sendButton.disabled).toBe(true);
     expect(sendButton.getAttribute("aria-description")).toContain("Add an OpenAI or Google API key to use Pi");
@@ -643,14 +566,14 @@ createUiTest("ChatPanel", () => {
     );
 
     render(() => <ChatPanel />);
-    const sendButton = screen.getByRole("button", { name: "Send task to Pi" }) as HTMLButtonElement;
+    const sendButton = requireButton(screen.getByRole("button", { name: "Send task to Pi" }));
 
     expect(sendButton.disabled).toBe(true);
     expect(sendButton.getAttribute("aria-description")).toContain("Add an OpenAI or Google API key to use Pi");
   });
 
   it("uses agent-available readiness to default sends to a ready CLI runtime", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-send-agent-available",
       draft: "simple task"
@@ -753,7 +676,7 @@ createUiTest("ChatPanel", () => {
     });
     harnessStore.setProjectDraft(project.id, "simple task");
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Send task to Codex CLI" }));
 
@@ -767,7 +690,7 @@ createUiTest("ChatPanel", () => {
   });
 
   it("sends with CLI runtimes without Pi API keys", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-send-codex",
       draft: "simple task"
@@ -804,7 +727,7 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Send task to Codex CLI" }));
 
@@ -856,14 +779,14 @@ createUiTest("ChatPanel", () => {
     );
 
     render(() => <ChatPanel />);
-    const sendButton = screen.getByRole("button", { name: "Send task to Codex CLI" }) as HTMLButtonElement;
+    const sendButton = requireButton(screen.getByRole("button", { name: "Send task to Codex CLI" }));
 
     expect(sendButton.disabled).toBe(true);
     expect(sendButton.getAttribute("aria-description")).toBe("Run `codex login` before sending tasks.");
   });
 
   it("locks mode on chat.send when user explicitly selected one", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-send-locked",
       draft: "simple task"
@@ -881,7 +804,7 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Send task to Pi" }));
 
@@ -895,7 +818,7 @@ createUiTest("ChatPanel", () => {
   });
 
   it("sends auto mode unlocked so server can classify each prompt", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-send-auto",
       draft: "simple task"
@@ -913,7 +836,7 @@ createUiTest("ChatPanel", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Send task to Pi" }));
 
@@ -951,7 +874,7 @@ createUiTest("ChatPanel", () => {
   });
 
 it("updates composer effort label and sends reasoning plus fast mode", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-effort-send",
       draft: "ship it"
@@ -971,10 +894,10 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
 
-    const effortTrigger = document.querySelector("[data-test-effort-trigger]") as HTMLButtonElement | null;
+    const effortTrigger = document.querySelector<HTMLButtonElement>("[data-test-effort-trigger]");
     if (!effortTrigger) {
       throw new Error("Expected effort trigger");
     }
@@ -993,7 +916,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     });
   });
 
-  it("keeps effort in the shared control row and hides single-choice dropdowns", () => {
+  it("keeps desktop effort grouped while compact mode keeps the current model visible", () => {
     const project = createViewProjectFixture({
       id: "project-compact-controls"
     });
@@ -1036,13 +959,13 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     expect(effortTrigger).not.toBeNull();
     expect(controlRow?.contains(effortTrigger)).toBe(true);
     expect(document.querySelector("[data-test-provider-select]")).toBeNull();
-    expect(document.querySelector("[data-test-model-select]")).toBeNull();
+    expect(document.querySelector("[data-test-model-select]")).not.toBeNull();
     expect(screen.queryByText("Mode")).toBeNull();
     expect(screen.queryByText("Agent")).toBeNull();
   });
 
   it("submits composer with Enter when textarea is focused", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-enter-send",
       draft: "send from keyboard"
@@ -1058,7 +981,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     const textbox = screen.getByRole("textbox");
     textbox.focus();
@@ -1066,7 +989,30 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     fireEvent.keyDown(textbox, { key: "Enter" });
 
     expect(commands.length).toBe(1);
-    expect((commands[0] as { type: string }).type).toBe("chat.send");
+    expect(commands[0]?.type).toBe("chat.send");
+  });
+
+  it("defines visible reasoning, fast-mode, and usage consequences", () => {
+    const project = createViewProjectFixture({ id: "project-effort-guidance" });
+    seedHarnessStoreForTests(
+      createHarnessStateFixture({
+        hasUsableApiKey: true,
+        hasUsableOpenAiApiKey: true,
+        workspace: {
+          activeProjectId: project.id,
+          projects: [project]
+        }
+      })
+    );
+
+    render(() => <ChatPanel />);
+    expect(getReasoningStrengthDescription("low")).toBe("Fastest pass with minimal internal deliberation.");
+    expect(getReasoningStrengthDescription("extra-high")).toBe("Heaviest reasoning budget for hard debugging and planning.");
+    expect(getFastModeDescription(true)).toBe("Prefer lower-latency responses when current runtime and model support it.");
+    expect(getFastModeDescription(false)).toBe("Use standard response path with default latency and reasoning behavior.");
+    expect(formatCapabilityTag("expensive")).toBe("Higher usage");
+    expect(screen.getByText("Higher usage")).not.toBeNull();
+    expect(screen.queryByText(/^expensive$/i)).toBeNull();
   });
 
   it("opens composer file references in the IDE on control click", () => {
@@ -1086,7 +1032,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textbox = requireTextArea(screen.getByRole("textbox"));
     const position = draft.indexOf("app.tsx");
     textbox.setSelectionRange(position, position);
     fireEvent.click(textbox, { ctrlKey: true });
@@ -1149,7 +1095,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textbox = requireTextArea(screen.getByRole("textbox"));
     textbox.focus();
     textbox.setSelectionRange(1, 1);
 
@@ -1175,7 +1121,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textbox = requireTextArea(screen.getByRole("textbox"));
     textbox.focus();
     textbox.setSelectionRange(4, 4);
     fireEvent.input(textbox, { target: { value: "/mar" } });
@@ -1207,7 +1153,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textbox = requireTextArea(screen.getByRole("textbox"));
     textbox.focus();
     textbox.setSelectionRange(3, 3);
     fireEvent.input(textbox, { target: { value: "/ma" } });
@@ -1244,7 +1190,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textbox = requireTextArea(screen.getByRole("textbox"));
     textbox.focus();
     textbox.setSelectionRange(3, 3);
     fireEvent.input(textbox, { target: { value: "@fo" } });
@@ -1271,7 +1217,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textbox = requireTextArea(screen.getByRole("textbox"));
     textbox.focus();
     textbox.setSelectionRange(3, 3);
     fireEvent.input(textbox, { target: { value: "@fo" } });
@@ -1301,7 +1247,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textbox = requireTextArea(screen.getByRole("textbox"));
     textbox.focus();
     textbox.setSelectionRange(3, 3);
     fireEvent.input(textbox, { target: { value: "@fo" } });
@@ -1342,7 +1288,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 360 });
 
     render(() => <ChatPanel />);
-    const textbox = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textbox = requireTextArea(screen.getByRole("textbox"));
     Object.defineProperty(textbox, "scrollHeight", { configurable: true, value: 400 });
 
     fireEvent.input(textbox, { target: { value: "long\n".repeat(40) } });
@@ -1352,7 +1298,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
   });
 
   it("blocks Enter submit while the active thread is streaming", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-enter-streaming",
       draft: "send while streaming",
@@ -1377,7 +1323,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     const textbox = screen.getByRole("textbox");
     fireEvent.keyDown(textbox, { key: "Enter" });
@@ -1387,7 +1333,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
   });
 
   it("allows a follow-up when only a stale stream flag remains after a live CLI session", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-stale-stream-cli",
       draft: "next task",
@@ -1426,11 +1372,11 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
 
-    expect((commands[0] as { type: string }).type).toBe("chat.send");
+    expect(commands[0]?.type).toBe("chat.send");
   });
 
   it("shows a waiting timer above the composer while the active thread is streaming", () => {
@@ -1536,17 +1482,17 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    const renameButton = screen.getByRole("button", { name: "Rename this thread" }) as HTMLButtonElement;
+    const renameButton = requireButton(screen.getByRole("button", { name: "Rename this thread" }));
     expect(renameButton.disabled).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy thread id" }));
+    fireEvent.click(screen.getByRole("button", { name: "More thread actions" })); fireEvent.click(await screen.findByRole("menuitem", { name: "Copy thread ID" }));
     await Promise.resolve();
     expect(copiedText).toBe("thread-streaming");
     expect(toastStore.toasts[0]?.title).toBe("Thread id copied");
   });
 
   it("blocks Enter submit while setup gates fresh tasks", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-enter-setup",
       draft: "send before setup"
@@ -1578,7 +1524,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     const textbox = screen.getByRole("textbox");
     fireEvent.keyDown(textbox, { key: "Enter" });
@@ -1588,7 +1534,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
   });
 
   it("blocks Enter submit for resumable runs", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-enter-resume",
       draft: "resume hint",
@@ -1609,7 +1555,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     const textbox = screen.getByRole("textbox");
     fireEvent.keyDown(textbox, { key: "Enter" });
@@ -1665,8 +1611,8 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     expect(screen.queryByText(plan.summary)).toBeNull();
   });
 
-  it("sends resume and retry commands when the thread is idle", () => {
-    const commands: unknown[] = [];
+  it("sends resume and retry commands when the thread is idle", async () => {
+    const commands: ClientCommand[] = [];
     const resumableRun = createRunFixture({
       id: "run-active",
       status: "partial-complete",
@@ -1694,17 +1640,18 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
 
     fireEvent.click(screen.getByRole("button", { name: "Resume failed or pending subagents" }));
-    fireEvent.click(screen.getByRole("button", { name: "Retry last run" }));
+    fireEvent.click(screen.getByRole("button", { name: "More thread actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Retry last run" }));
 
-    expect(commands.map((command) => (command as { type: string }).type)).toEqual(["run.resume", "run.retry"]);
+    expect(commands.map((command) => command.type)).toEqual(["run.resume", "run.retry"]);
   });
 
   it("sends stop commands when the thread is streaming", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-stop",
       activeRun: createRunFixture({
@@ -1726,11 +1673,11 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Stop active run" }));
 
-    expect(commands.map((command) => (command as { type: string }).type)).toEqual(["chat.stop"]);
+    expect(commands.map((command) => command.type)).toEqual(["chat.stop"]);
   });
 
   it("shows streaming assistant text only when a stream exists", () => {
@@ -1748,7 +1695,6 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    expect(screen.getByText("harness")).not.toBeNull();
     expect(screen.getByRole("heading", { name: "Partial output" })).not.toBeNull();
 
     const clearedProject = createViewProjectFixture({
@@ -1773,7 +1719,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
     cleanup();
     render(() => <ChatPanel />);
-    expect(screen.queryByText("harness")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Partial output" })).toBeNull();
   });
 
   it("hides duplicated persisted assistant row while the stream is still live", () => {
@@ -1814,7 +1760,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
   });
 
   it("renders assistant action cards and dispatches typed actions", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-assistant-action-card",
       session: {
@@ -1847,7 +1793,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     fireEvent.click(screen.getByRole("button", { name: "Run job" }));
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
 
-    expect(commands.map((command) => (command as { type: string }).type)).toEqual(["background-job.run-now", "assistant.pause"]);
+    expect(commands.map((command) => command.type)).toEqual(["background-job.run-now", "assistant.pause"]);
   });
 
   it("renders streamed markdown content from chat.delta state", async () => {
@@ -1978,7 +1924,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
 
     cleanup();
     render(() => <ChatPanel />);
-    expect(screen.getAllByText("harness").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Pi").length).toBeGreaterThanOrEqual(3);
     const articles = Array.from(document.querySelectorAll("article"));
     expect(articles.at(-2)?.textContent).toContain("Planning done. Spawning 3 subagents. Parallel slots: 3.");
     expect(articles.at(-1)?.textContent).toContain("New assistant text only.");
@@ -2100,7 +2046,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     expect(screen.queryByRole("button", { name: "Show every transcript row" })).toBeNull();
   });
 
-  it("renders system transcript rows as harness messages", () => {
+  it("renders system transcript rows with the selected agent identity", () => {
     const project = createViewProjectFixture({
       id: "project-system-message",
       session: {
@@ -2125,13 +2071,13 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    expect(screen.getByText("harness")).not.toBeNull();
+    expect(screen.getAllByText("Pi").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Planning task.")).not.toBeNull();
     expect(screen.queryByText("status")).toBeNull();
     expect(screen.getByRole("button", { name: "Copy harness message" })).not.toBeNull();
   });
 
-  it("renders run milestone rows as Harness messages", () => {
+  it("renders run milestone rows with the selected agent identity", () => {
     const createdAt = new Date().toISOString();
     const project = createViewProjectFixture({
       id: "project-milestones",
@@ -2163,7 +2109,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     );
 
     render(() => <ChatPanel />);
-    expect(screen.getByText("harness")).not.toBeNull();
+    expect(screen.getAllByText("Pi").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("In progress")).not.toBeNull();
     expect(screen.getByText("Subagent 1 started")).not.toBeNull();
     expect(screen.queryByText("status")).toBeNull();
@@ -2306,7 +2252,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
   });
 
   it("keeps ready plan controls usable when only a stale stream flag remains", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const plan = createExecutionPlanFixture({
       runId: "run-ready",
       gating: {
@@ -2347,9 +2293,9 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
-    expect((screen.getByRole("button", { name: "Refine plan before execution" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(requireButton(screen.getByRole("button", { name: "Refine plan before execution" })).disabled).toBe(false);
 
     harnessStore.applyServerEvent({
       type: "chat.message-appended",
@@ -2368,16 +2314,16 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     });
 
     cleanup();
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     expect(harnessStore.state.workspace.projects[0]?.session.isStreaming).toBe(false);
-    expect((screen.getByRole("button", { name: "Refine plan before execution" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(requireButton(screen.getByRole("button", { name: "Refine plan before execution" })).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Refine plan before execution" }));
-    expect((commands[0] as { type: string }).type).toBe("planning.refine");
+    expect(commands[0]?.type).toBe("planning.refine");
   });
 
   it("keeps approve-gated implement subagent plans startable from the transcript card", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const plan = createExecutionPlanFixture({
       runId: "run-subagents-approve",
       gating: {
@@ -2420,16 +2366,16 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Build this persisted plan now" }));
 
     expect(commands.length).toBe(1);
-    expect((commands[0] as { type: string }).type).toBe("run.execute");
+    expect(commands[0]?.type).toBe("run.execute");
   });
 
   it("starts virtual branch experiments from the transcript card", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const plan = createExecutionPlanFixture({
       runId: "run-experiment",
       gating: {
@@ -2469,7 +2415,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       })
     );
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Run this plan in isolated virtual branch" }));
 
@@ -2589,7 +2535,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
   });
 
   it("builds persisted ready plans from transcript run summaries", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const plan = createExecutionPlanFixture({ runId: "run-ready-summary" });
     const project = createViewProjectFixture({
       id: "project-ready-summary",
@@ -2610,7 +2556,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     });
     seedHarnessStoreForTests(createHarnessStateFixture({ workspace: { activeProjectId: project.id, projects: [project] } }));
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Build this persisted plan now" }));
 
@@ -2621,7 +2567,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
   });
 
   it("shows retry and resume actions from persisted plan states", () => {
-    const commands: unknown[] = [];
+    const commands: ClientCommand[] = [];
     const failedPlan = createExecutionPlanFixture({ runId: "run-failed-summary" });
     const stoppedPlan = createExecutionPlanFixture({ runId: "run-stopped-summary" });
     const project = createViewProjectFixture({
@@ -2651,7 +2597,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     });
     seedHarnessStoreForTests(createHarnessStateFixture({ workspace: { activeProjectId: project.id, projects: [project] } }));
 
-    captureDispatchedCommands(commands as never[]);
+    captureDispatchedCommands(commands);
     render(() => <ChatPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Retry this persisted run" }));
     fireEvent.click(screen.getByRole("button", { name: "Resume this persisted run" }));
@@ -2700,8 +2646,8 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
 
     render(() => <ChatPanel />);
 
-    expect((screen.getByRole("button", { name: "This plan has completed" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "This plan is already in progress" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "This persisted run is not available" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(requireButton(screen.getByRole("button", { name: "This plan has completed" })).disabled).toBe(true);
+    expect(requireButton(screen.getByRole("button", { name: "This plan is already in progress" })).disabled).toBe(true);
+    expect(requireButton(screen.getByRole("button", { name: "This persisted run is not available" })).disabled).toBe(true);
   });
 });

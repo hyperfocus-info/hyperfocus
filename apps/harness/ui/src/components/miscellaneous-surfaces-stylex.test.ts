@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 const miscellaneousSurfaceSources = [
-  new URL("./notification-inbox.tsx", import.meta.url),
+  new URL("./notification-inbox/view.tsx", import.meta.url),
   new URL("./mode-editor-panel.tsx", import.meta.url),
   new URL("./execution-plan-dialog.tsx", import.meta.url),
   new URL("./help-tutorial-dialog.tsx", import.meta.url),
@@ -26,7 +26,12 @@ describe("Miscellaneous harness surfaces StyleX boundary", () => {
 
   it("keeps the execution-plan body viewport bounded and scrollable", async () => {
     const styles = await Bun.file(new URL("./miscellaneous-surfaces.styles.ts", import.meta.url)).text();
+    const dialogContent = styles.match(/dialogContent:\s*{([^}]*)}/)?.[1] ?? "";
 
-    expect(styles).toContain('dialogContent: { display: "flex", flexDirection: "column", gap: "1rem", maxHeight: "80vh", overflow: "auto" }');
+    expect(dialogContent).toContain('display: "flex"');
+    expect(dialogContent).toContain('flexDirection: "column"');
+    expect(dialogContent).toContain('gap: "1rem"');
+    expect(dialogContent).toContain('maxHeight: "80vh"');
+    expect(dialogContent).toContain('overflow: "auto"');
   });
 });

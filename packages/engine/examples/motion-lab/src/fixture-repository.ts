@@ -1,0 +1,175 @@
+import { Group, SkinnedMesh, type Object3D } from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { clonePreparedThreeObject, loadThreeLoaderAsset } from "@hyperfocus/engine/render/3d";
+
+export const MOTION_LAB_FIXTURE_IDS = [
+  "canonical",
+  "renamed-bones",
+  "ape-proportions",
+  "extra-bones",
+  "incomplete",
+] as const;
+
+export type MotionLabFixtureId = (typeof MOTION_LAB_FIXTURE_IDS)[number];
+
+export const MOTION_LAB_FIXTURE_LABELS: Readonly<Record<MotionLabFixtureId, string>> = {
+  "ape-proportions": "Ape proportions",
+  canonical: "Canonical rig",
+  "extra-bones": "Extra bones",
+  incomplete: "Incomplete limbs",
+  "renamed-bones": "Renamed bones",
+};
+
+export type MotionLabFixtureEntry = {
+  byteLength: number;
+  expected: {
+    completeArmChains: boolean;
+    completeLegChains: boolean;
+    extraBonePassthrough: boolean;
+    nameBasedMapping: boolean;
+  };
+  file: string;
+  id: MotionLabFixtureId;
+  inspection: {
+    animations: number;
+    jointNames: string[];
+    joints: number;
+    nodeNames: string[];
+  };
+  sha256: string;
+  transform: string;
+};
+
+export type MotionLabAssetManifest = {
+  budget: {
+    limitBytes: number;
+    remainingBytes: number;
+    totalBytes: number;
+  };
+  coordinateSystem: {
+    forward: string;
+    handedness: string;
+    targetHeightMeters: number;
+    units: string;
+    up: string;
+  };
+  fixtures: MotionLabFixtureEntry[];
+  license: {
+    id: string;
+  };
+  source: {
+    name: string;
+    sha256: string;
+  };
+};
+
+export type MotionLabFixtureRepository = {
+  readonly canonicalJointNames: readonly string[];
+  readonly manifest: MotionLabAssetManifest;
+  createInstance(id: MotionLabFixtureId): Group;
+  entry(id: MotionLabFixtureId): MotionLabFixtureEntry;
+};
+
+function isFixtureId(value: unknown): value is MotionLabFixtureId {
+  return value === "canonical" || value === "renamed-bones" || value === "ape-proportions" || value === "extra-bones" || value === "incomplete";
+}
+
+function findSkinnedMesh(root: Object3D): SkinnedMesh {
+  let mesh: SkinnedMesh | null = null;
+  root.traverse((object) => {
+    if (!mesh && object instanceof SkinnedMesh) mesh = object;
+  });
+  if (!mesh) throw new Error("Fixture contains no Three.js SkinnedMesh.");
+  return mesh;
+}
+
+function validateManifest(value: unknown): MotionLabAssetManifest {
+  if (!value || typeof value !== "object") throw new Error("Motion-lab asset manifest is not an object.");
+  if (!isMotionLabManifest(value) || value.fixtures.length !== MOTION_LAB_FIXTURE_IDS.length) {
+    throw new Error("Motion-lab asset manifest does not declare all five fixtures.");
+  }
+  const ids = value.fixtures.map((fixture) => fixture.id);
+  if (!ids.every(isFixtureId) || MOTION_LAB_FIXTURE_IDS.some((id) => !ids.includes(id))) {
+    throw new Error("Motion-lab asset manifest fixture identifiers are invalid.");
+  }
+  return value;
+}
+
+function isMotionLabManifest(value: unknown): value is MotionLabAssetManifest {
+  if (!isRecord(value) || !Array.isArray(value.fixtures) || !value.fixtures.every(isFixtureEntry)) return false;
+  const budget = value.budget;
+  const coordinates = value.coordinateSystem;
+  const license = value.license;
+  const source = value.source;
+  return isRecord(budget) && [budget.limitBytes, budget.remainingBytes, budget.totalBytes].every(isNumber) &&
+    isRecord(coordinates) && [coordinates.forward, coordinates.handedness, coordinates.units, coordinates.up].every(isString) && isNumber(coordinates.targetHeightMeters) &&
+    isRecord(license) && isString(license.id) && isRecord(source) && isString(source.name) && isString(source.sha256);
+}
+
+function isFixtureEntry(value: unknown): value is MotionLabFixtureEntry {
+  if (!isRecord(value) || !isFixtureId(value.id) || !isString(value.file) || !isString(value.sha256) || !isString(value.transform) || !isNumber(value.byteLength)) return false;
+  const expected = value.expected;
+  const inspection = value.inspection;
+  return isRecord(expected) && [expected.completeArmChains, expected.completeLegChains, expected.extraBonePassthrough, expected.nameBasedMapping].every(isBoolean) &&
+    isRecord(inspection) && [inspection.animations, inspection.joints].every(isNumber) && isStringArray(inspection.jointNames) && isStringArray(inspection.nodeNames);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === "object" && !Array.isArray(value)); }
+function isString(value: unknown): value is string { return typeof value === "string"; }
+function isNumber(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value); }
+function isBoolean(value: unknown): value is boolean { return typeof value === "boolean"; }
+function isStringArray(value: unknown): value is string[] { return Array.isArray(value) && value.every(isString); }
+
+async function fetchJson(url: URL): Promise<unknown> {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Could not load ${url.pathname}: HTTP ${response.status}.`);
+  const value: unknown = await response.json();
+  return value;
+}
+
+export async function loadMotionLabFixtureRepository(baseUrl = new URL("../", import.meta.url)): Promise<MotionLabFixtureRepository> {
+  const manifestUrl = new URL("assets/manifest.json", baseUrl);
+  const manifest = validateManifest(await fetchJson(manifestUrl));
+  const loader = new GLTFLoader();
+  const loaded = new Map<MotionLabFixtureId, Group>();
+
+  await Promise.all(manifest.fixtures.map(async (fixture) => {
+    const fixtureUrl = new URL(`assets/${fixture.file}`, baseUrl);
+    const gltf = await loadThreeLoaderAsset(loader, fixtureUrl.href, { encodeUrl: false });
+    if (gltf.animations.length !== 0) throw new Error(`${fixture.id} must not contain animation clips.`);
+    if (findSkinnedMesh(gltf.scene).skeleton.bones.length !== fixture.inspection.joints) {
+      throw new Error(`${fixture.id} skin joint count differs from its manifest.`);
+    }
+    gltf.scene.name = `fixture:${fixture.id}`;
+    loaded.set(fixture.id, gltf.scene);
+  }));
+
+  const canonical = manifest.fixtures.find((fixture) => fixture.id === "canonical");
+  if (!canonical) throw new Error("Canonical fixture metadata is missing.");
+
+  return {
+    manifest,
+    canonicalJointNames: canonical.inspection.jointNames,
+    createInstance(id) {
+      const source = loaded.get(id);
+      if (!source) throw new Error(`Fixture was not preloaded: ${id}`);
+      const instance = clonePreparedThreeObject(source, {
+        clone: (object) => {
+          const instance = clone(object);
+          if (!(instance instanceof Group)) throw new Error("Cloned fixture root is not a Three.js Group.");
+          return instance;
+        },
+        castShadow: true,
+        receiveShadow: true,
+      });
+      instance.name = `fixture-instance:${id}`;
+      return instance;
+    },
+    entry(id) {
+      const entry = manifest.fixtures.find((fixture) => fixture.id === id);
+      if (!entry) throw new Error(`Fixture metadata is unavailable: ${id}`);
+      return entry;
+    },
+  };
+}

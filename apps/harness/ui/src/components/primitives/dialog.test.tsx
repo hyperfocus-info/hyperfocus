@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
-import { createUiTest } from "../../utils/tests/test-harness";
+import { createUiTest, requireElement } from "../../utils/tests/test-harness";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { clearBrowserStateForTests } from "../../utils/tests/store-test-utils";
 import { Dialog } from "./dialog";
@@ -51,10 +51,7 @@ createUiTest("Dialog", () => {
     render(() => <Dialog open title="Closable dialog" onClose={() => closeCount += 1}>Body</Dialog>);
 
     const dialog = await screen.findByRole("dialog", { name: "Closable dialog" });
-    const backdrop = dialog.parentElement?.previousElementSibling as HTMLElement | null;
-    if (!backdrop) {
-      throw new Error("Expected dialog backdrop");
-    }
+    const backdrop = requireElement(dialog.parentElement?.previousElementSibling);
 
     fireEvent.click(backdrop);
     fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));

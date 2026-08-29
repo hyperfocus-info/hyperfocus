@@ -1,4 +1,4 @@
-import type { ModeDefinition } from "./protocol";
+import type { ModeDefinition } from "./protocol/conversation";
 
 /**
  * Auto-mode intent detection.
@@ -32,15 +32,19 @@ export type ModeIntentMessage = {
 };
 
 export type ModeIntentContext = {
-  recentMessages?: ModeIntentMessage[];
+  recentMessages?: readonly ModeIntentMessage[];
   stickyModeId?: string;
 };
 
-type WorkspaceAction = {
-  artifact: "folder" | "file" | "workspace-artifact";
-  target?: string;
-  inherited: boolean;
-};
+function createWorkspaceAction(
+  artifact: "folder" | "file" | "workspace-artifact",
+  target: string | undefined,
+  inherited: boolean
+) {
+  return { artifact, target, inherited };
+}
+
+type WorkspaceAction = ReturnType<typeof createWorkspaceAction>;
 
 // ---------------------------------------------------------------------------
 // Starter / gating patterns (non-global, used with .test()).
@@ -122,16 +126,13 @@ const codeFence = /```|`[^`\n]+`/g;
 
 export function detectAutoMode(
   content: string,
-  availableModes: Array<Pick<ModeDefinition, "id">> = [],
+  availableModes: readonly Pick<ModeDefinition, "id">[] = [],
   context: ModeIntentContext = {}
 ) {
   const availableModeIds = new Set(availableModes.map((mode) => mode.id));
 
   if (availableModeIds.has("implement") && isDirectWorkspaceImplementTask(content, context)) {
-    return {
-      modeId: "implement" as BuiltinAutoModeId,
-      confidence: PLANNER_BYPASS_CONFIDENCE
-    };
+    return createModeScore("implement", PLANNER_BYPASS_CONFIDENCE);
   }
 
   const scored = scoreBuiltinModeIntent(content).filter((entry) =>
@@ -282,12 +283,12 @@ export function scoreBuiltinModeIntent(content: string) {
   );
 
   return [
-    { modeId: "ask", confidence: askScore },
-    { modeId: "plan", confidence: planScore },
-    { modeId: "implement", confidence: implementScore },
-    { modeId: "debug", confidence: debugScore },
-    { modeId: "review", confidence: reviewScore }
-  ] as Array<{ modeId: BuiltinAutoModeId; confidence: number }>;
+    createModeScore("ask", askScore),
+    createModeScore("plan", planScore),
+    createModeScore("implement", implementScore),
+    createModeScore("debug", debugScore),
+    createModeScore("review", reviewScore)
+  ];
 }
 
 export function estimateTaskDifficulty(content: string, context: ModeIntentContext = {}) {
@@ -411,11 +412,7 @@ export function extractWorkspaceAction(content: string, context: ModeIntentConte
     return undefined;
   }
 
-  return {
-    artifact: artifact ?? "workspace-artifact",
-    target,
-    inherited: false
-  } satisfies WorkspaceAction;
+  return createWorkspaceAction(artifact ?? "workspace-artifact", target, false);
 }
 
 function countMatches(input: string, pattern: RegExp) {
@@ -436,25 +433,26 @@ function clamp01(value: number) {
 
 function exactKeywordShortcut(normalized: string) {
   for (const id of builtinAutoModeIds) {
-    if (normalized === id) return { modeId: id, confidence: 1 } as const;
+    if (normalized === id) return createModeScore(id, 1);
   }
   return undefined;
 }
 
 function emptyScores() {
-  return builtinAutoModeIds.map((id) => ({ modeId: id, confidence: 0 })) as Array<{
-    modeId: BuiltinAutoModeId;
-    confidence: number;
-  }>;
+  return builtinAutoModeIds.map((id) => createModeScore(id, 0));
+}
+
+function createModeScore(modeId: BuiltinAutoModeId, confidence: number) {
+  return { modeId, confidence };
 }
 
 function extractWorkspaceArtifact(input: string) {
   if (/\b(?:folder|directory)\b/.test(input)) {
-    return "folder" as const;
+    return "folder";
   }
 
   if (/\b(?:file|readme|read-me|docs?|config(?:uration)?|package\.json|tsconfig(?:\.json)?|\.env|env)\b/.test(input)) {
-    return "file" as const;
+    return "file";
   }
 
   return undefined;
@@ -489,7 +487,7 @@ function cleanWorkspaceTarget(value: string) {
   return value.trim().replace(/^[(`"']+|[)`"',.;:]+$/g, "");
 }
 
-function inferRecentWorkspaceAction(recentMessages: ModeIntentMessage[] | undefined) {
+function inferRecentWorkspaceAction(recentMessages: readonly ModeIntentMessage[] | undefined) {
   if (!recentMessages?.length) {
     return undefined;
   }
@@ -508,11 +506,7 @@ function inferRecentWorkspaceAction(recentMessages: ModeIntentMessage[] | undefi
       continue;
     }
 
-    const action = {
-      artifact: artifact ?? "workspace-artifact",
-      target,
-      inherited: true
-    } satisfies WorkspaceAction;
+    const action = createWorkspaceAction(artifact ?? "workspace-artifact", target, true);
     if (artifact) {
       return action;
     }
@@ -549,9 +543,5 @@ function rebaseWorkspaceActionToCurrentScope(inheritedAction: WorkspaceAction, n
       ? inheritedAction.target.split(/[\\/]/).filter(Boolean).at(-1)
       : inheritedAction.target;
 
-  return {
-    artifact: inheritedAction.artifact,
-    target: rebasedTarget,
-    inherited: true
-  } satisfies WorkspaceAction;
+  return createWorkspaceAction(inheritedAction.artifact, rebasedTarget, true);
 }

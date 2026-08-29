@@ -12,11 +12,6 @@ let themeTransitionTimeout: number | undefined;
 
 const THEME_TRANSITION_DURATION_MS = 700;
 
-type LegacyMediaQueryList = MediaQueryList & {
-  addListener?: (listener: () => void) => void;
-  removeListener?: (listener: () => void) => void;
-};
-
 export function applyThemePreference(preference: ThemePreference, root: HTMLElement | undefined = getDocumentRoot()) {
   if (!root) {
     return;
@@ -46,7 +41,7 @@ export function applyThemePreference(preference: ThemePreference, root: HTMLElem
   applyResolvedTokens();
 
   if (normalized.mode === "system" && typeof window !== "undefined" && "matchMedia" in window) {
-    const media = window.matchMedia("(prefers-color-scheme: dark)") as LegacyMediaQueryList;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
     const listener = () => applyResolvedTokens();
     if (typeof media.addEventListener === "function") {
       media.addEventListener("change", listener);

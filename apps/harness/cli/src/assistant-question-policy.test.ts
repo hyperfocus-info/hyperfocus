@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AssistantLearning, AssistantQuestion } from "../../shared/protocol";
-import { evaluateAssistantQuestionPolicy } from "./assistant-question-policy";
+import type { AssistantLearning, AssistantQuestion } from "@hyperfocus/ai-core/protocol";
+import { evaluateAssistantQuestionPolicy, readAssistantPendingPromptQuestions, readAssistantPromptQuestions } from "./assistant-question-policy";
 
 const now = new Date().toISOString();
 
@@ -27,6 +27,28 @@ function learning(summary: string): AssistantLearning {
     createdAt: now
   };
 }
+
+test("prompt question scan reaches durable answers beyond bounded operational history", () => {
+  const pages = Array.from({ length: 33 }, (_, pageIndex) => Array.from({ length: 128 }, (_, index) => question({
+    id: `operational-${pageIndex}-${index}`, prompt: "Which todo should run?", answerText: "Run the first one."
+  })));
+  pages[32] = [question({ id: "durable-answer", prompt: "Which visual style should the game use?", answerText: "Use pixel art." })];
+  const selected = readAssistantPromptQuestions((cursor) => {
+    const index = cursor ? Number(cursor) : 0;
+    return { items: pages[index]!, nextCursor: index + 1 < pages.length ? String(index + 1) : undefined };
+  });
+  expect(selected.map((entry) => entry.id)).toEqual(["durable-answer"]);
+});
+
+test("pending prompt scan reaches old questions while retaining bounded context", () => {
+  const pages = Array.from({ length: 33 }, (_, pageIndex) => Array.from({ length: 128 }, (_, index) => question({
+    id: `answered-${pageIndex}-${index}`, status: "answered", answerText: "Done"
+  })));
+  pages[32] = [question({ id: "old-pending", status: "pending" })];
+  const selected = readAssistantPendingPromptQuestions((cursor) => { const index = cursor ? Number(cursor) : 0;
+    return { items: pages[index]!, nextCursor: index + 1 < pages.length ? String(index + 1) : undefined }; });
+  expect(selected.map((entry) => entry.id)).toEqual(["old-pending"]);
+});
 
 describe("assistant question policy", () => {
   test("suppresses duplicate taste questions after do-not-ask guidance", () => {

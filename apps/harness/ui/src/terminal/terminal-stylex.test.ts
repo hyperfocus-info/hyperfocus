@@ -3,6 +3,7 @@ import { transformFileAsync } from "@babel/core";
 import typescriptPreset from "@babel/preset-typescript";
 import stylexBabelPlugin from "@stylexjs/babel-plugin";
 import solidPreset from "babel-preset-solid";
+import { readStylexRules } from "../utils/tests/stylex-test-utils";
 
 const terminalSources = [
   "./terminal.styles.ts",
@@ -54,10 +55,7 @@ describe("Terminal StyleX boundary", () => {
         }]],
       });
       expect(result?.code?.length).toBeGreaterThan(0);
-      const extracted = (result?.metadata as { stylex?: Parameters<typeof stylexBabelPlugin.processStylexRules>[0] } | undefined)?.stylex;
-      if (extracted) {
-        extractedRules.push(...extracted);
-      }
+      extractedRules.push(...readStylexRules(result?.metadata));
     }
 
     const css = stylexBabelPlugin.processStylexRules(extractedRules, {

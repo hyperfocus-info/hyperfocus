@@ -1,12 +1,21 @@
 {
   "name": "@hyperfocus/ai-core",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Typed, framework-neutral contracts and clients for Hyperfocus AI runtimes.",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./protocol": "./src/harness/protocol.ts",
+    "./capacity-governor": "./src/capacity-governor.ts",
+    "./agent-catalog": "./src/harness/agent-catalog.ts",
+    "./app-version": "./src/harness/app-version.ts",
+    "./background-job-templates": "./src/harness/background-job-templates.ts",
+    "./capabilities": "./src/harness/capabilities.ts",
+    "./chat-attachments": "./src/harness/chat-attachments.ts",
+    "./intent-contract": "./src/harness/intent-contract.ts",
+    "./mode-intent": "./src/harness/mode-intent.ts",
+    "./protocol": "./src/harness/protocol/index.ts",
     "./modes": "./src/harness/modes.ts"
   },
   "files": ["src", "README.md"],
@@ -19,4 +28,3 @@
     "zod": "^3.25.76"
   }
 }
-

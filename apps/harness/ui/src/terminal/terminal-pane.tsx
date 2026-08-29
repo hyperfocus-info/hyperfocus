@@ -1,7 +1,7 @@
 import { Show, createSignal } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { AlertTriangle, Maximize2, Search, SplitSquareHorizontal, SplitSquareVertical, Square } from "lucide-solid";
-import { createRequestId, type TerminalSession } from "../../../shared/protocol";
+import { createRequestId, type TerminalSession } from "@hyperfocus/ai-core/protocol";
 import { getActiveProject, harnessStore } from "../harness-store";
 import { ActionButton } from "../components/action-button";
 import { terminalStore } from "./terminal-store";
@@ -10,7 +10,7 @@ import { SolidTerminalRendererPrototype } from "./renderers/solid-renderer-proto
 import { TerminalSearch } from "./terminal-search";
 import { shouldUseSolidTerminalRenderer } from "./terminal-renderer-mode";
 import { openTerminalSearch } from "./terminal-search-actions";
-import { sendTerminalInput } from "./terminal-transport";
+import { ownTerminalCreatingAttachRequest, sendTerminalInput } from "./terminal-transport";
 import { terminalStyles as styles, terminalUtilities as utilities } from "./terminal.styles";
 
 export function TerminalPane(props: {
@@ -99,16 +99,16 @@ export function TerminalPane(props: {
           <ActionButton tooltip="Search terminal" ariaLabel="Search terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Search class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={openTerminalSearch} />
           <ActionButton tooltip="Split terminal right" ariaLabel="Split terminal right" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<SplitSquareVertical class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={props.onSplitVertical} />
           <ActionButton tooltip="Split terminal down" ariaLabel="Split terminal down" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<SplitSquareHorizontal class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={props.onSplitHorizontal} />
-          <ActionButton tooltip="Restart terminal" ariaLabel="Restart terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Maximize2 class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={() => harnessStore.actions.sendCommand({
+          <ActionButton tooltip="Restart terminal" ariaLabel="Restart terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Maximize2 class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={() => { const requestId = createRequestId(); if (!harnessStore.actions.sendCommand({
             type: "terminal.session.restart",
-            requestId: createRequestId(),
+            requestId,
             payload: {
               projectId: props.session.projectId,
               sessionId: props.session.id,
               cols: props.session.cols,
               rows: props.session.rows
             }
-          })} />
+          })) return; ownTerminalCreatingAttachRequest(requestId); }} />
           <ActionButton tooltip="Stop terminal" ariaLabel="Stop terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Square class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={() => harnessStore.actions.sendCommand({
             type: "terminal.session.stop",
             requestId: createRequestId(),

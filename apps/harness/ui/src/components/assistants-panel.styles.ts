@@ -24,7 +24,9 @@ export const assistantUtilityStyles = stylex.create({
   breakWords: { overflowWrap: "anywhere" },
   cursorPointer: { cursor: "pointer" },
   flex: { display: "flex" },
-  flex1: { flex: "1 1 0%" },
+  flex1: { flexBasis: '0%',
+ flexGrow: '1',
+ flexShrink: '1', },
   flexCol: { flexDirection: "column" },
   flexWrap: { flexWrap: "wrap" },
   fontSemibold: { fontWeight: 600 },
@@ -148,8 +150,8 @@ export const assistantUtilityStyles = stylex.create({
     justifyContent: { default: null, "@media (min-width: 640px)": "flex-end" },
   },
   smWAuto: { width: { default: null, "@media (min-width: 640px)": "auto" } },
-  spaceY1: { display: "flex", flexDirection: "column", gap: "0.25rem" },
-  spaceY2: { display: "flex", flexDirection: "column", gap: "0.5rem" },
+  spaceY1: { gap: "0.25rem", display: "flex", flexDirection: "column", },
+  spaceY2: { gap: "0.5rem", display: "flex", flexDirection: "column", },
   text0575: { fontSize: "0.575rem" },
   text0585: { fontSize: "0.585rem" },
   text0625: { fontSize: "0.625rem" },
@@ -204,16 +206,16 @@ export const assistantUtilityStyles = stylex.create({
 /** Semantic interaction and state variants that previously depended on global legacy selectors. */
 export const assistantPanelStyles = stylex.create({
   denseCard: {
-    backgroundColor: "color-mix(in srgb, var(--panel-strong) 64%, transparent)",
     borderColor: "var(--border)",
     borderRadius: "0.5rem",
     borderStyle: "solid",
     borderWidth: "1px",
+    backgroundColor: "color-mix(in srgb, var(--panel-strong) 64%, transparent)",
     boxShadow: "none",
   },
   denseCardSelected: {
-    backgroundColor: "color-mix(in srgb, var(--accent) 10%, var(--panel) 90%)",
     borderColor: "var(--accent)",
+    backgroundColor: "color-mix(in srgb, var(--accent) 10%, var(--panel) 90%)",
     boxShadow: "inset 3px 0 0 var(--accent)",
   },
   secondaryAction: {
@@ -237,25 +239,25 @@ export const assistantPanelStyles = stylex.create({
     boxShadow: { ":focus-visible": "0 0 0 2px var(--ring)" },
   },
   tab: {
-    borderBottomStyle: "solid",
-    borderBottomWidth: "2px",
     borderRadius: 0,
-    flexShrink: 0,
-    height: "2.25rem",
     paddingInline: "0.625rem",
     color: { ":hover": "var(--foreground)" },
+    flexShrink: 0,
+    borderBottomStyle: "solid",
+    borderBottomWidth: "2px",
+    height: "2.25rem",
   },
   tabActive: {
     backgroundColor: { default: "transparent", ":hover": "transparent" },
-    borderBottomColor: "var(--accent)",
     color: {
       default: "var(--accent-strong)",
       ":hover": "var(--accent-strong)",
     },
+    borderBottomColor: "var(--accent)",
   },
   tabIdle: {
     backgroundColor: { ":hover": "var(--panel-strong)" },
-    borderBottomColor: "transparent",
     color: "var(--muted)",
+    borderBottomColor: "transparent",
   },
 });

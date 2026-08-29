@@ -3,6 +3,7 @@ import { transformFileAsync } from "@babel/core";
 import typescriptPreset from "@babel/preset-typescript";
 import stylexBabelPlugin from "@stylexjs/babel-plugin";
 import solidPreset from "babel-preset-solid";
+import { readStylexRules } from "../utils/tests/stylex-test-utils";
 
 const componentUrls = [
   new URL("./markdown-content.tsx", import.meta.url),
@@ -57,18 +58,12 @@ describe("Markdown StyleX boundary", () => {
         return transformFileAsync(filename, { ...options, filename });
       }),
     );
-    const styleRules = (
-      results.at(-1)?.metadata as
-        | {
-            stylex?: Parameters<typeof stylexBabelPlugin.processStylexRules>[0];
-          }
-        | undefined
-    )?.stylex;
+    const styleRules = readStylexRules(results.at(-1)?.metadata);
 
     expect(results.every((result) => Boolean(result?.code))).toBe(true);
     expect(styleRules?.length).toBeGreaterThan(0);
     expect(() =>
-      stylexBabelPlugin.processStylexRules(styleRules ?? []),
+      stylexBabelPlugin.processStylexRules(styleRules),
     ).not.toThrow();
   });
 });

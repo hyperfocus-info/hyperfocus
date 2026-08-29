@@ -1,4 +1,4 @@
-import { createChatMessage, type ChatMessage } from "../../../shared/protocol";
+import { createChatMessage, type ChatMessage } from "@hyperfocus/ai-core/protocol";
 
 export const PROJECT_CHAT_BROWSER_TARGET_TEXT = "Project chat browser message 159";
 export const ASSISTANT_CHAT_BROWSER_TARGET_TEXT = "Assistant chat browser message 159";

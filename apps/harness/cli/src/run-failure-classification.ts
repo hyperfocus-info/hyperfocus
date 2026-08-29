@@ -1,4 +1,4 @@
-import { runFailureCategorySchema, type RunFailureCategory } from "../../shared/protocol";
+import { runFailureCategorySchema, type RunFailureCategory } from "@hyperfocus/ai-core/protocol";
 
 type ClassifyRunFailureInput = {
   message?: string;

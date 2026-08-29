@@ -2,7 +2,7 @@ import {
   backgroundJobSchedulePreviewSchema,
   type BackgroundJobSchedule,
   type BackgroundJobSchedulePreview
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 
 const RELATIVE_INTERVAL_RE = /^(\d+)?\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)$/i;
 const FIVE_FIELD_CRON_RE =
@@ -92,7 +92,7 @@ export function getDueScheduleAdvance(schedule: BackgroundJobSchedule, now: Date
             ? ({
                 ...schedule,
                 consumedAt: now.toISOString()
-              } satisfies BackgroundJobSchedule)
+              })
             : schedule,
         nextRunAt: undefined
       };
@@ -118,7 +118,7 @@ export function getDueScheduleAdvance(schedule: BackgroundJobSchedule, now: Date
         nextSchedule: {
           ...schedule,
           nextRunAt: nextFutureRun.toISOString()
-        } satisfies BackgroundJobSchedule,
+        },
         nextRunAt: nextFutureRun.toISOString()
       };
     }
@@ -157,7 +157,7 @@ export function getDueScheduleAdvance(schedule: BackgroundJobSchedule, now: Date
         nextSchedule: {
           ...schedule,
           nextRunAt: nextFutureRun.toISOString()
-        } satisfies BackgroundJobSchedule,
+        },
         nextRunAt: nextFutureRun.toISOString()
       };
     }
@@ -178,7 +178,7 @@ export function getPostRunScheduleAdvance(schedule: BackgroundJobSchedule, compl
         schedule: {
           ...schedule,
           nextRunAt
-        } satisfies BackgroundJobSchedule,
+        },
         nextRunAt
       };
     }
@@ -196,14 +196,14 @@ export function getPostRunScheduleAdvance(schedule: BackgroundJobSchedule, compl
         schedule: {
           ...schedule,
           nextRunAt
-        } satisfies BackgroundJobSchedule,
+        },
         nextRunAt
       };
     }
   }
 }
 
-function parseRelativeInterval(input: string, now: Date) {
+function parseRelativeInterval(input: string, now: Date): BackgroundJobSchedule | undefined {
   const match = input.match(RELATIVE_INTERVAL_RE);
   if (!match) {
     return undefined;
@@ -229,7 +229,7 @@ function parseRelativeInterval(input: string, now: Date) {
     intervalSeconds,
     nextRunAt: new Date(now.getTime() + intervalSeconds * 1000).toISOString(),
     sourceText: input
-  } satisfies BackgroundJobSchedule;
+  };
 }
 
 function parseAbsoluteDate(input: string) {

@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
-import { stylexSolidPlugin } from "../../scripts/stylex-solid-plugin";
+import { stylexSolidPlugin } from "./build-tools/stylex-solid-plugin";
 
 const sourceRoot = path.join(import.meta.dir, "src");
 const outdir = path.join(import.meta.dir, "dist");

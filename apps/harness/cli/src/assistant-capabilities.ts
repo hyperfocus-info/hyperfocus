@@ -7,8 +7,29 @@ import type {
   AssistantAssetRefProvenance,
   AssistantAssetRefScope,
   BackgroundJobTemplate,
-  ModeDefinition
-} from "../../shared/protocol";
+  ModeDefinition,
+  AgentId,
+  AgentRuntimeCapability,
+  ProviderBrand
+} from "@hyperfocus/ai-core/protocol";
+
+export function resolveAssistantExecutionModel(input: { agentId: AgentId; capability: AgentRuntimeCapability;
+  providerBrand: ProviderBrand; runtimeDefaultModelId: string; requestedModelId?: string; persistedModelId?: string }) {
+  const requested = isAssistantExecutionModelAvailable(input.agentId, input.capability, input.requestedModelId, input.providerBrand)
+    ? input.requestedModelId : undefined;
+  const persisted = isAssistantExecutionModelAvailable(input.agentId, input.capability, input.persistedModelId, input.providerBrand)
+    ? input.persistedModelId : undefined;
+  return { modelId: requested ?? persisted ?? input.runtimeDefaultModelId,
+    rejectedModelId: input.requestedModelId && requested !== input.requestedModelId ? input.requestedModelId
+      : input.persistedModelId && !persisted ? input.persistedModelId : undefined };
+}
+
+function isAssistantExecutionModelAvailable(agentId: AgentId, capability: AgentRuntimeCapability,
+  modelId: string | undefined, providerBrand: ProviderBrand) {
+  if (!modelId) return false;
+  if (agentId !== "pi") return capability.activeModel === modelId || capability.discoveredModels.includes(modelId);
+  return providerBrand === "gemini" ? modelId.startsWith("google/") : modelId.startsWith("openai/");
+}
 
 type ResolveAssistantAssetRefsInput = {
   repoRoot: string;

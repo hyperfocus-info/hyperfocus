@@ -1,11 +1,11 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
-import { createRequestId, createProjectThreadSummary, type CliSession, type TerminalSession } from "../../../shared/protocol";
+import { createRequestId, createProjectThreadSummary, type CliSession, type TerminalSession } from "@hyperfocus/ai-core/protocol";
 import { harnessStore } from "../harness-store";
 import { clearBrowserStateForTests, captureDispatchedCommands, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
 import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
-import { createUiTest } from "../utils/tests/test-harness";
+import { createUiTest, requireElement } from "../utils/tests/test-harness";
 import { TerminalDrawer } from "./terminal-drawer";
 import { terminalStore } from "./terminal-store";
 
@@ -360,7 +360,7 @@ createUiTest("TerminalDrawer", () => {
     });
 
     const result = render(() => <TerminalDrawer />);
-    const drawer = result.container.querySelector("[data-test-terminal-drawer]") as HTMLElement;
+    const drawer = requireElement(result.container.querySelector("[data-test-terminal-drawer]"));
 
     fireEvent.keyDown(drawer, { key: "f", ctrlKey: true });
     expect(terminalStore.state.searchOpen).toBe(true);
@@ -372,6 +372,24 @@ createUiTest("TerminalDrawer", () => {
     fireEvent.keyDown(drawer, { key: "Escape" });
     expect(terminalStore.state.searchOpen).toBe(false);
   });
+
+  it("shows exhausted replay recovery and sends one manual attach", () => {
+    const project = createViewProjectFixture({ id: "project-replay" });
+    const session = createTerminalSession({ id: "terminal-replay", projectId: project.id });
+    seedHarnessStoreForTests(createHarnessStateFixture({ workspace: { activeProjectId: project.id, projects: [project] } }));
+    terminalStore.resetForTests({ open: true, height: 320, sessions: [session], focusedSessionId: session.id,
+      transportStatusBySessionId: { [session.id]: "replay-exhausted" } });
+    const commands: unknown[] = []; captureDispatchedCommands(commands);
+
+    render(() => <TerminalDrawer />);
+    expect(screen.getByRole("alert").textContent).toContain("expired");
+    fireEvent.click(screen.getByRole("button", { name: "Retry terminal connection" }));
+
+    expect(commands.filter((command) => typeof command === "object" && command !== null
+      && "type" in command && command.type === "terminal.session.attach")).toHaveLength(1);
+    expect(terminalStore.state.transportStatusBySessionId[session.id]).toBe("connecting");
+  });
+
 });
 
 function createCliSession(overrides: Partial<CliSession> = {}): CliSession {

@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { loadAgentsMdRuleSource, withAgentsMdRuleSource } from "./agent-rules";
+import { createHarnessTestTempPath } from "./test-support/test-temp-root";
 
 describe("agent rules", () => {
   test("loads agents.md as a workspace rule source", () => {
-    const root = path.join(process.cwd(), ".tmp-test-data", `agent-rules-${crypto.randomUUID()}`);
+    const root = createHarnessTestTempPath("agent-rules");
     mkdirSync(root, { recursive: true });
     writeFileSync(path.join(root, "agents.md"), "# Agents\n\n- Use terse updates.\n");
 
@@ -23,8 +24,23 @@ describe("agent rules", () => {
     }
   });
 
+  test("loads conventional AGENTS.md when runtime agents.md is absent", () => {
+    const root = createHarnessTestTempPath("agent-rules-uppercase");
+    mkdirSync(root, { recursive: true });
+    writeFileSync(path.join(root, "AGENTS.md"), "# Contributor rules\n");
+
+    try {
+      expect(loadAgentsMdRuleSource(root)).toMatchObject({
+        label: "AGENTS.md",
+        content: "# Contributor rules"
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("prepends agents.md to existing rule sources without requiring a project file copy", () => {
-    const root = path.join(process.cwd(), ".tmp-test-data", `agent-rules-${crypto.randomUUID()}`);
+    const root = createHarnessTestTempPath("agent-rules");
     mkdirSync(root, { recursive: true });
     writeFileSync(path.join(root, "agents.md"), "# Agents\n");
 

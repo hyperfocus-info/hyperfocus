@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { BackgroundJobRun } from "../../shared/protocol";
+import type { BackgroundJobRun } from "@hyperfocus/ai-core/protocol";
 import { assertBackgroundRunTransition } from "./background-job-command-guards";
 
 const baseRun: BackgroundJobRun = {

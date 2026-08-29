@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { buildExecutionPlan, buildExecutionPrompt, chooseExecutionPath, executePlanPrerequisites, executeReadyRun, runPlannerTurn, shouldUseReadOnlyExecutionTools } from "./pi-orchestrator";
 import type { PiAgentAdapter, PiAgentExecutionController, PiAgentPromptRequest, PiAgentPromptResult } from "./pi-agent-adapter";
-import type { ExecutionPlan, ModeDefinition, PlannerReadyTurn, ProviderModelId } from "../../shared/protocol";
-import { builtinModes, resolveModeExecutionAccess } from "../../shared/modes";
-import { WorkspaceRepository } from "./workspace-repository";
-import { RunBudgetAgentAdapter } from "./run-budget-agent-adapter";
+import type { ExecutionPlan, ModeDefinition, PlannerReadyTurn } from "@hyperfocus/ai-core/protocol";
+import { providerModelIdSchema } from "@hyperfocus/ai-core/protocol";
+import { builtinModes, resolveModeExecutionAccess } from "@hyperfocus/ai-core/modes";
+import { createWorkspaceRepository } from "./workspace-repository";
+import { createRunBudgetAgentAdapter } from "./run-budget-agent-adapter";
 
 describe("pi execution router", () => {
   test("routes low difficulty tasks to the main agent", () => {
@@ -383,7 +384,7 @@ describe("pi execution router", () => {
         sessionId: "session-1",
         messages: [],
         executionPlan,
-        executionModelId: readyPlan.executionModelId as ProviderModelId
+        executionModelId: providerModelIdSchema.parse(readyPlan.executionModelId)
       });
       await executeReadyRun(adapter, {
         cwd: rootPath,
@@ -593,11 +594,11 @@ describe("pi execution router", () => {
   });
 
   test("budget wrapper appends runtime budget and stops before exhausted model call", async () => {
-    const repository = new WorkspaceRepository(":memory:", process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(":memory:", process.cwd(), { durability: "test-fast" });
     const project = repository.addProject(process.cwd());
     const run = repository.createAgentRun(project.id, "budget work", "openai/gpt-5.4", project.activeThreadId, 1).activeRun!;
     const calls: PiAgentPromptRequest[] = [];
-    const adapter = new RunBudgetAgentAdapter(
+    const adapter = createRunBudgetAgentAdapter(
       createExecutionAdapter(calls, async () => ({ text: "done" })),
       repository,
       project.id,
@@ -667,7 +668,7 @@ function createExecutionPlan(readyPlan: PlannerReadyTurn): ExecutionPlan {
     finalExecutionBrief: readyPlan.finalExecutionBrief,
     difficultyScore: readyPlan.difficultyScore,
     planningModelId: "openai/gpt-5.4",
-    executionModelId: readyPlan.executionModelId as ProviderModelId,
+    executionModelId: providerModelIdSchema.parse(readyPlan.executionModelId),
     route: "pi-subagents",
     subagentWorktreeStrategy: "same-worktree",
     targetSubagentCount: 1,

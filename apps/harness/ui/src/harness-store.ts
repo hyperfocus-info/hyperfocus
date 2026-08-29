@@ -1,9 +1,10 @@
 import { createStore, reconcile, unwrap } from "solid-js/store";
-import { defaultAgentCatalog } from "../../shared/agent-catalog";
-import { defaultProviderCapabilities } from "../../shared/capabilities";
-import { DEFAULT_MODE_ID, resolveModeById, resolveModeCatalog } from "../../shared/modes";
+import { defaultAgentCatalog } from "@hyperfocus/ai-core/agent-catalog";
+import { defaultProviderCapabilities } from "@hyperfocus/ai-core/capabilities";
+import { DEFAULT_MODE_ID, resolveModeById, resolveModeCatalog } from "@hyperfocus/ai-core/modes";
 import {
-  createRequestId,
+  createRequestId, executionModelIdSchema, hasUniqueAgentRunChildren, hasValidAgentRunOwnership,
+  hasValidBrowserApprovalIntegrity, parseClientCommand,
   type Assistant,
   type AssistantAssetRef,
   type AssistantDetail,
@@ -11,12 +12,10 @@ import {
   type AssistantLogEntry,
   type AssistantQuestion,
   type AssistantsState,
-  type AssistantThread,
   type AssistantTodo,
   type AgentId,
   type AgentPlan,
   type AgentRunState,
-  type AgentRunSummary,
   type AgentTrace,
   type AgentRuntimeCapability,
   type BackgroundJob,
@@ -43,7 +42,6 @@ import {
   type ProjectSearchResult,
   type ProjectThreadSummary,
   type RunModelPreference,
-  type RunDiagnosticsReport,
   type RunDiagnosticsWindowDays,
   type RunPreflight,
   type ClientCommand,
@@ -57,13 +55,43 @@ import {
   type WorkspaceRuleSource,
   type WorkspaceProjectState,
   type WorkspaceState
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
+import * as assistantWorkloads from "./store/assistant-workload-pages";
+import * as assistantDetails from "./store/assistant-detail-state";
+import * as assistantRoster from "./store/assistant-roster-state";
+import { shouldAcceptRunLifecycle, shouldAcceptRunPatch, toRunSummary, upsertRunSummary } from "./store/assistant-event-order";
+import { applyAssistantSummaryDelta, hydrateAssistants, hydrateAssistantsForReconnect, rejectAssistantRequests,
+  resolveMissingReconnectAssistant, resolveReconnectAssistants } from "./store/assistant-hydration";
+import type { AssistantDetailTab, AssistantRosterSort, AssistantScopeFilter,
+  ViewAssistantsState } from "./store/assistant-view-state";
+import { applyWorkspacePageEvent, createWorkspacePageRequests, emptyWorkspacePagingStatus, hydratePagedWorkspace,
+  mergePagedWorkspace, prepareWorkspaceForPageEvent, retainWorkspaceMessageWindow,
+  type WorkspacePagingStatus } from "./store/workspace-page-state";
+import { createReadyContinuationRequests, mergeBackgroundJobPage, mergeNotificationPage } from "./store/ready-continuation-state";
+import { createPagingUnavailableCallbacks, retryUnavailablePagingItems, type PagingUnavailableItem } from "./store/paging-unavailable-state";
 import {
-  DEFAULT_APP_HOTKEY_PREFERENCES,
+  EXPERIENCE_MODE_STORAGE_KEY, isComposerReasoningStrength, parseBooleanStorageValue,
+  parseExperienceModeStorageValue, parseProviderBrandStorageValue, parseReasoningStrengthStorageValue,
+  type HarnessExperienceMode
+} from "./store/preferences/local-preference-values";
+export type { HarnessExperienceMode } from "./store/preferences/local-preference-values";
+import { createHarnessVisualPreferenceActions } from "./store/preferences/harness-visual-actions";
+import { createEmptyBackgroundJobsState, createEmptyNotificationInboxState, createInitialExecutionControlState,
+  createInitialRunDiagnosticsState, createDefaultMainPanelSizes, createInitialSetupState,
+  type MainPanelSizes, type RunDiagnosticsViewState } from "./store/initial-runtime-state";
+export { createEmptyBackgroundJobsState, createEmptyNotificationInboxState, createInitialExecutionControlState,
+  createInitialRunDiagnosticsState, createDefaultMainPanelSizes, createInitialSetupState,
+  type MainPanelSizes, type RunDiagnosticsViewState } from "./store/initial-runtime-state";
+import { getBackgroundJobSourcePatch, getClearPendingBackgroundJobSourcePatch, type PendingBackgroundJobSource } from "./background-job-source-state";
+import type { JobsRunFilter } from "./store/background-jobs-pane-state";
+import { boundBackgroundRuns, createBackgroundJobDeletionTombstones, filterDeletedAssistantWorkloadPage, getBackgroundJobsDeletedViewPatch, getBackgroundJobsUpdatedPatch, isDeletedBackgroundRun, type BackgroundJobDeletionTombstones } from "./store/background-workload-cache";
+import {
+  DEFAULT_APP_HOTKEY_PREFERENCES, normalizeAppHotkeys,
   normalizeAppHotkeyPreferences,
   type AppHotkeyId,
   type AppHotkeyPreferences
 } from "./lib/app-hotkeys";
+import { upsertProjectMemoryEntry } from "./memory/memory-model";
 import { applyThemePreference } from "./theme/theme-apply";
 import {
   createDefaultCustomTheme,
@@ -76,7 +104,9 @@ import {
   type ThemePreference
 } from "./theme/theme-model";
 import { pushToast, reportUiError } from "./toast-store";
-
+import { isTutorialGoalSatisfied } from "./lib/tutorial-progress";
+export { getSelectedAssistant, getVisibleAssistants } from "./assistant-view-selectors";
+export type { AssistantWorkloadPageState } from "./store/assistant-workload-pages";
 export const OPENAI_API_KEY_STORAGE_KEY = "openai_api_key";
 export const GOOGLE_API_KEY_STORAGE_KEY = "google_api_key";
 export const ANTHROPIC_API_KEY_STORAGE_KEY = "anthropic_api_key";
@@ -113,32 +143,23 @@ export const THREAD_DRAFT_STORAGE_KEY_PREFIX = "pi-harness:thread-draft:v1";
 export const TUTORIAL_PROGRESS_STORAGE_KEY = "pi-harness:tutorial-progress:v1";
 export const BROWSER_UI_SESSION_STORAGE_KEY = "pi-harness:browser-ui-session:v1";
 export const PROJECT_SIDEBAR_PREFERENCES_STORAGE_KEY = "pi-harness:project-sidebar-preferences:v1";
-export const DEFAULT_COMPOSER_REASONING_STRENGTH: ComposerReasoningStrength = "high";
-export const COMPOSER_REASONING_STRENGTHS: ComposerReasoningStrength[] = ["low", "medium", "high", "extra-high"];
+export const COMPOSER_REASONING_STRENGTHS = ["low", "medium", "high", "extra-high"] as const;
+export const DEFAULT_COMPOSER_REASONING_STRENGTH = COMPOSER_REASONING_STRENGTHS[2];
 const MAX_STREAMING_MESSAGE_HEARTBEATS = 2;
 const MAX_LIVE_TRACE_HISTORY = 500;
-
 export type HarnessActiveSurface = "chat" | "background-jobs" | "assistants" | "preferences" | "ide";
 export type HarnessLeftTab = "projects" | "assistants" | "jobs" | "runs" | "preferences";
 export type ChatPaneTab = "chat" | "plan" | "run" | "events" | "memory";
-export type AssistantDetailTab = "chat" | "todos" | "questions" | "jobs" | "log" | "config" | "learnings";
-export type AssistantScopeFilter = "all" | "global" | "project";
 export type ProjectSidebarProjectSort = "last-user-message" | "created-at" | "manual";
 export type ProjectSidebarThreadSort = "last-user-message" | "created-at";
 export type ProjectSidebarGrouping = "repository" | "repository-path" | "separate";
 export type JobsPaneSegment = "jobs" | "inbox" | "health";
-export type AssistantRosterSort = "updated" | "created" | "name" | "run-state" | "bootstrap-state";
+export type { AssistantDetailTab, AssistantRosterSort, AssistantScopeFilter,
+  ViewAssistantsState } from "./store/assistant-view-state";
 export type JobsPaneJobSort = "next-run" | "updated" | "created" | "status" | "risk";
 export type JobsPaneRunSort = "urgency" | "updated" | "queued" | "status";
 export type JobsJobStateFilter = "all" | BackgroundJobSchedulerStatus | "backoff";
-export type JobsRunFilter = "all" | "approval" | "input" | "queued" | "running" | "failed" | "done";
 export type TracePanelMode = "closed" | "peek" | "open";
-
-export type RunDiagnosticsViewState = {
-  loading: boolean;
-  windowDays: RunDiagnosticsWindowDays;
-  report?: RunDiagnosticsReport;
-};
 
 export type ProjectSidebarPreferences = {
   projectSort: ProjectSidebarProjectSort;
@@ -155,8 +176,6 @@ export type JobsPanePreferences = {
   runSearch?: string;
   jobSort: JobsPaneJobSort;
   runSort?: JobsPaneRunSort;
-  projectId?: string;
-  assistantId?: string;
   kind?: BackgroundJob["kind"];
   status?: BackgroundJob["status"];
   jobState?: JobsJobStateFilter;
@@ -182,12 +201,6 @@ export type PreferencesActiveSectionId =
   | "usage"
   | "background-jobs"
   | "developer-advanced";
-
-export type MainPanelSizes = {
-  left: number;
-  center: number;
-  right: number;
-};
 
 export type BrowserUiSessionState = {
   selectedModeId?: string;
@@ -313,24 +326,10 @@ export type ViewProjectState = WorkspaceProjectState & {
 export type ViewWorkspaceState = {
   activeProjectId?: string;
   projects: ViewProjectState[];
+  projectsNextCursor?: string;
   workspaceModes?: ModeDefinition[];
   workspaceRuleSource?: WorkspaceRuleSource;
   workspaceMemorySummary?: MemorySummary;
-};
-
-export type ViewAssistantsState = AssistantsState & {
-  selectedAssistantId?: string;
-  selectedTab: AssistantDetailTab;
-  selectedLogDetailsId?: string;
-  scopeFilter: AssistantScopeFilter;
-  rosterSearch: string;
-  detailSearch: string;
-  runStateFilter?: Assistant["runState"];
-  bootstrapStateFilter?: Assistant["bootstrapState"];
-  providerBrandFilter?: Assistant["providerBrand"];
-  projectIdFilter?: string;
-  rosterSort: AssistantRosterSort;
-  streamingByAssistantId: Record<string, string>;
 };
 
 export type HarnessViewState = {
@@ -341,6 +340,7 @@ export type HarnessViewState = {
   agentRuntimes: AgentRuntimeCapability[];
   setup: SetupState;
   workspace: ViewWorkspaceState;
+  workspacePaging: WorkspacePagingStatus;
   activeSurface: HarnessActiveSurface;
   activeLeftTab: HarnessLeftTab;
   chatPaneTab: ChatPaneTab;
@@ -348,12 +348,13 @@ export type HarnessViewState = {
   jobsPanePreferences: JobsPanePreferences;
   jobsRunFilter: JobsRunFilter;
   assistants: ViewAssistantsState;
-  backgroundJobs: BackgroundJobsState;
+  backgroundJobs: BackgroundJobsState; backgroundJobDeletionTombstones: BackgroundJobDeletionTombstones; pendingBackgroundJobSource?: PendingBackgroundJobSource;
   runDiagnostics: RunDiagnosticsViewState;
   diagnosticsRefreshVersion: number;
   tokenUsage: TokenUsageState;
   tokenUsageResetDialogOpen: boolean;
   notifications: NotificationInboxState;
+  pagingUnavailableItems: PagingUnavailableItem[];
   executionControl: ExecutionControlState;
   backgroundJobSchedulePreview?: {
     requestId: string;
@@ -410,6 +411,7 @@ export type HarnessViewState = {
   appHotkeyPreferences: AppHotkeyPreferences;
   themePreference: ThemePreference;
   numericRightAlignmentEnabled: boolean;
+  experienceMode: HarnessExperienceMode;
   attachmentsEnabled: boolean;
   capabilities: ProviderCapability[];
   preferencesModalOpen: boolean;
@@ -518,6 +520,7 @@ export type LocalPreferencesState = {
   appHotkeyPreferences?: AppHotkeyPreferences;
   themePreference?: ThemePreference;
   numericRightAlignmentEnabled?: boolean;
+  experienceMode?: HarnessExperienceMode;
   preferencesActiveSectionId?: PreferencesActiveSectionId;
 };
 
@@ -549,8 +552,6 @@ export function createDefaultJobsPanePreferences(): JobsPanePreferences {
     runSearch: "",
     jobSort: "next-run",
     runSort: "urgency",
-    projectId: undefined,
-    assistantId: undefined,
     kind: undefined,
     status: undefined,
     jobState: "all",
@@ -558,30 +559,6 @@ export function createDefaultJobsPanePreferences(): JobsPanePreferences {
     selectedJobId: undefined,
     selectedRunId: undefined,
     selectedNotificationId: undefined
-  };
-}
-
-export function createDefaultMainPanelSizes(): MainPanelSizes {
-  return {
-    left: 1.25,
-    center: 3,
-    right: 1.4
-  };
-}
-
-export function createEmptyBackgroundJobsState(): BackgroundJobsState {
-  return {
-    jobs: [],
-    runs: [],
-    templates: []
-  };
-}
-
-export function createInitialRunDiagnosticsState(): RunDiagnosticsViewState {
-  return {
-    loading: false,
-    windowDays: 7,
-    report: undefined
   };
 }
 
@@ -594,6 +571,7 @@ export function createEmptyAssistantsState(): ViewAssistantsState {
     questions: [],
     logs: [],
     assetRefs: [],
+    ...assistantWorkloads.createEmptyAssistantWorkloadState(),
     selectedAssistantId: undefined,
     selectedTab: "chat",
     selectedLogDetailsId: undefined,
@@ -605,25 +583,8 @@ export function createEmptyAssistantsState(): ViewAssistantsState {
     providerBrandFilter: undefined,
     projectIdFilter: undefined,
     rosterSort: "updated",
-    streamingByAssistantId: {}
-  };
-}
-
-export function createInitialExecutionControlState(): ExecutionControlState {
-  return {
-    isPaused: false,
-    deferredPlanningQuestionCount: 0,
-    deferredAssistantQuestionCount: 0,
-    deferredBrowserApprovalCount: 0
-  };
-}
-
-export function createEmptyNotificationInboxState(): NotificationInboxState {
-  return {
-    items: [],
-    unreadCount: 0,
-    interactiveUnreadCount: 0,
-    passiveUnreadCount: 0
+    streamingByAssistantId: {}, provisionalReconnectAssistantIds: [], rosterPage: assistantRoster.createAssistantRosterPageState(),
+    ...assistantDetails.createAssistantDetailRequestState()
   };
 }
 
@@ -654,16 +615,6 @@ export function createEmptyTokenUsageState(overrides: Partial<TokenUsageState> =
   };
 }
 
-export function createInitialSetupState(): SetupState {
-  return {
-    launchMode: "source",
-    updatedAt: new Date(0).toISOString(),
-    readyRequiredCount: 0,
-    totalRequiredCount: 0,
-    checks: []
-  };
-}
-
 export function createInitialViewState(): HarnessViewState {
   return {
     connectionState: "disconnected",
@@ -673,6 +624,7 @@ export function createInitialViewState(): HarnessViewState {
     agentRuntimes: [],
     setup: createInitialSetupState(),
     workspace: createInitialWorkspaceState(),
+    workspacePaging: emptyWorkspacePagingStatus(),
     activeSurface: "chat",
     activeLeftTab: "projects",
     chatPaneTab: "chat",
@@ -680,12 +632,13 @@ export function createInitialViewState(): HarnessViewState {
     jobsPanePreferences: createDefaultJobsPanePreferences(),
     jobsRunFilter: "all",
     assistants: createEmptyAssistantsState(),
-    backgroundJobs: createEmptyBackgroundJobsState(),
+    backgroundJobs: createEmptyBackgroundJobsState(), backgroundJobDeletionTombstones: createBackgroundJobDeletionTombstones(), pendingBackgroundJobSource: undefined,
     runDiagnostics: createInitialRunDiagnosticsState(),
     diagnosticsRefreshVersion: 0,
     tokenUsage: createEmptyTokenUsageState(),
     tokenUsageResetDialogOpen: false,
     notifications: createEmptyNotificationInboxState(),
+    pagingUnavailableItems: [],
     executionControl: createInitialExecutionControlState(),
     backgroundJobSchedulePreview: undefined,
     backgroundJobEditorOpen: false,
@@ -734,11 +687,12 @@ export function createInitialViewState(): HarnessViewState {
     maxBackgroundJobsDefault: 10,
     autoArchiveCompletedThreadsDefault: false,
     memoryBankEnabledDefault: true,
-    memoryBankRecordRunsDefault: true,
+    memoryBankRecordRunsDefault: false,
     checkCliUpdatesDefault: true,
     appHotkeyPreferences: { ...DEFAULT_APP_HOTKEY_PREFERENCES },
     themePreference: DEFAULT_THEME_PREFERENCE,
     numericRightAlignmentEnabled: true,
+    experienceMode: "advanced",
     attachmentsEnabled: false,
     capabilities: [...defaultProviderCapabilities],
     preferencesModalOpen: false,
@@ -807,34 +761,24 @@ export function getActiveProject(state: HarnessViewState) {
   return state.workspace.projects.find((project) => project.id === state.workspace.activeProjectId);
 }
 
-export function getVisibleAssistants(state: HarnessViewState) {
-  if (state.assistants.scopeFilter === "all") {
-    return state.assistants.assistants;
-  }
-
-  return state.assistants.assistants.filter((assistant) =>
-    state.assistants.scopeFilter === "global"
-      ? assistant.scope === "global"
-      : assistant.scope === "project" && assistant.projectId === state.workspace.activeProjectId
-  );
-}
-
-export function getSelectedAssistant(state: HarnessViewState) {
-  const visibleAssistants = getVisibleAssistants(state);
-  if (state.assistants.selectedAssistantId) {
-    const selected = visibleAssistants.find((assistant) => assistant.id === state.assistants.selectedAssistantId);
-    if (selected) {
-      return selected;
-    }
-  }
-  return visibleAssistants[0];
-}
-
 export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): HarnessViewState {
+  return reduceWorkspaceServerEvent(state, event)
+    ?? reduceChatStreamServerEvent(state, event)
+    ?? reduceThreadMessageServerEvent(state, event)
+    ?? reduceRunAndWorkloadServerEvent(state, event)
+    ?? reduceAssistantAndControlServerEvent(state, event)
+    ?? state;
+}
+
+function reduceWorkspaceServerEvent(
+  state: HarnessViewState,
+  event: ServerEvent,
+): HarnessViewState | undefined {
   switch (event.type) {
     case "connection.ready": {
       const workspace = hydrateWorkspace(event.payload.workspace);
-      const assistants = hydrateAssistants(state.assistants, event.payload.assistants);
+      const assistants = { ...hydrateAssistantsForReconnect(state.assistants, event.payload.assistants),
+        jobs: [], runs: [], workloadPagesByAssistantId: {} };
       const backgroundJobs = event.payload.backgroundJobs;
       const notifications = event.payload.notifications;
       const readyState = {
@@ -845,6 +789,8 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         workspace,
         assistants,
         backgroundJobs,
+        backgroundJobDeletionTombstones: createBackgroundJobDeletionTombstones(),
+        pendingBackgroundJobSource: undefined,
         notifications,
         executionControl: event.payload.executionControl,
         tokenUsage: event.payload.tokenUsage,
@@ -856,7 +802,9 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
       };
       return {
         ...readyState,
-        jobsPanePreferences: normalizeJobsPanePreferences(readyState.jobsPanePreferences, readyState, true)
+        jobsPanePreferences: normalizeJobsPanePreferences({ ...readyState.jobsPanePreferences,
+          selectedJobId: undefined, selectedRunId: undefined }, readyState, true),
+        backgroundJobDetailsRunId: undefined
       };
     }
     case "notifications.updated":
@@ -865,6 +813,8 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         ...state,
         notifications: event.payload.notifications
       };
+    case "notifications.page.listed":
+      return { ...state, notifications: mergeNotificationPage(state.notifications, event) };
     case "usage.updated":
       return {
         ...state,
@@ -891,18 +841,27 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         projectSearchPendingRequestId: undefined,
         projectSearchFilesystemResults: [],
         workspace: {
+          ...state.workspace,
           activeProjectId: event.payload.activeProjectId,
           projects: upsertProject(state.workspace.projects, toViewProject(event.payload.project))
         }
       };
-    case "project.removed":
+    case "project.removed": {
+      const deletedAssistantIds = state.assistants.assistants
+        .filter((assistant) => assistant.projectId === event.payload.projectId).map((assistant) => assistant.id);
       return {
         ...state,
         workspace: {
+          ...state.workspace,
           activeProjectId: event.payload.activeProjectId,
           projects: state.workspace.projects.filter((project) => project.id !== event.payload.projectId)
-        }
+        },
+        assistants: assistantDetails.invalidateAssistantDetails(hydrateAssistants(state.assistants, {
+          assistants: assistantRoster.mergeAssistantSummaryDelta(state.assistants.assistants, [], deletedAssistantIds),
+          threads: [], todos: [], learnings: [], questions: [], logs: [], assetRefs: []
+        }), deletedAssistantIds)
       };
+    }
     case "project.activated":
       return {
         ...state,
@@ -920,6 +879,9 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
       };
     case "project.search.results":
       return applyProjectSearchResultsState(state, event.requestId, event.payload.query, event.payload.results);
+    case "workspace.projects.listed":
+    case "workspace.projectChildren.listed":
+      return { ...state, workspace: applyWorkspacePageEvent(state.workspace, event, toViewProject) };
     case "workspace.updated":
       return {
         ...state,
@@ -1003,6 +965,16 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
           })
         );
       });
+    default:
+      return undefined;
+  }
+}
+
+function reduceChatStreamServerEvent(
+  state: HarnessViewState,
+  event: ServerEvent,
+): HarnessViewState | undefined {
+  switch (event.type) {
     case "chat.delta":
       return updateProjectState(state, event.payload.projectId, (project) => {
         const targetThreadId = event.payload.sessionId;
@@ -1123,6 +1095,16 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
             }
             : project.session
       }));
+    default:
+      return undefined;
+  }
+}
+
+function reduceThreadMessageServerEvent(
+  state: HarnessViewState,
+  event: ServerEvent,
+): HarnessViewState | undefined {
+  switch (event.type) {
     case "thread.message-appended":
       return updateProjectState(state, event.payload.projectId, (project) =>
         applyThreadLiveTranscriptState(
@@ -1254,12 +1236,23 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         executionPlanDialogOpen: false,
         selectedExecutionPlan: undefined
       };
-    case "run.updated":
+    default:
+      return undefined;
+  }
+}
+
+function reduceRunAndWorkloadServerEvent(
+  state: HarnessViewState,
+  event: ServerEvent,
+): HarnessViewState | undefined {
+  switch (event.type) {
+    case "run.updated": if (event.payload.threadId !== event.payload.run.threadId || !hasValidAgentRunOwnership(event.payload.run) || !hasUniqueAgentRunChildren(event.payload.run) || !hasValidBrowserApprovalIntegrity(event.payload.run)) return state;
       const currentProject = state.workspace.projects.find((project) => project.id === event.payload.projectId);
       const currentThreadState =
         currentProject?.threadLiveTranscriptById[event.payload.threadId] ??
         (currentProject?.activeThreadId === event.payload.threadId ? getActiveThreadLiveTranscriptState(currentProject) : undefined);
       const latestKnownRunId = currentThreadState?.activeRun?.id ?? currentThreadState?.lastRun?.id;
+      if (!shouldAcceptRunLifecycle(currentThreadState?.activeRun ?? currentThreadState?.lastRun, event.payload.run)) return state;
       const resetPlanningTransients =
         event.payload.run.status === "planning" &&
         latestKnownRunId !== undefined &&
@@ -1325,6 +1318,8 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         const priorLiveTranscript =
           project.threadLiveTranscriptById[event.payload.threadId] ??
           (appliesToActiveThread ? getActiveThreadLiveTranscriptState(project) : undefined);
+        const current = [priorLiveTranscript?.activeRun, priorLiveTranscript?.lastRun].find((run) => run?.id === event.payload.runId);
+        if (!shouldAcceptRunPatch(current, event.payload.updatedAt)) return project;
         const nextLiveTranscript = createThreadLiveTranscriptState({
           ...priorLiveTranscript,
           activeRun: patchRun(priorLiveTranscript?.activeRun),
@@ -1370,12 +1365,7 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         ...state,
         workspace: {
           ...state.workspace,
-          projects: state.workspace.projects.map((project) => ({
-            ...project,
-            memoryEntries: project.memoryEntries.map((entry) =>
-              entry.id === event.payload.entry.id ? event.payload.entry : entry
-            )
-          }))
+          projects: state.workspace.projects.map((project) => upsertProjectMemoryEntry(project, event.payload.entry))
         }
       };
     case "memory.reordered":
@@ -1394,94 +1384,61 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
           }))
         }
       };
-    case "cli-session.started":
-    case "cli-session.updated":
-    case "cli-session.exited":
+    case "cli-session.started": case "cli-session.updated": case "cli-session.exited": {
+      if (event.payload.projectId !== event.payload.session.projectId || event.payload.threadId !== event.payload.session.threadId) return state;
       return updateProjectState(state, event.payload.projectId, (project) => ({
         ...project,
         activeCliSession:
           project.activeThreadId === event.payload.threadId ? event.payload.session : project.activeCliSession,
         cliSessions: upsertCliSession(project.cliSessions ?? [], event.payload.session)
       }));
+    }
     case "cli-session.attach-ready":
       return state;
-    case "background-jobs.updated":
-      return {
-        ...state,
-        backgroundJobs: event.payload.backgroundJobs,
-        diagnosticsRefreshVersion: state.diagnosticsRefreshVersion + 1
-      };
-    case "execution-control.updated":
-      return {
-        ...state,
-        executionControl: event.payload.executionControl
-      };
+    case "background-jobs.updated": {
+      return { ...state,
+        ...getBackgroundJobsUpdatedPatch(state, event.payload.backgroundJobs),
+        assistants: assistantWorkloads.invalidateLoadedAssistantWorkloadPages(state.assistants),
+        diagnosticsRefreshVersion: state.diagnosticsRefreshVersion + 1 };
+    }
+    case "background-jobs.page.listed":
+      return { ...state, backgroundJobs: mergeBackgroundJobPage(state.backgroundJobs, event) };
+    case "background-jobs.deleted": return { ...state, ...getBackgroundJobsDeletedViewPatch(state, event.payload) };
+    case "execution-control.updated": return { ...state, executionControl: event.payload.executionControl };
+    default:
+      return undefined;
+  }
+}
+
+function reduceAssistantAndControlServerEvent(
+  state: HarnessViewState,
+  event: ServerEvent,
+): HarnessViewState | undefined {
+  switch (event.type) {
     case "assistants.updated":
-      return {
-        ...state,
-        assistants: hydrateAssistants(state.assistants, event.payload.assistants)
-      };
-    case "assistant.summary.listed":
-      return {
-        ...state,
-        assistants: hydrateAssistants(state.assistants, {
-          assistants: event.payload.assistants.items,
-          threads: [],
-          todos: [],
-          learnings: [],
-          questions: [],
-          logs: [],
-          assetRefs: []
-        })
-      };
+      return { ...state, assistants: applyAssistantSummaryDelta(state.assistants, event.payload) };
+    case "assistant.summary.listed": {
+      const merged = assistantRoster.mergeAssistantRosterPage(state.assistants.assistants,
+        state.assistants.rosterPage, event.requestId, event.payload.assistants);
+      return merged ? { ...state, assistants: resolveReconnectAssistants(hydrateAssistants({ ...state.assistants, rosterPage: merged.page }, {
+        assistants: merged.assistants, threads: [], todos: [], learnings: [], questions: [], logs: [], assetRefs: []
+      }), event.payload.assistants.items.map(({ id }) => id)) } : state;
+    }
     case "assistant.detail.loaded":
-      return {
-        ...state,
-        assistants: mergeAssistantDetail(state.assistants, event.payload.detail)
-      };
+      if (state.assistants.pendingDetailRequestByAssistantId[event.payload.detail.assistant.id] !== event.requestId) return state;
+      return { ...state, assistants: resolveReconnectAssistants(
+        mergeAssistantDetail(state.assistants, event.payload.detail), [event.payload.detail.assistant.id]) };
+    case "assistant.workloads.listed": return { ...state, assistants: assistantWorkloads.mergeAssistantWorkloadPage(
+      state.assistants, event.requestId, filterDeletedAssistantWorkloadPage(event.payload, state.backgroundJobDeletionTombstones)) };
+    case "background-job.source.loaded": return { ...state, ...getBackgroundJobSourcePatch(state, event.requestId, event.payload) };
     case "assistant.thread.messages.listed":
-      return {
-        ...state,
-        assistants: mergeAssistantThreadMessages(
-          state.assistants,
-          event.payload.assistantId,
-          event.payload.threadId,
-          event.payload.messages.items
-        )
-      };
     case "assistant.logs.listed":
-      return {
-        ...state,
-        assistants: {
-          ...state.assistants,
-          logs: mergeScopedItems(state.assistants.logs, event.payload.assistantId, event.payload.logs.items)
-        }
-      };
     case "assistant.todos.listed":
-      return {
-        ...state,
-        assistants: {
-          ...state.assistants,
-          todos: mergeScopedItems(state.assistants.todos, event.payload.assistantId, event.payload.todos.items)
-        }
-      };
     case "assistant.learnings.listed":
-      return {
-        ...state,
-        assistants: {
-          ...state.assistants,
-          learnings: mergeScopedItems(state.assistants.learnings, event.payload.assistantId, event.payload.learnings.items)
-        }
-      };
-    case "assistant.questions.listed":
-      return {
-        ...state,
-        assistants: {
-          ...state.assistants,
-          questions: mergeScopedItems(state.assistants.questions, event.payload.assistantId, event.payload.questions.items)
-        }
-      };
+    case "assistant.questions.listed": { const assistants = assistantDetails.reduceAssistantDetailPageEvent(state.assistants, event);
+      return assistants === state.assistants ? state : { ...state, assistants }; }
     case "assistant.updated":
+      if (!state.assistants.assistants.some((assistant) => assistant.id === event.payload.assistant.id)) return state;
       return {
         ...state,
         assistants: {
@@ -1490,38 +1447,12 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         }
       };
     case "assistant.chat.delta":
-      return {
-        ...state,
-        assistants: {
-          ...state.assistants,
-          streamingByAssistantId: {
-            ...state.assistants.streamingByAssistantId,
-            [event.payload.assistantId]:
-              (state.assistants.streamingByAssistantId[event.payload.assistantId] ?? "") + event.payload.delta
-          }
-        }
-      };
     case "assistant.chat.message-appended":
-      return {
-        ...state,
-        assistants: {
-          ...state.assistants,
-          threads: upsertById(state.assistants.threads, event.payload.thread)
-        }
-      };
     case "assistant.chat.complete":
-      return {
-        ...state,
-        assistants: {
-          ...state.assistants,
-          threads: upsertById(state.assistants.threads, event.payload.thread),
-          streamingByAssistantId: {
-            ...state.assistants.streamingByAssistantId,
-            [event.payload.assistantId]: ""
-          }
-        }
-      };
+    case "assistant.chat.failed": { const assistants = assistantDetails.reduceAssistantLiveChatEvent(state.assistants, event);
+      return assistants === state.assistants ? state : { ...state, assistants }; }
     case "assistant.question.updated":
+      if (!state.assistants.loadedDetailAssistantIds.includes(event.payload.question.assistantId)) return state;
       return {
         ...state,
         assistants: {
@@ -1530,6 +1461,7 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         }
       };
     case "assistant.todo.updated":
+      if (!state.assistants.loadedDetailAssistantIds.includes(event.payload.todo.assistantId)) return state;
       return {
         ...state,
         assistants: {
@@ -1538,13 +1470,8 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         }
       };
     case "assistant.log.appended":
-      return {
-        ...state,
-        assistants: {
-          ...state.assistants,
-          logs: [event.payload.entry, ...state.assistants.logs.filter((entry) => entry.id !== event.payload.entry.id)]
-        }
-      };
+      { const assistants = assistantDetails.appendAssistantLiveLog(state.assistants, event.payload.entry);
+        return assistants === state.assistants ? state : { ...state, assistants }; }
     case "assistant.created-card":
       return {
         ...state,
@@ -1555,12 +1482,17 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         }
       };
     case "background-job-run.updated":
+      if (isDeletedBackgroundRun(event.payload.run, state.backgroundJobDeletionTombstones)) return state;
       return {
         ...state,
         backgroundJobs: {
           ...state.backgroundJobs,
-          runs: upsertBackgroundJobRun(state.backgroundJobs.runs, event.payload.run)
+          runs: upsertBackgroundJobRun(state.backgroundJobs.runs, event.payload.run, new Set([
+            state.jobsPanePreferences.selectedRunId,
+            state.backgroundJobDetailsRunId
+          ].filter((id): id is string => !!id)))
         },
+        assistants: assistantWorkloads.applyLiveAssistantRun(state.assistants, event.payload.run),
         diagnosticsRefreshVersion: state.diagnosticsRefreshVersion + 1
       };
     case "run-diagnostics.inspected":
@@ -1631,7 +1563,17 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
           })
         );
       });
-    case "command.rejected":
+    case "command.rejected": {
+      if (!event.requestId) return state;
+      return {
+        ...state,
+        assistants: rejectAssistantRequests(resolveMissingReconnectAssistant(state.assistants, event.requestId,
+          event.payload.message), event.requestId,
+          event.payload.detail ?? event.payload.message, event.payload.code),
+        ...getClearPendingBackgroundJobSourcePatch(state, event.requestId)
+      };
+    }
+    case "bulk-operation.applied": return state;
     case "connection.pong":
       return state;
     case "preferences.saved":
@@ -1664,10 +1606,9 @@ export function reduceServerEvent(state: HarnessViewState, event: ServerEvent): 
         setup: event.payload.setup
       };
     default:
-      return state;
+      return undefined;
   }
 }
-
 function applyTokenUsageEvent(
   state: HarnessViewState,
   event: Extract<ServerEvent, { type: "project.context" }>,
@@ -1745,16 +1686,14 @@ function addTokenUsageTotals(left: TokenUsageTotals, right: TokenUsageTotals) {
   });
 }
 
-export function createHarnessStore() {
+function createHarnessStoreContext() {
   const [state, setState] = createStore(createInitialViewState());
   let commandDispatcher: ((command: ClientCommand) => void) | undefined;
+  let assistantDetailDemandCount = 0;
   const recordedTokenUsageEventKeys = new Set<string>();
-
   const persistBrowserUiStateIfChanged = (previousSnapshot: BrowserUiSessionState, nextState: HarnessViewState) => {
     const nextSnapshot = getBrowserUiSessionSnapshot(nextState);
-    if (JSON.stringify(previousSnapshot) !== JSON.stringify(nextSnapshot)) {
-      persistBrowserUiSession(nextSnapshot);
-    }
+    if (JSON.stringify(previousSnapshot) !== JSON.stringify(nextSnapshot)) persistBrowserUiSession(nextSnapshot);
   };
   const setThemePreferenceState = (themePreference: ThemePreference) => {
     const normalized = normalizeThemePreference(themePreference);
@@ -1762,36 +1701,142 @@ export function createHarnessStore() {
     persistMergedLocalPreferences({ themePreference: normalized });
     applyThemePreference(normalized);
   };
-
+  const commitBrowserUiState = (nextState: HarnessViewState) => {
+    const previousSnapshot = getBrowserUiSessionSnapshot(state);
+    const finalizedState = finalizeHarnessViewState(nextState);
+    setState(reconcile(finalizedState));
+    persistBrowserUiStateIfChanged(previousSnapshot, finalizedState);
+  };
+  const sendCommand = (command: ClientCommand) => {
+    if (!commandDispatcher) {
+      pushToast("Connection unavailable", "Wait for workspace connection before sending commands.", "error");
+      reportUiError(new Error("Command dispatcher unavailable"), "Command send failed", { rethrow: "dev-only" });
+      return false;
+    }
+    try {
+      if (isPreflightCapableCommand(command)) {
+        setState("pendingPreflightCommands", { ...state.pendingPreflightCommands, [command.requestId]: command });
+      }
+      commandDispatcher(command);
+      return true;
+    } catch (error) {
+      if (isPreflightCapableCommand(command)) setState("pendingPreflightCommands", command.requestId, undefined);
+      pushToast("Command failed", error instanceof Error ? error.message : "Command send failed.", "error");
+      reportUiError(error, "Command send failed", { rethrow: "dev-only" });
+      return false;
+    }
+  };
+  const pagingUnavailable = createPagingUnavailableCallbacks({
+    get: () => state.pagingUnavailableItems,
+    set: (items) => setState("pagingUnavailableItems", items),
+    notify: (collection, count) => pushToast(
+      "Hydration item unavailable",
+      `${count} ${collection} item could not be loaded because its detail exceeds the transport limit.`,
+      "error",
+    ),
+  });
+  const workspacePages = createWorkspacePageRequests({
+    getWorkspace: () => state.workspace,
+    sendCommand,
+    onStatusChange: (workspacePaging) => setState("workspacePaging", workspacePaging),
+    onTerminalError: (message, retry) => pushToast("Workspace hydration incomplete", `${message} Click to retry.`, "error", retry),
+    onUnavailable: pagingUnavailable.unavailable,
+    onAvailable: pagingUnavailable.available,
+    onReconciled: pagingUnavailable.reconciled,
+  });
+  const readyContinuation = createReadyContinuationRequests({
+    sendCommand,
+    createRequestId,
+    onAssistantCursor(cursor) {
+      const requestId = createRequestId();
+      setState("assistants", "rosterPage", assistantRoster.startAssistantRosterRequest(
+        state.assistants.rosterPage,
+        { id: requestId, cursor },
+      ));
+      if (!sendCommand({
+        type: "assistant.summary.list",
+        requestId,
+        payload: { cursor, limit: assistantRoster.ASSISTANT_ROSTER_PAGE_SIZE },
+      })) {
+        setState("assistants", "rosterPage", assistantRoster.rejectAssistantRosterRequest(
+          state.assistants.rosterPage,
+          requestId,
+          "Could not request remaining assistants.",
+        ));
+      }
+    },
+    onTerminalError: (message, retry) => pushToast("Startup hydration incomplete", `${message} Click to retry.`, "error", retry),
+    onUnavailable: pagingUnavailable.unavailableEntries,
+    onAvailable: pagingUnavailable.available,
+    onReconciled: pagingUnavailable.reconciled,
+  });
+  const requestSelectedAssistantDetail = () => {
+    if (assistantDetailDemandCount === 0) return;
+    const assistantId = assistantDetails.getAssistantDetailRequestId(state.assistants);
+    if (!assistantId) return;
+    const requestId = createRequestId();
+    setState("assistants", assistantDetails.startAssistantDetailRequest(state.assistants, assistantId, requestId));
+    if (!sendCommand({ type: "assistant.detail.get", requestId, payload: { assistantId } })) {
+      setState("assistants", assistantDetails.rejectAssistantDetailRequest(state.assistants, assistantId, requestId));
+    }
+  };
+  const registerAssistantDetailDemand = () => {
+    assistantDetailDemandCount += 1;
+    let active = true;
+    return () => {
+      if (active) assistantDetailDemandCount -= 1;
+      active = false;
+    };
+  };
   return {
-    state,
-    actions: {
-      setCommandDispatcher(dispatcher?: (command: ClientCommand) => void) {
-        commandDispatcher = dispatcher;
-      },
-      sendCommand(command: ClientCommand) {
-        if (!commandDispatcher) {
-          const error = new Error("Command dispatcher unavailable");
-          pushToast("Connection unavailable", "Wait for workspace connection before sending commands.", "error");
-          reportUiError(error, "Command send failed", { rethrow: "dev-only" });
-          return false;
-        }
+    state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    commitBrowserUiState, normalizeMainPanelSizes, sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail, registerAssistantDetailDemand,
+    setCommandDispatcher: (dispatcher?: (command: ClientCommand) => void) => { commandDispatcher = dispatcher; },
+    hasCommandDispatcher: () => Boolean(commandDispatcher),
+  };
+}
 
-        try {
-          if (isPreflightCapableCommand(command)) {
-            setState("pendingPreflightCommands", {
-              ...state.pendingPreflightCommands,
-              [command.requestId]: command
-            });
-          }
-          commandDispatcher(command);
-          return true;
-        } catch (error) {
-          pushToast("Command failed", error instanceof Error ? error.message : "Command send failed.", "error");
-          reportUiError(error, "Command send failed", { rethrow: "dev-only" });
-          return false;
-        }
+type HarnessStoreFactoryContext = ReturnType<typeof createHarnessStoreContext>;
+
+function createHarnessTransportActions(context: HarnessStoreFactoryContext) {
+  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  return {
+      setCommandDispatcher(dispatcher?: (command: ClientCommand) => void) { context.setCommandDispatcher(dispatcher); },
+      startAssistantWorkloadRequest(assistantId: string, collection: "jobs" | "runs", request: { id: string; cursor?: string }) {
+        setState("assistants", assistantWorkloads.markAssistantWorkloadLoading(state.assistants, assistantId, collection, request));
       },
+      startAssistantDetailPageRequest(assistantId: string, collection: assistantDetails.AssistantDetailCollection,
+        request: { id: string; cursor?: string }) {
+        setState("assistants", assistantDetails.startAssistantDetailPageRequest(state.assistants, assistantId, collection, request));
+      },
+      startAssistantRosterRequest(request: { id: string; cursor?: string }) {
+        setState("assistants", "rosterPage", assistantRoster.startAssistantRosterRequest(state.assistants.rosterPage, request));
+      },
+      rejectAssistantRosterRequest(requestId: string, error: string) {
+        setState("assistants", "rosterPage", assistantRoster.rejectAssistantRosterRequest(state.assistants.rosterPage, requestId, error));
+      },
+      rejectAssistantDetailPageRequest(requestId: string, error: string) {
+        setState("assistants", assistantDetails.rejectAssistantDetailPageRequest(state.assistants, requestId, error));
+      },
+      rejectAssistantWorkloadRequest(requestId: string, error: string) { setState("assistants", assistantWorkloads.rejectAssistantWorkloadRequest(state.assistants, requestId, error)); },
+      startBackgroundJobSourceRequest(request: PendingBackgroundJobSource) { setState("pendingBackgroundJobSource", request); },
+      rejectBackgroundJobSourceRequest(requestId: string) { if (state.pendingBackgroundJobSource?.requestId === requestId) setState("pendingBackgroundJobSource", undefined); },
+      markAssistantDetailRequestQueued(assistantId: string, requestId: string) { setState("assistants",
+        assistantDetails.markAssistantDetailRequestQueued(state.assistants, assistantId, requestId)); },
+      restoreQueuedAssistantDetailRequest(assistantId: string, requestId: string) { setState("assistants",
+        assistantDetails.restoreQueuedAssistantDetailRequest(state.assistants, assistantId, requestId)); },
+      registerAssistantDetailDemand() { return context.registerAssistantDetailDemand(); },
+      requestSelectedAssistantDetail,
+      retryWorkspaceProjects: () => workspacePages.retryProjects(),
+      retryWorkspaceProjectChildren: (projectId: string) => workspacePages.retryChildren(projectId),
+      requestEarlierProjectMessages: (projectId: string) => workspacePages.requestMessages(projectId),
+      retryUnavailablePaging(items: PagingUnavailableItem[]) {
+        retryUnavailablePagingItems(items, { ready: readyContinuation.retryUnavailable,
+          workspace: workspacePages.retryUnavailable });
+      },
+      restoreQueuedPreflightOwnership(command: ClientCommand) { if (isPreflightCapableCommand(command)) setState("pendingPreflightCommands", command.requestId, command); },
+      sendCommand,
       hydrateBrowserUiSession() {
         const browserUiSession = readBrowserUiSession();
         const previousSnapshot = browserUiSession;
@@ -1860,12 +1905,17 @@ export function createHarnessStore() {
           }
         });
       }
-    },
+  };
+}
+
+function createHarnessConnectionActions(context: HarnessStoreFactoryContext) {
+  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  return {
     setConnectionState(connectionState: ConnectionState, connectionError?: string) {
-      setState({
-        connectionState,
-        connectionError
-      });
+      if (connectionState !== "connected") { workspacePages.reset(); readyContinuation.reset(); }
+      setState({ connectionState, connectionError, pendingBackgroundJobSource: connectionState === "connected" ? state.pendingBackgroundJobSource : undefined, assistants: connectionState === "connected" ? state.assistants
+        : assistantWorkloads.failPendingAssistantWorkloads(state.assistants, connectionError ?? "Connection lost. Retry after reconnecting.") });
     },
     openProjectSwitcher(initialQuery: string = "") {
       setState({
@@ -1909,11 +1959,7 @@ export function createHarnessStore() {
     setActiveSurface(activeSurface: HarnessActiveSurface) {
       const previousSnapshot = getBrowserUiSessionSnapshot(state);
       const activeLeftTab = activeSurfaceToLeftTab(activeSurface);
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        activeSurface,
-        activeLeftTab
-      });
+      const nextState = finalizeHarnessViewState({ ...state, pendingBackgroundJobSource: undefined, activeSurface, activeLeftTab });
       setState(reconcile(nextState));
       if (JSON.stringify(previousSnapshot) === JSON.stringify(getBrowserUiSessionSnapshot(nextState))) {
         persistBrowserUiSession(getBrowserUiSessionSnapshot(nextState));
@@ -1925,20 +1971,17 @@ export function createHarnessStore() {
       const previousSnapshot = getBrowserUiSessionSnapshot(state);
       const previousActiveSurface = state.activeSurface;
       const normalizedTab = normalizeLeftTab(activeLeftTab);
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        activeLeftTab: normalizedTab,
-        activeSurface: leftTabToActiveSurface(normalizedTab)
-      });
+      const nextState = finalizeHarnessViewState({ ...state, pendingBackgroundJobSource: undefined,
+        activeLeftTab: normalizedTab, activeSurface: leftTabToActiveSurface(normalizedTab) });
       setState(reconcile(nextState));
       if (JSON.stringify(previousSnapshot) === JSON.stringify(getBrowserUiSessionSnapshot(nextState))) {
         persistBrowserUiSession(getBrowserUiSessionSnapshot(nextState));
       } else {
         persistBrowserUiStateIfChanged(previousSnapshot, nextState);
       }
-      if (normalizedTab === "projects" && previousActiveSurface !== "chat" && commandDispatcher) {
+      if (normalizedTab === "projects" && previousActiveSurface !== "chat" && context.hasCommandDispatcher()) {
         for (const command of getBrowserUiSessionRestoreCommands(nextState, getBrowserUiSessionSnapshot(nextState))) {
-          commandDispatcher(command);
+          sendCommand(command);
         }
       }
     },
@@ -1959,7 +2002,7 @@ export function createHarnessStore() {
       persistBrowserUiStateIfChanged(previousSnapshot, nextState);
     },
     setChatPaneTab(chatPaneTab: ChatPaneTab) {
-      const currentState = unwrap(state) as HarnessViewState;
+      const currentState: HarnessViewState = unwrap(state);
       const previousSnapshot = getBrowserUiSessionSnapshot(currentState);
       const nextState = finalizeHarnessViewState({
         ...currentState,
@@ -2004,6 +2047,13 @@ export function createHarnessStore() {
       setState(reconcile(nextState));
       persistBrowserUiStateIfChanged(previousSnapshot, nextState);
     },
+  };
+}
+
+function createHarnessAssistantPaneActions(context: HarnessStoreFactoryContext) {
+  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  return {
     setAssistantScopeFilter(scopeFilter: AssistantScopeFilter) {
       const previousSnapshot = getBrowserUiSessionSnapshot(state);
       const nextState = finalizeHarnessViewState({
@@ -2020,8 +2070,7 @@ export function createHarnessStore() {
       const previousSnapshot = getBrowserUiSessionSnapshot(state);
       const hasFilter = (key: keyof typeof filters) => Object.prototype.hasOwnProperty.call(filters, key);
       const nextState = finalizeHarnessViewState({
-        ...state,
-        assistants: {
+        ...state, pendingBackgroundJobSource: undefined, assistants: {
           ...state.assistants,
           rosterSearch: normalizeSearchText(hasFilter("rosterSearch") ? filters.rosterSearch : state.assistants.rosterSearch),
           detailSearch: normalizeSearchText(hasFilter("detailSearch") ? filters.detailSearch : state.assistants.detailSearch),
@@ -2037,13 +2086,8 @@ export function createHarnessStore() {
     },
     setAssistantDetailTab(selectedTab: AssistantDetailTab) {
       const previousSnapshot = getBrowserUiSessionSnapshot(state);
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        assistants: {
-          ...state.assistants,
-          selectedTab: normalizeAssistantDetailTab(selectedTab)
-        }
-      });
+      const nextState = finalizeHarnessViewState({ ...state, pendingBackgroundJobSource: undefined,
+        assistants: { ...state.assistants, selectedTab: normalizeAssistantDetailTab(selectedTab) } });
       setState(reconcile(nextState));
       persistBrowserUiStateIfChanged(previousSnapshot, nextState);
     },
@@ -2061,13 +2105,10 @@ export function createHarnessStore() {
     },
     setSelectedAssistantId(assistantId?: string) {
       const previousSnapshot = getBrowserUiSessionSnapshot(state);
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        assistants: {
-          ...state.assistants,
-          selectedAssistantId: normalizeOptionalStorageString(assistantId)
-        }
-      });
+      const selectedAssistantId = normalizeOptionalStorageString(assistantId);
+      const nextState = finalizeHarnessViewState({ ...state, pendingBackgroundJobSource: undefined,
+        assistants: { ...(selectedAssistantId ? assistantDetails.touchAssistantDetailScope(
+          assistantWorkloads.touchAssistantWorkloadScope(state.assistants, selectedAssistantId), selectedAssistantId) : state.assistants), selectedAssistantId } });
       setState(reconcile(nextState));
       persistBrowserUiStateIfChanged(previousSnapshot, nextState);
     },
@@ -2112,6 +2153,13 @@ export function createHarnessStore() {
     setBackgroundJobNotificationsEnabled(backgroundJobNotificationsEnabled: boolean) {
       setState({ backgroundJobNotificationsEnabled });
     },
+  };
+}
+
+function createHarnessProjectPreferenceActions(context: HarnessStoreFactoryContext) {
+  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  return {
     setProjectDraft(projectId: string, draft: string) {
       const project = state.workspace.projects.find((entry) => entry.id === projectId);
       if (!project) {
@@ -2186,7 +2234,7 @@ export function createHarnessStore() {
       const normalizedExecutionModelId = selectedExecutionModelId?.trim();
       const nextState = finalizeHarnessViewState({
         ...state,
-        selectedExecutionModelId: normalizedExecutionModelId ? (normalizedExecutionModelId as ExecutionModelId) : undefined,
+        selectedExecutionModelId: parseExecutionModelId(normalizedExecutionModelId),
         hasGlobalSelectedExecutionModelId: Boolean(normalizedExecutionModelId)
       });
       setState(reconcile(nextState));
@@ -2252,168 +2300,13 @@ export function createHarnessStore() {
         }
       });
     },
-    setDebugEnabled(debugEnabled: boolean) {
-      setState({ debugEnabled });
-    },
-    setThemeId(themeId: ThemeId) {
-      setThemePreferenceState(withThemePreference(state.themePreference, { themeId }));
-    },
-    setThemeMode(mode: ThemeModePreference) {
-      setThemePreferenceState(withThemePreference(state.themePreference, { mode }));
-    },
-    setNumericRightAlignmentEnabled(numericRightAlignmentEnabled: boolean) {
-      setState({ numericRightAlignmentEnabled });
-    },
-    setCustomTheme(custom: CustomThemeDefinition) {
-      setThemePreferenceState(withThemePreference(state.themePreference, { themeId: "custom", custom }));
-    },
-    resetCustomTheme() {
-      setThemePreferenceState(withThemePreference(state.themePreference, {
-        themeId: "custom",
-        custom: createDefaultCustomTheme(state.themePreference.custom?.baseThemeId)
-      }));
-    },
-    setTracePanelOpen(tracePanelOpen: boolean) {
-      const previousSnapshot = getBrowserUiSessionSnapshot(state);
-      const tracePanelMode: TracePanelMode = tracePanelOpen ? "open" : "closed";
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        tracePanelMode,
-        tracePanelOpen,
-        hasPersistedTracePanelOpen: true
-      });
-      setState(reconcile(nextState));
-      persistBrowserUiStateIfChanged(previousSnapshot, nextState);
-    },
-    setTracePanelMode(tracePanelMode: TracePanelMode) {
-      const previousSnapshot = getBrowserUiSessionSnapshot(state);
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        tracePanelMode,
-        tracePanelOpen: tracePanelMode !== "closed",
-        hasPersistedTracePanelOpen: true
-      });
-      setState(reconcile(nextState));
-      persistBrowserUiStateIfChanged(previousSnapshot, nextState);
-    },
-    toggleTracePanel() {
-      const previousSnapshot = getBrowserUiSessionSnapshot(state);
-      const tracePanelMode: TracePanelMode = state.tracePanelMode === "closed" ? "peek" : state.tracePanelMode === "peek" ? "open" : "closed";
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        tracePanelMode,
-        tracePanelOpen: tracePanelMode !== "closed",
-        hasPersistedTracePanelOpen: true
-      });
-      setState(reconcile(nextState));
-      persistBrowserUiStateIfChanged(previousSnapshot, nextState);
-    },
-    setTracePanelDefaultOpen(tracePanelDefaultOpen: boolean) {
-      const previousSnapshot = getBrowserUiSessionSnapshot(state);
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        tracePanelDefaultOpen,
-        tracePanelMode: state.hasPersistedTracePanelOpen ? state.tracePanelMode : tracePanelDefaultOpen ? "open" : "closed",
-        tracePanelOpen: state.hasPersistedTracePanelOpen ? state.tracePanelOpen : tracePanelDefaultOpen
-      });
-      setState(reconcile(nextState));
-      persistBrowserUiStateIfChanged(previousSnapshot, nextState);
-    },
-    setMainPanelSizes(mainPanelSizes: MainPanelSizes) {
-      const previousSnapshot = getBrowserUiSessionSnapshot(state);
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        mainPanelSizes: normalizeMainPanelSizes(mainPanelSizes)
-      });
-      setState(reconcile(nextState));
-      persistBrowserUiStateIfChanged(previousSnapshot, nextState);
-    },
-    resetMainPanelSizes() {
-      const previousSnapshot = getBrowserUiSessionSnapshot(state);
-      const nextState = finalizeHarnessViewState({
-        ...state,
-        mainPanelSizes: createDefaultMainPanelSizes()
-      });
-      setState(reconcile(nextState));
-      persistBrowserUiStateIfChanged(previousSnapshot, nextState);
-    },
-    openExecutionPlanDialog(executionPlan: ExecutionPlan) {
-      setState({
-        executionPlanDialogOpen: true,
-        selectedExecutionPlan: executionPlan
-      });
-    },
-    closeExecutionPlanDialog() {
-      setState({
-        executionPlanDialogOpen: false,
-        selectedExecutionPlan: undefined
-      });
-    },
-    setSubagentWorktreeStrategyDefault(subagentWorktreeStrategyDefault: "same-worktree" | "separate-worktrees") {
-      setState({ subagentWorktreeStrategyDefault });
-    },
-    setBlockChatOnDirtyGitDefault(blockChatOnDirtyGitDefault: boolean) {
-      setState({ blockChatOnDirtyGitDefault });
-    },
-    setDirtyGitChangeLimitDefault(dirtyGitChangeLimitDefault: number) {
-      setState({ dirtyGitChangeLimitDefault: Math.max(0, Math.min(10000, Math.round(dirtyGitChangeLimitDefault))) });
-    },
-    setAutoCompactContextThresholdPercentDefault(autoCompactContextThresholdPercentDefault: number) {
-      setState({
-        autoCompactContextThresholdPercentDefault: Math.max(10, Math.min(95, Math.round(autoCompactContextThresholdPercentDefault)))
-      });
-    },
-    setPlanExecutionModeDefault(planExecutionModeDefault: "countdown" | "approve" | "immediate") {
-      setState({ planExecutionModeDefault });
-    },
-    setPlanExecutionDelaySecondsDefault(planExecutionDelaySecondsDefault: number) {
-      setState({ planExecutionDelaySecondsDefault: Math.max(0, Math.min(300, Math.round(planExecutionDelaySecondsDefault))) });
-    },
-    setSingleAgentModelPreferenceDefault(singleAgentModelPreferenceDefault: RunModelPreference) {
-      setState({ singleAgentModelPreferenceDefault });
-    },
-    setSubagentModelPreferenceDefault(subagentModelPreferenceDefault: RunModelPreference) {
-      setState({ subagentModelPreferenceDefault });
-    },
-    setCorrectnessIterationModeDefault(correctnessIterationModeDefault: "ask-before-iterate" | "auto-once" | "auto-until-clean") {
-      setState({ correctnessIterationModeDefault });
-    },
-    setBackgroundJobApprovalPolicyDefault(backgroundJobApprovalPolicyDefault: BackgroundJobApprovalPolicy) {
-      setState({ backgroundJobApprovalPolicyDefault });
-    },
-    setAssistantAutoApproveNonBlockingQuestionsDefault(assistantAutoApproveNonBlockingQuestionsDefault: boolean) {
-      setState({ assistantAutoApproveNonBlockingQuestionsDefault });
-    },
-    setAssistantCongestionControlEnabledDefault(assistantCongestionControlEnabledDefault: boolean) {
-      setState({ assistantCongestionControlEnabledDefault });
-    },
-    setAssistantMaxCongestionDefault(assistantMaxCongestionDefault: number) {
-      setState({ assistantMaxCongestionDefault: Math.max(0.25, Math.min(3, Math.round(assistantMaxCongestionDefault * 4) / 4)) });
-    },
-    setMaxBackgroundJobsDefault(maxBackgroundJobsDefault: number) {
-      setState({ maxBackgroundJobsDefault: Math.max(5, Math.min(100, Math.round(maxBackgroundJobsDefault))) });
-    },
-    setMemoryBankEnabledDefault(memoryBankEnabledDefault: boolean) {
-      setState({ memoryBankEnabledDefault });
-    },
-    setMemoryBankRecordRunsDefault(memoryBankRecordRunsDefault: boolean) {
-      setState({ memoryBankRecordRunsDefault });
-    },
-    setCheckCliUpdatesDefault(checkCliUpdatesDefault: boolean) {
-      setState({ checkCliUpdatesDefault });
-    },
-    setAppHotkeyPreference(appHotkeyId: AppHotkeyId, hotkeys: string[]) {
-      setState("appHotkeyPreferences", appHotkeyId, hotkeys.map((hotkey) => hotkey.trim()).filter(Boolean));
-    },
-    setAutoArchiveCompletedThreadsDefault(autoArchiveCompletedThreadsDefault: boolean) {
-      setState({ autoArchiveCompletedThreadsDefault });
-    },
-    beginProviderConnectionTest(provider: ProviderConnectionProvider) {
-      setState("providerConnectionTests", provider, {
-        status: "pending",
-        message: "Testing connection..."
-      });
-    },
+  };
+}
+
+function createHarnessDialogAndTutorialActions(context: HarnessStoreFactoryContext) {
+  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  return {
     openPreferencesModal() {
       const previousSnapshot = getBrowserUiSessionSnapshot(state);
       const nextState = finalizeHarnessViewState({
@@ -2459,14 +2352,7 @@ export function createHarnessStore() {
     },
     resetTokenUsage() {
       recordedTokenUsageEventKeys.clear();
-      if (!commandDispatcher) {
-        const error = new Error("Command dispatcher unavailable");
-        pushToast("Connection unavailable", "Wait for workspace connection before resetting usage.", "error");
-        reportUiError(error, "Token usage reset failed", { rethrow: "dev-only" });
-        return;
-      }
-      commandDispatcher({ type: "usage.reset", requestId: createRequestId() });
-      setState({ tokenUsageResetDialogOpen: false });
+      if (sendCommand({ type: "usage.reset", requestId: createRequestId() })) setState({ tokenUsageResetDialogOpen: false });
     },
     openSetupChecklist() {
       setState({ setupChecklistOpen: true });
@@ -2502,6 +2388,15 @@ export function createHarnessStore() {
       setState({ activeTutorialStepIndex: Math.max(0, activeTutorialStepIndex) });
     },
     finishTutorial(tutorialId: string) {
+      if (!isTutorialGoalSatisfied(tutorialId, state)) {
+        pushToast(
+          "Tutorial goal not finished",
+          "Complete the highlighted workflow before marking this tutorial complete.",
+          "info"
+        );
+        return false;
+      }
+
       const progress = readTutorialProgress();
       const completedTutorialIds = [...new Set([...progress.completedTutorialIds, tutorialId])];
       const dismissedTutorialIds = progress.dismissedTutorialIds.filter((id) => id !== tutorialId);
@@ -2512,6 +2407,7 @@ export function createHarnessStore() {
         completedTutorialIds,
         dismissedTutorialIds
       });
+      return true;
     },
     dismissTutorial(tutorialId?: string) {
       const nextTutorialId = tutorialId ?? state.activeTutorialId;
@@ -2535,6 +2431,13 @@ export function createHarnessStore() {
         dismissedTutorialIds
       });
     },
+  };
+}
+
+function createHarnessLocalPreferenceActions(context: HarnessStoreFactoryContext) {
+  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  return {
     setOpenAiApiKeyDraft(openAiApiKeyDraft: string) {
       setState({
         openAiApiKeyDraft,
@@ -2613,6 +2516,7 @@ export function createHarnessStore() {
         themePreference,
         numericRightAlignmentEnabled:
           localPreferences.numericRightAlignmentEnabled ?? state.numericRightAlignmentEnabled,
+        experienceMode: localPreferences.experienceMode ?? state.experienceMode,
         backgroundJobNotificationsEnabled:
           localPreferences.backgroundJobNotificationsEnabled ?? state.backgroundJobNotificationsEnabled,
         preferencesActiveSectionId:
@@ -2660,6 +2564,13 @@ export function createHarnessStore() {
       })));
       applyThemePreference(themePreference);
     },
+  };
+}
+
+function createHarnessHydrationActions(context: HarnessStoreFactoryContext) {
+  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  return {
     setHasUsableApiKey(hasUsableApiKey: boolean) {
       setState({ hasUsableApiKey });
     },
@@ -2717,6 +2628,7 @@ export function createHarnessStore() {
         themePreference,
         numericRightAlignmentEnabled:
           localPreferences.numericRightAlignmentEnabled ?? state.numericRightAlignmentEnabled,
+        experienceMode: localPreferences.experienceMode ?? state.experienceMode,
         backgroundJobNotificationsEnabled:
           localPreferences.backgroundJobNotificationsEnabled ?? state.backgroundJobNotificationsEnabled,
         tokenUsage: state.tokenUsage,
@@ -2775,15 +2687,45 @@ export function createHarnessStore() {
       });
       return progress;
     },
+  };
+}
+
+function createHarnessEventActions(context: HarnessStoreFactoryContext) {
+  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  return {
     applyServerEvent(event: ServerEvent) {
-      const currentState = unwrap(state) as HarnessViewState;
+      if (event.type === "workspace.projects.listed" && !workspacePages.accepts(event)) return;
+      if (event.type === "workspace.projectChildren.listed" && !workspacePages.accepts(event)) return;
+      if (!readyContinuation.accepts(event)) return;
+      let currentState: HarnessViewState = unwrap(state);
+      if (event.type === "background-jobs.page.listed") currentState = { ...currentState,
+        backgroundJobs: readyContinuation.prepareBackgroundJobs(currentState.backgroundJobs, event) };
+      if (event.type === "notifications.page.listed") currentState = { ...currentState,
+        notifications: readyContinuation.prepareNotifications(currentState.notifications, event) };
+      if (event.type === "workspace.projects.listed" || event.type === "workspace.projectChildren.listed")
+        currentState = { ...currentState, workspace: prepareWorkspaceForPageEvent(currentState.workspace, event,
+          workspacePages.getProjectsRequest()?.cursor === "", event.type === "workspace.projectChildren.listed"
+            ? workspacePages.getChildRequest(event.payload.projectId) : undefined) };
       const previousSnapshot = getBrowserUiSessionSnapshot(currentState);
       let reducedState = reduceServerEvent(currentState, event);
-      if (event.type === "project.context") {
-        reducedState = applyTokenUsageEvent(reducedState, event, recordedTokenUsageEventKeys);
-      }
+      if (event.type === "project.context") reducedState = applyTokenUsageEvent(reducedState, event, recordedTokenUsageEventKeys);
       const nextState = finalizeHarnessViewState(reducedState);
       setState(reconcile(nextState));
+      if (event.type === "connection.ready") { requestSelectedAssistantDetail();
+        readyContinuation.hydrate({ assistants: event.payload.assistants.assistantsNextCursor, jobs: event.payload.backgroundJobs.jobsNextCursor,
+          runs: event.payload.backgroundJobs.runsNextCursor, notifications: event.payload.notifications.itemsNextCursor,
+          firstJobIds: event.payload.backgroundJobs.jobs.map(({ id }) => id), firstRunIds: event.payload.backgroundJobs.runs.map(({ id }) => id),
+          firstNotificationIds: event.payload.notifications.items.map(({ id }) => id) });
+      }
+      workspacePages.handle(event);
+      readyContinuation.handle(event);
+      if (event.type === "notifications.updated") readyContinuation.notificationsUpdated(state.notifications);
+      if (event.type === "background-jobs.updated") readyContinuation.backgroundJobsUpdated(state.backgroundJobs);
+      if (event.type === "background-jobs.deleted") pagingUnavailable.backgroundDeleted(event.payload.deletedJobIds, event.payload.targets.filter((target) => target.kind === "project").map(({ projectId }) => projectId));
+      if (event.type === "project.removed") pagingUnavailable.projectDeleted(event.payload.projectId);
+      if (event.type === "assistants.updated" && event.payload.invalidatedDetailAssistantIds?.includes(
+        state.assistants.selectedAssistantId ?? "")) requestSelectedAssistantDetail();
       if (event.type === "preferences.providerConnectionTested") {
         if (typeof document !== "undefined") {
           document
@@ -2793,31 +2735,37 @@ export function createHarnessStore() {
       }
       persistBrowserUiStateIfChanged(previousSnapshot, nextState);
       const retryCommand = getRepairedPreflightRetryCommand(nextState, event);
-      if (retryCommand && commandDispatcher) {
+      if (retryCommand) {
         const nextCommand = cloneCommandWithRequestId(retryCommand, createRequestId());
-        setState({
+        if (sendCommand(nextCommand)) setState({
           blockingNonGitPreflight: undefined,
-          pendingPreflightRepairKind: undefined,
-          pendingPreflightCommands: {
-            ...state.pendingPreflightCommands,
-            [nextCommand.requestId]: nextCommand
-          }
+          pendingPreflightRepairKind: undefined
         });
-        commandDispatcher(nextCommand);
       }
     },
     replaceStateForTests(nextState: HarnessViewState) {
-      commandDispatcher = undefined;
+      context.setCommandDispatcher(undefined);
       setState(reconcile(nextState));
     },
     resetForTests(overrides: Partial<HarnessViewState> = {}) {
-      commandDispatcher = undefined;
+      context.setCommandDispatcher(undefined);
       recordedTokenUsageEventKeys.clear();
       setState(reconcile({ ...createInitialViewState(), ...overrides }));
     }
   };
 }
 
+export function createHarnessStore() {
+  const context = createHarnessStoreContext();
+  return {
+    state: context.state,
+    actions: createHarnessTransportActions(context),
+    ...createHarnessConnectionActions(context), ...createHarnessAssistantPaneActions(context),
+    ...createHarnessProjectPreferenceActions(context), ...createHarnessVisualPreferenceActions(context),
+    ...createHarnessDialogAndTutorialActions(context), ...createHarnessLocalPreferenceActions(context),
+    ...createHarnessHydrationActions(context), ...createHarnessEventActions(context),
+  };
+}
 export type HarnessStoreApi = ReturnType<typeof createHarnessStore>;
 
 let activeHarnessStore: HarnessStoreApi | undefined;
@@ -2838,7 +2786,8 @@ export function requireHarnessStore() {
   return activeHarnessStore;
 }
 
-export const harnessStore = new Proxy({} as HarnessStoreApi, {
+const harnessStoreProxyTarget: HarnessStoreApi = Object.create(null);
+export const harnessStore = new Proxy(harnessStoreProxyTarget, {
   get(_target, prop, receiver) {
     return Reflect.get(requireHarnessStore(), prop, receiver);
   },
@@ -2883,51 +2832,7 @@ function getRepairedPreflightRetryCommand(state: HarnessViewState, event: Server
 }
 
 function cloneCommandWithRequestId(command: ClientCommand, requestId: string): ClientCommand {
-  return {
-    ...command,
-    requestId
-  } as ClientCommand;
-}
-
-function hydrateAssistants(existing: ViewAssistantsState, incoming: AssistantsState): ViewAssistantsState {
-  const activeAssistantIds = new Set(incoming.assistants.map((assistant) => assistant.id));
-  const keepActive = <T extends { assistantId: string }>(entries: T[]) =>
-    entries.filter((entry) => activeAssistantIds.has(entry.assistantId));
-  const nextThreads = incoming.threads.length > 0 ? incoming.threads : keepActive(existing.threads);
-  const nextTodos = incoming.todos.length > 0 ? incoming.todos : keepActive(existing.todos);
-  const nextLearnings = incoming.learnings.length > 0 ? incoming.learnings : keepActive(existing.learnings);
-  const nextQuestions = incoming.questions.length > 0 ? incoming.questions : keepActive(existing.questions);
-  const nextLogs = incoming.logs.length > 0 ? incoming.logs : keepActive(existing.logs);
-  const nextAssetRefs = incoming.assetRefs.length > 0 ? incoming.assetRefs : keepActive(existing.assetRefs);
-  const nextVisibleId =
-    existing.selectedAssistantId && incoming.assistants.some((assistant) => assistant.id === existing.selectedAssistantId)
-      ? existing.selectedAssistantId
-      : incoming.assistants[0]?.id;
-  return {
-    ...existing,
-    assistants: incoming.assistants,
-    threads: nextThreads,
-    todos: nextTodos,
-    learnings: nextLearnings,
-    questions: nextQuestions,
-    logs: nextLogs,
-    assetRefs: nextAssetRefs,
-    selectedAssistantId: nextVisibleId,
-    selectedTab: existing.selectedTab,
-    selectedLogDetailsId:
-      existing.selectedLogDetailsId && nextLogs.some((entry) => entry.id === existing.selectedLogDetailsId)
-        ? existing.selectedLogDetailsId
-        : undefined,
-    scopeFilter: existing.scopeFilter,
-    rosterSearch: existing.rosterSearch,
-    detailSearch: existing.detailSearch,
-    runStateFilter: existing.runStateFilter,
-    bootstrapStateFilter: existing.bootstrapStateFilter,
-    providerBrandFilter: existing.providerBrandFilter,
-    projectIdFilter: existing.projectIdFilter,
-    rosterSort: existing.rosterSort,
-    streamingByAssistantId: existing.streamingByAssistantId
-  };
+  return parseClientCommand({ ...command, requestId });
 }
 
 function mergeAssistantDetail(existing: ViewAssistantsState, detail: AssistantDetail): ViewAssistantsState {
@@ -2936,7 +2841,7 @@ function mergeAssistantDetail(existing: ViewAssistantsState, detail: AssistantDe
       ? existing.selectedAssistantId
       : detail.assistant.id;
   const nextLogs = replaceScopedItems(existing.logs, detail.assistant.id, detail.logs.items);
-  return {
+  return assistantDetails.retainAssistantDetailScopes({
     ...existing,
     assistants: upsertById(existing.assistants, detail.assistant),
     threads: detail.thread ? upsertById(existing.threads, detail.thread) : existing.threads,
@@ -2945,36 +2850,13 @@ function mergeAssistantDetail(existing: ViewAssistantsState, detail: AssistantDe
     questions: replaceScopedItems(existing.questions, detail.assistant.id, detail.questions.items),
     logs: nextLogs,
     assetRefs: replaceScopedItems(existing.assetRefs, detail.assistant.id, detail.assetRefs),
+    ...assistantDetails.completeAssistantDetailRequest(existing, detail),
     selectedAssistantId,
     selectedLogDetailsId:
       existing.selectedLogDetailsId && nextLogs.some((entry) => entry.id === existing.selectedLogDetailsId)
         ? existing.selectedLogDetailsId
         : undefined
-  };
-}
-
-function mergeAssistantThreadMessages(
-  existing: ViewAssistantsState,
-  assistantId: string,
-  threadId: string,
-  messages: AssistantThread["messages"]
-): ViewAssistantsState {
-  const thread = existing.threads.find((entry) => entry.id === threadId && entry.assistantId === assistantId);
-  if (!thread) {
-    return existing;
-  }
-  return {
-    ...existing,
-    threads: existing.threads.map((entry) =>
-      entry.id === threadId
-        ? {
-          ...entry,
-          messages: mergeItemsById(messages, entry.messages).sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
-          messageCount: Math.max(entry.messageCount, messages.length)
-        }
-        : entry
-    )
-  };
+  });
 }
 
 function upsertById<T extends { id: string }>(entries: T[], nextEntry: T) {
@@ -3000,8 +2882,11 @@ function replaceScopedItems<T extends { assistantId: string }>(existing: T[], as
   return [...incoming, ...existing.filter((entry) => entry.assistantId !== assistantId)];
 }
 
-function mergeScopedItems<T extends { id: string; assistantId: string }>(existing: T[], assistantId: string, incoming: T[]) {
-  return mergeItemsById(incoming, existing.filter((entry) => entry.assistantId === assistantId)).concat(
+function mergeScopedItems<T extends { id: string; assistantId: string }>(existing: T[], assistantId: string, incoming: T[],
+  limit = Number.MAX_SAFE_INTEGER, preferIncoming = false) {
+  const scoped = existing.filter((entry) => entry.assistantId === assistantId);
+  const merged = preferIncoming ? mergeItemsById(incoming, scoped) : mergeItemsById(scoped, incoming);
+  return merged.slice(0, limit).concat(
     existing.filter((entry) => entry.assistantId !== assistantId)
   );
 }
@@ -3019,15 +2904,13 @@ function updateProjectState(
   projectId: string,
   updater: (project: ViewProjectState) => ViewProjectState
 ): HarnessViewState {
-  if (!state.workspace.projects.some((project) => project.id === projectId)) {
-    return state;
-  }
-
+  if (!state.workspace.projects.some((project) => project.id === projectId)) return state;
   return {
     ...state,
     workspace: {
       ...state.workspace,
-      projects: state.workspace.projects.map((project) => (project.id === projectId ? updater(project) : project))
+      projects: state.workspace.projects.map((project) => project.id === projectId
+        ? retainWorkspaceMessageWindow(updater(project)) : project)
     }
   };
 }
@@ -3220,26 +3103,11 @@ function applyThreadLiveTranscriptState(
 }
 
 function hydrateWorkspace(workspace: WorkspaceState): ViewWorkspaceState {
-  return {
-    activeProjectId: workspace.activeProjectId,
-    projects: workspace.projects.map((project) => toViewProject(project)),
-    workspaceModes: workspace.workspaceModes ?? [],
-    workspaceRuleSource: workspace.workspaceRuleSource,
-    workspaceMemorySummary: workspace.workspaceMemorySummary
-  };
+  return { ...hydratePagedWorkspace(workspace, toViewProject), workspaceModes: workspace.workspaceModes ?? [] };
 }
 
 function mergeIncomingWorkspace(existing: ViewWorkspaceState, incoming: ViewWorkspaceState): ViewWorkspaceState {
-  return {
-    activeProjectId: incoming.activeProjectId,
-    workspaceModes: incoming.workspaceModes,
-    workspaceRuleSource: incoming.workspaceRuleSource,
-    workspaceMemorySummary: incoming.workspaceMemorySummary,
-    projects: incoming.projects.map((project) => {
-      const prior = existing.projects.find((entry) => entry.id === project.id);
-      return prior ? mergeIncomingProject(prior, project) : project;
-    })
-  };
+  return mergePagedWorkspace(existing, incoming, mergeIncomingProject);
 }
 
 function toViewProject(project: WorkspaceProjectState): ViewProjectState {
@@ -3389,12 +3257,10 @@ function shouldUseMessageForThreadPreview(message: ViewProjectState["session"]["
 
 function upsertBackgroundJobRun(
   runs: BackgroundJobsState["runs"],
-  nextRun: BackgroundJobsState["runs"][number]
+  nextRun: BackgroundJobsState["runs"][number],
+  retainedIds: ReadonlySet<string>
 ) {
-  const nextRuns = runs.some((run) => run.id === nextRun.id)
-    ? runs.map((run) => (run.id === nextRun.id ? nextRun : run))
-    : [nextRun, ...runs];
-  return [...nextRuns].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return boundBackgroundRuns(runs, nextRun, retainedIds);
 }
 
 function badgeFromRunStatus(status: NonNullable<ViewProjectState["lastRun"]>["status"]): ViewProjectState["threads"][number]["badgeState"] {
@@ -3507,9 +3373,7 @@ export function readLocalPreferences(): LocalPreferencesState {
     return {};
   }
 
-  const openAiApiKey = window.localStorage.getItem(OPENAI_API_KEY_STORAGE_KEY)?.trim() || undefined;
-  const googleApiKey = window.localStorage.getItem(GOOGLE_API_KEY_STORAGE_KEY)?.trim() || undefined;
-  const anthropicApiKey = window.localStorage.getItem(ANTHROPIC_API_KEY_STORAGE_KEY)?.trim() || undefined;
+  const { openAiApiKey, googleApiKey, anthropicApiKey } = readAndScrubLegacyProviderApiKeys();
   const providerBrand = parseProviderBrandStorageValue(window.localStorage.getItem(PROVIDER_BRAND_STORAGE_KEY));
   const debugEnabled = parseBooleanStorageValue(window.localStorage.getItem(DEBUG_ENABLED_STORAGE_KEY));
   const tracePanelDefaultOpen = parseBooleanStorageValue(
@@ -3592,6 +3456,7 @@ export function readLocalPreferences(): LocalPreferencesState {
   const numericRightAlignmentEnabled = parseBooleanStorageValue(
     window.localStorage.getItem(NUMERIC_RIGHT_ALIGNMENT_ENABLED_STORAGE_KEY)
   );
+  const experienceMode = parseExperienceModeStorageValue(window.localStorage.getItem(EXPERIENCE_MODE_STORAGE_KEY));
   const preferencesActiveSectionId = parsePreferencesActiveSectionStorageValue(
     window.localStorage.getItem(PREFERENCES_ACTIVE_SECTION_STORAGE_KEY)
   );
@@ -3627,6 +3492,7 @@ export function readLocalPreferences(): LocalPreferencesState {
     appHotkeyPreferences,
     themePreference,
     numericRightAlignmentEnabled,
+    experienceMode,
     preferencesActiveSectionId
   };
 }
@@ -3644,11 +3510,11 @@ export function readAppHotkeyPreferences(): AppHotkeyPreferences {
   }
 }
 
-export function readTutorialProgress() {
+export function readTutorialProgress(): { completedTutorialIds: string[]; dismissedTutorialIds: string[] } {
   if (typeof window === "undefined") {
     return {
-      completedTutorialIds: [] as string[],
-      dismissedTutorialIds: [] as string[]
+      completedTutorialIds: [],
+      dismissedTutorialIds: []
     };
   }
 
@@ -3656,15 +3522,13 @@ export function readTutorialProgress() {
     const raw = window.localStorage.getItem(TUTORIAL_PROGRESS_STORAGE_KEY);
     if (!raw) {
       return {
-        completedTutorialIds: [] as string[],
-        dismissedTutorialIds: [] as string[]
+        completedTutorialIds: [],
+        dismissedTutorialIds: []
       };
     }
 
-    const parsed = JSON.parse(raw) as {
-      completedTutorialIds?: unknown;
-      dismissedTutorialIds?: unknown;
-    };
+    const decoded: unknown = JSON.parse(raw);
+    const parsed = isRecord(decoded) ? decoded : {};
     return {
       completedTutorialIds: Array.isArray(parsed.completedTutorialIds)
         ? parsed.completedTutorialIds.filter((value): value is string => typeof value === "string")
@@ -3675,8 +3539,8 @@ export function readTutorialProgress() {
     };
   } catch {
     return {
-      completedTutorialIds: [] as string[],
-      dismissedTutorialIds: [] as string[]
+      completedTutorialIds: [],
+      dismissedTutorialIds: []
     };
   }
 }
@@ -3712,9 +3576,11 @@ export function persistLocalPreferences(input: LocalPreferencesState) {
     return;
   }
 
-  persistStorageValue(OPENAI_API_KEY_STORAGE_KEY, input.openAiApiKey);
-  persistStorageValue(GOOGLE_API_KEY_STORAGE_KEY, input.googleApiKey);
-  persistStorageValue(ANTHROPIC_API_KEY_STORAGE_KEY, input.anthropicApiKey);
+  // Provider credentials belong to the CLI credential store. Never mirror a
+  // draft into browser storage, and scrub keys left by older releases.
+  window.localStorage.removeItem(OPENAI_API_KEY_STORAGE_KEY);
+  window.localStorage.removeItem(GOOGLE_API_KEY_STORAGE_KEY);
+  window.localStorage.removeItem(ANTHROPIC_API_KEY_STORAGE_KEY);
   persistProviderBrandStorageValue(PROVIDER_BRAND_STORAGE_KEY, input.providerBrand);
   persistBooleanStorageValue(DEBUG_ENABLED_STORAGE_KEY, input.debugEnabled);
   persistBooleanStorageValue(TRACE_PANEL_DEFAULT_OPEN_STORAGE_KEY, input.tracePanelDefaultOpen);
@@ -3753,6 +3619,7 @@ export function persistLocalPreferences(input: LocalPreferencesState) {
   persistAppHotkeyPreferences(input.appHotkeyPreferences);
   persistThemePreference(input.themePreference);
   persistBooleanStorageValue(NUMERIC_RIGHT_ALIGNMENT_ENABLED_STORAGE_KEY, input.numericRightAlignmentEnabled);
+  persistStorageValue(EXPERIENCE_MODE_STORAGE_KEY, input.experienceMode);
   persistStorageValue(PREFERENCES_ACTIVE_SECTION_STORAGE_KEY, input.preferencesActiveSectionId);
 }
 
@@ -3763,6 +3630,16 @@ function persistAppHotkeyPreferences(input: AppHotkeyPreferences | undefined) {
   }
 
   window.localStorage.setItem(APP_HOTKEY_PREFERENCES_STORAGE_KEY, JSON.stringify(normalizeAppHotkeyPreferences(input)));
+}
+
+function readAndScrubLegacyProviderApiKeys() {
+  const openAiApiKey = window.localStorage.getItem(OPENAI_API_KEY_STORAGE_KEY)?.trim() || undefined;
+  const googleApiKey = window.localStorage.getItem(GOOGLE_API_KEY_STORAGE_KEY)?.trim() || undefined;
+  const anthropicApiKey = window.localStorage.getItem(ANTHROPIC_API_KEY_STORAGE_KEY)?.trim() || undefined;
+  window.localStorage.removeItem(OPENAI_API_KEY_STORAGE_KEY);
+  window.localStorage.removeItem(GOOGLE_API_KEY_STORAGE_KEY);
+  window.localStorage.removeItem(ANTHROPIC_API_KEY_STORAGE_KEY);
+  return { openAiApiKey, googleApiKey, anthropicApiKey };
 }
 
 function persistThemePreference(input: ThemePreference | undefined) {
@@ -3814,7 +3691,8 @@ export function readBrowserUiSession(): BrowserUiSessionState {
       return {};
     }
 
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const decoded: unknown = JSON.parse(raw);
+    const parsed = isRecord(decoded) ? decoded : {};
     const lastActiveThreadByProjectId =
       parsed.lastActiveThreadByProjectId && typeof parsed.lastActiveThreadByProjectId === "object"
         ? Object.fromEntries(
@@ -3832,7 +3710,7 @@ export function readBrowserUiSession(): BrowserUiSessionState {
       result.selectedAgentId = parsed.selectedAgentId;
     }
     if (typeof parsed.selectedExecutionModelId === "string") {
-      result.selectedExecutionModelId = parsed.selectedExecutionModelId as ExecutionModelId;
+      result.selectedExecutionModelId = parseExecutionModelId(parsed.selectedExecutionModelId);
     }
     if (isComposerReasoningStrength(parsed.selectedReasoningStrength)) {
       result.selectedReasoningStrength = parsed.selectedReasoningStrength;
@@ -3875,6 +3753,10 @@ export function readBrowserUiSession(): BrowserUiSessionState {
     if (isRecord(parsed.jobsPane)) {
       result.jobsPane = {
         ...normalizeJobsPanePreferences(parsed.jobsPane),
+        // Exact workload records are bounded server state; stale ids cannot be
+        // restored safely without their project ownership after a reconnect.
+        selectedJobId: undefined,
+        selectedRunId: undefined,
         runFilter: normalizeJobsRunFilter(parsed.jobsPane.runFilter)
       };
     }
@@ -3923,9 +3805,7 @@ export function persistBrowserUiSession(input: BrowserUiSessionState) {
   const normalizedInput: BrowserUiSessionState = {
     selectedModeId: input.selectedModeId?.trim() || undefined,
     selectedAgentId: input.selectedAgentId,
-    selectedExecutionModelId: input.selectedExecutionModelId?.trim()
-      ? (input.selectedExecutionModelId.trim() as ExecutionModelId)
-      : undefined,
+    selectedExecutionModelId: parseExecutionModelId(input.selectedExecutionModelId),
     selectedReasoningStrength: input.selectedReasoningStrength,
     selectedFastMode: input.selectedFastMode,
     tracePanelMode: input.tracePanelMode ? normalizeTracePanelMode(input.tracePanelMode) : undefined,
@@ -3961,6 +3841,8 @@ export function persistBrowserUiSession(input: BrowserUiSessionState) {
     jobsPane: input.jobsPane
       ? {
           ...normalizeJobsPanePreferences(input.jobsPane),
+          selectedJobId: undefined,
+          selectedRunId: undefined,
           runFilter: input.jobsPane.runFilter ? normalizeJobsRunFilter(input.jobsPane.runFilter) : undefined
         }
       : undefined
@@ -4076,6 +3958,8 @@ function getBrowserUiSessionSnapshot(state: HarnessViewState): BrowserUiSessionS
     },
     jobsPane: {
       ...state.jobsPanePreferences,
+      selectedJobId: undefined,
+      selectedRunId: undefined,
       runFilter: state.jobsRunFilter
     },
     lastActiveProjectId: state.lastActiveProjectId,
@@ -4214,8 +4098,6 @@ function normalizeJobsPanePreferences(input: unknown, state?: HarnessViewState, 
     runSearch: normalizeSearchText(source.runSearch ?? source.search),
     jobSort: normalizeJobsPaneJobSort(source.jobSort),
     runSort: normalizeJobsPaneRunSort(source.runSort),
-    projectId: normalizeOptionalStorageString(source.projectId),
-    assistantId: normalizeOptionalStorageString(source.assistantId),
     kind: source.kind === "ai-routine" || source.kind === "shell" ? source.kind : undefined,
     status: source.status === "enabled" || source.status === "paused" || source.status === "disabled" ? source.status : undefined,
     jobState: normalizeJobsJobStateFilter(source.jobState),
@@ -4229,22 +4111,12 @@ function normalizeJobsPanePreferences(input: unknown, state?: HarnessViewState, 
     return preferences;
   }
 
-  const projectIds = new Set(state.workspace.projects.map((project) => project.id));
-  const assistantIds = new Set(state.assistants.assistants.map((assistant) => assistant.id));
   const jobIds = new Set(state.backgroundJobs.jobs.map((job) => job.id));
   const runIds = new Set(state.backgroundJobs.runs.map((run) => run.id));
   const notificationIds = new Set(state.notifications.items.map((notification) => notification.id));
 
   return {
     ...preferences,
-    projectId:
-      preferences.projectId && (projectIds.has(preferences.projectId) || (!clearMissingIds && projectIds.size === 0))
-        ? preferences.projectId
-        : undefined,
-    assistantId:
-      preferences.assistantId && (assistantIds.has(preferences.assistantId) || (!clearMissingIds && assistantIds.size === 0))
-        ? preferences.assistantId
-        : undefined,
     selectedJobId:
       preferences.selectedJobId && (jobIds.has(preferences.selectedJobId) || (!clearMissingIds && jobIds.size === 0))
         ? preferences.selectedJobId
@@ -4267,24 +4139,6 @@ function normalizeOptionalStorageString(input: unknown) {
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === "object" && input !== null;
-}
-
-function toRunSummary(run: AgentRunState): AgentRunSummary {
-  return {
-    id: run.id,
-    threadId: run.threadId,
-    status: run.status,
-    failureMessage: run.failureMessage,
-    resumable: run.resumable,
-    retryable: run.retryable,
-    updatedAt: run.updatedAt,
-    completedAt: run.completedAt
-  };
-}
-
-function upsertRunSummary(summaries: AgentRunSummary[], next: AgentRunSummary) {
-  const existing = summaries.filter((summary) => summary.id !== next.id);
-  return [next, ...existing].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
 function normalizeAssistantsViewState(state: HarnessViewState): ViewAssistantsState {
@@ -4374,6 +4228,7 @@ function finalizeHarnessViewState(state: HarnessViewState): HarnessViewState {
   };
 }
 
+
 function capLiveTraceHistory(traces: AgentTrace[]) {
   return traces.length > MAX_LIVE_TRACE_HISTORY ? traces.slice(-MAX_LIVE_TRACE_HISTORY) : traces;
 }
@@ -4415,13 +4270,15 @@ function resolveSelectedExecutionModelId(
     project?.session.executionModelId,
     getFallbackExecutionModelIdForAgent(state, selectedAgentId, state.providerBrand)
   ];
-  return candidates.find((modelId) =>
-    isExecutionModelIdAvailableForAgent(state, selectedAgentId, modelId, state.providerBrand)
-  ) as ExecutionModelId | undefined;
+  for (const modelId of candidates) {
+    if (modelId && isExecutionModelIdAvailableForAgent(state, selectedAgentId, modelId, state.providerBrand)) return modelId;
+  }
+  return undefined;
 }
 
-function isComposerReasoningStrength(value: unknown): value is ComposerReasoningStrength {
-  return typeof value === "string" && COMPOSER_REASONING_STRENGTHS.includes(value as ComposerReasoningStrength);
+function parseExecutionModelId(value: unknown): ExecutionModelId | undefined {
+  const parsed = executionModelIdSchema.safeParse(typeof value === "string" ? value.trim() : value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function coerceReasoningStrength(
@@ -4459,18 +4316,6 @@ function resolveComposerControlState(
   };
 }
 
-function parseBooleanStorageValue(value: string | null) {
-  if (value === "true") {
-    return true;
-  }
-
-  if (value === "false") {
-    return false;
-  }
-
-  return undefined;
-}
-
 function normalizeTokenCount(input: unknown) {
   if (typeof input !== "number" || !Number.isFinite(input)) {
     return 0;
@@ -4490,14 +4335,6 @@ function parseThemePreferenceStorageValue(value: string | null): ThemePreference
   }
 }
 
-function parseProviderBrandStorageValue(value: string | null): ProviderBrand | undefined {
-  return value === "gpt" || value === "gemini" || value === "claude" ? value : undefined;
-}
-
-function parseReasoningStrengthStorageValue(value: string | null): ComposerReasoningStrength | undefined {
-  return isComposerReasoningStrength(value) ? value : undefined;
-}
-
 function isProjectSidebarProjectSort(value: unknown): value is ProjectSidebarProjectSort {
   return value === "last-user-message" || value === "created-at" || value === "manual";
 }
@@ -4512,8 +4349,7 @@ function isProjectSidebarGrouping(value: unknown): value is ProjectSidebarGroupi
 
 function normalizeProjectSidebarPreferences(input: unknown, projectIds: string[]): ProjectSidebarPreferences {
   const defaults = createDefaultProjectSidebarPreferences();
-  const parsed =
-    input && typeof input === "object" ? (input as Partial<ProjectSidebarPreferences>) : defaults;
+  const parsed = isRecord(input) ? input : defaults;
   const seenProjectIds = new Set<string>();
   const manualProjectOrder = Array.isArray(parsed.manualProjectOrder)
     ? parsed.manualProjectOrder.filter((projectId): projectId is string => {
@@ -4588,11 +4424,11 @@ function parsePreferencesActiveSectionStorageValue(value: string | null): Prefer
 
 function normalizeMainPanelSizes(input: unknown): MainPanelSizes {
   const defaults = createDefaultMainPanelSizes();
-  if (!input || typeof input !== "object") {
+  if (!isRecord(input)) {
     return defaults;
   }
 
-  const parsed = input as Partial<Record<keyof MainPanelSizes, unknown>>;
+  const parsed = input;
   return {
     left: clampPanelSize(parsed.left, defaults.left),
     center: clampPanelSize(parsed.center, defaults.center),
@@ -4844,9 +4680,8 @@ export function getFallbackExecutionModelIdForAgent(
 ): ExecutionModelId {
   if (agentId === "copilot-cli" || agentId === "codex-cli") {
     const runtime = state.agentRuntimes.find((entry) => entry.agentId === agentId);
-    return (runtime?.activeModel ??
-      runtime?.discoveredModels[0] ??
-      getDefaultExecutionModelIdForProvider("gpt")) as ExecutionModelId;
+    return parseExecutionModelId(runtime?.activeModel ?? runtime?.discoveredModels[0]) ??
+      getDefaultExecutionModelIdForProvider("gpt");
   }
 
   return getDefaultExecutionModelIdForProvider(getEffectiveProviderBrandForAgent(agentId, providerBrand) ?? "gpt");
@@ -4915,7 +4750,7 @@ export function getComposerControlState(
   agentId: AgentId,
   modelId: string | undefined
 ) {
-  return resolveComposerControlState(state, agentId, modelId as ExecutionModelId | undefined);
+  return resolveComposerControlState(state, agentId, parseExecutionModelId(modelId));
 }
 
 export function getCapabilityTags(state: HarnessViewState, modelId: string | undefined) {

@@ -2,6 +2,7 @@ import {
   AuthStorage,
   createAgentSession,
   DefaultResourceLoader,
+  defineTool,
   getAgentDir,
   ModelRegistry,
   SessionManager,
@@ -9,8 +10,8 @@ import {
   type SessionStats,
   type AgentSessionEvent
 } from "@mariozechner/pi-coding-agent";
-import { streamSimple, type ImageContent, type SimpleStreamOptions } from "@mariozechner/pi-ai";
-import type { ComposerReasoningStrength } from "../../shared/protocol";
+import { streamSimple, Type, type ImageContent, type SimpleStreamOptions } from "@mariozechner/pi-ai";
+import type { ComposerReasoningStrength } from "@hyperfocus/ai-core/protocol";
 import { transformAnthropicCachePayload } from "./anthropic-cache-payload";
 import { isBrowserToolName } from "./browser-session-state";
 import { debugLog } from "./logging";
@@ -19,6 +20,17 @@ import { buildPromptCacheKey, extractCachedInputTokens, type PromptCacheIdentity
 import { supportsGeminiExplicitCaching } from "./gemini-cached-contents";
 
 export type PiAgentPromptKind = "planner" | "executor" | "subagent" | "aggregator" | "merge-resolver";
+
+export type PiAgentMemorySearchInput = {
+  queryText: string;
+  tags?: string[];
+  maxEntries?: number;
+};
+
+export type PiAgentMemorySearchResult = {
+  text: string;
+  count: number;
+};
 
 export type PiAgentPromptRequest = {
   kind: PiAgentPromptKind;
@@ -35,6 +47,7 @@ export type PiAgentPromptRequest = {
   fastMode?: boolean;
   onTextDelta?: (delta: string) => void;
   onExecutionEvent?: (event: PiAgentExecutionEvent) => void;
+  memorySearch?: (input: PiAgentMemorySearchInput) => Promise<PiAgentMemorySearchResult>;
   requestBrowserApproval?: (input: { toolCallId: string; toolName: string; args: unknown }) => Promise<{ approved: boolean }>;
 };
 
@@ -72,7 +85,7 @@ export interface PiAgentAdapter {
 
 export type SerializablePiAgentPromptRequest = Omit<
   PiAgentPromptRequest,
-  "abortSignal" | "onTextDelta" | "onExecutionEvent" | "requestBrowserApproval"
+  "abortSignal" | "onTextDelta" | "onExecutionEvent" | "memorySearch" | "requestBrowserApproval"
 >;
 
 export type PiSdkPromptWorkerRequest = {
@@ -86,11 +99,20 @@ export type PiSdkPromptWorkerResponse =
   | { id: string; ok: true; result: PiAgentPromptResult }
   | { id: string; ok: false; error: { message: string; stack?: string } };
 
+export type PiPromptWorker = {
+  onmessage: ((event: MessageEvent<PiSdkPromptWorkerResponse>) => void) | null;
+  onerror: ((event: ErrorEvent) => unknown) | null;
+  onmessageerror: ((event: MessageEvent) => unknown) | null;
+  postMessage(payload: PiSdkPromptWorkerRequest): void;
+  terminate(): void;
+};
+
 export function toSerializablePromptRequest(request: PiAgentPromptRequest): SerializablePiAgentPromptRequest {
   const {
     abortSignal: _abortSignal,
     onTextDelta: _onTextDelta,
     onExecutionEvent: _onExecutionEvent,
+    memorySearch: _memorySearch,
     requestBrowserApproval: _requestBrowserApproval,
     ...serializable
   } = request;
@@ -115,6 +137,11 @@ const ANTHROPIC_PROVIDER = "anthropic";
 const GOOGLE_PROVIDER = "google";
 
 export type PiApiKeyProvider = "openai" | "google" | "anthropic";
+
+type PiSdkAgentAdapterOptions = {
+  offloadRunPrompt?: boolean;
+  createPromptWorker?: () => PiPromptWorker;
+};
 
 export function clampAutoCompactContextThresholdPercent(value: number) {
   return Math.max(
@@ -141,86 +168,35 @@ export function buildPiAutoCompactionSettings(contextWindow: number, thresholdPe
   };
 }
 
-export function mapReasoningStrengthToThinkingLevel(reasoningStrength: ComposerReasoningStrength | undefined) {
+export function mapReasoningStrengthToThinkingLevel(
+  reasoningStrength: ComposerReasoningStrength | undefined
+): "low" | "medium" | "high" | "xhigh" {
   switch (reasoningStrength) {
     case "low":
-      return "low" as const;
+      return "low";
     case "medium":
-      return "medium" as const;
+      return "medium";
     case "extra-high":
-      return "xhigh" as const;
+      return "xhigh";
     case "high":
     default:
-      return "high" as const;
+      return "high";
   }
 }
 
-export class PiSdkAgentAdapter implements PiAgentAdapter {
-  private readonly authStorage: AuthStorage;
-  private readonly modelRegistry: ModelRegistry;
-  private readonly runtimeApiKeys: Partial<Record<PiApiKeyProvider, string>> = {};
-  private autoCompactContextThresholdPercent = DEFAULT_AUTO_COMPACT_CONTEXT_THRESHOLD_PERCENT;
-
-  constructor(
-    private readonly options: {
-      offloadRunPrompt?: boolean;
-      createPromptWorker?: () => Worker;
-    } = {}
-  ) {
-    this.authStorage = AuthStorage.create();
-    this.modelRegistry = ModelRegistry.create(this.authStorage);
-  }
-
-  setApiKey(provider: PiApiKeyProvider, apiKey: string | undefined) {
-    const normalizedKey = apiKey?.trim() || undefined;
-    if (normalizedKey) {
-      this.runtimeApiKeys[provider] = normalizedKey;
-      this.authStorage.setRuntimeApiKey(provider, normalizedKey);
-      return;
-    }
-
-    delete this.runtimeApiKeys[provider];
-    this.authStorage.removeRuntimeApiKey(provider);
-  }
-
-  hasApiKey(provider: PiApiKeyProvider) {
-    return this.authStorage.hasAuth(provider);
-  }
-
-  setAutoCompactContextThresholdPercent(thresholdPercent: number) {
-    this.autoCompactContextThresholdPercent = clampAutoCompactContextThresholdPercent(thresholdPercent);
-  }
-
-  async runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
-    if (this.shouldOffloadRunPrompt(request)) {
-      return this.runPromptInWorker(request);
-    }
-
-    const controller = await this.startExecution(request);
-    try {
-      return await controller.result;
-    } finally {
-      controller.dispose();
-    }
-  }
-
-  private shouldOffloadRunPrompt(request: PiAgentPromptRequest) {
-    return Boolean(
-      this.options.offloadRunPrompt !== false &&
-        !request.onTextDelta &&
-        !request.onExecutionEvent &&
-        !request.requestBrowserApproval
-    );
-  }
-
-  private runPromptInWorker(request: PiAgentPromptRequest) {
-    const worker = this.createPromptWorker();
+function createPiWorkerPromptRunner(
+  options: PiSdkAgentAdapterOptions,
+  runtimeApiKeys: Partial<Record<PiApiKeyProvider, string>>,
+  getAutoCompactContextThresholdPercent: () => number
+) {
+  function runPromptInWorker(request: PiAgentPromptRequest) {
+    const worker = createPromptWorker();
     const id = crypto.randomUUID();
     const payload: PiSdkPromptWorkerRequest = {
       id,
       request: toSerializablePromptRequest(request),
-      apiKeys: { ...this.runtimeApiKeys },
-      autoCompactContextThresholdPercent: this.autoCompactContextThresholdPercent
+      apiKeys: { ...runtimeApiKeys },
+      autoCompactContextThresholdPercent: getAutoCompactContextThresholdPercent()
     };
 
     debugLog("agent.prompt.worker.start", {
@@ -308,42 +284,20 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
     });
   }
 
-  private createPromptWorker() {
+  function createPromptWorker() {
     return (
-      this.options.createPromptWorker?.() ??
+      options.createPromptWorker?.() ??
       new Worker(new URL("./pi-sdk-prompt-worker.ts", import.meta.url), {
         type: "module"
       })
     );
   }
 
-  async startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
-    const modelRegistry = this.createExecutionModelRegistry(request);
-    const model = this.resolveModel(modelRegistry, request.modelId);
-    const toolNames = request.readOnly ? ["read", "grep", "find", "ls"] : ["read", "bash", "edit", "write"];
-    const settingsManager = SettingsManager.inMemory({
-      compaction: buildPiAutoCompactionSettings(model.contextWindow, this.autoCompactContextThresholdPercent),
-      retry: { enabled: true, maxRetries: 1 }
-    });
-    const resourceLoader = request.requestBrowserApproval
-      ? await this.createResourceLoader(request, settingsManager)
-      : undefined;
-    const { session } = await createAgentSession({
-      cwd: request.cwd,
-      authStorage: this.authStorage,
-      modelRegistry,
-      model,
-      thinkingLevel: mapReasoningStrengthToThinkingLevel(request.reasoningStrength),
-      tools: toolNames,
-      resourceLoader,
-      sessionManager: SessionManager.inMemory(request.cwd),
-      settingsManager
-    });
+  return runPromptInWorker;
+}
 
-    return new PiSdkExecutionController(session, request, model.contextWindow, (event) => this.handleEvent(event, request));
-  }
-
-  private resolveModel(modelRegistry: ModelRegistry, modelId: string) {
+function createPiModelRegistryTools(authStorage: AuthStorage, modelRegistry: ModelRegistry) {
+  function resolveModel(modelRegistry: ModelRegistry, modelId: string) {
     const [provider, providerModelId] = modelId.split("/", 2);
 
     if (provider !== "openai" && provider !== "google" && provider !== "anthropic") {
@@ -358,7 +312,7 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
     return model;
   }
 
-  private createExecutionModelRegistry(request: PiAgentPromptRequest) {
+  function createExecutionModelRegistry(request: PiAgentPromptRequest) {
     const shouldWrapOpenAi = Boolean(
       request.modelId.startsWith(`${FAST_OPENAI_PROVIDER}/`) && (request.fastMode || request.promptCacheIdentity)
     );
@@ -369,24 +323,24 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
         supportsGeminiExplicitCaching(request.modelId)
     );
     if (!shouldWrapOpenAi && !shouldWrapAnthropic && !shouldWrapGoogle) {
-      return this.modelRegistry;
+      return modelRegistry;
     }
 
-    const modelRegistry = ModelRegistry.inMemory(this.authStorage);
+    const executionRegistry = ModelRegistry.inMemory(authStorage);
     if (shouldWrapOpenAi) {
-      this.registerOpenAiProvider(modelRegistry, request);
+      registerOpenAiProvider(executionRegistry, request);
     }
     if (shouldWrapAnthropic) {
-      this.registerAnthropicCacheProvider(modelRegistry, request);
+      registerAnthropicCacheProvider(executionRegistry, request);
     }
     if (shouldWrapGoogle) {
-      this.registerGoogleCachedContentProvider(modelRegistry, request);
+      registerGoogleCachedContentProvider(executionRegistry, request);
     }
 
-    return modelRegistry;
+    return executionRegistry;
   }
 
-  private registerOpenAiProvider(modelRegistry: ModelRegistry, request: PiAgentPromptRequest) {
+  function registerOpenAiProvider(modelRegistry: ModelRegistry, request: PiAgentPromptRequest) {
     const openAiModels = modelRegistry.getAll().filter((model) => model.provider === FAST_OPENAI_PROVIDER);
     const baseModel = openAiModels[0];
     if (!baseModel || !baseModel.baseUrl) {
@@ -397,17 +351,14 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
       baseUrl: baseModel.baseUrl,
       apiKey: "OPENAI_API_KEY",
       streamSimple(model, context, options) {
-        const cacheOptions = request.promptCacheIdentity
-          ? {
-              sessionId: buildPromptCacheKey(request.promptCacheIdentity),
-              cacheRetention: "long" as const
-            }
-          : {};
-        return streamSimple(model, context, {
+        const streamOptions: SimpleStreamOptions & { serviceTier?: string } = {
           ...options,
-          ...cacheOptions,
+          ...(request.promptCacheIdentity
+            ? { sessionId: buildPromptCacheKey(request.promptCacheIdentity), cacheRetention: "long" }
+            : {}),
           ...(request.fastMode ? { serviceTier: FAST_OPENAI_SERVICE_TIER } : {})
-        } as SimpleStreamOptions & { serviceTier?: string });
+        };
+        return streamSimple(model, context, streamOptions);
       },
       models: openAiModels.map((model) => ({
         id: model.id,
@@ -424,7 +375,7 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
     });
   }
 
-  private registerGoogleCachedContentProvider(modelRegistry: ModelRegistry, request: PiAgentPromptRequest) {
+  function registerGoogleCachedContentProvider(modelRegistry: ModelRegistry, request: PiAgentPromptRequest) {
     const googleModels = modelRegistry.getAll().filter((model) => model.provider === GOOGLE_PROVIDER);
     const baseModel = googleModels[0];
     if (!baseModel || !baseModel.baseUrl) {
@@ -442,7 +393,7 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
             const nextPayload = injectGeminiCachedContent(payload, payloadModel, request.geminiCachedContentName);
             return (await options?.onPayload?.(nextPayload, payloadModel)) ?? nextPayload;
           }
-        } satisfies SimpleStreamOptions);
+        });
       },
       models: googleModels.map((model) => ({
         id: model.id,
@@ -459,7 +410,7 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
     });
   }
 
-  private registerAnthropicCacheProvider(modelRegistry: ModelRegistry, request: PiAgentPromptRequest) {
+  function registerAnthropicCacheProvider(modelRegistry: ModelRegistry, request: PiAgentPromptRequest) {
     const anthropicModels = modelRegistry.getAll().filter((model) => model.provider === ANTHROPIC_PROVIDER);
     const baseModel = anthropicModels[0];
     if (!baseModel || !baseModel.baseUrl) {
@@ -483,7 +434,7 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
             const nextPayload = transformed ?? payload;
             return (await options?.onPayload?.(nextPayload, payloadModel)) ?? nextPayload;
           }
-        } satisfies SimpleStreamOptions);
+        });
       },
       models: anthropicModels.map((model) => ({
         id: model.id,
@@ -500,7 +451,93 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
     });
   }
 
-  private handleEvent(event: AgentSessionEvent, request: PiAgentPromptRequest) {
+  return { resolveModel, createExecutionModelRegistry };
+}
+export function createPiSdkAgentAdapter(
+    options: PiSdkAgentAdapterOptions = {}
+  ) {
+  const authStorage = AuthStorage.create();
+  const modelRegistry = ModelRegistry.create(authStorage);
+  const runtimeApiKeys: Partial<Record<PiApiKeyProvider, string>> = {};
+  let autoCompactContextThresholdPercent = DEFAULT_AUTO_COMPACT_CONTEXT_THRESHOLD_PERCENT;
+  const runPromptInWorker = createPiWorkerPromptRunner(
+    options,
+    runtimeApiKeys,
+    () => autoCompactContextThresholdPercent
+  );
+  const { resolveModel, createExecutionModelRegistry } = createPiModelRegistryTools(authStorage, modelRegistry);
+
+  function setApiKey(provider: PiApiKeyProvider, apiKey: string | undefined) {
+    const normalizedKey = apiKey?.trim() || undefined;
+    if (normalizedKey) {
+      runtimeApiKeys[provider] = normalizedKey;
+      authStorage.setRuntimeApiKey(provider, normalizedKey);
+      return;
+    }
+
+    delete runtimeApiKeys[provider];
+    authStorage.removeRuntimeApiKey(provider);
+  }
+
+  function hasApiKey(provider: PiApiKeyProvider) {
+    return authStorage.hasAuth(provider);
+  }
+
+  function setAutoCompactContextThresholdPercent(thresholdPercent: number) {
+    autoCompactContextThresholdPercent = clampAutoCompactContextThresholdPercent(thresholdPercent);
+  }
+
+  async function runPrompt(request: PiAgentPromptRequest): Promise<PiAgentPromptResult> {
+    if (shouldOffloadRunPrompt(request)) {
+      return runPromptInWorker(request);
+    }
+
+    const controller = await startExecution(request);
+    try {
+      return await controller.result;
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  function shouldOffloadRunPrompt(request: PiAgentPromptRequest) {
+    return Boolean(
+      options.offloadRunPrompt !== false &&
+        !request.onTextDelta &&
+        !request.onExecutionEvent &&
+        !request.memorySearch &&
+        !request.requestBrowserApproval
+    );
+  }
+
+
+  async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    const modelRegistry = createExecutionModelRegistry(request);
+    const model = resolveModel(modelRegistry, request.modelId);
+    const toolNames = request.readOnly ? ["read", "grep", "find", "ls"] : ["read", "bash", "edit", "write"];
+    const settingsManager = SettingsManager.inMemory({
+      compaction: buildPiAutoCompactionSettings(model.contextWindow, autoCompactContextThresholdPercent),
+      retry: { enabled: true, maxRetries: 1 }
+    });
+    const resourceLoader = request.requestBrowserApproval || request.memorySearch
+      ? await createResourceLoader(request, settingsManager) : undefined;
+    const { session } = await createAgentSession({
+      cwd: request.cwd,
+      authStorage: authStorage,
+      modelRegistry,
+      model,
+      thinkingLevel: mapReasoningStrengthToThinkingLevel(request.reasoningStrength),
+      tools: toolNames,
+      resourceLoader,
+      sessionManager: SessionManager.inMemory(request.cwd),
+      settingsManager
+    });
+
+    return createPiSdkExecutionController(session, request, model.contextWindow, (event) => handleEvent(event, request));
+  }
+
+
+  function handleEvent(event: AgentSessionEvent, request: PiAgentPromptRequest) {
     if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
       request.onExecutionEvent?.({ type: "activity" });
       request.onTextDelta?.(event.assistantMessageEvent.delta);
@@ -553,11 +590,14 @@ export class PiSdkAgentAdapter implements PiAgentAdapter {
     }
   }
 
-  private async createResourceLoader(request: PiAgentPromptRequest, settingsManager: SettingsManager) {
+  async function createResourceLoader(request: PiAgentPromptRequest, settingsManager: SettingsManager) {
     return createPiResourceLoader(request, settingsManager);
   }
 
+  return { setApiKey, hasApiKey, setAutoCompactContextThresholdPercent, runPrompt, startExecution };
 }
+
+export type PiSdkAgentAdapter = ReturnType<typeof createPiSdkAgentAdapter>;
 
 async function createPiResourceLoader(request: PiAgentPromptRequest, settingsManager: SettingsManager) {
   const loader = new DefaultResourceLoader({
@@ -566,6 +606,35 @@ async function createPiResourceLoader(request: PiAgentPromptRequest, settingsMan
     settingsManager,
     extensionFactories: [
       (pi) => {
+        const memorySearch = request.memorySearch;
+        if (memorySearch) {
+          pi.registerTool(defineTool({
+            name: "memory_search",
+            label: "Search project notes",
+            description: "Pull a small set of explicitly saved project notes only when prior project context is needed. Search by concrete terms and optional semantic tags such as feature:frontend-refactor. Results are not loaded unless this tool is called.",
+            parameters: Type.Object({
+              query: Type.String({ minLength: 1, maxLength: 2000, description: "Concrete terms describing the prior context needed" }),
+              tags: Type.Optional(Type.Array(Type.String({
+                minLength: 3,
+                maxLength: 97,
+                pattern: "^[a-z][a-z0-9-]{0,31}:[a-z0-9][a-z0-9-]{0,63}$"
+              }), { maxItems: 6 })),
+              limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 4 }))
+            }),
+            async execute(_toolCallId, params) {
+              const result = await memorySearch({
+                queryText: params.query,
+                tags: params.tags,
+                maxEntries: params.limit
+              });
+              return {
+                content: [{ type: "text", text: result.text }],
+                details: { count: result.count }
+              };
+            }
+          }));
+        }
+
         pi.on("tool_call", async (event) => {
           if (!request.requestBrowserApproval || !isBrowserToolName(event.toolName)) {
             return;
@@ -592,99 +661,90 @@ async function createPiResourceLoader(request: PiAgentPromptRequest, settingsMan
   return loader;
 }
 
-class PiSdkExecutionController implements PiAgentExecutionController {
-  readonly result: Promise<PiAgentPromptResult>;
-
-  private readonly abortHandler: (() => Promise<void>) | undefined;
-  private readonly unsubscribe: () => void;
-  private currentResult: Promise<PiAgentPromptResult> | undefined;
-  private disposed = false;
-  private lastSessionEventSummary = "session-created";
-  private running = false;
-
-  constructor(
-    private readonly session: Awaited<ReturnType<typeof createAgentSession>>["session"],
-    private readonly request: PiAgentPromptRequest,
-    private readonly contextWindow: number,
+function createPiSdkExecutionController(
+    session: Awaited<ReturnType<typeof createAgentSession>>["session"],
+    request: PiAgentPromptRequest,
+    contextWindow: number,
     onSessionEvent: (event: AgentSessionEvent) => void
   ) {
-    this.unsubscribe = this.session.subscribe((event) => {
-      this.lastSessionEventSummary = summarizeSessionEvent(event);
+    let disposed = false;
+    let lastSessionEventSummary = "session-created";
+    let running = false;
+    const unsubscribe = session.subscribe((event) => {
+      lastSessionEventSummary = summarizeSessionEvent(event);
       onSessionEvent(event);
     });
-    this.request.onExecutionEvent?.({ type: "session-created" });
+    request.onExecutionEvent?.({ type: "session-created" });
 
-    this.abortHandler = this.request.abortSignal
+    const abortHandler = request.abortSignal
       ? async () => {
-          await this.abort();
+          await abort();
         }
       : undefined;
 
-    if (this.abortHandler) {
-      this.request.abortSignal?.addEventListener("abort", this.abortHandler, { once: true });
+    if (abortHandler) {
+      request.abortSignal?.addEventListener("abort", abortHandler, { once: true });
     }
-    this.result = this.run(this.request.prompt);
+
+  function continueWithPrompt(prompt: string = "continue") {
+    return run(prompt);
   }
 
-  continueWithPrompt(prompt: string = "continue") {
-    return this.run(prompt);
-  }
-
-  async abort() {
+  async function abort() {
     debugLog("agent.abort", {
-      kind: this.request.kind,
-      modelId: this.request.modelId
+      kind: request.kind,
+      modelId: request.modelId
     });
-    await this.session.abort();
+    await session.abort();
   }
 
-  dispose() {
-    if (this.disposed) {
+  function dispose() {
+    if (disposed) {
       return;
     }
 
-    this.disposed = true;
-    if (this.abortHandler) {
-      this.request.abortSignal?.removeEventListener("abort", this.abortHandler);
+    disposed = true;
+    if (abortHandler) {
+      request.abortSignal?.removeEventListener("abort", abortHandler);
     }
-    this.unsubscribe();
-    this.session.dispose();
+    unsubscribe();
+    session.dispose();
   }
 
-  private run(prompt: string) {
-    if (this.disposed) {
+  function run(prompt: string) {
+    if (disposed) {
       return Promise.reject(new Error("Execution controller is disposed"));
     }
 
-    if (this.running) {
+    if (running) {
       return Promise.reject(new Error("Execution already running"));
     }
 
-    this.running = true;
-    this.currentResult = (async () => {
-      await promptSession(this.session, prompt, this.request.images, this.request.abortSignal, this.lastSessionEventSummary);
-      let text = this.session.getLastAssistantText()?.trim();
+    running = true;
+    const currentResult = (async () => {
+      await promptSession(session, prompt, request.images, request.abortSignal, lastSessionEventSummary);
+      let text = session.getLastAssistantText()?.trim();
 
       if (!text && prompt.trim().toLowerCase() !== "continue") {
-        await promptSession(this.session, "continue", this.request.images, this.request.abortSignal, this.lastSessionEventSummary);
-        text = this.session.getLastAssistantText()?.trim();
+        await promptSession(session, "continue", request.images, request.abortSignal, lastSessionEventSummary);
+        text = session.getLastAssistantText()?.trim();
       }
 
       if (!text) {
-        const sessionStats = this.session.getSessionStats();
+        const sessionStats = session.getSessionStats();
         throw createPiExecutionError(
           "empty-response",
           "Pi agent returned an empty response",
-          this.lastSessionEventSummary,
+          lastSessionEventSummary,
           sessionStats
         );
       }
 
-      const sessionStats = this.session.getSessionStats();
-      if (this.request.modelId.startsWith("anthropic/") && sessionStats.tokens.cacheWrite > 0) {
+      const sessionStats = session.getSessionStats();
+      if (request.modelId.startsWith("anthropic/") && sessionStats.tokens.cacheWrite > 0) {
         debugLog("agent.cache.creation", {
           providerBrand: "claude",
-          modelId: this.request.modelId,
+          modelId: request.modelId,
           cacheCreationInputTokens: sessionStats.tokens.cacheWrite
         });
       }
@@ -694,18 +754,21 @@ class PiSdkExecutionController implements PiAgentExecutionController {
         text,
         contextUsage: {
           tokens,
-          contextWindow: this.contextWindow,
-          usagePercent: tokens === undefined ? undefined : Math.min(100, (tokens / this.contextWindow) * 100),
+          contextWindow: contextWindow,
+          usagePercent: tokens === undefined ? undefined : Math.min(100, (tokens / contextWindow) * 100),
           sessionStats,
           cachedInputTokens
         }
-      } satisfies PiAgentPromptResult;
+      };
     })().finally(() => {
-      this.running = false;
+      running = false;
     });
 
-    return this.currentResult;
+    return currentResult;
   }
+
+  const result = run(request.prompt);
+  return { result, continueWithPrompt, abort, dispose };
 }
 
 function summarizeSessionEvent(event: AgentSessionEvent) {

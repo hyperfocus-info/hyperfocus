@@ -3,7 +3,7 @@ export type WebMExportOptions = {
   height: number;
   fps: number;
   frameCount: number;
-  codec: "vp8" | "vp9";
+  codec: "avc" | "vp8" | "vp9";
   bitrate?: number;
   renderFrame(context: CanvasRenderingContext2D, frame: number): void;
   onProgress?(progress: number): void;
@@ -38,7 +38,7 @@ export async function encodeCanvasSequenceWebM(options: WebMExportOptions) {
   await encoder.flush(); encoder.close();
   if (encoderError) throw encoderError;
   frames.sort((a, b) => a.timestamp - b.timestamp);
-  const blob = muxWebM(frames, options.width, options.height, options.fps, options.codec);
+  const blob = muxWebM(frames, options.width, options.height, options.fps, options.codec === "vp9" ? "vp9" : "vp8");
   options.onProgress?.(1);
   return blob;
 }

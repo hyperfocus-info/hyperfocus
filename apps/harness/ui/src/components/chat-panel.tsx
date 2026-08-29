@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type JSX } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type Accessor, type JSX, type Setter } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import {
   createRequestId,
@@ -9,12 +9,13 @@ import {
   type ChatMessage,
   type ProviderBrand,
   type SetupAction
-} from "../../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import {
   detectSupportedChatAttachment,
   isSupportedChatAttachment,
   MAX_CHAT_ATTACHMENT_COUNT
-} from "../../../shared/chat-attachments";
+} from "@hyperfocus/ai-core/chat-attachments";
+import { ownCliStartingRequest } from "../terminal/terminal-transport";
 import {
   canSelectProviderBrand,
   COMPOSER_REASONING_STRENGTHS,
@@ -33,6 +34,7 @@ import {
   resolveUsablePiProviderBrand,
   shouldShowSetupChecklist,
   type ChatPaneTab,
+  type HarnessViewState,
   type ViewProjectState
 } from "../harness-store";
 import { normalizeAppHotkeyPreferences } from "../lib/app-hotkeys";
@@ -40,14 +42,17 @@ import { findChatFileReferenceAtPosition, findChatFileReferences, resolveChatFil
 import { tooltipWithPrimaryHotkey } from "../lib/hotkey-hints";
 import { openIdeWindow } from "../lib/ide-window";
 import { uploadFiles } from "../lib/uploadthing";
-import { buildChatTimelineRows, type ChatTimelineRow, type TimelineLiveMessage } from "../lib/chat-timeline-model";
+import { buildExperienceTimelineRows, type ChatTimelineRow, type TimelineLiveMessage } from "../lib/chat-timeline-model";
 import { formatShortTimestamp, resolveBrowserTimezone } from "../lib/time-format";
+import { getCompleteRun } from "../lib/run-status";
+import { runDetailRecoveries } from "../store/run-detail-state";
 import { formatProviderModelName } from "../lib/utils";
 import { pushToast } from "../toast-store";
-import { openBackgroundRunInJobsPane } from "../background-run-navigation";
-import { ActionButton } from "./action-button";
+import { openBackgroundRunInJobsPane } from "../source-navigation";
+import { ActionButton, ActionStatus } from "./action-button";
 import { CliSessionPanel } from "./cli-session-panel";
 import { MarkdownContent } from "./markdown-content";
+import { MemoryPane } from "../memory/memory-pane";
 import { ModeEditorPanel } from "./mode-editor-panel";
 import { SetupChecklistCard } from "./setup-checklist-card";
 import { StreamedToolBlock } from "./streamed-tool-block";
@@ -64,6 +69,7 @@ import { Textarea } from "./primitives/textarea";
 import { Tooltip } from "./primitives/tooltip";
 import { VirtualList } from "./primitives/virtual-list";
 import { Button } from "./primitives/button";
+import { persistDraftAttachments, readPersistedDraftAttachments } from "./chat/chat-draft-persistence";
 import {
   Activity,
   AlertTriangle,
@@ -87,7 +93,6 @@ import {
   RefreshCcw,
   Plus,
   ArrowDown,
-  ArrowUp,
   Check,
   File,
   FileCode,
@@ -95,7 +100,6 @@ import {
   FileText,
   Image,
   SendHorizontal,
-  Settings,
   Terminal,
   WandSparkles,
   X,
@@ -103,8 +107,17 @@ import {
 } from "lucide-solid";
 import { chatPanelStyles as styles } from "./chat-panel.styles";
 import { chatUtilityStyles } from "./chat-panel.utilities";
+import { TransientTranscriptRow } from "./chat-panel/transient-transcript-row";
+import { formatTokenCount, getComposerLookupOptionId } from "./chat-panel/chat-panel-model";
+export { formatCapabilityTag } from "./chat-panel/chat-panel-model";
+import { ChatSetupDialog } from "./chat-panel/chat-setup-dialog";
+import { ChatPanelHeader } from "./chat-panel/chat-panel-header";
+import { ChatTranscriptSurface } from "./chat-panel/chat-transcript-surface";
+import { ChatProjectSetupNotice } from "./chat-panel/chat-project-setup-notice";
+import { ChatComposerSurface } from "./chat-panel/chat-composer-surface";
+import { ChatExperimentDialog } from "./chat-panel/chat-experiment-dialog";
 
-function getReasoningStrengthDescription(strength: (typeof COMPOSER_REASONING_STRENGTHS)[number]) {
+export function getReasoningStrengthDescription(strength: (typeof COMPOSER_REASONING_STRENGTHS)[number]) {
   switch (strength) {
     case "low":
       return "Fastest pass with minimal internal deliberation.";
@@ -117,7 +130,7 @@ function getReasoningStrengthDescription(strength: (typeof COMPOSER_REASONING_ST
   }
 }
 
-function getFastModeDescription(enabled: boolean) {
+export function getFastModeDescription(enabled: boolean) {
   return enabled
     ? "Prefer lower-latency responses when current runtime and model support it."
     : "Use standard response path with default latency and reasoning behavior.";
@@ -128,8 +141,10 @@ function isHarnessTranscriptMessage(message: ChatMessage) {
 }
 
 function getTranscriptRoleLabel(role: ChatMessage["role"]) {
-  return role === "user" ? "user" : "harness";
+  return role === "user" ? "You" : "Assistant";
 }
+
+function getIdentityInitial(label: string) { return label.trim().slice(0, 1).toUpperCase() || "A"; }
 
 function getCopyAriaLabel(message: ChatMessage) {
   return `Copy ${isHarnessTranscriptMessage(message) ? "harness" : message.role} message`;
@@ -137,6 +152,15 @@ function getCopyAriaLabel(message: ChatMessage) {
 
 function getPlanFromMessage(message: ChatMessage) {
   return message.metadata?.type === "plan-summary" ? message.metadata.plan : undefined;
+}
+
+function requirePlanRunId(message: ChatMessage) {
+  if (message.metadata?.type !== "plan-summary") throw new Error("Expected plan summary metadata");
+  return message.metadata.runId;
+}
+
+function getAssistantActionMetadata(message: ChatMessage) {
+  return message.metadata?.type === "assistant-action" ? message.metadata : undefined;
 }
 
 function getProviderBrandLabel(providerBrand: ProviderBrand) {
@@ -191,13 +215,692 @@ type ComposerReferenceBadge = {
   target: ChatFileTarget;
 };
 
-export function ChatPanel() {
-  let messageViewport: HTMLDivElement | undefined;
-  let attachmentInput: HTMLInputElement | undefined;
-  let composerTextarea: HTMLTextAreaElement | undefined;
-  let composerLookupMenu: HTMLDivElement | undefined;
-  let countdownTimer: number | undefined;
-  let waitingTimer: number | undefined;
+function createComposerLookupDomActions(options: {
+  composerLookupIndex: Accessor<number>;
+  composerLookupKey: () => string | undefined;
+  composerLookupOpen: () => boolean;
+  owner: ReturnType<typeof getOwner>;
+  refs: { messageViewport?: HTMLDivElement; attachmentInput?: HTMLInputElement; composerTextarea?: HTMLTextAreaElement; composerLookupMenu?: HTMLDivElement; };
+  setComposerCaret: Setter<number | undefined>;
+  setComposerLookupForcedClosed: Setter<boolean>;
+  setComposerLookupIndex: Setter<number>;
+  setDismissedComposerLookupKey: Setter<string | undefined>;
+}) {
+  const {
+    composerLookupIndex, composerLookupKey, composerLookupOpen, owner, refs,
+    setComposerCaret, setComposerLookupForcedClosed, setComposerLookupIndex, setDismissedComposerLookupKey,
+  } = options;
+  function syncComposerCaret() {
+      if (refs.composerTextarea) {
+        setComposerCaret(refs.composerTextarea.selectionStart);
+      }
+    }
+
+  function runWithChatPanelOwner(callback: () => void) {
+      if (owner) {
+        runWithOwner(owner, callback);
+        return;
+      }
+      callback();
+    }
+
+  function dismissComposerLookup(options: { focusComposer?: boolean } = {}) {
+      setDismissedComposerLookupKey(composerLookupKey());
+      setComposerLookupForcedClosed(true);
+      setComposerLookupActiveIndex(0);
+      setComposerLookupMenuHidden(true);
+      queueMicrotask(() => syncComposerLookupDomVisibility());
+      if (options.focusComposer) {
+        queueMicrotask(() => refs.composerTextarea?.focus());
+      }
+    }
+
+  function updateComposerLookupDomSelection(activeIndex: number) {
+      refs.composerLookupMenu?.querySelectorAll<HTMLElement>("[data-composer-lookup-option]").forEach((element) => {
+        const selected = element.getAttribute("data-composer-lookup-index") === String(activeIndex);
+        element.setAttribute("aria-selected", selected ? "true" : "false");
+      });
+    }
+
+  function syncComposerLookupDomVisibility(options: { focusMenu?: boolean } = {}) {
+      if (!refs.composerLookupMenu) {
+        return;
+      }
+      const open = composerLookupOpen();
+      setComposerLookupMenuHidden(!open);
+      if (open) {
+        updateComposerLookupDomSelection(composerLookupIndex());
+        if (options.focusMenu) {
+          refs.composerLookupMenu.focus();
+        }
+      }
+    }
+
+  function setComposerLookupMenuHidden(hidden: boolean) {
+      if (!refs.composerLookupMenu) {
+        return;
+      }
+      refs.composerLookupMenu.hidden = hidden;
+      refs.composerLookupMenu.setAttribute("aria-hidden", hidden ? "true" : "false");
+      if (hidden) {
+        refs.composerLookupMenu.removeAttribute("role");
+        refs.composerLookupMenu.removeAttribute("aria-label");
+      } else {
+        refs.composerLookupMenu.setAttribute("role", "listbox");
+        refs.composerLookupMenu.setAttribute("aria-label", "Composer lookup");
+      }
+      refs.composerLookupMenu.querySelectorAll<HTMLElement>("[data-composer-lookup-option]").forEach((element) => {
+        if (hidden) {
+          element.removeAttribute("role");
+        } else {
+          element.setAttribute("role", "option");
+        }
+      });
+      refs.composerLookupMenu.style.display = hidden ? "none" : "";
+    }
+
+  function setComposerLookupActiveIndex(index: number) {
+      setComposerLookupIndex(index);
+      updateComposerLookupDomSelection(index);
+    }
+  return { dismissComposerLookup, runWithChatPanelOwner, setComposerLookupActiveIndex, setComposerLookupMenuHidden, syncComposerCaret, syncComposerLookupDomVisibility, updateComposerLookupDomSelection };
+}
+
+
+function createComposerLookupActions(options: {
+  activeProject: () => ViewProjectState | undefined;
+  chatFileLinkContext: () => ChatFileLinkContext;
+  composerLookup: () => { kind: "skill"; query: string; start: number; end: number; } | { kind: "file"; query: string; start: number; end: number; } | undefined;
+  composerLookupIndex: Accessor<number>;
+  composerLookupKey: () => string | undefined;
+  composerLookupOpen: () => boolean;
+  composerLookupOptions: () => { label: string; detail: string; insertText: string; }[];
+  dismissComposerLookup: (options?: { focusComposer?: boolean; }) => void;
+  project: () => ViewProjectState;
+  refs: { messageViewport?: HTMLDivElement; attachmentInput?: HTMLInputElement; composerTextarea?: HTMLTextAreaElement; composerLookupMenu?: HTMLDivElement; };
+  resizeComposer: () => void;
+  setComposerCaret: Setter<number | undefined>;
+  setComposerLookupActiveIndex: (index: number) => void;
+  setComposerLookupForcedClosed: Setter<boolean>;
+  setComposerLookupMenuHidden: (hidden: boolean) => void;
+  setDismissedComposerLookupKey: Setter<string | undefined>;
+  syncComposerCaret: () => void;
+  syncComposerLookupDomVisibility: (options?: { focusMenu?: boolean; }) => void;
+}) {
+  const {
+    activeProject, chatFileLinkContext, composerLookup, composerLookupIndex, composerLookupKey,
+    composerLookupOpen, composerLookupOptions, dismissComposerLookup, project, refs,
+    resizeComposer, setComposerCaret, setComposerLookupActiveIndex, setComposerLookupForcedClosed, setComposerLookupMenuHidden,
+    setDismissedComposerLookupKey, syncComposerCaret, syncComposerLookupDomVisibility,
+  } = options;
+  function applyComposerLookupOption(index = composerLookupIndex()) {
+      const lookup = composerLookup();
+      const option = composerLookupOptions()[index];
+      if (!lookup || !option) {
+        return;
+      }
+      const draft = project().draft;
+      const nextDraft = `${draft.slice(0, lookup.start)}${option.insertText}${draft.slice(lookup.end)}`;
+      const nextCaret = lookup.start + option.insertText.length;
+      setComposerCaret(nextCaret);
+      setDismissedComposerLookupKey(composerLookupKey());
+      setComposerLookupForcedClosed(true);
+      setComposerLookupActiveIndex(0);
+      setComposerLookupMenuHidden(true);
+      queueMicrotask(() => syncComposerLookupDomVisibility());
+      harnessStore.setProjectDraft(project().id, nextDraft);
+      queueMicrotask(() => {
+        refs.composerTextarea?.setSelectionRange(nextCaret, nextCaret);
+        refs.composerTextarea?.focus();
+        setComposerCaret(nextCaret);
+        resizeComposer();
+      });
+    }
+
+  function handleComposerLookupKeyDown(event: KeyboardEvent) {
+      if (event.key === "ArrowDown") {
+        if (!composerLookupOpen()) {
+          return false;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        setComposerLookupActiveIndex((composerLookupIndex() + 1) % composerLookupOptions().length);
+        return true;
+      }
+      if (event.key === "ArrowUp") {
+        if (!composerLookupOpen()) {
+          return false;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        setComposerLookupActiveIndex((composerLookupIndex() + composerLookupOptions().length - 1) % composerLookupOptions().length);
+        return true;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        if (!composerLookupOpen()) {
+          return false;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        applyComposerLookupOption();
+        return true;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        dismissComposerLookup({ focusComposer: true });
+        return true;
+      }
+      return false;
+    }
+
+  function handleComposerKeyDown(event: KeyboardEvent) {
+      if (handleComposerLookupKeyDown(event)) {
+        return;
+      }
+      queueMicrotask(syncComposerCaret);
+    }
+
+  function handleComposerClick(event: MouseEvent & { currentTarget: HTMLTextAreaElement }) {
+      const lookupWasOpen = composerLookupOpen();
+      syncComposerCaret();
+      if (!event.ctrlKey && !event.metaKey) {
+        if (lookupWasOpen) {
+          dismissComposerLookup({ focusComposer: true });
+        } else {
+          setComposerLookupForcedClosed(false);
+          setDismissedComposerLookupKey(undefined);
+        }
+        return;
+      }
+      const reference = findChatFileReferenceAtPosition(event.currentTarget.value, event.currentTarget.selectionStart, chatFileLinkContext());
+      if (!reference) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      handleOpenChatFile(reference.target);
+    }
+
+  function handleOpenChatFile(target: ChatFileTarget) {
+      const currentProject = activeProject();
+      if (!currentProject) {
+        return;
+      }
+      openIdeWindow({ projectId: currentProject.id, threadId: currentProject.activeThreadId });
+      harnessStore.openIdeFile(target.path, target.line, target.column);
+    }
+
+  function handleComposerBadgeClick(event: MouseEvent, badge: ComposerReferenceBadge) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.ctrlKey && !event.metaKey) {
+        return;
+      }
+      handleOpenChatFile(badge.target);
+    }
+  return { applyComposerLookupOption, handleComposerBadgeClick, handleComposerClick, handleComposerKeyDown, handleComposerLookupKeyDown, handleOpenChatFile };
+}
+
+
+function createChatAttachmentActions(options: {
+  activeProject: () => ViewProjectState | undefined;
+  draftAttachments: Accessor<{ id: string; kind: "image" | "text" | "document"; name: string; mimeType: string; sizeBytes: number; url: string; key: string; uploadedAt: string; documentType?: "pdf" | "docx" | "xlsx" | "pptx" | "odt" | undefined; }[]>;
+  hasVisionCapability: () => boolean;
+  setDraftAttachments: Setter<{ id: string; kind: "image" | "text" | "document"; name: string; mimeType: string; sizeBytes: number; url: string; key: string; uploadedAt: string; documentType?: "pdf" | "docx" | "xlsx" | "pptx" | "odt" | undefined; }[]>;
+  setDraggingAttachments: Setter<boolean>;
+  setUploadingAttachments: Setter<boolean>;
+  state: HarnessViewState;
+}) {
+  const {
+    activeProject, draftAttachments, hasVisionCapability, setDraftAttachments, setDraggingAttachments,
+    setUploadingAttachments, state,
+  } = options;
+  async function uploadAttachmentFiles(files: File[]) {
+      const project = activeProject();
+      if (!project || files.length === 0) {
+        return;
+      }
+
+      if (!state.attachmentsEnabled) {
+        pushToast("Attachments unavailable", "Set UPLOADTHING_TOKEN on the server to enable uploads.", "error");
+        return;
+      }
+
+      if (draftAttachments().length + files.length > MAX_CHAT_ATTACHMENT_COUNT) {
+        pushToast("Too many attachments", `Attach at most ${MAX_CHAT_ATTACHMENT_COUNT} files per message.`, "error");
+        return;
+      }
+
+      for (const file of files) {
+        const validation = isSupportedChatAttachment({
+          name: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size
+        });
+        if (!validation.ok) {
+          pushToast("Attachment rejected", `${file.name}: ${validation.reason}`, "error");
+          return;
+        }
+        if (validation.kind === "image" && !hasVisionCapability()) {
+          pushToast("Image blocked", "Current model lacks vision support for image attachments.", "error");
+          return;
+        }
+      }
+
+      setUploadingAttachments(true);
+      try {
+        const uploadedFiles = await uploadFiles("chatAttachment", {
+          files,
+          input: {
+            projectId: project.id,
+            threadId: project.activeThreadId
+          }
+        });
+
+        const nextAttachments = uploadedFiles.flatMap((file) => {
+          const detectedAttachment = detectSupportedChatAttachment({ name: file.name, mimeType: file.type });
+          if (!detectedAttachment) {
+            return [];
+          }
+
+          return [
+            {
+              id: `${file.key}-${file.lastModified ?? Date.now()}`,
+              kind: detectedAttachment.kind,
+              documentType: detectedAttachment.kind === "document" ? detectedAttachment.documentType : undefined,
+              name: file.name,
+              mimeType: file.type,
+              sizeBytes: file.size,
+              url: file.serverData?.url ?? file.ufsUrl ?? file.url,
+              key: file.serverData?.key ?? file.key,
+              uploadedAt: file.serverData?.uploadedAt ?? new Date().toISOString()
+            }
+          ];
+        });
+
+        setDraftAttachments((current) => [...current, ...nextAttachments]);
+      } catch (error) {
+        pushToast(
+          "Attachment upload failed",
+          error instanceof Error ? error.message : "UploadThing could not upload the selected files.",
+          "error"
+        );
+      } finally {
+        setUploadingAttachments(false);
+      }
+    }
+
+  async function handleSelectAttachments(event: Event) {
+      const input = event.currentTarget;
+      if (!(input instanceof HTMLInputElement)) return;
+      const files = input.files ? [...input.files] : [];
+      input.value = "";
+
+      await uploadAttachmentFiles(files);
+    }
+
+  function handleRemoveAttachment(attachmentId: string) {
+      setDraftAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+    }
+
+  function handleAttachmentDragOver(event: DragEvent) {
+      if (!event.dataTransfer?.types.includes("Files")) {
+        return;
+      }
+      event.preventDefault();
+      setDraggingAttachments(true);
+    }
+
+  function handleAttachmentDragLeave(event: DragEvent) {
+      if (event.currentTarget instanceof Node && event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
+        return;
+      }
+      setDraggingAttachments(false);
+    }
+
+  async function handleAttachmentDrop(event: DragEvent) {
+      if (!event.dataTransfer?.files.length) {
+        return;
+      }
+      event.preventDefault();
+      setDraggingAttachments(false);
+      await uploadAttachmentFiles([...event.dataTransfer.files]);
+    }
+  return { handleAttachmentDragLeave, handleAttachmentDragOver, handleAttachmentDrop, handleRemoveAttachment, handleSelectAttachments, uploadAttachmentFiles };
+}
+
+
+function createChatSubmitAction(options: {
+  activeMode: () => { id: string; description: string; updatedAt: string; scope: "project" | "workspace" | "builtin"; label: string; plannerPrompt: string; executionPrompt: string; toolPolicy: "full-access" | "read-heavy" | "review-only"; executionAccess: "workspace-write" | "read-only"; planExecutionModeDefault?: "countdown" | "approve" | "immediate" | undefined; subagentWorktreeStrategyDefault?: "same-worktree" | "separate-worktrees" | undefined; correctnessIterationModeDefault?: "ask-before-iterate" | "auto-once" | "auto-until-clean" | undefined; };
+  activeProject: () => ViewProjectState | undefined;
+  clearCountdown: () => void;
+  composerSubmitState: Accessor<{ disabled: boolean; disabledReason: string | undefined; tooltip: string; }>;
+  draftAttachments: Accessor<{ id: string; kind: "image" | "text" | "document"; name: string; mimeType: string; sizeBytes: number; url: string; key: string; uploadedAt: string; documentType?: "pdf" | "docx" | "xlsx" | "pptx" | "odt" | undefined; }[]>;
+  getComposerControlPayload: () => { reasoningStrength: "low" | "medium" | "high" | "extra-high"; fastMode: boolean; };
+  getEffectiveExecutionModelId: () => string;
+  getSelectedAgentUnavailableReason: () => string | undefined;
+  hasImageDraftAttachments: () => boolean;
+  hasVisionCapability: () => boolean;
+  isAutoModeSelected: () => boolean;
+  pendingQuestion: () => { status: "pending" | "deferred" | "answered"; id: string; prompt: string; required: boolean; askedAt: string; logicalQuestionId?: string | undefined; placeholder?: string | undefined; responseKind?: "choice" | "freeform" | undefined; answerText?: string | undefined; choices?: { id: string; description: string; label: string; answerText: string; recommended: boolean; }[] | undefined; intent?: { type: "assistant-create-intent"; projectId: string; threadId: string; sourcePrompt: string; suggestedName: string; defaultScope: "project" | "global"; purpose?: string | undefined; requiresPurpose?: boolean | undefined; } | { type: "assistant-action-intent"; sourcePrompt: string; actionKind: "pause" | "resume" | "create" | "chat" | "inspect" | "list-jobs" | "create-job" | "run-job" | "clone" | "answer-question" | "update-todo" | "recover"; questionId?: string | undefined; jobId?: string | undefined; jobPrompt?: string | undefined; todoId?: string | undefined; answerText?: string | undefined; assistantSelector?: string | undefined; candidateAssistantIds?: string[] | undefined; candidateJobIds?: string[] | undefined; candidateQuestionIds?: string[] | undefined; candidateTodoIds?: string[] | undefined; scheduleText?: string | undefined; } | undefined; answeredAt?: string | undefined; } | undefined;
+  persistProviderPreferences: (providerBrand: ProviderBrand) => void;
+  resumableRun: Accessor<AgentRunState | undefined>;
+  selectedAgentId: () => "pi" | "copilot-cli" | "codex-cli";
+  sendCommand: typeof harnessStore.actions.sendCommand;
+  setDraftAttachments: Setter<{ id: string; kind: "image" | "text" | "document"; name: string; mimeType: string; sizeBytes: number; url: string; key: string; uploadedAt: string; documentType?: "pdf" | "docx" | "xlsx" | "pptx" | "odt" | undefined; }[]>;
+  state: HarnessViewState;
+  uploadingAttachments: Accessor<boolean>;
+}) {
+  const {
+    activeMode, activeProject, clearCountdown, composerSubmitState, draftAttachments,
+    getComposerControlPayload, getEffectiveExecutionModelId, getSelectedAgentUnavailableReason, hasImageDraftAttachments, hasVisionCapability,
+    isAutoModeSelected, pendingQuestion, persistProviderPreferences, resumableRun, selectedAgentId,
+    sendCommand, setDraftAttachments, state, uploadingAttachments,
+  } = options;
+  function handleSubmit(event: SubmitEvent) {
+      event.preventDefault();
+
+      const submitState = composerSubmitState();
+      if (submitState.disabled) {
+        if (submitState.disabledReason) {
+          pushToast("Cannot send yet", submitState.disabledReason, "error");
+        }
+        return;
+      }
+
+      const project = activeProject();
+      if (!project) {
+        return;
+      }
+      const content = project.draft.trim();
+      if (!content && draftAttachments().length === 0) {
+        return;
+      }
+      if (!content && draftAttachments().length > 0) {
+        pushToast("Task text required", "Describe what pi should do with the attached files.", "error");
+        return;
+      }
+
+      if (uploadingAttachments()) {
+        pushToast("Upload in progress", "Wait for attachments to finish uploading before sending.", "error");
+        return;
+      }
+
+      if (hasImageDraftAttachments() && !hasVisionCapability()) {
+        pushToast(
+          "Vision model required",
+          "Current model cannot inspect attached images. Switch to a vision-capable model before sending.",
+          "error"
+        );
+        return;
+      }
+
+      const question = pendingQuestion();
+      if (question && project.activeRun) {
+        const sent = sendCommand({
+          type: "planning.answer",
+          requestId: createRequestId(),
+          payload: {
+            projectId: project.id,
+            threadId: project.activeThreadId,
+            runId: project.activeRun.id,
+            questionId: question.id,
+            content,
+            attachments: draftAttachments(),
+            ...getComposerControlPayload()
+          }
+        });
+
+        if (sent) {
+          harnessStore.setProjectDraft(project.id, "");
+          setDraftAttachments([]);
+        }
+        return;
+      }
+
+      if (project.activeRun?.status === "ready") {
+        const sent = sendCommand({
+          type: "planning.refine",
+          requestId: createRequestId(),
+          payload: {
+            projectId: project.id,
+            threadId: project.activeThreadId,
+            runId: project.activeRun.id,
+            content,
+            attachments: draftAttachments(),
+            ...getComposerControlPayload()
+          }
+        });
+
+        if (sent) {
+          harnessStore.setProjectDraft(project.id, "");
+          setDraftAttachments([]);
+          clearCountdown();
+        }
+        return;
+      }
+
+      if (resumableRun()) {
+        pushToast(
+          "Resume required",
+          "Use the resume action to rerun failed or pending subagents. Draft text is optional guidance for resume.",
+          "error"
+        );
+        return;
+      }
+
+      if (selectedAgentId() === "pi" && !hasUsableApiKeyForProvider(state, state.providerBrand)) {
+        const fallbackProviderBrand = resolveUsablePiProviderBrand(state);
+        if (fallbackProviderBrand) {
+          harnessStore.setProviderBrand(fallbackProviderBrand);
+          persistProviderPreferences(fallbackProviderBrand);
+        } else {
+          pushToast(
+            `${getProviderBrandLabel(state.providerBrand)} API key required`,
+            "Open preferences and add an OpenAI, Google, or Anthropic key before sending chat.",
+            "error"
+          );
+          harnessStore.openPreferencesModal();
+          return;
+        }
+      }
+
+      if (selectedAgentId() !== "pi") {
+        const unavailableAgentReason = getSelectedAgentUnavailableReason();
+        if (unavailableAgentReason) {
+          pushToast("CLI runtime unavailable", unavailableAgentReason, "error");
+          return;
+        }
+      }
+
+      const executionModelId = getEffectiveExecutionModelId();
+      const selectedModeId = isAutoModeSelected() ? "auto" : activeMode()?.id;
+
+      const sent = sendCommand({
+        type: "chat.send",
+        requestId: createRequestId(),
+        payload: {
+          projectId: project.id,
+          threadId: project.activeThreadId,
+          agentId: selectedAgentId(),
+          content,
+          attachments: draftAttachments(),
+          modeId: selectedModeId,
+          modeLocked: state.hasGlobalSelectedModeId && selectedModeId !== "auto",
+          executionModelId,
+          ...getComposerControlPayload(),
+          debug: state.debugEnabled
+        }
+      });
+
+      if (sent) {
+        harnessStore.setProjectDraft(project.id, "");
+        setDraftAttachments([]);
+      }
+    }
+  return { handleSubmit };
+}
+
+
+function createChatSetupActions(options: {
+  activeProject: () => ViewProjectState | undefined;
+  autoExecutedRunId: Accessor<string | undefined>;
+  executionPaused: () => boolean;
+  getComposerControlPayload: () => { reasoningStrength: "low" | "medium" | "high" | "extra-high"; fastMode: boolean; };
+  handleExecuteRun: (runId: string) => void;
+  pendingQuestion: () => { status: "pending" | "deferred" | "answered"; id: string; prompt: string; required: boolean; askedAt: string; logicalQuestionId?: string | undefined; placeholder?: string | undefined; responseKind?: "choice" | "freeform" | undefined; answerText?: string | undefined; choices?: { id: string; description: string; label: string; answerText: string; recommended: boolean; }[] | undefined; intent?: { type: "assistant-create-intent"; projectId: string; threadId: string; sourcePrompt: string; suggestedName: string; defaultScope: "project" | "global"; purpose?: string | undefined; requiresPurpose?: boolean | undefined; } | { type: "assistant-action-intent"; sourcePrompt: string; actionKind: "pause" | "resume" | "create" | "chat" | "inspect" | "list-jobs" | "create-job" | "run-job" | "clone" | "answer-question" | "update-todo" | "recover"; questionId?: string | undefined; jobId?: string | undefined; jobPrompt?: string | undefined; todoId?: string | undefined; answerText?: string | undefined; assistantSelector?: string | undefined; candidateAssistantIds?: string[] | undefined; candidateJobIds?: string[] | undefined; candidateQuestionIds?: string[] | undefined; candidateTodoIds?: string[] | undefined; scheduleText?: string | undefined; } | undefined; answeredAt?: string | undefined; } | undefined;
+  readyRun: Accessor<AgentRunState | undefined>;
+  savePreferences: (overrides?: { providerBrand?: ProviderBrand; blockChatOnDirtyGitDefault?: boolean; }) => void;
+  sendCommand: typeof harnessStore.actions.sendCommand;
+  setAutoExecutedRunId: Setter<string | undefined>;
+  setCountdownFrozenByExecutionPause: Setter<boolean>;
+  setCountdownPaused: Setter<boolean>;
+  setCountdownRemainingMs: Setter<number>;
+  setCountdownRunId: Setter<string | undefined>;
+  timers: { countdown?: number; waiting?: number; };
+}) {
+  const {
+    activeProject, autoExecutedRunId, executionPaused, getComposerControlPayload, handleExecuteRun,
+    pendingQuestion, readyRun, savePreferences, sendCommand, setAutoExecutedRunId,
+    setCountdownFrozenByExecutionPause, setCountdownPaused, setCountdownRemainingMs, setCountdownRunId, timers,
+  } = options;
+  function startCountdown(runId: string) {
+      if (timers.countdown !== undefined) {
+        window.clearInterval(timers.countdown);
+      }
+
+      timers.countdown = window.setInterval(() => {
+        setCountdownRemainingMs((value) => {
+          const next = Math.max(0, value - 100);
+          if (next === 0 && readyRun()?.id === runId && autoExecutedRunId() !== runId && !executionPaused()) {
+            clearCountdown();
+            handleExecuteRun(runId);
+            setAutoExecutedRunId(runId);
+          }
+          return next;
+        });
+      }, 100);
+    }
+
+  async function handleSetupAction(action: SetupAction) {
+      switch (action.kind) {
+        case "open-project-switcher":
+          harnessStore.openProjectSwitcher();
+          return;
+        case "open-preferences":
+          harnessStore.openPreferencesModal();
+          return;
+        case "refresh-runtime-health":
+          sendCommand({
+            type: "agent.runtime.refresh",
+            requestId: createRequestId()
+          });
+          return;
+        case "copy-command":
+          if (!action.value) {
+            return;
+          }
+
+          try {
+            await navigator.clipboard.writeText(action.value);
+            pushToast("Command copied", action.value);
+          } catch {
+            pushToast("Clipboard blocked", action.value, "error");
+          }
+          return;
+        case "open-url":
+          if (action.value) {
+            window.open(action.value, "_blank", "noopener,noreferrer");
+          }
+          return;
+        case "start-tutorial":
+          if (action.value) {
+            harnessStore.startTutorial(action.value);
+          }
+          return;
+        case "init-git-baseline":
+          handleInitGitBaseline();
+          return;
+        case "disable-dirty-git-check":
+          handleDisableDirtyGitCheck();
+          return;
+      }
+    }
+
+  function handleInitGitBaseline() {
+      const project = activeProject();
+      if (!project) return;
+      harnessStore.prepareNonGitPreflightRepair("git-init");
+      sendCommand({
+        type: "project.git.initBaseline",
+        requestId: createRequestId(),
+        payload: {
+          projectId: project.id
+        }
+      });
+    }
+
+  function handleDisableDirtyGitCheck() {
+      harnessStore.prepareNonGitPreflightRepair("disable-check");
+      harnessStore.setBlockChatOnDirtyGitDefault(false);
+      savePreferences({ blockChatOnDirtyGitDefault: false });
+    }
+
+  function handleCancelNonGitPreflight() {
+      harnessStore.clearBlockingNonGitPreflight();
+    }
+
+  function clearCountdown() {
+      if (timers.countdown !== undefined) {
+        window.clearInterval(timers.countdown);
+        timers.countdown = undefined;
+      }
+      setCountdownRunId(undefined);
+      setCountdownRemainingMs(0);
+      setCountdownPaused(false);
+      setCountdownFrozenByExecutionPause(false);
+    }
+
+  function handleQuestionChoice(answerText: string) {
+      if (executionPaused()) {
+        return;
+      }
+      const project = activeProject();
+      const question = pendingQuestion();
+      if (!project || !question || !project.activeRun) {
+        return;
+      }
+
+      const sent = sendCommand({
+        type: "planning.answer",
+        requestId: createRequestId(),
+        payload: {
+          projectId: project.id,
+          threadId: project.activeThreadId,
+          runId: project.activeRun.id,
+          questionId: question.id,
+          content: answerText,
+          ...getComposerControlPayload()
+        }
+      });
+
+      if (sent) {
+        harnessStore.setProjectDraft(project.id, "");
+      }
+    }
+  return { clearCountdown, handleCancelNonGitPreflight, handleDisableDirtyGitCheck, handleInitGitBaseline, handleQuestionChoice, handleSetupAction, startCountdown };
+}
+
+
+function createChatPanelController() {
+  const refs: {
+    messageViewport?: HTMLDivElement;
+    attachmentInput?: HTMLInputElement;
+    composerTextarea?: HTMLTextAreaElement;
+    composerLookupMenu?: HTMLDivElement;
+  } = {};
+  const timers: { countdown?: number; waiting?: number } = {};
   const owner = getOwner();
   const state = harnessStore.state;
   const sendCommand = harnessStore.actions.sendCommand;
@@ -208,7 +911,11 @@ export function ChatPanel() {
     const index = activeProjectIndex();
     return index >= 0 ? state.workspace.projects[index] : undefined;
   };
-  const project = () => activeProject()!;
+  const project = () => {
+    const currentProject = activeProject();
+    if (!currentProject) throw new Error("Expected an active project");
+    return currentProject;
+  };
   const chatFileLinkContext = (): ChatFileLinkContext => ({
     rootPath: activeProject()?.rootPath,
     filePaths: activeProject()?.filePaths ?? []
@@ -231,14 +938,12 @@ export function ChatPanel() {
   const [selectedExperimentFilePath, setSelectedExperimentFilePath] = createSignal<string>();
   const [projectRulesDraft, setProjectRulesDraft] = createSignal("");
   const [threadMemoryDraft, setThreadMemoryDraft] = createSignal("");
-  const [deleteArmedMemoryId, setDeleteArmedMemoryId] = createSignal<string>();
   const [draftAttachments, setDraftAttachments] = createSignal<ChatAttachment[]>(readPersistedDraftAttachments(undefined));
   const [uploadingAttachments, setUploadingAttachments] = createSignal(false);
   const [draggingAttachments, setDraggingAttachments] = createSignal(false);
   const [attachmentDraftHydrated, setAttachmentDraftHydrated] = createSignal(false);
   const [composerSettingsOpen, setComposerSettingsOpen] = createSignal(false);
   const [desktopReasoningMenuOpen, setDesktopReasoningMenuOpen] = createSignal(false);
-  const [mobileReasoningMenuOpen, setMobileReasoningMenuOpen] = createSignal(false);
   const [composerLookupIndex, setComposerLookupIndex] = createSignal(0);
   const [composerLookupForcedClosed, setComposerLookupForcedClosed] = createSignal(false);
   const [composerCaret, setComposerCaret] = createSignal<number | undefined>();
@@ -376,25 +1081,31 @@ export function ChatPanel() {
   const hasVisionCapability = () => selectedAgentId() === "codex-cli" || capabilityTags().includes("vision");
   const hasImageDraftAttachments = () => draftAttachments().some((attachment) => attachment.kind === "image");
   const blockingSetupCheck = () => getBlockingSetupCheck(state);
-  const visibleTabs = () =>
-    [
+  const visibleTabs = () => { const tabs: Array<{ id: ChatPaneTab; label: string; icon: JSX.Element; tooltip: string }> = [
       { id: "chat", label: "Chat", icon: <MessageSquareMore class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open transcript and plan cards" },
       { id: "plan", label: "Plan", icon: <ClipboardList class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open planning context and saved plan tools" },
       { id: "run", label: "Run", icon: <Play class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open run status, subtasks, and experiment actions" },
-      { id: "memory", label: "Memory", icon: <Brain class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open shared memory entries" },
+      { id: "memory", label: "Memory", icon: <Brain class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open intentional project notes and retrieval audit" },
       { id: "events", label: "Model events", icon: <Activity class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />, tooltip: "Open model trace events; tool activity remains in Run" }
-    ] satisfies Array<{ id: ChatPaneTab; label: string; icon: JSX.Element; tooltip: string }>;
+    ]; return tabs.filter((tab) => state.experienceMode === "advanced" || tab.id === "chat" || tab.id === "run"); };
   const experimentRun = () => activeProject()?.activeRun?.experiment ?? activeProject()?.lastRun?.experiment;
+  const countdownReadyRun = () => {
+    const run = readyRun();
+    return run && currentExecutionPlan()?.gating.mode === "countdown" && countdownRunId() === run.id ? run : undefined;
+  };
+  const terminalHistoryScope = () => {
+    const currentProject = activeProject();
+    return currentProject ? { projectId: currentProject.id, threadId: currentProject.activeThreadId } : undefined;
+  };
   const liveHarnessMessages = () => {
     const project = activeProject();
     return project ? getStreamingLiveMessages(project) : [];
   };
   const projectTraces = createMemo(() => reactiveArraySnapshot(activeProject()?.traces));
   const hasBranchfsSizeWarning = createMemo(() => projectTraces().some((trace) => trace.stage === "branchfs-size-warning"));
-  const projectMemoryEntries = createMemo(() => reactiveArraySnapshot(activeProject()?.memoryEntries));
   const transcriptRows = createMemo<ChatTimelineRow[]>(() => {
     const project = activeProject();
-    return buildChatTimelineRows({
+    return buildExperienceTimelineRows(state.experienceMode, {
       messages: reactiveArraySnapshot(project?.session.messages),
       liveMessages: liveHarnessMessages(),
       toolActivities: reactiveArraySnapshot(project?.activeRun?.toolActivities ?? project?.lastRun?.toolActivities),
@@ -403,11 +1114,9 @@ export function ChatPanel() {
   });
   const liveHarnessMessageTimestamp = () => activeProject()?.activeRun?.updatedAt ?? activeProject()?.activeRun?.createdAt;
   const runSubtasks = createMemo(() => reactiveArraySnapshot(activeProject()?.activeRun?.subtasks ?? activeProject()?.lastRun?.subtasks));
-  const currentRun = () => activeProject()?.activeRun ?? activeProject()?.lastRun;
-  const currentBackgroundRun = createMemo(() => {
-    const run = activeProject()?.activeRun ?? activeProject()?.lastRun;
-    return run ? state.backgroundJobs.runs.find((entry) => entry.linkedAgentRunId === run.id) : undefined;
-  });
+  const currentRun = () => getCompleteRun(activeProject()?.activeRun) ?? getCompleteRun(activeProject()?.lastRun);
+  const runDetailRecovery = () => runDetailRecoveries.find(({ projectId, runId }) => projectId === activeProject()?.id && runId === (activeProject()?.activeRun ?? activeProject()?.lastRun)?.id);
+  const currentBackgroundRun = createMemo(() => state.backgroundJobs.runs.find((entry) => entry.linkedAgentRunId === (activeProject()?.activeRun ?? activeProject()?.lastRun)?.id));
   const liveHarnessMessageKey = () =>
     liveHarnessMessages()
       .map((message) => `${message.id}:${message.locked ? "locked" : "live"}:${message.content}`)
@@ -496,8 +1205,10 @@ export function ChatPanel() {
     !pendingQuestion() && activeProject()?.activeRun?.status !== "ready" && !resumableRun();
   const executionPaused = () => state.executionControl.isPaused;
   const executionPauseReason = () => "Global execution pause is active";
-  const setupBlockedReason = () =>
-    requiresFreshTopLevelSend() && blockingSetupCheck() ? blockingSetupCheck()!.summary : undefined;
+  const setupBlockedReason = () => {
+    const check = blockingSetupCheck();
+    return requiresFreshTopLevelSend() && check ? check.summary : undefined;
+  };
   const composerSubmitState = createMemo(() => {
     const project = activeProject();
     const content = project?.draft.trim() ?? "";
@@ -613,7 +1324,7 @@ export function ChatPanel() {
       value={selectedAgentId()}
       options={agentDropdownOptions()}
       hideWhenSingleOption
-      onChange={(value) => handleSelectAgent(value as "pi" | "copilot-cli" | "codex-cli")}
+      onChange={handleSelectAgent}
       dataAttributes={{ "data-test-agent-select": "", "data-tour-id": "agent-select" }}
     />
   );
@@ -628,11 +1339,11 @@ export function ChatPanel() {
       options={providerDropdownOptions()}
       disabled={selectedAgentId() === "codex-cli"}
       hideWhenSingleOption
-      onChange={(value) => handleProviderBrandSelect(value as ProviderBrand)}
+      onChange={handleProviderBrandSelect}
       dataAttributes={{ "data-test-provider-select": "" }}
     />
   );
-  const renderModelControl = (size: "sm" | "md" = "sm", className?: string) => (
+  const renderModelControl = (size: "sm" | "md" = "sm", className?: string, hideWhenSingleOption: boolean = true) => (
     <DropdownControl
       kind="select"
       ariaLabel="Select model"
@@ -641,63 +1352,57 @@ export function ChatPanel() {
       class={className}
       value={getEffectiveExecutionModelId()}
       options={modelDropdownOptions()}
-      hideWhenSingleOption
+      hideWhenSingleOption={hideWhenSingleOption}
       onChange={handleExecutionModelSelect}
       dataAttributes={{ "data-test-model-select": "" }}
     />
   );
-  const renderEffortControl = (
-    onToggle: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>,
-    className?: string
-  ) => (
-    <Tooltip content={`${getReasoningStrengthDescription(selectedReasoningStrength())}${selectedFastMode() ? "\nFast mode on for lower latency." : "\nFast mode off for default response pacing."}`}>
-      <DropdownControl
-        kind="trigger"
-        ariaLabel="Open effort options"
-        icon={<Gauge class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
-        class={className}
-        label={composerSettingsLabel()}
-        onClick={onToggle}
-        dataAttributes={{ "data-test-effort-trigger": "" }}
-      />
-    </Tooltip>
+  const renderEffortControl = (onToggle: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>) => (
+    <DropdownControl
+      kind="trigger"
+      ariaLabel="Open effort options"
+      icon={<Gauge class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
+      label={composerSettingsLabel()}
+      onClick={onToggle}
+      dataAttributes={{ "data-test-effort-trigger": "" }}
+    />
   );
 
   const scrollToBottom = (force: boolean = false) => {
-    if (!messageViewport || (!force && !stickToBottom())) {
+    if (!refs.messageViewport || (!force && !stickToBottom())) {
       return;
     }
 
     queueMicrotask(() => {
-      if (!messageViewport) {
+      if (!refs.messageViewport) {
         return;
       }
 
-      messageViewport.scrollTop = messageViewport.scrollHeight;
+      refs.messageViewport.scrollTop = refs.messageViewport.scrollHeight;
     });
   };
 
   const updateScrollLock = () => {
-    if (!messageViewport) {
+    if (!refs.messageViewport) {
       setStickToBottom(true);
       return;
     }
 
     const distanceFromBottom =
-      messageViewport.scrollHeight - messageViewport.scrollTop - messageViewport.clientHeight;
+      refs.messageViewport.scrollHeight - refs.messageViewport.scrollTop - refs.messageViewport.clientHeight;
     setStickToBottom(distanceFromBottom <= 32);
   };
 
   onMount(() => {
     scrollToBottom(true);
-    waitingTimer = window.setInterval(() => setElapsedNowMs(Date.now()), 1000);
+    timers.waiting = window.setInterval(() => setElapsedNowMs(Date.now()), 1000);
   });
 
   onCleanup(() => {
     clearCountdown();
-    if (waitingTimer !== undefined) {
-      window.clearInterval(waitingTimer);
-      waitingTimer = undefined;
+    if (timers.waiting !== undefined) {
+      window.clearInterval(timers.waiting);
+      timers.waiting = undefined;
     }
   });
 
@@ -760,7 +1465,7 @@ export function ChatPanel() {
       if (!(target instanceof Node)) {
         return;
       }
-      if (composerLookupMenu?.contains(target) || composerTextarea?.contains(target)) {
+      if (refs.composerLookupMenu?.contains(target) || refs.composerTextarea?.contains(target)) {
         return;
       }
       dismissComposerLookup();
@@ -769,12 +1474,11 @@ export function ChatPanel() {
       if (!composerLookupOpen()) {
         return;
       }
-      if (event.key === "Escape") {
-        runWithChatPanelOwner(() => handleComposerLookupKeyDown(event));
+      const target = event.target;
+      if (target instanceof Node && (refs.composerLookupMenu?.contains(target) || refs.composerTextarea?.contains(target))) {
         return;
       }
-      const target = event.target;
-      if (target instanceof Node && (composerLookupMenu?.contains(target) || composerTextarea?.contains(target))) {
+      if (event.key === "Escape") {
         runWithChatPanelOwner(() => handleComposerLookupKeyDown(event));
       }
     };
@@ -812,12 +1516,6 @@ export function ChatPanel() {
   });
 
   createEffect(() => {
-    activeProject()?.id;
-    currentTab();
-    setDeleteArmedMemoryId(undefined);
-  });
-
-  createEffect(() => {
     const run = readyRun();
     const executionPlan = currentExecutionPlan();
     if (!run || !executionPlan) {
@@ -840,7 +1538,7 @@ export function ChatPanel() {
     }
 
     if (countdownRunId() === run.id) {
-      if (!executionPaused() && countdownTimer === undefined && !countdownPaused() && countdownRemainingMs() > 0) {
+      if (!executionPaused() && timers.countdown === undefined && !countdownPaused() && countdownRemainingMs() > 0) {
         startCountdown(run.id);
       }
       return;
@@ -864,147 +1562,26 @@ export function ChatPanel() {
     }
 
     if (executionPaused()) {
-      if (countdownTimer !== undefined) {
-        window.clearInterval(countdownTimer);
-        countdownTimer = undefined;
+      if (timers.countdown !== undefined) {
+        window.clearInterval(timers.countdown);
+        timers.countdown = undefined;
       }
       setCountdownFrozenByExecutionPause(true);
       return;
     }
 
-    if (countdownFrozenByExecutionPause() && countdownTimer === undefined && !countdownPaused() && countdownRemainingMs() > 0) {
+    if (countdownFrozenByExecutionPause() && timers.countdown === undefined && !countdownPaused() && countdownRemainingMs() > 0) {
       setCountdownFrozenByExecutionPause(false);
       startCountdown(run.id);
     }
   });
 
-  function startCountdown(runId: string) {
-    if (countdownTimer !== undefined) {
-      window.clearInterval(countdownTimer);
-    }
-
-    countdownTimer = window.setInterval(() => {
-      setCountdownRemainingMs((value) => {
-        const next = Math.max(0, value - 100);
-        if (next === 0 && readyRun()?.id === runId && autoExecutedRunId() !== runId && !executionPaused()) {
-          clearCountdown();
-          handleExecuteRun(runId);
-          setAutoExecutedRunId(runId);
-        }
-        return next;
-      });
-    }, 100);
-  }
-
-  async function handleSetupAction(action: SetupAction) {
-    switch (action.kind) {
-      case "open-project-switcher":
-        harnessStore.openProjectSwitcher();
-        return;
-      case "open-preferences":
-        harnessStore.openPreferencesModal();
-        return;
-      case "refresh-runtime-health":
-        sendCommand({
-          type: "agent.runtime.refresh",
-          requestId: createRequestId()
-        });
-        return;
-      case "copy-command":
-        if (!action.value) {
-          return;
-        }
-
-        try {
-          await navigator.clipboard.writeText(action.value);
-          pushToast("Command copied", action.value);
-        } catch {
-          pushToast("Clipboard blocked", action.value, "error");
-        }
-        return;
-      case "open-url":
-        if (action.value) {
-          window.open(action.value, "_blank", "noopener,noreferrer");
-        }
-        return;
-      case "start-tutorial":
-        if (action.value) {
-          harnessStore.startTutorial(action.value);
-        }
-        return;
-      case "init-git-baseline":
-        handleInitGitBaseline();
-        return;
-      case "disable-dirty-git-check":
-        handleDisableDirtyGitCheck();
-        return;
-    }
-  }
-
-  function handleInitGitBaseline() {
-    const project = activeProject();
-    if (!project) {
-      return;
-    }
-
-    harnessStore.prepareNonGitPreflightRepair("git-init");
-    sendCommand({
-      type: "project.git.initBaseline",
-      requestId: createRequestId(),
-      payload: {
-        projectId: project.id
-      }
-    });
-  }
-
-  function handleDisableDirtyGitCheck() {
-    harnessStore.prepareNonGitPreflightRepair("disable-check");
-    harnessStore.setBlockChatOnDirtyGitDefault(false);
-    savePreferences({ blockChatOnDirtyGitDefault: false });
-  }
-
-  function handleCancelNonGitPreflight() {
-    harnessStore.clearBlockingNonGitPreflight();
-  }
-
-  function clearCountdown() {
-    if (countdownTimer !== undefined) {
-      window.clearInterval(countdownTimer);
-      countdownTimer = undefined;
-    }
-    setCountdownRunId(undefined);
-    setCountdownRemainingMs(0);
-    setCountdownPaused(false);
-    setCountdownFrozenByExecutionPause(false);
-  }
-
-  function handleQuestionChoice(answerText: string) {
-    if (executionPaused()) {
-      return;
-    }
-    const project = activeProject();
-    const question = pendingQuestion();
-    if (!project || !question || !project.activeRun) {
-      return;
-    }
-
-    const sent = sendCommand({
-      type: "planning.answer",
-      requestId: createRequestId(),
-      payload: {
-        projectId: project.id,
-        threadId: project.activeThreadId,
-        runId: project.activeRun.id,
-        questionId: question.id,
-        content: answerText,
-        ...getComposerControlPayload()
-      }
-    });
-
-    if (sent) {
-      harnessStore.setProjectDraft(project.id, "");
-    }
-  }
+  const setupActions = createChatSetupActions({
+    activeProject, autoExecutedRunId, executionPaused, getComposerControlPayload, handleExecuteRun,
+    pendingQuestion, readyRun, savePreferences, sendCommand, setAutoExecutedRunId,
+    setCountdownFrozenByExecutionPause, setCountdownPaused, setCountdownRemainingMs, setCountdownRunId, timers,
+  });
+  const { clearCountdown, handleCancelNonGitPreflight, handleDisableDirtyGitCheck, handleInitGitBaseline, handleQuestionChoice, handleSetupAction, startCountdown } = setupActions;
 
   let lastAttachmentDraftKey: string | undefined;
   onMount(() => {
@@ -1033,457 +1610,53 @@ export function ChatPanel() {
     persistDraftAttachments(key, draftAttachments());
   });
 
-  async function uploadAttachmentFiles(files: File[]) {
-    const project = activeProject();
-    if (!project || files.length === 0) {
-      return;
-    }
+  const attachmentActions = createChatAttachmentActions({
+    activeProject, draftAttachments, hasVisionCapability, setDraftAttachments, setDraggingAttachments,
+    setUploadingAttachments, state,
+  });
+  const { handleAttachmentDragLeave, handleAttachmentDragOver, handleAttachmentDrop, handleRemoveAttachment, handleSelectAttachments, uploadAttachmentFiles } = attachmentActions;
 
-    if (!state.attachmentsEnabled) {
-      pushToast("Attachments unavailable", "Set UPLOADTHING_TOKEN on the server to enable uploads.", "error");
-      return;
-    }
+  const composerLookupDomActions = createComposerLookupDomActions({
+    composerLookupIndex, composerLookupKey, composerLookupOpen, owner, refs,
+    setComposerCaret, setComposerLookupForcedClosed, setComposerLookupIndex, setDismissedComposerLookupKey,
+  });
+  const { dismissComposerLookup, runWithChatPanelOwner, setComposerLookupActiveIndex, setComposerLookupMenuHidden, syncComposerCaret, syncComposerLookupDomVisibility, updateComposerLookupDomSelection } = composerLookupDomActions;
 
-    if (draftAttachments().length + files.length > MAX_CHAT_ATTACHMENT_COUNT) {
-      pushToast("Too many attachments", `Attach at most ${MAX_CHAT_ATTACHMENT_COUNT} files per message.`, "error");
-      return;
-    }
+  const composerLookupActions = createComposerLookupActions({
+    activeProject, chatFileLinkContext, composerLookup, composerLookupIndex, composerLookupKey,
+    composerLookupOpen, composerLookupOptions, dismissComposerLookup, project, refs,
+    resizeComposer, setComposerCaret, setComposerLookupActiveIndex, setComposerLookupForcedClosed, setComposerLookupMenuHidden,
+    setDismissedComposerLookupKey, syncComposerCaret, syncComposerLookupDomVisibility,
+  });
+  const { applyComposerLookupOption, handleComposerBadgeClick, handleComposerClick, handleComposerKeyDown, handleComposerLookupKeyDown, handleOpenChatFile } = composerLookupActions;
 
-    for (const file of files) {
-      const validation = isSupportedChatAttachment({
-        name: file.name,
-        mimeType: file.type,
-        sizeBytes: file.size
-      });
-      if (!validation.ok) {
-        pushToast("Attachment rejected", `${file.name}: ${validation.reason}`, "error");
-        return;
-      }
-      if (validation.kind === "image" && !hasVisionCapability()) {
-        pushToast("Image blocked", "Current model lacks vision support for image attachments.", "error");
-        return;
-      }
-    }
+  const submitAction = createChatSubmitAction({
+    activeMode, activeProject, clearCountdown, composerSubmitState, draftAttachments,
+    getComposerControlPayload, getEffectiveExecutionModelId, getSelectedAgentUnavailableReason, hasImageDraftAttachments, hasVisionCapability,
+    isAutoModeSelected, pendingQuestion, persistProviderPreferences, resumableRun, selectedAgentId,
+    sendCommand, setDraftAttachments, state, uploadingAttachments,
+  });
+  const { handleSubmit } = submitAction;
 
-    setUploadingAttachments(true);
-    try {
-      const uploadedFiles = await uploadFiles("chatAttachment", {
-        files,
-        input: {
-          projectId: project.id,
-          threadId: project.activeThreadId
-        }
-      });
-
-      const nextAttachments = uploadedFiles.flatMap((file) => {
-        const detectedAttachment = detectSupportedChatAttachment({ name: file.name, mimeType: file.type });
-        if (!detectedAttachment) {
-          return [];
-        }
-
-        return [
-          {
-            id: `${file.key}-${file.lastModified ?? Date.now()}`,
-            kind: detectedAttachment.kind,
-            documentType: detectedAttachment.kind === "document" ? detectedAttachment.documentType : undefined,
-            name: file.name,
-            mimeType: file.type,
-            sizeBytes: file.size,
-            url: file.serverData?.url ?? file.ufsUrl ?? file.url,
-            key: file.serverData?.key ?? file.key,
-            uploadedAt: file.serverData?.uploadedAt ?? new Date().toISOString()
-          } satisfies ChatAttachment
-        ];
-      });
-
-      setDraftAttachments((current) => [...current, ...nextAttachments]);
-    } catch (error) {
-      pushToast(
-        "Attachment upload failed",
-        error instanceof Error ? error.message : "UploadThing could not upload the selected files.",
-        "error"
-      );
-    } finally {
-      setUploadingAttachments(false);
-    }
-  }
-
-  async function handleSelectAttachments(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const files = input.files ? [...input.files] : [];
-    input.value = "";
-
-    await uploadAttachmentFiles(files);
-  }
-
-  function handleRemoveAttachment(attachmentId: string) {
-    setDraftAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
-  }
-
-  function syncComposerCaret() {
-    if (composerTextarea) {
-      setComposerCaret(composerTextarea.selectionStart);
-    }
-  }
-
-  function runWithChatPanelOwner(callback: () => void) {
-    if (owner) {
-      runWithOwner(owner, callback);
-      return;
-    }
-    callback();
-  }
-
-  function dismissComposerLookup(options: { focusComposer?: boolean } = {}) {
-    setDismissedComposerLookupKey(composerLookupKey());
-    setComposerLookupForcedClosed(true);
-    setComposerLookupActiveIndex(0);
-    setComposerLookupMenuHidden(true);
-    queueMicrotask(() => syncComposerLookupDomVisibility());
-    if (options.focusComposer) {
-      queueMicrotask(() => composerTextarea?.focus());
-    }
-  }
-
-  function updateComposerLookupDomSelection(activeIndex: number) {
-    composerLookupMenu?.querySelectorAll<HTMLElement>("[data-composer-lookup-option]").forEach((element) => {
-      const selected = element.dataset.composerLookupIndex === String(activeIndex);
-      element.setAttribute("aria-selected", selected ? "true" : "false");
-    });
-  }
-
-  function syncComposerLookupDomVisibility(options: { focusMenu?: boolean } = {}) {
-    if (!composerLookupMenu) {
-      return;
-    }
-    const open = composerLookupOpen();
-    setComposerLookupMenuHidden(!open);
-    if (open) {
-      updateComposerLookupDomSelection(composerLookupIndex());
-      if (options.focusMenu) {
-        composerLookupMenu.focus();
-      }
-    }
-  }
-
-  function setComposerLookupMenuHidden(hidden: boolean) {
-    if (!composerLookupMenu) {
-      return;
-    }
-    composerLookupMenu.hidden = hidden;
-    composerLookupMenu.setAttribute("aria-hidden", hidden ? "true" : "false");
-    if (hidden) {
-      composerLookupMenu.removeAttribute("role");
-      composerLookupMenu.removeAttribute("aria-label");
-    } else {
-      composerLookupMenu.setAttribute("role", "listbox");
-      composerLookupMenu.setAttribute("aria-label", "Composer lookup");
-    }
-    composerLookupMenu.querySelectorAll<HTMLElement>("[data-composer-lookup-option]").forEach((element) => {
-      if (hidden) {
-        element.removeAttribute("role");
-      } else {
-        element.setAttribute("role", "option");
-      }
-    });
-    composerLookupMenu.style.display = hidden ? "none" : "";
-  }
-
-  function setComposerLookupActiveIndex(index: number) {
-    setComposerLookupIndex(index);
-    updateComposerLookupDomSelection(index);
-  }
-
-  function applyComposerLookupOption(index = composerLookupIndex()) {
-    const lookup = composerLookup();
-    const option = composerLookupOptions()[index];
-    if (!lookup || !option) {
-      return;
-    }
-    const draft = project().draft;
-    const nextDraft = `${draft.slice(0, lookup.start)}${option.insertText}${draft.slice(lookup.end)}`;
-    const nextCaret = lookup.start + option.insertText.length;
-    setComposerCaret(nextCaret);
-    setDismissedComposerLookupKey(composerLookupKey());
-    setComposerLookupForcedClosed(true);
-    setComposerLookupActiveIndex(0);
-    setComposerLookupMenuHidden(true);
-    queueMicrotask(() => syncComposerLookupDomVisibility());
-    harnessStore.setProjectDraft(project().id, nextDraft);
-    queueMicrotask(() => {
-      composerTextarea?.setSelectionRange(nextCaret, nextCaret);
-      composerTextarea?.focus();
-      setComposerCaret(nextCaret);
-      resizeComposer();
-    });
-  }
-
-  function handleComposerLookupKeyDown(event: KeyboardEvent) {
-    if (event.key === "ArrowDown") {
-      if (!composerLookupOpen()) {
-        return false;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      setComposerLookupActiveIndex((composerLookupIndex() + 1) % composerLookupOptions().length);
-      return true;
-    }
-    if (event.key === "ArrowUp") {
-      if (!composerLookupOpen()) {
-        return false;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      setComposerLookupActiveIndex((composerLookupIndex() + composerLookupOptions().length - 1) % composerLookupOptions().length);
-      return true;
-    }
-    if (event.key === "Enter" || event.key === "Tab") {
-      if (!composerLookupOpen()) {
-        return false;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      applyComposerLookupOption();
-      return true;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      dismissComposerLookup({ focusComposer: true });
-      return true;
-    }
-    return false;
-  }
-
-  function handleComposerKeyDown(event: KeyboardEvent) {
-    if (handleComposerLookupKeyDown(event)) {
-      return;
-    }
-    queueMicrotask(syncComposerCaret);
-  }
-
-  function handleComposerClick(event: MouseEvent & { currentTarget: HTMLTextAreaElement }) {
-    syncComposerCaret();
-    if (!event.ctrlKey && !event.metaKey) {
-      if (composerLookupOpen()) {
-        dismissComposerLookup({ focusComposer: true });
-      } else {
-        setComposerLookupForcedClosed(false);
-        setDismissedComposerLookupKey(undefined);
-      }
-      return;
-    }
-    const reference = findChatFileReferenceAtPosition(event.currentTarget.value, event.currentTarget.selectionStart, chatFileLinkContext());
-    if (!reference) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    handleOpenChatFile(reference.target);
-  }
-
-  function handleOpenChatFile(target: ChatFileTarget) {
-    const currentProject = activeProject();
-    if (!currentProject) {
-      return;
-    }
-    openIdeWindow({ projectId: currentProject.id, threadId: currentProject.activeThreadId });
-    harnessStore.openIdeFile(target.path, target.line, target.column);
-  }
-
-  function handleComposerBadgeClick(event: MouseEvent, badge: ComposerReferenceBadge) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!event.ctrlKey && !event.metaKey) {
-      return;
-    }
-    handleOpenChatFile(badge.target);
-  }
-
-  function handleAttachmentDragOver(event: DragEvent) {
-    if (!event.dataTransfer?.types.includes("Files")) {
-      return;
-    }
-    event.preventDefault();
-    setDraggingAttachments(true);
-  }
-
-  function handleAttachmentDragLeave(event: DragEvent) {
-    if (event.currentTarget instanceof Node && event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
-      return;
-    }
-    setDraggingAttachments(false);
-  }
-
-  async function handleAttachmentDrop(event: DragEvent) {
-    if (!event.dataTransfer?.files.length) {
-      return;
-    }
-    event.preventDefault();
-    setDraggingAttachments(false);
-    await uploadAttachmentFiles([...event.dataTransfer.files]);
-  }
-
-  function handleSubmit(event: SubmitEvent) {
-    event.preventDefault();
-
-    const submitState = composerSubmitState();
-    if (submitState.disabled) {
-      if (submitState.disabledReason) {
-        pushToast("Cannot send yet", submitState.disabledReason, "error");
-      }
-      return;
-    }
-
-    const project = activeProject();
-    if (!project) {
-      return;
-    }
-    const content = project.draft.trim();
-    if (!content && draftAttachments().length === 0) {
-      return;
-    }
-    if (!content && draftAttachments().length > 0) {
-      pushToast("Task text required", "Describe what pi should do with the attached files.", "error");
-      return;
-    }
-
-    if (uploadingAttachments()) {
-      pushToast("Upload in progress", "Wait for attachments to finish uploading before sending.", "error");
-      return;
-    }
-
-    if (hasImageDraftAttachments() && !hasVisionCapability()) {
-      pushToast(
-        "Vision model required",
-        "Current model cannot inspect attached images. Switch to a vision-capable model before sending.",
-        "error"
-      );
-      return;
-    }
-
-    const question = pendingQuestion();
-    if (question && project.activeRun) {
-      const sent = sendCommand({
-        type: "planning.answer",
-        requestId: createRequestId(),
-        payload: {
-          projectId: project.id,
-          threadId: project.activeThreadId,
-          runId: project.activeRun.id,
-          questionId: question.id,
-          content,
-          attachments: draftAttachments(),
-          ...getComposerControlPayload()
-        }
-      });
-
-      if (sent) {
-        harnessStore.setProjectDraft(project.id, "");
-        setDraftAttachments([]);
-      }
-      return;
-    }
-
-    if (project.activeRun?.status === "ready") {
-      const sent = sendCommand({
-        type: "planning.refine",
-        requestId: createRequestId(),
-        payload: {
-          projectId: project.id,
-          threadId: project.activeThreadId,
-          runId: project.activeRun.id,
-          content,
-          attachments: draftAttachments(),
-          ...getComposerControlPayload()
-        }
-      });
-
-      if (sent) {
-        harnessStore.setProjectDraft(project.id, "");
-        setDraftAttachments([]);
-        clearCountdown();
-      }
-      return;
-    }
-
-    if (resumableRun()) {
-      pushToast(
-        "Resume required",
-        "Use the resume action to rerun failed or pending subagents. Draft text is optional guidance for resume.",
-        "error"
-      );
-      return;
-    }
-
-    if (selectedAgentId() === "pi" && !hasUsableApiKeyForProvider(state, state.providerBrand)) {
-      const fallbackProviderBrand = resolveUsablePiProviderBrand(state);
-      if (fallbackProviderBrand) {
-        harnessStore.setProviderBrand(fallbackProviderBrand);
-        persistProviderPreferences(fallbackProviderBrand);
-      } else {
-        pushToast(
-          `${getProviderBrandLabel(state.providerBrand)} API key required`,
-          "Open preferences and add an OpenAI, Google, or Anthropic key before sending chat.",
-          "error"
-        );
-        harnessStore.openPreferencesModal();
-        return;
-      }
-    }
-
-    if (selectedAgentId() !== "pi") {
-      const unavailableAgentReason = getSelectedAgentUnavailableReason();
-      if (unavailableAgentReason) {
-        pushToast("CLI runtime unavailable", unavailableAgentReason, "error");
-        return;
-      }
-    }
-
-    const executionModelId = getEffectiveExecutionModelId();
-    const selectedModeId = isAutoModeSelected() ? "auto" : activeMode()?.id;
-
-    const sent = sendCommand({
-      type: "chat.send",
-      requestId: createRequestId(),
-      payload: {
-        projectId: project.id,
-        threadId: project.activeThreadId,
-        agentId: selectedAgentId(),
-        content,
-        attachments: draftAttachments(),
-        modeId: selectedModeId,
-        modeLocked: state.hasGlobalSelectedModeId && selectedModeId !== "auto",
-        executionModelId,
-        ...getComposerControlPayload(),
-        debug: state.debugEnabled
-      }
-    });
-
-    if (sent) {
-      harnessStore.setProjectDraft(project.id, "");
-      setDraftAttachments([]);
-    }
-  }
-
-  function handleSelectAgent(agentId: "pi" | "copilot-cli" | "codex-cli") {
+  function handleSelectAgent(agentId: string) {
+    if (agentId !== "pi" && agentId !== "copilot-cli" && agentId !== "codex-cli") return;
     harnessStore.setSelectedAgentId(agentId);
   }
 
   function resizeComposer() {
-    if (!composerTextarea) {
+    if (!refs.composerTextarea) {
       return;
     }
 
-    const computedStyle = window.getComputedStyle(composerTextarea);
+    const computedStyle = window.getComputedStyle(refs.composerTextarea);
     const lineHeight = Number.parseFloat(computedStyle.lineHeight) || 18;
     const minHeight = lineHeight * 2;
     const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
     const maxHeight = Math.max(lineHeight * 6, Math.floor(viewportHeight * 0.5));
-    composerTextarea.style.height = "auto";
-    composerTextarea.style.maxHeight = `${maxHeight}px`;
-    const nextHeight = Math.max(minHeight, Math.min(composerTextarea.scrollHeight, maxHeight));
-    composerTextarea.style.height = `${nextHeight}px`;
+    refs.composerTextarea.style.height = "auto";
+    refs.composerTextarea.style.maxHeight = `${maxHeight}px`;
+    const nextHeight = Math.max(minHeight, Math.min(refs.composerTextarea.scrollHeight, maxHeight));
+    refs.composerTextarea.style.height = `${nextHeight}px`;
   }
 
   function getSelectedAgentUnavailableReason() {
@@ -1513,13 +1686,11 @@ export function ChatPanel() {
     }
     const project = activeProject();
     const runtime = selectedAgentRuntime();
-    if (!project || !runtime || runtime.agentId === "pi") {
-      return;
-    }
-
-    sendCommand({
+    if (!project || !runtime || runtime.agentId === "pi") return;
+    const requestId = createRequestId();
+    if (!sendCommand({
       type: "cli-session.start",
-      requestId: createRequestId(),
+      requestId,
       payload: {
         projectId: project.id,
         threadId: project.activeThreadId,
@@ -1529,7 +1700,8 @@ export function ChatPanel() {
         prompt: project.draft.trim() || undefined,
         runId: project.activeRun?.id
       }
-    });
+    })) return;
+    ownCliStartingRequest(requestId, project.id, project.activeThreadId);
   }
 
   function handleExecuteRun(runId: string) {
@@ -1611,12 +1783,13 @@ export function ChatPanel() {
       return;
     }
 
-    return [project.activeRun, project.lastRun].find((entry) => entry?.id === runId) ?? (runId ? undefined : project.activeRun ?? project.lastRun);
+    return [getCompleteRun(project.activeRun), getCompleteRun(project.lastRun)].find((entry) => entry?.id === runId) ??
+      (runId ? undefined : getCompleteRun(project.activeRun) ?? getCompleteRun(project.lastRun));
   }
 
   function getPlanRunState(runId: string): AgentRunState | AgentRunSummary | undefined {
-    const project = activeProject();
-    return [project?.activeRun, project?.lastRun].find((entry) => entry?.id === runId) ?? project?.runSummaries.find((run) => run.id === runId);
+    const project = activeProject(), projected = [project?.activeRun, project?.lastRun].find((entry) => entry?.id === runId);
+    return projected && !getCompleteRun(projected) ? undefined : projected ?? project?.runSummaries.find((run) => run.id === runId);
   }
 
   function getPlanRunAction(runId: string) {
@@ -1728,37 +1901,16 @@ export function ChatPanel() {
     );
   }
 
-  function renderTranscriptRow(row: ChatTimelineRow, index: number, project: ViewProjectState) {
-    if (row.kind === "tool-block") {
-      return <StreamedToolBlock block={row.block} fileLinks={chatFileLinks()} />;
-    }
-
-    if (row.kind === "live") {
+  function renderTranscriptRow(row: ChatTimelineRow, project: ViewProjectState) {
+    if (row.kind !== "persisted") {
       return (
-        <article
-          {...stylex.attrs(
-            styles.transcriptCard,
-            styles.transcriptCardLive,
-            row.message.kind === "status" ? styles.transcriptStatus : styles.transcriptAssistant
-          )}
-        >
-          <div {...stylex.attrs(styles.transcriptRole, styles.transcriptRoleHarness)}>harness</div>
-          <MarkdownContent content={() => row.message.content} size="compact" live={!row.message.locked && row.liveIndex === liveHarnessMessages().length - 1} fileLinks={chatFileLinks()} />
-          {renderMessageActionRow(
-            liveHarnessMessageTimestamp(),
-            <CopyTextButton
-              value={row.message.content}
-              tooltip="Copy harness message"
-              copiedTitle="Message copied"
-              copiedDescription="Message copied to clipboard."
-              size="sm"
-              variant="ghost"
-              ariaLabel="Copy harness message"
-            >
-              Copy
-            </CopyTextButton>
-          )}
-        </article>
+        <TransientTranscriptRow
+          row={row}
+          agentLabel={selectedAgentLabel()}
+          fileLinks={chatFileLinks()}
+          liveMessageCount={liveHarnessMessages().length}
+          timestamp={liveHarnessMessageTimestamp()}
+        />
       );
     }
 
@@ -1771,17 +1923,25 @@ export function ChatPanel() {
       <Show
         when={message.kind === "plan-summary" && message.metadata?.type === "plan-summary"}
         fallback={
-          <article
-            {...stylex.attrs(
-              styles.transcriptCard,
-              isHarnessTranscriptMessage(message)
-                ? message.kind === "run-milestones" && message.metadata?.type === "run-milestones" && message.metadata.status === "open"
-                  ? styles.transcriptMilestones
-                  : styles.transcriptAssistant
-                : styles.transcriptUser
-            )}
-          >
-            <div {...stylex.attrs(styles.transcriptContents)}>
+          <article {...stylex.attrs(styles.transcriptMessage)}>
+            <div
+              {...stylex.attrs(styles.transcriptAvatar, !isHarnessTranscriptMessage(message) ? styles.transcriptAvatarUser : undefined)}
+              aria-hidden="true"
+            >
+              {isHarnessTranscriptMessage(message) ? getIdentityInitial(selectedAgentLabel()) : "Y"}
+            </div>
+            <div
+              {...stylex.attrs(
+                styles.transcriptCard,
+                styles.transcriptBubble,
+                isHarnessTranscriptMessage(message)
+                  ? message.kind === "run-milestones" && message.metadata?.type === "run-milestones" && message.metadata.status === "open"
+                    ? styles.transcriptMilestones
+                    : styles.transcriptAssistant
+                  : styles.transcriptUser
+              )}
+            >
+              <div {...stylex.attrs(styles.transcriptContents)}>
               <div {...stylex.attrs(styles.inlineRow)}>
                 <div
                   {...stylex.attrs(
@@ -1789,7 +1949,7 @@ export function ChatPanel() {
                     isHarnessTranscriptMessage(message) ? styles.transcriptRoleHarness : styles.transcriptRoleUser
                   )}
                 >
-                  {getTranscriptRoleLabel(message.role)}
+                  {isHarnessTranscriptMessage(message) ? selectedAgentLabel() : getTranscriptRoleLabel(message.role)}
                 </div>
                 <Show when={message.kind === "run-milestones" && message.metadata?.type === "run-milestones" && message.metadata.status === "open"}>
                   <span {...stylex.attrs(styles.progressChip)}>
@@ -1798,8 +1958,8 @@ export function ChatPanel() {
                 </Show>
               </div>
               <MarkdownContent content={() => message.content} size="compact" fileLinks={chatFileLinks()} />
-              <Show when={message.metadata?.type === "assistant-action"}>
-                {renderAssistantActionCard(message.metadata as AssistantActionMessageMetadata)}
+              <Show when={getAssistantActionMetadata(message)}>
+                {(metadata) => renderAssistantActionCard(metadata())}
               </Show>
               <Show when={message.attachments?.length}>
                 <div {...stylex.attrs(styles.attachmentList)}>
@@ -1831,6 +1991,7 @@ export function ChatPanel() {
                   Copy
                 </CopyTextButton>
               )}
+              </div>
             </div>
           </article>
         }
@@ -1880,28 +2041,28 @@ export function ChatPanel() {
                 icon={<CalendarClock class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
                 size="sm"
                 variant="secondary"
-                onClick={() => handlePromoteScheduledRun((message.metadata as { runId: string }).runId)}
+                onClick={() => handlePromoteScheduledRun(requirePlanRunId(message))}
               >
                 Schedule
               </ActionButton>
-              {renderPlanRunAction((message.metadata as { runId: string }).runId)}
+              {renderPlanRunAction(requirePlanRunId(message))}
               <Show when={getPlanFromMessage(message)?.gating.mode === "approve"}>
                 <ActionButton
                   tooltip="Run this plan in isolated virtual branch"
                   disabledReason={
-                    getPlanRunAction((message.metadata as { runId: string }).runId).kind === "execute"
+                    getPlanRunAction(requirePlanRunId(message)).kind === "execute"
                       ? executionPauseReason()
                       : "This plan is not ready to build"
                   }
-                  disabled={getPlanRunAction((message.metadata as { runId: string }).runId).kind !== "execute" || executionPaused()}
+                  disabled={getPlanRunAction(requirePlanRunId(message)).kind !== "execute" || executionPaused()}
                   size="sm"
                   variant="secondary"
-                  onClick={() => handleExecuteRunTarget((message.metadata as { runId: string }).runId, "ephemeral-experiment")}
+                  onClick={() => handleExecuteRunTarget(requirePlanRunId(message), "ephemeral-experiment")}
                 >
                   Try experiment
                 </ActionButton>
               </Show>
-              <Show when={getPlanFromMessage(message)?.gating.mode === "countdown" && readyRun()?.id === (message.metadata as { runId: string }).runId}>
+              <Show when={getPlanFromMessage(message)?.gating.mode === "countdown" && readyRun()?.id === requirePlanRunId(message)}>
                 <ActionButton
                   tooltip={
                     executionPaused()
@@ -2012,52 +2173,6 @@ export function ChatPanel() {
     }
   }
 
-  function handleUpdateMemory(entryId: string, patch: { pinned?: boolean; status?: "active" | "archived" }) {
-    setDeleteArmedMemoryId(undefined);
-    sendCommand({
-      type: "memory.update",
-      requestId: createRequestId(),
-      payload: {
-        memoryEntryId: entryId,
-        ...patch
-      }
-    });
-  }
-
-  function handleReorderMemory(entryId: string, direction: "up" | "down") {
-    const project = activeProject();
-    if (!project) {
-      return;
-    }
-
-    setDeleteArmedMemoryId(undefined);
-    sendCommand({
-      type: "memory.reorder",
-      requestId: createRequestId(),
-      payload: {
-        projectId: project.id,
-        memoryEntryId: entryId,
-        direction
-      }
-    });
-  }
-
-  function handleDeleteMemory(entryId: string) {
-    if (deleteArmedMemoryId() !== entryId) {
-      setDeleteArmedMemoryId(entryId);
-      return;
-    }
-
-    setDeleteArmedMemoryId(undefined);
-    sendCommand({
-      type: "memory.delete",
-      requestId: createRequestId(),
-      payload: {
-        memoryEntryId: entryId
-      }
-    });
-  }
-
   function handleResume() {
     if (executionPaused()) {
       return;
@@ -2157,9 +2272,9 @@ export function ChatPanel() {
       return;
     }
 
-    if (countdownTimer !== undefined) {
-      window.clearInterval(countdownTimer);
-      countdownTimer = undefined;
+    if (timers.countdown !== undefined) {
+      window.clearInterval(timers.countdown);
+      timers.countdown = undefined;
     }
     setCountdownPaused(true);
   }
@@ -2255,7 +2370,8 @@ export function ChatPanel() {
     return Math.round((cachedInputTokens / totalInputTokens) * 100);
   }
 
-  function handleProviderBrandSelect(providerBrand: ProviderBrand) {
+  function handleProviderBrandSelect(providerBrand: string) {
+    if (providerBrand !== "gpt" && providerBrand !== "gemini" && providerBrand !== "claude") return;
     if (!canSelectProviderBrand(state, providerBrand)) {
       pushToast("Provider key required", `Saved ${getProviderBrandLabel(providerBrand)} key required.`, "error");
       return;
@@ -2357,11 +2473,10 @@ export function ChatPanel() {
               const enabled = composerControlState().availableStrengths.includes(strength);
               const selected = selectedReasoningStrength() === strength;
               return (
-            <Tooltip content={getReasoningStrengthDescription(strength)} triggerClass={stylex.attrs(styles.tooltipBlock).class} side="right">
                   <button
                     type="button"
                     disabled={!enabled}
-                    class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.wFull, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.roundedLg, chatUtilityStyles.px15, chatUtilityStyles.py1, chatUtilityStyles.textLeft, chatUtilityStyles.text0525rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.transition, chatUtilityStyles.hoverBgBlack5, chatUtilityStyles.disabledCursorNotAllowed, chatUtilityStyles.disabledOpacity50).class}
+                    class={stylex.attrs(styles.composerMenuOption, chatUtilityStyles.wFull, chatUtilityStyles.roundedLg, chatUtilityStyles.px15, chatUtilityStyles.py1, chatUtilityStyles.textLeft, chatUtilityStyles.text0525rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.transition, chatUtilityStyles.hoverBgBlack5, chatUtilityStyles.disabledCursorNotAllowed, chatUtilityStyles.disabledOpacity50).class}
                     onClick={() => {
                       if (!enabled) {
                         return;
@@ -2369,12 +2484,14 @@ export function ChatPanel() {
                       handleReasoningStrengthSelect(strength);
                     }}
                   >
-                    <span>{formatReasoningOptionLabel(strength)}</span>
+                    <span class={stylex.attrs(styles.composerMenuOptionCopy).class}>
+                      <span>{formatReasoningOptionLabel(strength)}</span>
+                      <span class={stylex.attrs(styles.composerMenuOptionDescription).class}>{getReasoningStrengthDescription(strength)}</span>
+                    </span>
                     <Show when={selected}>
                       <Check class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />
                     </Show>
                   </button>
-                </Tooltip>
               );
             }}
           </For>
@@ -2387,11 +2504,10 @@ export function ChatPanel() {
               const supported = !enabled || composerControlState().supportsFastMode;
               const selected = selectedFastMode() === enabled;
               return (
-            <Tooltip content={getFastModeDescription(enabled)} triggerClass={stylex.attrs(styles.tooltipBlock).class} side="right">
                   <button
                     type="button"
                     disabled={!supported}
-                    class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.wFull, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.roundedLg, chatUtilityStyles.px15, chatUtilityStyles.py1, chatUtilityStyles.textLeft, chatUtilityStyles.text0525rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.transition, chatUtilityStyles.hoverBgBlack5, chatUtilityStyles.disabledCursorNotAllowed, chatUtilityStyles.disabledOpacity50).class}
+                    class={stylex.attrs(styles.composerMenuOption, chatUtilityStyles.wFull, chatUtilityStyles.roundedLg, chatUtilityStyles.px15, chatUtilityStyles.py1, chatUtilityStyles.textLeft, chatUtilityStyles.text0525rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.transition, chatUtilityStyles.hoverBgBlack5, chatUtilityStyles.disabledCursorNotAllowed, chatUtilityStyles.disabledOpacity50).class}
                     onClick={() => {
                       if (!supported) {
                         return;
@@ -2399,12 +2515,14 @@ export function ChatPanel() {
                       handleFastModeSelect(enabled);
                     }}
                   >
-                    <span>{enabled ? "On" : "Off"}</span>
+                    <span class={stylex.attrs(styles.composerMenuOptionCopy).class}>
+                      <span>{enabled ? "On" : "Off"}</span>
+                      <span class={stylex.attrs(styles.composerMenuOptionDescription).class}>{getFastModeDescription(enabled)}</span>
+                    </span>
                     <Show when={selected}>
                       <Check class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />
                     </Show>
                   </button>
-                </Tooltip>
               );
             }}
           </For>
@@ -2654,34 +2772,72 @@ export function ChatPanel() {
     );
   }
 
+  return {
+    activeMode, activeProject, activeThread, activeThreadIsStreaming, applyComposerLookupOption,
+    attachmentButtonDisabled, attachmentButtonReason, capabilityTags, chatFileLinks, composerLookup,
+    composerLookupActiveOptionId, composerLookupOpen, composerLookupRenderedOptions, composerReferenceBadges, composerSettingsOpen,
+    composerSubmitState, composerTimerState, contextUsage, countdownPaused, countdownReadyRun,
+    countdownRemainingMs, currentBackgroundRun, currentExecutionPlan, currentRun, currentTab,
+    desktopReasoningMenuOpen, draftAttachments, draggingAttachments, dropState, editingThreadTitle,
+    executionPauseReason, executionPaused, experimentDialogOpen, experimentRun, failedSubtaskCount,
+    getCacheHitPercent, getComposerPlaceholder, getContextUsageTooltip, handleAttachmentDragLeave, handleAttachmentDragOver,
+    handleAttachmentDrop, handleBrowseProject, handleCancelNonGitPreflight, handleCommitRenameThread, handleComposerBadgeClick,
+    handleComposerClick, handleComposerKeyDown, handleComposerLookupKeyDown, handleDisableDirtyGitCheck, handleDiscardExperiment,
+    handleForkThread, handleInitGitBaseline, handleInspectExperiment, handleModeSelect, handleOpenCurrentRunJob,
+    handleOpenThreadTerminalHistory, handlePauseAutoRun, handlePromoteExperiment, handlePromoteScheduledRun, handleQuestionChoice,
+    handleRemoveAttachment, handleReset, handleResume, handleResumeAutoRun, handleRetry,
+    handleSaveProjectContext, handleSelectAttachments, handleSelectPaneTab, handleSetupAction, handleStartRenameThread,
+    handleStop, handleSubmit, isAutoModeSelected, modeDropdownOptions,
+    pendingQuestion, project, projectRulesDraft, projectTraces, refs,
+    renderAgentControl, renderComposerControlMenu, renderEffortControl, renderModeControl, renderModelControl,
+    renderPlanRunAction, renderProviderControl, renderTranscriptRow, resizeComposer, resumableRun,
+    retryableRun, runDetailRecovery, runSubtasks, runWithChatPanelOwner, scrollToBottom,
+    selectedAgentHealthMessage, selectedAgentLabel, selectedExperimentFilePath, selectedModeValue, sendCommand, setComposerLookupActiveIndex,
+    setComposerLookupForcedClosed, setComposerLookupMenuHidden, setComposerSettingsOpen, setDesktopReasoningMenuOpen, setDismissedComposerLookupKey,
+    setEditingThreadTitle, setExperimentDialogOpen, setProjectRulesDraft, setSelectedExperimentFilePath,
+    setTerminalHistoryOpen, setThreadTitleDraft, state, stickToBottom, syncComposerCaret,
+    syncComposerLookupDomVisibility, terminalHistoryOpen, terminalHistoryScope, threadTitleDraft, transcriptRows,
+    updateScrollLock, uploadingAttachments, visibleTabs,
+  };
+}
+export type ChatPanelController = ReturnType<typeof createChatPanelController>;
+export function ChatPanel() {
+  const controller = createChatPanelController();
+  return <ChatPanelView controller={controller} />;
+}
+
+function ChatPanelView(props: { controller: ChatPanelController }) {
+  const {
+    activeMode, activeProject, activeThread, activeThreadIsStreaming, applyComposerLookupOption,
+    attachmentButtonDisabled, attachmentButtonReason, capabilityTags, chatFileLinks, composerLookup,
+    composerLookupActiveOptionId, composerLookupOpen, composerLookupRenderedOptions, composerReferenceBadges, composerSettingsOpen,
+    composerSubmitState, composerTimerState, contextUsage, countdownPaused, countdownReadyRun,
+    countdownRemainingMs, currentBackgroundRun, currentExecutionPlan, currentRun, currentTab,
+    desktopReasoningMenuOpen, draftAttachments, draggingAttachments, dropState, editingThreadTitle,
+    executionPauseReason, executionPaused, experimentDialogOpen, experimentRun, failedSubtaskCount,
+    getCacheHitPercent, getComposerPlaceholder, getContextUsageTooltip, handleAttachmentDragLeave, handleAttachmentDragOver,
+    handleAttachmentDrop, handleBrowseProject, handleCancelNonGitPreflight, handleCommitRenameThread, handleComposerBadgeClick,
+    handleComposerClick, handleComposerKeyDown, handleComposerLookupKeyDown, handleDisableDirtyGitCheck, handleDiscardExperiment,
+    handleForkThread, handleInitGitBaseline, handleInspectExperiment, handleModeSelect, handleOpenCurrentRunJob,
+    handleOpenThreadTerminalHistory, handlePauseAutoRun, handlePromoteExperiment, handlePromoteScheduledRun, handleQuestionChoice,
+    handleRemoveAttachment, handleReset, handleResume, handleResumeAutoRun, handleRetry,
+    handleSaveProjectContext, handleSelectAttachments, handleSelectPaneTab, handleSetupAction, handleStartRenameThread,
+    handleStop, handleSubmit, isAutoModeSelected, modeDropdownOptions,
+    pendingQuestion, project, projectRulesDraft, projectTraces,
+    renderAgentControl, renderComposerControlMenu, renderEffortControl, renderModeControl, renderModelControl,
+    renderPlanRunAction, renderProviderControl, renderTranscriptRow, resizeComposer, resumableRun,
+    retryableRun, runDetailRecovery, runSubtasks, runWithChatPanelOwner, scrollToBottom,
+    selectedAgentHealthMessage, selectedExperimentFilePath, selectedModeValue, sendCommand, setComposerLookupActiveIndex,
+    setComposerLookupForcedClosed, setComposerLookupMenuHidden, setComposerSettingsOpen, setDesktopReasoningMenuOpen, setDismissedComposerLookupKey,
+    setEditingThreadTitle, setExperimentDialogOpen, setProjectRulesDraft, setSelectedExperimentFilePath,
+    setTerminalHistoryOpen, setThreadTitleDraft, state, stickToBottom, syncComposerCaret,
+    syncComposerLookupDomVisibility, terminalHistoryOpen, terminalHistoryScope, threadTitleDraft, transcriptRows,
+    updateScrollLock, uploadingAttachments, visibleTabs,
+  } = props.controller;
   return (
     <>
-    <section data-test-chat-panel="" class={stylex.attrs(chatUtilityStyles.panelShell, chatUtilityStyles.flex, chatUtilityStyles.hFull, chatUtilityStyles.minH0, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded2xl, chatUtilityStyles.borderT0, chatUtilityStyles.p08rem).class}>
-      <Dialog
-        open={Boolean(state.blockingNonGitPreflight)}
-        title="Git setup required"
-        eyebrow="Preflight"
-        description="Dirty-git protection cannot verify this folder because it is not a git repository."
-        onClose={handleCancelNonGitPreflight}
-        footer={
-          <>
-            <ActionButton tooltip="Initialize git and commit the current folder baseline" type="button" onClick={handleInitGitBaseline}>
-              Init Git
-            </ActionButton>
-            <ActionButton tooltip="Disable dirty-git protection and retry this run" type="button" variant="secondary" onClick={handleDisableDirtyGitCheck}>
-              Disable check and continue
-            </ActionButton>
-            <ActionButton tooltip="Cancel this run" type="button" variant="ghost" onClick={handleCancelNonGitPreflight}>
-              Cancel
-            </ActionButton>
-          </>
-        }
-      >
-        <div class={stylex.attrs(chatUtilityStyles.spaceY2, chatUtilityStyles.textXs, chatUtilityStyles.leading6, chatUtilityStyles.textVariableMuted).class}>
-          <p>{state.blockingNonGitPreflight?.preflight.repairSummary}</p>
-          <p>{state.blockingNonGitPreflight?.preflight.repairDetail}</p>
-        </div>
-      </Dialog>
+    <section data-test-chat-panel="" class={stylex.attrs(chatUtilityStyles.panelShell, styles.panelContainer, state.experienceMode === "simple" ? styles.panelSimple : undefined, chatUtilityStyles.flex, chatUtilityStyles.hFull, chatUtilityStyles.wFull, chatUtilityStyles.minH0, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded2xl, chatUtilityStyles.p08rem).class}>
+<ChatSetupDialog controller={props.controller} />
       <Show when={shouldShowSetupChecklist(state)}>
         <SetupChecklistCard
           checks={state.setup.checks}
@@ -2746,1104 +2902,21 @@ export function ChatPanel() {
         }
       >
           <>
-          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.borderB, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.pb3, chatUtilityStyles.lgFlexRow, chatUtilityStyles.lgItemsStart, chatUtilityStyles.lgJustifyBetween).class}>
-              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flex1, chatUtilityStyles.flexCol, chatUtilityStyles.gap15).class}>
-                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>
-                  <Folder class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35, chatUtilityStyles.shrink0, chatUtilityStyles.textVariableAccent).class} />
-                <Tooltip content={project().rootPath} triggerClass={stylex.attrs(styles.tooltipMinWidth).class}>
-                    <span class={stylex.attrs(chatUtilityStyles.block, chatUtilityStyles.minW0, chatUtilityStyles.truncate).class}>{project().name}</span>
-                  </Tooltip>
-                </div>
-                <div class={stylex.attrs(chatUtilityStyles.minW0).class}>
-                  <div class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.minW0, chatUtilityStyles.maxWFull, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap15).class}>
-                    <Show
-                      when={editingThreadTitle()}
-                      fallback={
-                    <Tooltip content={activeThread()?.title ?? "Thread"} triggerClass={stylex.attrs(styles.tooltipThreadTitle).class}>
-                          <h3 class={stylex.attrs(chatUtilityStyles.maxWFull, chatUtilityStyles.truncate, chatUtilityStyles.fontDisplay, chatUtilityStyles.text135rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.mdText165rem).class}>
-                            {activeThread()?.title ?? "Thread"}
-                          </h3>
-                        </Tooltip>
-                      }
-                    >
-                      <Input
-                        class={stylex.attrs(chatUtilityStyles.maxW2xl).class}
-                        value={threadTitleDraft()}
-                        onInput={(event: InputEvent & { currentTarget: HTMLInputElement; target: Element }) =>
-                          setThreadTitleDraft(event.currentTarget.value)
-                        }
-                        onBlur={handleCommitRenameThread}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            handleCommitRenameThread();
-                          }
-                          if (event.key === "Escape") {
-                            setEditingThreadTitle(false);
-                          }
-                        }}
-                      />
-                    </Show>
-                    <ActionButton
-                      tooltip="Rename this thread"
-                      icon={<Edit3 class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
-                      size="icon"
-                      variant="ghost"
-                      ariaLabel="Rename this thread"
-                      onClick={handleStartRenameThread}
-                    />
-                  </div>
-                  <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.text0625rem, chatUtilityStyles.textVariableMuted).class}>
-                    <span>{activeThread()?.messageCount ?? 0} msgs</span>
-                    <span class={stylex.attrs(chatUtilityStyles.h1, chatUtilityStyles.w1, chatUtilityStyles.roundedFull, chatUtilityStyles.bgVariableBorder).class} />
-                    <span>thread</span>
-                    <span class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.maxWFull, chatUtilityStyles.breakAll, chatUtilityStyles.fontMono, chatUtilityStyles.text06rem).class}>{activeThread()?.id}</span>
-                    <CopyTextButton
-                      value={activeThread()?.id ?? ""}
-                      tooltip="Copy thread id"
-                      copiedTitle="Thread id copied"
-                      copiedDescription={activeThread()?.id}
-                      size="icon"
-                      variant="ghost"
-                      ariaLabel="Copy thread id"
-                    />
-                  </div>
-                </div>
-              </div>
+<ChatPanelHeader controller={props.controller} />
 
-              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.shrink0, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2, chatUtilityStyles.lgJustifyEnd).class}>
-                <ActionButton
-                  tooltip={tooltipWithPrimaryHotkey(
-                    "Create a new thread in this project",
-                    normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences).createProjectChat[0]
-                  )}
-                  icon={<Plus class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                  variant="secondary"
-                  onClick={handleReset}
-                />
-                <ActionButton
-                  tooltip="Fork current thread into a new thread"
-                  icon={<Split class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                  variant="secondary"
-                  onClick={handleForkThread}
-                />
-                <ActionButton
-                  tooltip="Open terminal history for this thread"
-                  ariaLabel="Open thread terminal history"
-                  icon={<Terminal class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                  variant="secondary"
-                  onClick={handleOpenThreadTerminalHistory}
-                />
-                <ActionButton
-                  tooltip="Stop active run"
-                  disabledReason="No running task"
-                  disabled={!activeThreadIsStreaming()}
-                  icon={<Pause class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                  variant="secondary"
-                  onClick={handleStop}
-                >
-                  Stop
-                </ActionButton>
-                    <Show when={retryableRun()}>
-                      <ActionButton
-                        tooltip="Retry last run"
-                        disabledReason="Project is streaming"
-                        disabled={activeThreadIsStreaming()}
-                        icon={<RefreshCcw class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                        variant="secondary"
-                        onClick={handleRetry}
-                  />
-                </Show>
-              </div>
-            </div>
+<ChatTranscriptSurface controller={props.controller} />
 
-            <div {...stylex.attrs(styles.paneBody)}>
-            <Show when={currentTab()} keyed>
-              {(selectedTab) => (
-                <div {...stylex.attrs(styles.paneColumn)}>
-                  <div data-test-chat-pane-nav="" role="tablist" aria-label="Project panes" {...stylex.attrs(styles.paneTabs)}>
-                    <div {...stylex.attrs(styles.paneTabList)}>
-                      <For each={visibleTabs()}>
-                        {(tab) => {
-                          const pressed = selectedTab === tab.id;
+<ChatProjectSetupNotice controller={props.controller} />
 
-                          return (
-                            <Button
-                              tooltip={tab.tooltip}
-                              type="button"
-                              role="tab"
-                              variant="ghost"
-                              class={stylex.attrs(styles.paneTab, pressed ? styles.paneTabSelected : styles.paneTabIdle).class}
-                              aria-label={tab.label}
-                              attr:aria-selected={pressed ? "true" : "false"}
-                              tabIndex={pressed ? 0 : -1}
-                              data-test-chat-pane-tab={tab.id}
-                              onClick={() => handleSelectPaneTab(tab.id)}
-                            >
-                              {tab.icon}
-                              <span>{tab.label}</span>
-                            </Button>
-                          );
-                        }}
-                      </For>
-                    </div>
-                  </div>
-                  <Show when={resumableRun()}>
-                    {(run) => (
-                      <div {...stylex.attrs(styles.resumableBanner)}>
-                        <div {...stylex.attrs(styles.minWidthZero)}>
-                          <div {...stylex.attrs(styles.resumableHeading)}>
-                            <AlertTriangle {...stylex.attrs(styles.iconSmall)} />
-                            Resumable run
-                          </div>
-                          <div {...stylex.attrs(styles.resumableStatus)}>
-                            Status: {run().status}. Failed subtasks: {failedSubtaskCount()}.
-                          </div>
-                          <div {...stylex.attrs(styles.resumableDetail)}>
-                            Resume reruns failed or pending subtasks only. Composer text becomes extra guidance.
-                          </div>
-                        </div>
-                        <ActionButton
-                          tooltip="Resume failed or pending subagents"
-                          disabledReason={
-                            executionPaused()
-                              ? executionPauseReason()
-                              : activeThreadIsStreaming()
-                                ? "Project is streaming"
-                                : "No resumable run"
-                          }
-                          disabled={executionPaused() || !resumableRun() || activeThreadIsStreaming()}
-                          icon={<RefreshCcw class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                          type="button"
-                          onClick={handleResume}
-                        >
-                          Resume failed agents
-                        </ActionButton>
-                      </div>
-                    )}
-                  </Show>
-
-                  <Switch>
-                    <Match when={selectedTab === "chat"}>
-                      <div class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.flex, chatUtilityStyles.minH0, chatUtilityStyles.flex1, chatUtilityStyles.flexCol).class}>
-                        <VirtualList
-                          viewportRef={(element) => {
-                            messageViewport = element;
-                          }}
-                          class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}
-                    contentClass={stylex.attrs(styles.virtualContent).class}
-                    itemClass={stylex.attrs(styles.virtualItem).class}
-                          dataTest="project-chat-transcript"
-                          items={transcriptRows()}
-                          getKey={(row, index) => row.kind === "persisted" ? row.message.id : row.kind === "tool-block" ? row.block.id : `live-${row.message.id}-${index}`}
-                          estimateSize={estimateTranscriptRowSize}
-                          pagination={{ kind: "reverse", initialCount: CHAT_TRANSCRIPT_LIMIT, batchSize: CHAT_TRANSCRIPT_LIMIT, thresholdPx: 1000 }}
-                          overscan={20}
-                          stickToEnd
-                          onScroll={updateScrollLock}
-                          empty={
-                            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH44, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite38, chatUtilityStyles.p6, chatUtilityStyles.textCenter, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
-                              No messages in this thread yet. Send a task from the composer.
-                            </div>
-                          }
-                        >
-                          {(row, index) => renderTranscriptRow(row, index, project())}
-                        </VirtualList>
-                        <Show when={!stickToBottom()}>
-                          <div class={stylex.attrs(chatUtilityStyles.pointerEventsNone, chatUtilityStyles.absolute, chatUtilityStyles.insetX0, chatUtilityStyles.bottom3, chatUtilityStyles.flex, chatUtilityStyles.justifyCenter).class}>
-                            <div class={stylex.attrs(chatUtilityStyles.pointerEventsAuto).class}>
-                              <ActionButton
-                                tooltip="Scroll to latest message"
-                                icon={<ArrowDown class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                                variant="secondary"
-                                onClick={() => scrollToBottom(true)}
-                              >
-                                Scroll to latest
-                              </ActionButton>
-                            </div>
-                          </div>
-                        </Show>
-                      </div>
-                    </Match>
-                    <Match when={selectedTab === "plan"}>
-                <ScrollArea class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}>
-                  <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap4).class}>
-                    <Show
-                      when={currentExecutionPlan()}
-                      fallback={
-                        <div class={stylex.attrs(chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite45, chatUtilityStyles.p5, chatUtilityStyles.text0675rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
-                          No saved execution plan yet. Ask for a plan from Chat, then review it here before files change.
-                        </div>
-                      }
-                    >
-                      {(plan) => (
-                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderVariableAccent35, chatUtilityStyles.bgWhite70, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
-                          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
-                            <div>
-                              <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableAccentStrong).class}>Plan ready for review</div>
-                              <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.textVariableMuted).class}>Confirm scope and verification before execution.</div>
-                            </div>
-                            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
-                              <ActionButton tooltip="Open full execution plan" size="sm" variant="secondary" onClick={() => harnessStore.openExecutionPlanDialog(plan())}>
-                                Review full plan
-                              </ActionButton>
-                              {renderPlanRunAction(plan().runId)}
-                            </div>
-                          </div>
-                          <MarkdownContent content={() => plan().summary} size="compact" fileLinks={chatFileLinks()} />
-                        </div>
-                      )}
-                    </Show>
-
-                    <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
-                      <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap3, chatUtilityStyles.mdGridCols2).class}>
-                        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
-                          <span class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Active mode</span>
-                          <DropdownControl
-                            kind="select"
-                            ariaLabel="Select active mode"
-                            icon={<Split class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
-                            size="md"
-                            class={stylex.attrs(chatUtilityStyles.wFull).class}
-                            value={selectedModeValue()}
-                            options={modeDropdownOptions()}
-                            onChange={handleModeSelect}
-                          />
-                        </label>
-                        <div class={stylex.attrs(chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
-                          {isAutoModeSelected()
-                            ? "Interpret each prompt and choose the best implementation mode."
-                            : activeMode()?.description ?? "Default implementation mode."}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
-                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
-                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap1).class}>
-                          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Project context</div>
-                          <div class={stylex.attrs(chatUtilityStyles.text0675rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
-                            Rules and working memory flow into planner and execution prompts.
-                          </div>
-                        </div>
-                        <ActionButton tooltip="Save project rules and thread memory" size="sm" onClick={handleSaveProjectContext}>
-                          Save context
-                        </ActionButton>
-                      </div>
-                      <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap3, chatUtilityStyles.pt4, chatUtilityStyles.mdGridCols2).class}>
-                        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
-                          <span class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Project rules</span>
-                          <Textarea rows="8" value={projectRulesDraft()} onInput={(event) => setProjectRulesDraft(event.currentTarget.value)} />
-                        </label>
-                        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
-                          <span class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Thread memory</span>
-                          <Textarea rows="8" value={threadMemoryDraft()} onInput={(event) => setThreadMemoryDraft(event.currentTarget.value)} />
-                        </label>
-                      </div>
-                    </div>
-
-                    <ModeEditorPanel
-                      title="Project custom modes"
-                      scope="project"
-                      modes={project().projectModes ?? []}
-                      onSave={(mode) =>
-                        sendCommand({
-                          type: "mode.save",
-                          requestId: createRequestId(),
-                          payload: {
-                            scope: "project",
-                            projectId: project().id,
-                            mode
-                          }
-                        })
-                      }
-                      onDelete={(modeId) =>
-                        sendCommand({
-                          type: "mode.delete",
-                          requestId: createRequestId(),
-                          payload: {
-                            scope: "project",
-                            projectId: project().id,
-                            modeId
-                          }
-                        })
-                      }
-                    />
-
-                  </div>
-                </ScrollArea>
-                    </Match>
-                    <Match when={selectedTab === "run"}>
-                <ScrollArea class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}>
-                  <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap4).class}>
-                    <CliSessionPanel />
-                    <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
-                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
-                        <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Run summary</div>
-                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
-                          <Show when={currentBackgroundRun()}>
-                            <ActionButton
-                              tooltip="Open background job for this run"
-                              icon={<Briefcase class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
-                              size="sm"
-                              variant="secondary"
-                              onClick={handleOpenCurrentRunJob}
-                            >
-                              Job
-                            </ActionButton>
-                          </Show>
-                          <ActionButton
-                            tooltip="Promote latest run into scheduled task"
-                            icon={<CalendarClock class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handlePromoteScheduledRun()}
-                          >
-                            Schedule
-                          </ActionButton>
-                          <Show when={currentExecutionPlan()}>
-                            {(plan) => renderPlanRunAction(plan().runId)}
-                          </Show>
-                          <Show when={experimentRun()}>
-                            <ActionButton tooltip="Review virtual branch diff" size="sm" variant="secondary" onClick={handleInspectExperiment}>
-                              Review experiment
-                            </ActionButton>
-                            <ActionButton tooltip="Flush experiment changes into project and commit" size="sm" onClick={handlePromoteExperiment}>
-                              Promote
-                            </ActionButton>
-                            <ActionButton tooltip="Discard virtual branch changes" size="sm" variant="secondary" onClick={handleDiscardExperiment}>
-                              Discard
-                            </ActionButton>
-                          </Show>
-                        </div>
-                      </div>
-                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, chatUtilityStyles.pt2).class}>
-                        <div>Status: {currentRun()?.status ?? "idle"}</div>
-                        <div>Retryable: {currentRun()?.retryable ? "yes" : "no"}</div>
-                        <div>Resumable: {currentRun()?.resumable ? "yes" : "no"}</div>
-                        <Show when={currentRun()?.failureMessage}>
-                          {(failure) => <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderRose300, chatUtilityStyles.bgRose50, chatUtilityStyles.p3, chatUtilityStyles.fontMedium, chatUtilityStyles.textRose800).class}>Failure: {failure()}</div>}
-                        </Show>
-                        <Show when={currentRun()?.status === "completed" || currentRun()?.status === "failed"}>
-                          <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite65, chatUtilityStyles.p3).class}>
-                            <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>Outcome</div>
-                            <Show when={currentRun()?.summary ?? currentRun()?.finalExecutionBrief}>
-                              {(summary) => <div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>{summary()}</div>}
-                            </Show>
-                            <div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>
-                              Evidence: {currentRun()?.toolActivities?.filter((activity) => activity.status === "completed").length ?? 0} completed tool steps; {currentRun()?.subtasks.filter((task) => task.status === "completed").length ?? 0} completed subtasks.
-                            </div>
-                          </div>
-                        </Show>
-                        <RunLedgerCompact run={currentRun()} />
-                        <RunProofBundleCompact run={currentRun()} />
-                        <Tooltip
-                          content={currentRun()?.latestUserPrompt}
-                              triggerClass={stylex.attrs(styles.tooltipThreadTitle).class}
-                        >
-                          <div class={stylex.attrs(chatUtilityStyles.truncate).class}>
-                            Prompt: {currentRun()?.latestUserPrompt ?? "n/a"}
-                          </div>
-                        </Tooltip>
-                      </div>
-                      <Show when={experimentRun()}>
-                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, chatUtilityStyles.pt2).class}>
-                          <div>Virtual branch: {experimentRun()!.virtualBranchName}</div>
-                          <div class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.breakAll).class}>Mount: {experimentRun()!.projectMountPath}</div>
-                          <div>
-                            Diff: {experimentRun()!.filesChanged} files, +{experimentRun()!.insertions} / -{experimentRun()!.deletions}
-                          </div>
-                        </div>
-                      </Show>
-                    </div>
-                    <VirtualList
-                      class={stylex.attrs(chatUtilityStyles.minH80, chatUtilityStyles.pr2).class}
-                      contentClass={stylex.attrs(styles.virtualContent).class}
-                      itemClass={stylex.attrs(styles.virtualItem).class}
-                      items={runSubtasks()}
-                      getKey={(task, index) => `${task.id ?? task.title}-${index}`}
-                      estimateSize={150}
-                      pagination={{ kind: "reverse", initialCount: CHAT_RUN_SUBTASK_LIMIT, batchSize: CHAT_RUN_SUBTASK_LIMIT }}
-                      empty={<div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>No subtasks yet.</div>}
-                    >
-                      {(task) => (
-                        <div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
-                          <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>{task.title}</div>
-                          <div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>Status: {task.status} | Attempts: {task.attemptCount}</div>
-                          <Show when={task.output}>
-                            <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
-                              <MarkdownContent content={() => task.output ?? ""} size="compact" fileLinks={chatFileLinks()} />
-                            </div>
-                          </Show>
-                          <Show when={task.errorMessage}>
-                            <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
-                              <MarkdownContent content={() => task.errorMessage ?? ""} size="compact" tone="danger" fileLinks={chatFileLinks()} />
-                            </div>
-                          </Show>
-                        </div>
-                      )}
-                    </VirtualList>
-                  </div>
-                </ScrollArea>
-                    </Match>
-                    <Match when={selectedTab === "events"}>
-                <VirtualList
-                  class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}
-                  contentClass={stylex.attrs(styles.virtualContent).class}
-                  itemClass={stylex.attrs(styles.virtualItem).class}
-                  items={projectTraces()}
-                  getKey={(trace, index) => `${trace.stage}-${index}`}
-                  estimateSize={145}
-                  pagination={{ kind: "reverse", initialCount: CHAT_EVENT_LIMIT, batchSize: CHAT_EVENT_LIMIT }}
-                  empty={
-                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH56, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.rounded3xl, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite40, chatUtilityStyles.p8, chatUtilityStyles.textCenter, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
-                      No model trace events yet. Tool commands and subtask activity appear in Run and Developer trace.
-                    </div>
-                  }
-                >
-                  {(trace) => (
-                    <article class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
-                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>
-                        <span>{trace.stage}</span>
-                        <span>{trace.modelId ?? "n/a"}</span>
-                      </div>
-                      <MarkdownContent content={() => trace.message} size="compact" fileLinks={chatFileLinks()} />
-                      <Show when={trace.detail}>
-                        <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
-                          <MarkdownContent content={() => trace.detail ?? ""} size="compact" tone="muted" fileLinks={chatFileLinks()} />
-                        </div>
-                      </Show>
-                    </article>
-                  )}
-                </VirtualList>
-                    </Match>
-                    <Match when={selectedTab === "memory"}>
-                <Show
-                  when={projectMemoryEntries().length > 0}
-                  fallback={
-                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH56, chatUtilityStyles.flex1, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite40, chatUtilityStyles.p8, chatUtilityStyles.textCenter, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
-                      No shared memory yet. Memories appear here after they are recorded for this project.
-                    </div>
-                  }
-                >
-                <VirtualList
-                  class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}
-                  contentClass={stylex.attrs(styles.virtualContent).class}
-                  itemClass={stylex.attrs(styles.virtualItem).class}
-                  items={projectMemoryEntries()}
-                  getKey={(entry) => entry.id}
-                  estimateSize={190}
-                  pagination={{ kind: "reverse", initialCount: CHAT_MEMORY_LIMIT, batchSize: CHAT_MEMORY_LIMIT }}
-                >
-                  {(entry, index) => (
-                    <article class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
-                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
-                        <div>
-                          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>{entry.kind}</div>
-                          <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>{entry.title}</div>
-                        </div>
-                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
-                          <ActionButton
-                            tooltip="Move memory earlier in retrieval priority"
-                            disabled={index === 0}
-                            disabledReason="Already highest priority memory"
-                            icon={<ArrowUp class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
-                            size="icon"
-                            variant="secondary"
-                            ariaLabel="Move memory up"
-                            onClick={() => handleReorderMemory(entry.id, "up")}
-                          />
-                          <ActionButton
-                            tooltip="Move memory later in retrieval priority"
-                            disabled={index === projectMemoryEntries().length - 1}
-                            disabledReason="Already lowest priority memory"
-                            icon={<ArrowDown class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
-                            size="icon"
-                            variant="secondary"
-                            ariaLabel="Move memory down"
-                            onClick={() => handleReorderMemory(entry.id, "down")}
-                          />
-                          <ActionButton tooltip={entry.pinned ? "Unpin memory entry" : "Pin memory entry"} size="sm" variant="secondary" onClick={() => handleUpdateMemory(entry.id, { pinned: !entry.pinned })}>
-                            {entry.pinned ? "Unpin" : "Pin"}
-                          </ActionButton>
-                          <ActionButton
-                            tooltip={entry.status === "active" ? "Archive memory entry" : "Restore memory entry"}
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handleUpdateMemory(entry.id, { status: entry.status === "active" ? "archived" : "active" })}
-                          >
-                            {entry.status === "active" ? "Archive" : "Restore"}
-                          </ActionButton>
-                          <ActionButton tooltip="Permanently delete this memory entry" size="sm" variant="secondary" onClick={() => handleDeleteMemory(entry.id)}>
-                            {deleteArmedMemoryId() === entry.id ? "Confirm delete" : "Delete"}
-                          </ActionButton>
-                        </div>
-                      </div>
-                      <div class={stylex.attrs(chatUtilityStyles.pt2, chatUtilityStyles.textVariableMuted).class}>priority {entry.priority} | {entry.confidence} | {entry.freshness} | hits {entry.hitCount}</div>
-                      <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
-                        <MarkdownContent content={() => entry.summary} size="compact" fileLinks={chatFileLinks()} />
-                      </div>
-                      <Show when={entry.evidence}>
-                        <div class={stylex.attrs(chatUtilityStyles.pt2).class}>
-                          <MarkdownContent content={() => entry.evidence ?? ""} size="compact" tone="muted" fileLinks={chatFileLinks()} />
-                        </div>
-                      </Show>
-                    </article>
-                  )}
-                </VirtualList>
-                </Show>
-                    </Match>
-                  </Switch>
-                </div>
-              )}
-            </Show>
-            </div>
-
-            <Show when={readyRun() && currentExecutionPlan()?.gating.mode === "countdown" && countdownRunId() === readyRun()!.id}>
-              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded125rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite65, chatUtilityStyles.p3).class}>
-                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
-                  <span>
-                    Auto-run {countdownPaused() ? "paused" : "in progress"} for {currentExecutionPlan()?.gating.delaySeconds}s gate.
-                  </span>
-                  <ActionButton
-                    tooltip={
-                      executionPaused()
-                        ? "Global pause freezes automatic execution countdown"
-                        : countdownPaused()
-                          ? "Resume automatic execution countdown"
-                          : "Pause automatic execution countdown"
-                    }
-                    disabled={executionPaused()}
-                    disabledReason={executionPauseReason()}
-                    icon={countdownPaused() ? <Play class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} /> : <Pause class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => (countdownPaused() ? handleResumeAutoRun() : handlePauseAutoRun())}
-                  >
-                    {countdownPaused() ? "Resume auto-run" : "Pause auto-run"}
-                  </ActionButton>
-                </div>
-                <div class={stylex.attrs(chatUtilityStyles.h2, chatUtilityStyles.overflowHidden, chatUtilityStyles.roundedFull, chatUtilityStyles.bgVariableBorder).class}>
-                  <div
-                    class={stylex.attrs(chatUtilityStyles.hFull, chatUtilityStyles.roundedFull, chatUtilityStyles.bgVariableAccent, chatUtilityStyles.transitionWidth).class}
-                    style={{
-                      width: `${Math.max(
-                        0,
-                        Math.min(
-                          100,
-                          100 -
-                          (countdownRemainingMs() /
-                            Math.max(1, (currentExecutionPlan()?.gating.delaySeconds ?? 1) * 1000)) *
-                          100
-                        )
-                      )}%`
-                    }}
-                  />
-                </div>
-              </div>
-            </Show>
-
-            <form
-              data-test-chat-composer=""
-              class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.shrink0, chatUtilityStyles.spaceY3).class}
-              onSubmit={handleSubmit}
-              onDragOver={handleAttachmentDragOver}
-              onDragLeave={handleAttachmentDragLeave}
-              onDrop={handleAttachmentDrop}
-            >
-              <Show when={draggingAttachments()}>
-                <div class={stylex.attrs(chatUtilityStyles.pointerEventsNone, chatUtilityStyles.absolute, chatUtilityStyles.inset0, chatUtilityStyles.z10, chatUtilityStyles.grid, chatUtilityStyles.placeItemsCenter, chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableAccent, chatUtilityStyles.bgWhite85, chatUtilityStyles.p4, chatUtilityStyles.textCenter, chatUtilityStyles.shadowLg).class}>
-                  <div>
-                    <div class={stylex.attrs(chatUtilityStyles.text075rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>{dropState().label}</div>
-                    <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>{dropState().detail}</div>
-                  </div>
-                </div>
-              </Show>
-              <Show when={pendingQuestion()}>
-                {(question) => (
-                  <div class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.overflowHidden, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgVariablePanelStrong, chatUtilityStyles.p3, chatUtilityStyles.shadowSm).class}>
-                    <div class={stylex.attrs(chatUtilityStyles.absolute, chatUtilityStyles.insetY0, chatUtilityStyles.left0, chatUtilityStyles.w1, chatUtilityStyles.bgVariableWarning).class} />
-                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.pl2, chatUtilityStyles.text0625rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking014em, chatUtilityStyles.textVariableWarningStrong).class}>
-                      <MessageSquareMore class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35, chatUtilityStyles.shrink0).class} />
-                      <span class={stylex.attrs(chatUtilityStyles.truncate).class}>
-                        {question().intent?.type === "assistant-create-intent" && question().responseKind === "freeform" ? "Assistant setup" : "Planner question"}
-                      </span>
-                    </div>
-                    <div class={stylex.attrs(chatUtilityStyles.pl2, chatUtilityStyles.textSm, chatUtilityStyles.fontMedium, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>{question().prompt}</div>
-                    <Show when={question().placeholder}>
-                      <div class={stylex.attrs(chatUtilityStyles.pl2, chatUtilityStyles.text07rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>Example: {question().placeholder}</div>
-                    </Show>
-                    <Show when={question().responseKind !== "freeform"}>
-                      <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap2, chatUtilityStyles.smGridCols2, chatUtilityStyles.lgGridCols3).class}>
-                        <For each={question().choices ?? []}>
-                          {(choice) => (
-                            <Button
-                              tooltip={executionPaused() ? executionPauseReason() : choice.description}
-                              type="button"
-                              variant="secondary"
-                              disabled={executionPaused()}
-                              tooltipTriggerClass={stylex.attrs(styles.plannerChoiceTooltip).class}
-                              class={stylex.attrs(
-                                chatUtilityStyles.hAuto,
-                                chatUtilityStyles.minH18,
-                                chatUtilityStyles.wFull,
-                                chatUtilityStyles.itemsStart,
-                                chatUtilityStyles.justifyStart,
-                                chatUtilityStyles.whitespaceNormal,
-                                chatUtilityStyles.roundedLg,
-                                chatUtilityStyles.px3,
-                                chatUtilityStyles.py2,
-                                chatUtilityStyles.textLeft,
-                                chatUtilityStyles.transition,
-                                chatUtilityStyles.hoverBorderVariableAccent,
-                                choice.recommended ? styles.plannerChoiceRecommended : styles.plannerChoiceDefault
-                              ).class}
-                              aria-label={`Choose planner answer: ${choice.label}`}
-                              onClick={() => handleQuestionChoice(choice.answerText)}
-                            >
-                              <span
-                                class={stylex.attrs(
-                                  chatUtilityStyles.flex,
-                                  chatUtilityStyles.h5,
-                                  chatUtilityStyles.w5,
-                                  chatUtilityStyles.shrink0,
-                                  chatUtilityStyles.itemsCenter,
-                                  chatUtilityStyles.justifyCenter,
-                                  chatUtilityStyles.roundedMd,
-                                  chatUtilityStyles.border,
-                                  chatUtilityStyles.text06rem,
-                                  choice.recommended ? styles.plannerChoiceMarkerRecommended : styles.plannerChoiceMarkerDefault
-                                ).class}
-                              >
-                                <Show when={choice.recommended} fallback={String((question().choices ?? []).findIndex((entry) => entry.id === choice.id) + 1)}>
-                                  <Check class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
-                                </Show>
-                              </span>
-                              <span class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flex1, chatUtilityStyles.flexCol, chatUtilityStyles.gap1).class}>
-                                <span class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
-                                  <span class={stylex.attrs(chatUtilityStyles.truncate, chatUtilityStyles.textXs, chatUtilityStyles.fontSemibold).class}>{choice.label}</span>
-                                  <Show when={choice.recommended}>
-                                    <span class={stylex.attrs(chatUtilityStyles.rounded, chatUtilityStyles.border, chatUtilityStyles.borderVariableWarning, chatUtilityStyles.px15, chatUtilityStyles.py05, chatUtilityStyles.text052rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking01em, chatUtilityStyles.textVariableWarningStrong).class}>
-                                      Rec
-                                    </span>
-                                  </Show>
-                                </span>
-                                <span class={stylex.attrs(chatUtilityStyles.lineClamp3, chatUtilityStyles.text0675rem, chatUtilityStyles.fontNormal, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>{choice.description}</span>
-                              </span>
-                            </Button>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                    <Show when={executionPaused()}>
-                      <div class={stylex.attrs(chatUtilityStyles.pl2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableWarningStrong).class}>
-                        Global pause active. Send answer after resume.
-                      </div>
-                    </Show>
-                  </div>
-                )}
-              </Show>
-
-              <Show when={selectedAgentHealthMessage()}>
-                {(message) => (
-                  <div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderSky200, chatUtilityStyles.bgSky5080, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textSky950).class}>
-                    {message()}
-                  </div>
-                )}
-              </Show>
-
-              <Show when={composerTimerState()}>
-                {(timer) => (
-                  <div
-                    aria-live="polite"
-                    data-test-waiting-timer=""
-                    role="status"
-                    class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.px1, chatUtilityStyles.text0675rem, chatUtilityStyles.fontMedium, chatUtilityStyles.textVariableMuted).class}
-                  >
-                    <Show when={timer().kind === "working"}>
-                      <span aria-hidden="true" class={stylex.attrs(chatUtilityStyles.agentWaitingDots).class}>
-                        <span data-test-agent-waiting-dot="" data-delay-index="0" class={stylex.attrs(chatUtilityStyles.agentWaitingDot).class} />
-                        <span data-test-agent-waiting-dot="" data-delay-index="1" class={stylex.attrs(chatUtilityStyles.agentWaitingDot, chatUtilityStyles.agentWaitingDot2).class} />
-                        <span data-test-agent-waiting-dot="" data-delay-index="2" class={stylex.attrs(chatUtilityStyles.agentWaitingDot, chatUtilityStyles.agentWaitingDot3).class} />
-                      </span>
-                    </Show>
-                    <span>{timer().label}</span>
-                  </div>
-                )}
-              </Show>
-
-              <ChatComposer
-                dataTourId="chat-composer"
-                textareaRef={(element) => {
-                  composerTextarea = element;
-                }}
-                rows="2"
-                value={project().draft}
-                placeholder={getComposerPlaceholder()}
-                disabled={executionPaused()}
-                disabledReason={executionPauseReason()}
-                onSubmit={() => composerTextarea?.form?.requestSubmit()}
-                onKeyDown={handleComposerKeyDown}
-                onKeyUp={syncComposerCaret}
-                onClick={handleComposerClick}
-                onSelect={syncComposerCaret}
-                onFocus={() => queueMicrotask(syncComposerCaret)}
-                ariaControls={composerLookupOpen() ? "chat-composer-lookup" : undefined}
-                ariaExpanded={composerLookupOpen()}
-                ariaActiveDescendant={composerLookupActiveOptionId()}
-                onInput={(value) => {
-                  syncComposerCaret();
-                  harnessStore.setProjectDraft(project().id, value);
-                  setComposerLookupForcedClosed(false);
-                  setDismissedComposerLookupKey(undefined);
-                  setComposerLookupActiveIndex(0);
-                  queueMicrotask(() => syncComposerLookupDomVisibility());
-                  resizeComposer();
-                }}
-                rightActions={
-                  <>
-                    <ActionButton
-                      tooltip="Attach screenshots, PDFs, or office docs"
-                      disabledReason={executionPaused() ? executionPauseReason() : attachmentButtonReason()}
-                      disabled={executionPaused() || attachmentButtonDisabled()}
-                      icon={<Paperclip class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      class={stylex.attrs(chatUtilityStyles.pointerEventsAuto, chatUtilityStyles.h8, chatUtilityStyles.w8, chatUtilityStyles.roundedLg).class}
-                      onClick={() => attachmentInput?.click()}
-                    />
-                    <ActionButton
-                      tooltip={composerSubmitState().tooltip}
-                      disabledReason={composerSubmitState().disabledReason}
-                      disabled={composerSubmitState().disabled}
-                      icon={<SendHorizontal class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                      type="submit"
-                      variant="ghost"
-                      size="icon"
-                      class={stylex.attrs(chatUtilityStyles.pointerEventsAuto, chatUtilityStyles.h8, chatUtilityStyles.w8, chatUtilityStyles.roundedLg).class}
-                      dataTourId="chat-send"
-                    />
-                  </>
-                }
-                leftControls={
-                  <>
-                    <div data-test-composer-control-row="" class={stylex.attrs(chatUtilityStyles.hidden, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap1, chatUtilityStyles.lgFlex).class}>
-                      {renderModeControl()}
-                      {renderAgentControl()}
-                      {renderProviderControl()}
-                      {renderModelControl()}
-                      <Popover
-                        open={desktopReasoningMenuOpen()}
-                        onClose={() => setDesktopReasoningMenuOpen(false)}
-                        align="start"
-                        side="top"
-                            contentClass={stylex.attrs(styles.compactPopover).class}
-                        content={renderComposerControlMenu()}
-                      >
-                        {renderEffortControl(() => setDesktopReasoningMenuOpen((current) => !current))}
-                      </Popover>
-                    </div>
-                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
-                      <Popover
-                        open={mobileReasoningMenuOpen()}
-                        onClose={() => setMobileReasoningMenuOpen(false)}
-                        align="start"
-                        side="top"
-                            contentClass={stylex.attrs(styles.compactPopover).class}
-                        content={renderComposerControlMenu()}
-                      >
-                        {renderEffortControl(() => setMobileReasoningMenuOpen((current) => !current), "lg:hidden")}
-                      </Popover>
-                      <div class={stylex.attrs(chatUtilityStyles.lgHidden).class}>
-                        <Popover
-                          open={composerSettingsOpen()}
-                          onClose={() => setComposerSettingsOpen(false)}
-                          align="start"
-                          side="top"
-                            contentClass={stylex.attrs(styles.mobileSettingsPopover).class}
-                          content={
-                            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
-                              {renderModeControl("md", "w-full")}
-                              {renderAgentControl("md", "w-full")}
-                              {renderProviderControl("md", "w-full")}
-                              {renderModelControl("md", "w-full")}
-                            </div>
-                          }
-                        >
-                          <ActionButton
-                            tooltip="Open composer settings"
-                            icon={<Settings class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            class={stylex.attrs(chatUtilityStyles.h7, chatUtilityStyles.w7, chatUtilityStyles.roundedLg).class}
-                            onClick={() => setComposerSettingsOpen((current) => !current)}
-                          />
-                        </Popover>
-                      </div>
-                    </div>
-                  </>
-                }
-              />
-              <div
-                ref={(element) => {
-                  composerLookupMenu = element;
-                  queueMicrotask(() => {
-                    if (composerLookupOpen() && composerLookupMenu === element) {
-                      syncComposerLookupDomVisibility();
-                    } else {
-                      setComposerLookupMenuHidden(true);
-                    }
-                  });
-                }}
-                id="chat-composer-lookup"
-                data-test-composer-lookup=""
-                hidden={!composerLookupOpen()}
-                role={composerLookupOpen() ? "listbox" : undefined}
-                aria-label={composerLookupOpen() ? "Composer lookup" : undefined}
-                aria-hidden={composerLookupOpen() ? "false" : "true"}
-                tabIndex={-1}
-                class={stylex.attrs(chatUtilityStyles.absolute, chatUtilityStyles.bottom775rem, chatUtilityStyles.left8, chatUtilityStyles.right8, chatUtilityStyles.z20, chatUtilityStyles.maxH64, chatUtilityStyles.overflowAuto, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgVariablePanel, chatUtilityStyles.p1, chatUtilityStyles.shadowXl).class}
-                onKeyDown={(event) => runWithChatPanelOwner(() => handleComposerLookupKeyDown(event))}
-              >
-                <For each={composerLookupRenderedOptions()}>
-                  {(option) => (
-                    <button
-                      id={getComposerLookupOptionId(option.index)}
-                      data-composer-lookup-option=""
-                      data-composer-lookup-index={option.index}
-                      type="button"
-                      role={composerLookupOpen() ? "option" : undefined}
-                      aria-selected={option.selected}
-                      class={stylex.attrs(styles.composerLookupOption, option.selected && styles.composerLookupOptionSelected).class}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => {
-                        setComposerLookupActiveIndex(option.index);
-                        applyComposerLookupOption(option.index);
-                      }}
-                      onMouseEnter={() => {
-                        setComposerLookupActiveIndex(option.index);
-                      }}
-                    >
-                      <Show when={composerLookup()?.kind === "skill"} fallback={getFileTypeIcon(option.insertText.slice(1).trim(), "sm")}>
-                        <WandSparkles class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35, chatUtilityStyles.textVariableMuted).class} />
-                      </Show>
-                      <span class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.flex1).class}>
-                        <span class={stylex.attrs(chatUtilityStyles.block, chatUtilityStyles.truncate, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>{option.label}</span>
-                        <span class={stylex.attrs(chatUtilityStyles.block, chatUtilityStyles.truncate, chatUtilityStyles.text05625rem, chatUtilityStyles.textVariableMuted).class}>{option.detail}</span>
-                      </span>
-                    </button>
-                  )}
-                </For>
-              </div>
-              <input
-                ref={attachmentInput}
-                class={stylex.attrs(chatUtilityStyles.hidden).class}
-                type="file"
-                multiple
-                accept="image/*,.pdf,.docx,.xlsx,.pptx,.odt,.txt,.md,.markdown,.json,.yml,.yaml,.xml,.html,.css,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.rb,.go,.rs,.java,.kt,.swift,.sql,.sh,.bash,.zsh,.ini,.toml,.env,.csv,.log"
-                onChange={handleSelectAttachments}
-              />
-
-              <Show when={draftAttachments().length > 0 || uploadingAttachments()}>
-                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
-                  <For each={draftAttachments()}>
-                    {(attachment) => (
-                      <span class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite75, chatUtilityStyles.px3, chatUtilityStyles.py1, chatUtilityStyles.text06rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textVariableMuted).class}>
-                        <span>{attachment.kind}</span>
-                        <span class={stylex.attrs(chatUtilityStyles.maxW56, chatUtilityStyles.truncate, chatUtilityStyles.normalCase, chatUtilityStyles.trackingNormal).class}>{attachment.name}</span>
-                        <ActionButton
-                          tooltip="Remove attachment"
-                          icon={<X class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />}
-                          size="icon"
-                          variant="ghost"
-                          ariaLabel={`Remove ${attachment.name}`}
-                          onClick={() => handleRemoveAttachment(attachment.id)}
-                        />
-                      </span>
-                    )}
-                  </For>
-                  <Show when={uploadingAttachments()}>
-                    <span class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite75, chatUtilityStyles.px3, chatUtilityStyles.py1, chatUtilityStyles.text06rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textVariableMuted).class}>
-                      <LoaderCircle class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3, chatUtilityStyles.animateSpin).class} />
-                      Uploading attachments
-                    </span>
-                  </Show>
-                </div>
-              </Show>
-              <Show when={composerReferenceBadges().length > 0}>
-                <div {...stylex.attrs(styles.attachmentList)}>
-                  <For each={composerReferenceBadges()}>
-                    {(badge) => (
-                      <Button
-                        data-test-composer-reference-badge=""
-                        tooltip={`Ctrl/Meta-click to open ${badge.label} in the IDE`}
-                        aria-label={`Open ${badge.label} in IDE`}
-                        variant="secondary"
-                        size="sm"
-                        class={stylex.attrs(chatUtilityStyles.h7, chatUtilityStyles.maxWFull, chatUtilityStyles.roundedFull, chatUtilityStyles.px25, chatUtilityStyles.py1, chatUtilityStyles.text05625rem, chatUtilityStyles.fontSemibold).class}
-                        onClick={(event) => handleComposerBadgeClick(event, badge)}
-                      >
-                        <Show when={badge.kind === "skill"} fallback={getFileTypeIcon(badge.target.path, "xs")}>
-                          <WandSparkles class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3, chatUtilityStyles.textVariableMuted).class} />
-                        </Show>
-                        <span class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.truncate).class}>{badge.label}</span>
-                      </Button>
-                    )}
-                  </For>
-                </div>
-              </Show>
-
-              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.lgFlexRow, chatUtilityStyles.lgItemsCenter, chatUtilityStyles.lgJustifyBetween).class}>
-                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
-                  <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
-                    <For each={capabilityTags()}>
-                      {(tag) => (
-                        <span class={stylex.attrs(chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.px2, chatUtilityStyles.py05, chatUtilityStyles.text055rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textVariableMuted).class}>
-                          {tag}
-                        </span>
-                      )}
-                    </For>
-                  </div>
-                  <Show when={contextUsage()}>
-                    {(usage) => (
-                      <Tooltip content={getContextUsageTooltip()}>
-                        <span class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap3, chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite75, chatUtilityStyles.px25, chatUtilityStyles.py15, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableForeground).class}>
-                          <span
-                            class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.flex, chatUtilityStyles.h9, chatUtilityStyles.w9, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedFull).class}
-                            style={{
-                              background: `conic-gradient(var(--accent) ${Math.max(
-                                0,
-                                Math.min(100, Math.round(usage().usagePercent ?? 0))
-                              )}%, rgba(38, 22, 15, 0.12) 0%)`
-                            }}
-                          >
-                            <span class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.h7, chatUtilityStyles.w7, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedFull, chatUtilityStyles.bgVariablePanel, chatUtilityStyles.text05rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>
-                              {Math.round(usage().usagePercent ?? 0)}%
-                            </span>
-                          </span>
-                          <span>{`${Math.round(usage().usagePercent ?? 0)}% · ${formatTokenCount(usage().tokens)}/${formatTokenCount(
-                            usage().contextWindow
-                          )} context used`}</span>
-                          <Show when={getCacheHitPercent(usage())}>
-                            {(cacheHitPercent) => (
-                              <span class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.roundedFull, chatUtilityStyles.border, chatUtilityStyles.borderEmerald50030, chatUtilityStyles.bgEmerald50, chatUtilityStyles.px2, chatUtilityStyles.py05, chatUtilityStyles.text055rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textEmerald700).class}>
-                                ⚡ Cache Hit {cacheHitPercent()}%
-                              </span>
-                            )}
-                          </Show>
-                        </span>
-                      </Tooltip>
-                    )}
-                  </Show>
-                </div>
-                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
-                  {/*
-                    Open live session is intentionally hidden for MVP.
-                    This is unneeded at the moment, but can be reintroduced post-MVP.
-                  */}
-                  {/* <Show when={selectedAgentRuntime()?.agentId !== "pi"}>
-                    <ActionButton
-                      tooltip="Open live pipe-based CLI session"
-                      disabledReason={
-                        executionPaused()
-                          ? executionPauseReason()
-                          : !selectedAgentRuntime()?.installed
-                            ? selectedAgentRuntime()?.healthMessage ?? "Runtime not installed"
-                            : !selectedAgentRuntime()?.authenticated
-                              ? selectedAgentRuntime()?.healthMessage ?? "Runtime not authenticated"
-                              : !selectedAgentRuntime()?.interactivePipeCompatible
-                                ? selectedAgentRuntime()?.healthMessage ?? "Interactive mode unavailable"
-                                : undefined
-                      }
-                      disabled={
-                        executionPaused() ||
-                        !selectedAgentRuntime()?.installed ||
-                        !selectedAgentRuntime()?.authenticated ||
-                        !selectedAgentRuntime()?.interactivePipeCompatible
-                      }
-                      type="button"
-                      variant="secondary"
-                      onClick={handleStartLiveSession}
-                    >
-                      Open live session
-                    </ActionButton>
-                  </Show> */}
-                </div>
-              </div>
-            </form>
-            <Dialog open={experimentDialogOpen()} onClose={() => setExperimentDialogOpen(false)} title="Experiment review">
-              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.text07rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
-                <Show when={experimentRun()}>
-                  <div>
-                    <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>{experimentRun()!.virtualBranchName}</div>
-                    <div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>
-                      {experimentRun()!.filesChanged} files | +{experimentRun()!.insertions} / -{experimentRun()!.deletions}
-                    </div>
-                  </div>
-                </Show>
-                <Show
-                  when={activeProject()?.experimentInspection}
-                  fallback={<div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>Loading experiment diff...</div>}
-                >
-                  {(inspection) => {
-                    const files = () => inspection().files ?? [];
-                    const selectedFile = () => files().find((file) => file.path === selectedExperimentFilePath()) ?? files()[0];
-                    return (
-                      <Show when={files().length > 0} fallback={<MarkdownContent content={() => `\`\`\`diff\n${inspection().diffText}\n\`\`\``} size="compact" />}>
-                        <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.minH0, chatUtilityStyles.gap3, chatUtilityStyles.lgGridColsMinmax12rem18remMinmax01fr).class}>
-                          <div class={stylex.attrs(chatUtilityStyles.minH0, chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite65, chatUtilityStyles.p2).class}>
-                            <div class={stylex.attrs(chatUtilityStyles.px2, chatUtilityStyles.pb2, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>
-                              {files().length} changed paths
-                            </div>
-                            <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.maxH72, chatUtilityStyles.gap1, chatUtilityStyles.overflowAuto).class}>
-                              <For each={files()}>
-                                {(file) => (
-                                  <button
-                                    type="button"
-                                    class={stylex.attrs(
-                                      chatUtilityStyles.minW0,
-                                      chatUtilityStyles.roundedXl,
-                                      chatUtilityStyles.px2,
-                                      chatUtilityStyles.py2,
-                                      chatUtilityStyles.textLeft,
-                                      chatUtilityStyles.transition,
-                                      selectedFile()?.path === file.path ? styles.experimentFileSelected : styles.experimentFileDefault
-                                    ).class}
-                                    onClick={() => setSelectedExperimentFilePath(file.path)}
-                                  >
-                                    <div class={stylex.attrs(chatUtilityStyles.truncate, chatUtilityStyles.text07rem, chatUtilityStyles.fontSemibold).class}>{file.path}</div>
-                                    <div class={stylex.attrs(chatUtilityStyles.text06rem, chatUtilityStyles.opacity75).class}>+{file.additions} / -{file.deletions}</div>
-                                  </button>
-                                )}
-                              </For>
-                            </div>
-                          </div>
-                          <div class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite65, chatUtilityStyles.p3).class}>
-                            <Show when={inspection().staleReason}>
-                              {(reason) => <div class={stylex.attrs(chatUtilityStyles.mb3, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderAmber300, chatUtilityStyles.bgAmber50, chatUtilityStyles.px3, chatUtilityStyles.py2, chatUtilityStyles.text0675rem, chatUtilityStyles.textAmber900).class}>{reason()}</div>}
-                            </Show>
-                            <div class={stylex.attrs(chatUtilityStyles.mb2, chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
-                              <span class={stylex.attrs(chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>{selectedFile()?.path}</span>
-                              <span>+{selectedFile()?.additions ?? 0} / -{selectedFile()?.deletions ?? 0}</span>
-                            </div>
-                            <MarkdownContent content={() => `\`\`\`diff\n${selectedFile()?.hunksPreview || inspection().diffText}\n\`\`\``} size="compact" />
-                          </div>
-                        </div>
-                      </Show>
-                    );
-                  }}
-                </Show>
-              </div>
-            </Dialog>
+<ChatComposerSurface controller={props.controller} />
+<ChatExperimentDialog controller={props.controller} />
           </>
       </Show>
     </section>
     <TerminalHistoryDialog
       open={terminalHistoryOpen()}
       title="Thread Terminal History"
-      scope={activeProject() ? { projectId: activeProject()!.id, threadId: activeProject()!.activeThreadId } : undefined}
+      scope={terminalHistoryScope()}
       onClose={() => setTerminalHistoryOpen(false)}
     />
     </>
@@ -3886,111 +2959,6 @@ function formatModeIntentLabel(modeId: string, fallback: string) {
       return fallback;
   }
 }
-
-function RunLedgerCompact(props: { run?: AgentRunState }) {
-  const ledger = () => props.run?.ledger;
-  return (
-    <Show when={ledger()}>
-      {(entry) => (
-        <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p3).class}>
-          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Run ledger</div>
-          <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.grid, chatUtilityStyles.gap1).class}>
-            <Show when={entry().currentPhase}>{(value) => <div>Phase: {value()}</div>}</Show>
-            <Show when={entry().nextStep}>{(value) => <div>Next: {value()}</div>}</Show>
-            <Show when={entry().waitingOn}>{(value) => <div>Waiting: {value()}</div>}</Show>
-            <Show when={entry().failureClass}>{(value) => <div>Failure: {value()}</div>}</Show>
-            <Show when={entry().lastVerifiedAt}>{(value) => <div>Verified: {formatShortTimestamp(value())}</div>}</Show>
-          </div>
-        </div>
-      )}
-    </Show>
-  );
-}
-
-function RunProofBundleCompact(props: { run?: AgentRunState }) {
-  const bundle = () => props.run?.proofBundle;
-  const evidenceCount = () => (bundle()?.commands?.length ?? 0) + (bundle()?.browserEvidenceRefs?.length ?? 0) + (bundle()?.approvals?.length ?? 0);
-  return (
-    <Show when={bundle()}>
-      {(proof) => (
-        <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p3).class}>
-          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Proof bundle</div>
-          <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.grid, chatUtilityStyles.gap1).class}>
-            <Show when={proof().diffSummary}>{(value) => <div>Diff: {value()}</div>}</Show>
-            <div>Evidence refs: {evidenceCount()}</div>
-            <Show when={proof().finalReviewNotes}>{(value) => <div>Review: {value()}</div>}</Show>
-          </div>
-        </div>
-      )}
-    </Show>
-  );
-}
-
-function estimateTranscriptRowSize(row: ChatTimelineRow) {
-  switch (row.kind) {
-    case "tool-block":
-      return 180;
-    case "live":
-      return row.message.kind === "status" ? 120 : 180;
-    case "persisted":
-      switch (row.message.metadata?.type ?? row.message.kind ?? "plain") {
-        case "plan-summary":
-          return 260;
-        case "run-milestones":
-          return 140;
-        default:
-          return row.message.attachments && row.message.attachments.length > 0 ? 220 : 180;
-      }
-  }
-}
-
-function readPersistedDraftAttachments(key: string | undefined, threadId?: string): ChatAttachment[] {
-  const effectiveKey = key ?? findAttachmentDraftKeyForThread(threadId);
-  if (!effectiveKey) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(localStorage.getItem(effectiveKey) ?? "{}") as { attachments?: ChatAttachment[] };
-    return Array.isArray(parsed.attachments)
-      ? parsed.attachments.filter((attachment) => attachment && typeof attachment.id === "string" && typeof attachment.url === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function findAttachmentDraftKeyForThread(threadId?: string) {
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const key = localStorage.key(index);
-    if (key?.startsWith("ai-harness:chat-draft:v2:") && (!threadId || key.endsWith(`:${threadId}`))) {
-      return key;
-    }
-  }
-  return undefined;
-}
-
-function persistDraftAttachments(key: string, attachments: ChatAttachment[]) {
-  try {
-    const existing = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
-    localStorage.setItem(
-      key,
-      JSON.stringify({
-        ...existing,
-        version: 2,
-        attachments,
-        cleanupNeeded: attachments.length === 0 ? existing.cleanupNeeded : undefined,
-        updatedAt: new Date().toISOString()
-      })
-    );
-  } catch {
-    // Best-effort browser draft persistence.
-  }
-}
-
-const CHAT_TRANSCRIPT_LIMIT = 120;
-const CHAT_RUN_SUBTASK_LIMIT = 24;
-const CHAT_EVENT_LIMIT = 80;
-const CHAT_MEMORY_LIMIT = 80;
 
 function getStreamingLiveMessages(project: ViewProjectState): TimelineLiveMessage[] {
   const messages: TimelineLiveMessage[] = [];
@@ -4081,10 +3049,6 @@ function isProjectRunStreaming(project: ViewProjectState) {
 
 function isBlockingRunStatus(status: AgentRunState["status"]) {
   return status === "planning" || status === "running-main" || status === "running-subagents" || status === "aggregating";
-}
-
-function getComposerLookupOptionId(index: number) {
-  return `chat-composer-lookup-option-${index}`;
 }
 
 function getComposerLookup(draft: string, caret: number) {
@@ -4198,67 +3162,6 @@ function formatChatFileTarget(target: ChatFileTarget) {
   return `${target.path}${line}${column}`;
 }
 
-function getFileTypeIcon(filePath: string, size: "xs" | "sm") {
-  const iconStyles = () => stylex.attrs(size === "sm" ? styles.iconSmall : styles.iconTiny, styles.iconMuted);
-  const extension = filePath.split(".").at(-1)?.toLowerCase();
-  if (!extension || extension === filePath.toLowerCase()) {
-    return <File {...iconStyles()} />;
-  }
-  if (["png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "ico"].includes(extension)) {
-    return <Image {...iconStyles()} />;
-  }
-  if (["json", "jsonc"].includes(extension)) {
-    return <FileJson {...iconStyles()} />;
-  }
-  if (["md", "markdown", "txt", "log", "csv"].includes(extension)) {
-    return <FileText {...iconStyles()} />;
-  }
-  if (
-    [
-      "ts",
-      "tsx",
-      "js",
-      "jsx",
-      "mjs",
-      "cjs",
-      "css",
-      "html",
-      "py",
-      "rb",
-      "go",
-      "rs",
-      "java",
-      "kt",
-      "swift",
-      "sql",
-      "sh",
-      "bash",
-      "zsh"
-    ].includes(extension)
-  ) {
-    return <FileCode {...iconStyles()} />;
-  }
-  return <File {...iconStyles()} />;
-}
-
-function formatTokenCount(value: number | undefined) {
-  if (value === undefined) {
-    return "?";
-  }
-
-  if (value < 1_000) {
-    return String(value);
-  }
-
-  if (value < 1_000_000) {
-    const scaled = value / 1_000;
-    return `${scaled >= 100 ? Math.round(scaled) : Number(scaled.toFixed(1))}k`;
-  }
-
-  const scaled = value / 1_000_000;
-  return `${scaled >= 100 ? Math.round(scaled) : Number(scaled.toFixed(1))}m`;
-}
-
 function formatElapsedDuration(elapsedMs: number) {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
   if (totalSeconds < 60) {
@@ -4279,4 +3182,3 @@ function formatElapsedDuration(elapsedMs: number) {
 function formatResponseTime(timestampMs: number) {
   return formatShortTimestamp(timestampMs);
 }
-

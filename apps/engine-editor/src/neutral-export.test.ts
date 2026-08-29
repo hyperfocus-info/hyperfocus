@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createDefaultProject } from "./project.ts";
+import { createDefaultProject } from "@hyperfocus/engine/project";
 import { createPongProject } from "./starter-projects.ts";
 import {
   createEditorNeutralExport,
@@ -27,7 +27,7 @@ describe("editor neutral export", () => {
   test("writes a fresh directory and refuses overwrite transactionally", async () => {
     const project = createDefaultProject("Directory Test");
     const bundle = await createEditorNeutralExport(project, []);
-    const root = new MemoryDirectory("root");
+    const root = createMemoryDirectory("root");
     const evidence = await writeNeutralExportDirectory(root, "directory-test-neutral-export", bundle);
     expect(evidence).toEqual({ directoryName: "directory-test-neutral-export", fileCount: 2, bytesWritten: bundle.bytesWritten });
     expect([...root.children.get("directory-test-neutral-export")!.files.keys()].sort()).toEqual(["manifest.json", "project.json"]);
@@ -38,7 +38,7 @@ describe("editor neutral export", () => {
     const bundle = await createEditorNeutralExport(createPongProject("Script Escape"), []);
     expect(bundle.files.map((file) => file.path)).toEqual(["project.json", "manifest.json", "scripts/src/gameplay.ts"]);
     expect(bundle.manifest.scripts).toEqual([{ sourcePath: "src/gameplay.ts", path: "scripts/src/gameplay.ts", mimeType: "text/typescript", size: bundle.files[2].bytes.byteLength }]);
-    const root = new MemoryDirectory("root");
+    const root = createMemoryDirectory("root");
     await writeNeutralExportDirectory(root, "script-escape", bundle);
     expect(root.children.get("script-escape")?.children.get("scripts")?.children.get("src")?.files.has("gameplay.ts")).toBe(true);
   });
@@ -46,45 +46,50 @@ describe("editor neutral export", () => {
   test("reports permission failures and removes incomplete output", async () => {
     const project = createDefaultProject("Denied");
     const bundle = await createEditorNeutralExport(project, []);
-    const root = new MemoryDirectory("root");
+    const root = createMemoryDirectory("root");
     root.failWrite = true;
     await expect(writeNeutralExportDirectory(root, "denied-neutral-export", bundle)).rejects.toThrow("permission denied");
     expect(root.children.has("denied-neutral-export")).toBe(false);
   });
 });
 
-class MemoryDirectory implements NeutralDirectoryHandle {
-  readonly children = new Map<string, MemoryDirectory>();
-  readonly files = new Map<string, Uint8Array>();
-  failWrite = false;
+type MemoryDirectory = NeutralDirectoryHandle & {
+  children: Map<string, MemoryDirectory>;
+  files: Map<string, Uint8Array>;
+  failWrite: boolean;
+};
 
-  constructor(readonly name: string) {}
-
-  async getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<MemoryDirectory> {
-    const existing = this.children.get(name);
-    if (existing) return existing;
-    if (!options?.create) throw new DOMException("missing", "NotFoundError");
-    const directory = new MemoryDirectory(name);
-    directory.failWrite = this.failWrite;
-    this.children.set(name, directory);
-    return directory;
-  }
-
-  async getFileHandle(name: string, options?: { create?: boolean }) {
-    if (!options?.create && !this.files.has(name)) throw new DOMException("missing", "NotFoundError");
-    return {
-      createWritable: async (): Promise<NeutralWritableFile> => ({
-        write: async (bytes) => {
-          if (this.failWrite) throw new DOMException("user blocked access", "NotAllowedError");
-          this.files.set(name, new Uint8Array(bytes));
-        },
-        close: async () => undefined,
-      }),
-    };
-  }
-
-  async removeEntry(name: string): Promise<void> {
-    this.children.delete(name);
-    this.files.delete(name);
-  }
+function createMemoryDirectory(name: string): MemoryDirectory {
+  const directory: MemoryDirectory = {
+    name,
+    children: new Map(),
+    files: new Map(),
+    failWrite: false,
+    async getDirectoryHandle(childName, options) {
+      const existing = directory.children.get(childName);
+      if (existing) return existing;
+      if (!options?.create) throw new DOMException("missing", "NotFoundError");
+      const child = createMemoryDirectory(childName);
+      child.failWrite = directory.failWrite;
+      directory.children.set(childName, child);
+      return child;
+    },
+    async getFileHandle(fileName, options) {
+      if (!options?.create && !directory.files.has(fileName)) throw new DOMException("missing", "NotFoundError");
+      return {
+        createWritable: async (): Promise<NeutralWritableFile> => ({
+          write: async (bytes) => {
+            if (directory.failWrite) throw new DOMException("user blocked access", "NotAllowedError");
+            directory.files.set(fileName, new Uint8Array(bytes));
+          },
+          close: async () => undefined,
+        }),
+      };
+    },
+    async removeEntry(childName) {
+      directory.children.delete(childName);
+      directory.files.delete(childName);
+    },
+  };
+  return directory;
 }

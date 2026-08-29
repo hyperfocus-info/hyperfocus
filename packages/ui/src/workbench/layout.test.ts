@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeWorkbenchLayout, parseWorkbenchLayout, serializeWorkbenchLayout } from "./layout";
+import { normalizeWorkbenchLayout, parseWorkbenchLayout, resetWorkbenchPanel, resizeWorkbenchPanel, serializeWorkbenchLayout, toggleWorkbenchPanel } from "./layout";
 
 describe("workbench layout", () => {
   test("clamps persisted dimensions", () => {
@@ -11,5 +11,11 @@ describe("workbench layout", () => {
     expect(parseWorkbenchLayout(serializeWorkbenchLayout(layout))).toEqual(layout);
     expect(() => parseWorkbenchLayout('{"version":2,"layout":{}}')).toThrow("Unsupported");
   });
-});
 
+  test("updates panels through clamped, reusable operations", () => {
+    const layout = normalizeWorkbenchLayout({ sidebarSize: 320 });
+    expect(resizeWorkbenchPanel(layout, "sidebar", 900).sidebarSize).toBe(640);
+    expect(toggleWorkbenchPanel(layout, "sidebar").sidebarCollapsed).toBe(true);
+    expect(resetWorkbenchPanel({ ...layout, sidebarSize: 410 }, "sidebar").sidebarSize).toBe(260);
+  });
+});

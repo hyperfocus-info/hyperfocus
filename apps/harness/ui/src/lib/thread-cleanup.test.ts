@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createProjectThreadSummary, createWorkspaceProjectState } from "../../../shared/protocol";
+import { createProjectThreadSummary, createWorkspaceProjectState } from "@hyperfocus/ai-core/protocol";
 import { getThreadCleanupActivityAt, getThreadCleanupCandidates, parseThreadCleanupDuration } from "./thread-cleanup";
 
 describe("thread cleanup helpers", () => {

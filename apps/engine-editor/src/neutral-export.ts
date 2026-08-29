@@ -1,5 +1,5 @@
-import { packHyperfocusExchangeFiles } from "../../../engine/src/project/index.ts";
-import { createNeutralExportBundle, type NeutralExportBundle, type NeutralExportProject } from "../../../engine/src/project/neutral-export.ts";
+import { packHyperfocusExchangeFiles } from "@hyperfocus/engine/project";
+import { createNeutralExportBundle, type NeutralExportBundle, type NeutralExportProject } from "@hyperfocus/engine/project/neutral-export";
 import type { EditorPortableAsset } from "./portable-project.ts";
 
 export type NeutralWritableFile = {

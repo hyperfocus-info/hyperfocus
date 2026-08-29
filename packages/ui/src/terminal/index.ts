@@ -1,2 +1,1 @@
-export * from "./terminal-surface";
-
+export { TerminalSurface } from "./terminal-surface";

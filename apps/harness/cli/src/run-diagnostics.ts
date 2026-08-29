@@ -3,19 +3,23 @@ import type {
   RunDiagnosticsReport,
   RunDiagnosticsWindowDays,
   RunFailureCategory
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { isLifecycleFailureCategory } from "./run-failure-classification";
 import type { WorkspaceRepository, RunDiagnosticsQueryReport } from "./workspace-repository";
 
 const LIFECYCLE_SHARE_EXCLUDED_CATEGORIES = new Set<RunFailureCategory>(["manual-abort", "shutdown-interrupt"]);
+type RunDiagnosticsRepository = {
+  getRunDiagnosticsReport(windowDays: RunDiagnosticsWindowDays): RunDiagnosticsQueryReport;
+  getEnabledBackgroundJobsInBackoff(now: Date): ReturnType<WorkspaceRepository["getEnabledBackgroundJobsInBackoff"]>;
+};
 
 export function buildRunDiagnosticsReport(
-  repository: WorkspaceRepository,
+  repository: RunDiagnosticsRepository,
   windowDays: RunDiagnosticsWindowDays = 7,
   now: Date = new Date()
 ): RunDiagnosticsReport {
   const queryReport = repository.getRunDiagnosticsReport(windowDays);
-  const backgroundJobs = repository.loadBackgroundJobsState().jobs;
+  const backgroundJobs = repository.getEnabledBackgroundJobsInBackoff(now);
   const generatedAt = now.toISOString();
   const totalFailuresBySource = summarizeFailuresBySource(queryReport);
   const backgroundFailureCount = totalFailuresBySource.get("background-job-run") ?? 0;
@@ -30,7 +34,7 @@ export function buildRunDiagnosticsReport(
   );
   const dominantBackgroundFailureCategory = resolveDominantBackgroundFailureCategory(backgroundRows);
   const activeBackoffJobRows = backgroundJobs
-    .filter((job) => job.status === "enabled" && isFutureTimestamp(job.backoffUntil, now))
+    .filter((job) => isFutureTimestamp(job.backoffUntil, now))
     .map((job) => ({
       jobId: job.id,
       jobName: job.name,

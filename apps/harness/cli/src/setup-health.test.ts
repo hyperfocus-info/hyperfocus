@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { buildSetupState, formatSetupDoctorReport } from "./setup-health";
-import type { PreferencesState, WorkspaceState } from "../../shared/protocol";
+import type { PreferencesState, WorkspaceState } from "@hyperfocus/ai-core/protocol";
 
-const baseWorkspace = {
+const baseWorkspace: WorkspaceState = {
   projects: [],
   activeProjectId: undefined
-} as WorkspaceState;
+};
 
 const basePreferences: PreferencesState = {
   hasUsableApiKey: false,
@@ -68,6 +68,29 @@ test("buildSetupState surfaces Chromium install guidance instead of unsupported 
   expect(browserCheck?.secondaryAction?.kind).toBe("refresh-runtime-health");
 
   const report = formatSetupDoctorReport(setup);
-  expect(report).toContain("[warn] Install browser Chromium");
+  expect(report).toContain("Required now");
+  expect(report).toContain("Optional capabilities");
+  expect(report).toContain("[optional] Install browser Chromium");
   expect(report).toContain("action: Copy Chromium install | bun.cmd x playwright install chromium");
+  expect(report.indexOf("[fix] Open a project")).toBeLessThan(report.indexOf("Optional capabilities"));
+  expect(report.indexOf("[optional] Install browser Chromium")).toBeGreaterThan(report.indexOf("Optional capabilities"));
+
+  const reportWithUnsupported = formatSetupDoctorReport({
+    ...setup,
+    checks: [
+      ...setup.checks,
+      {
+        id: "future-capability",
+        title: "Future capability",
+        summary: "This platform cannot provide it yet.",
+        status: "unsupported",
+        requiredForFirstTask: false,
+        updatedAt: new Date().toISOString()
+      }
+    ]
+  });
+  expect(reportWithUnsupported).toContain("Not yet supported");
+  expect(reportWithUnsupported).toContain("[na] Future capability");
+  expect(reportWithUnsupported.indexOf("Not yet supported")).toBeGreaterThan(reportWithUnsupported.indexOf("Optional capabilities"));
+  expect(reportWithUnsupported.indexOf("[na] Future capability")).toBeGreaterThan(reportWithUnsupported.indexOf("Not yet supported"));
 });

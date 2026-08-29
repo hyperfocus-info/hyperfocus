@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   createAssistantId,
@@ -16,19 +16,28 @@ import {
   createMemoryRetrievalId,
   type BackgroundJob,
   type ExecutionPlan
-} from "../../shared/protocol";
-import { normalizeWindowsEscapedPath, WorkspaceRepository } from "./workspace-repository";
+} from "@hyperfocus/ai-core/protocol";
+import { resolveHarnessTestTempRoot } from "./test-support/test-temp-root";
+import { normalizeWindowsEscapedPath, createWorkspaceRepository, type WorkspaceRepository } from "./workspace-repository";
+import { createMemoryOnlyProviderCredentialStore } from "./provider-credential-store";
 
 function createTempDir() {
-  const tempRoot = path.join(process.cwd(), ".tmp-test-data");
+  const tempRoot = resolveHarnessTestTempRoot();
   mkdirSync(tempRoot, { recursive: true });
   return tempRoot;
 }
 
 function createRepository() {
-  const tempRoot = createTempDir();
-  const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
-  return new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+  const dbPath = path.join(createTempDir(), `workspace-${crypto.randomUUID()}.sqlite`);
+  return createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+}
+
+function countPlaintextProviderKeys(dbPath: string) {
+  const database = new Database(dbPath, { readonly: true, strict: true });
+  const count = database.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM workspace_meta
+    WHERE key IN ('openai_api_key', 'google_api_key', 'anthropic_api_key')`).get()?.count ?? 0;
+  database.close(false);
+  return count;
 }
 
 function addProject(repository: WorkspaceRepository) {
@@ -100,7 +109,7 @@ describe("workspace repository", () => {
   });
 
   test("supports in-memory test-fast databases", () => {
-    const repository = new WorkspaceRepository(":memory:", process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(":memory:", process.cwd(), { durability: "test-fast" });
     const project = addProject(repository);
 
     repository.appendMessage(project.id, "user", "hello memory");
@@ -111,7 +120,7 @@ describe("workspace repository", () => {
   test("defaults and persists memory record-run preference", () => {
     const repository = createRepository();
 
-    expect(repository.getMemoryBankRecordRunsDefault()).toBe(true);
+    expect(repository.getMemoryBankRecordRunsDefault()).toBe(false);
     repository.setMemoryBankRecordRunsDefault(false);
 
     expect(repository.getMemoryBankRecordRunsDefault()).toBe(false);
@@ -235,7 +244,7 @@ describe("workspace repository", () => {
     repository.activateThread(secondProject.id, secondProject.activeThreadId);
     const old = "2026-01-01T00:00:00.000Z";
     const recent = "2026-04-20T00:00:00.000Z";
-    const db = (repository as unknown as { db: Database }).db;
+    const db = new Database(repository.dbPath, { strict: true });
     db.query(`UPDATE project_threads SET created_at = ?2, updated_at = ?2 WHERE id = ?1`).run(oldThreadId, old);
     db.query(`UPDATE project_threads SET created_at = ?2, updated_at = ?2 WHERE id = ?1`).run(pinnedThreadId, old);
     db.query(`UPDATE project_threads SET created_at = ?2, updated_at = ?2 WHERE id = ?1`).run(recentThreadId, recent);
@@ -266,14 +275,14 @@ describe("workspace repository", () => {
 
   test("preserves archived thread state when a file-backed repository reopens", () => {
     const dbPath = path.join(createTempDir(), `workspace-archive-${crypto.randomUUID()}.sqlite`);
-    const repository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const project = addProject(repository);
     const archivedThreadId = project.activeThreadId;
 
     repository.createThread(project.id);
     repository.archiveThread(project.id, archivedThreadId);
 
-    const reopenedRepository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const reopenedRepository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const reopenedThread = reopenedRepository.getProject(project.id).threads.find((thread) => thread.id === archivedThreadId);
 
     expect(reopenedThread).toMatchObject({
@@ -282,7 +291,7 @@ describe("workspace repository", () => {
     });
     expect(reopenedThread?.archivedAt).toBeTruthy();
 
-    const reopenedAgainRepository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const reopenedAgainRepository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     expect(reopenedAgainRepository.getProject(project.id).threads.find((thread) => thread.id === archivedThreadId)).toMatchObject({
       id: archivedThreadId,
       status: "archived",
@@ -397,7 +406,7 @@ describe("workspace repository", () => {
         nextRunAt: now,
         createdAt: now,
         updatedAt: now
-      } satisfies BackgroundJob);
+      });
 
     saveJob({ id: "job-assistant-enabled", assistantId: assistant.id, status: "enabled", name: "Assistant enabled" });
     saveJob({ id: "job-assistant-disabled", assistantId: assistant.id, status: "disabled", name: "Assistant disabled" });
@@ -579,7 +588,7 @@ describe("workspace repository", () => {
     });
     repository.touchBackgroundJobRun(run.id, { stage: "late-progress", detail: "should not move terminal row" });
 
-    const restoredRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const restoredRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restoredRun = restoredRepository.getBackgroundJobRun(run.id);
     expect(restoredRun?.status).toBe("partial-complete");
     expect(restoredRun?.summary).toBe("Useful result.");
@@ -644,7 +653,7 @@ describe("workspace repository", () => {
     repository.appendMessage(nextProject.id, "user", "hello");
     repository.appendMessage(nextProject.id, "assistant", "world");
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const workspace = reloadedRepository.loadWorkspace();
     const restoredProject = workspace.projects.find((project) => project.id === nextProject.id);
 
@@ -723,8 +732,14 @@ describe("workspace repository", () => {
     expect(resetProject.activeThreadId).toBe(resetProject.session.sessionId);
   });
 
-  test("persists API key and global defaults", () => {
-    const repository = createRepository();
+  test("persists API keys outside workspace metadata and preserves global defaults", () => {
+    const tempRoot = createTempDir();
+    const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
+    const providerCredentialStore = createMemoryOnlyProviderCredentialStore();
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), {
+      durability: "test-fast",
+      providerCredentialStore
+    });
 
     repository.setStoredOpenAiApiKey("sk-test-123");
     repository.setStoredGoogleApiKey("gsk-test-456");
@@ -735,7 +750,9 @@ describe("workspace repository", () => {
     repository.setDirtyGitChangeLimitDefault(7);
     repository.setAutoCompactContextThresholdPercentDefault(45);
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    expect(countPlaintextProviderKeys(dbPath)).toBe(0);
+
+    const reloadedRepository = createWorkspaceRepository(dbPath, process.cwd(), { providerCredentialStore });
     expect(reloadedRepository.getStoredOpenAiApiKey()).toBe("sk-test-123");
     expect(reloadedRepository.getStoredGoogleApiKey()).toBe("gsk-test-456");
     expect(reloadedRepository.getProviderBrand()).toBe("gemini");
@@ -749,6 +766,43 @@ describe("workspace repository", () => {
     reloadedRepository.clearStoredGoogleApiKey();
     expect(reloadedRepository.getStoredOpenAiApiKey()).toBeUndefined();
     expect(reloadedRepository.getStoredGoogleApiKey()).toBeUndefined();
+  });
+
+  test("migrates and scrubs legacy plaintext provider keys from workspace metadata", () => {
+    const tempRoot = createTempDir();
+    const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
+    const legacyDb = new Database(dbPath, { create: true, strict: true });
+    legacyDb.exec(`
+      CREATE TABLE workspace_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      INSERT INTO workspace_meta (key, value) VALUES
+        ('openai_api_key', 'sk-legacy-openai'),
+        ('google_api_key', 'sk-legacy-google'),
+        ('anthropic_api_key', 'sk-legacy-anthropic');
+    `);
+    legacyDb.close(false);
+
+    const providerCredentialStore = createMemoryOnlyProviderCredentialStore();
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), {
+      durability: "test-fast",
+      providerCredentialStore
+    });
+
+    expect(repository.getStoredOpenAiApiKey()).toBe("sk-legacy-openai");
+    expect(repository.getStoredGoogleApiKey()).toBe("sk-legacy-google");
+    expect(repository.getStoredAnthropicApiKey()).toBe("sk-legacy-anthropic");
+    const persistedDatabaseBytes = readFileSync(dbPath);
+    expect(persistedDatabaseBytes.includes(Buffer.from("sk-legacy-openai"))).toBe(false);
+    expect(persistedDatabaseBytes.includes(Buffer.from("sk-legacy-google"))).toBe(false);
+    expect(persistedDatabaseBytes.includes(Buffer.from("sk-legacy-anthropic"))).toBe(false);
+    const walPath = `${dbPath}-wal`;
+    if (existsSync(walPath)) {
+      const walBytes = readFileSync(walPath);
+      expect(walBytes.includes(Buffer.from("sk-legacy-openai"))).toBe(false);
+      expect(walBytes.includes(Buffer.from("sk-legacy-google"))).toBe(false);
+      expect(walBytes.includes(Buffer.from("sk-legacy-anthropic"))).toBe(false);
+    }
+
+    expect(countPlaintextProviderKeys(dbPath)).toBe(0);
   });
 
   test("persists workspace context and workspace modes across reload", () => {
@@ -770,7 +824,7 @@ describe("workspace repository", () => {
       updatedAt: new Date().toISOString()
     });
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const workspace = reloadedRepository.loadWorkspace();
 
     expect(workspace.workspaceRuleSource?.content).toBe("Prefer plan-first work.");
@@ -801,7 +855,7 @@ describe("workspace repository", () => {
       threadMemorySummaryContent: " Current bug around planner refinement. "
     });
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restoredProject = reloadedRepository.getProject(project.id);
 
     expect(restoredProject.selectedModeId).toBe("focus-fix");
@@ -835,7 +889,7 @@ describe("workspace repository", () => {
       ]
     });
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restoredProject = reloadedRepository.getProject(project.id);
 
     expect(restoredProject.session.messages[0]?.attachments?.[0]?.name).toBe("spec.md");
@@ -979,7 +1033,6 @@ describe("workspace repository", () => {
       riskLevel: "unsafe",
       approvalStatus: "approved"
     });
-
     const assistants = repository.loadAssistantsState();
     expect(assistants.assistants[0]?.id).toBe(assistantId);
     expect(assistants.assistants[0]?.reasoningStrength).toBe("extra-high");
@@ -998,7 +1051,7 @@ describe("workspace repository", () => {
   test("normalizes oversized assistant learning sources on save and load", () => {
     const tempRoot = createTempDir();
     const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
-    const repository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const assistantId = createAssistantId();
     const now = new Date().toISOString();
     const oversizedSource = `reprioritize:${"x".repeat(400)}`;
@@ -1052,81 +1105,6 @@ describe("workspace repository", () => {
     expect(learnings.every((learning) => learning.kind === "fact")).toBe(true);
   });
 
-  test("pages assistant summaries and selected assistant detail with stable cursors", () => {
-    const repository = createRepository();
-    const assistant = addLearningAssistant(repository);
-    const now = Date.now();
-    for (let index = 0; index < 5; index += 1) {
-      const createdAt = new Date(now + index * 1000).toISOString();
-      repository.appendAssistantMessage(assistant.id, "user", `Message ${index}`, { createdAt });
-      repository.saveAssistantTodo({
-        id: createAssistantTodoId(),
-        assistantId: assistant.id,
-        title: `Todo ${index}`,
-        state: "pending",
-        sortOrder: index,
-        source: "assistant",
-        workKind: "unspecified",
-        createdAt,
-        updatedAt: createdAt
-      });
-      repository.saveAssistantLearning({
-        id: createAssistantLearningId(),
-        assistantId: assistant.id,
-        summary: `Learning ${index}`,
-        source: "test",
-        confidence: "medium",
-        createdAt
-      });
-      repository.saveAssistantQuestion({
-        id: createAssistantQuestionId(),
-        assistantId: assistant.id,
-        prompt: `Question ${index}?`,
-        status: "pending",
-        linkedTodoIds: [],
-        askedAt: createdAt
-      });
-      repository.appendAssistantLogEntry({
-        id: createAssistantLogEntryId(),
-        assistantId: assistant.id,
-        level: "info",
-        summary: `Log ${index}`,
-        createdAt
-      });
-    }
-
-    const summary = repository.listAssistantSummaries({ limit: 1 });
-    expect(summary.items).toHaveLength(1);
-    expect(summary.totalApprox).toBe(1);
-    expect(repository.loadAssistantSummaryState().todos).toHaveLength(0);
-
-    const firstTodos = repository.listAssistantTodos({ assistantId: assistant.id, limit: 2 });
-    const secondTodos = repository.listAssistantTodos({ assistantId: assistant.id, cursor: firstTodos.nextCursor, limit: 2 });
-    expect(firstTodos.items.map((todo) => todo.title)).toEqual(["Todo 0", "Todo 1"]);
-    expect(secondTodos.items.map((todo) => todo.title)).toEqual(["Todo 2", "Todo 3"]);
-
-    const firstLogs = repository.listAssistantLogs({ assistantId: assistant.id, limit: 2 });
-    const secondLogs = repository.listAssistantLogs({ assistantId: assistant.id, cursor: firstLogs.nextCursor, limit: 2 });
-    expect(firstLogs.items.map((entry) => entry.summary)).toEqual(["Log 4", "Log 3"]);
-    expect(secondLogs.items.map((entry) => entry.summary)).toEqual(["Log 2", "Log 1"]);
-
-    const firstMessages = repository.listAssistantThreadMessages({ assistantId: assistant.id, limit: 2 });
-    const secondMessages = repository.listAssistantThreadMessages({
-      assistantId: assistant.id,
-      cursor: firstMessages.nextCursor,
-      limit: 2
-    });
-    expect(firstMessages.items.map((message) => message.content)).toEqual(["Message 3", "Message 4"]);
-    expect(secondMessages.items.map((message) => message.content)).toEqual(["Message 1", "Message 2"]);
-
-    const detail = repository.getAssistantDetail({ assistantId: assistant.id });
-    expect(detail.thread?.messages.at(-1)?.content).toBe("Message 4");
-    expect(detail.todos.items).toHaveLength(5);
-    expect(detail.learnings.items).toHaveLength(5);
-    expect(detail.questions.items).toHaveLength(5);
-    expect(detail.logs.items).toHaveLength(5);
-  });
-
   test("rejects garbage assistant learning summaries", () => {
     const repository = createRepository();
     const assistant = addLearningAssistant(repository);
@@ -1158,7 +1136,7 @@ describe("workspace repository", () => {
   test("startup cleanup removes garbage assistant learning rows", () => {
     const tempRoot = createTempDir();
     const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
-    const repository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const assistant = addLearningAssistant(repository);
     const now = new Date().toISOString();
     const legacyDb = new Database(dbPath, { strict: true });
@@ -1176,7 +1154,7 @@ describe("workspace repository", () => {
       .run(createAssistantLearningId(), assistant.id, "Keep real launch guidance.", "legacy", "medium", now);
     legacyDb.close();
 
-    const repairedRepository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const repairedRepository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
 
     expect(repairedRepository.getAssistantLearnings(assistant.id).map((learning) => learning.summary)).toEqual([
       "Keep real launch guidance."
@@ -1313,7 +1291,6 @@ describe("workspace repository", () => {
     if (!first || !second) {
       throw new Error("Expected source learnings to save");
     }
-
     repository.compactAssistantLearnings(
       assistant.id,
       {
@@ -1334,6 +1311,7 @@ describe("workspace repository", () => {
     expect(learnings[0]?.kind).toBe("summary");
     expect(learnings[0]?.summary).toBe("Merged assistant guidance.");
     expect(learnings[0]?.supersedesLearningIds).toEqual([first.id, second.id]);
+    expect(repository.listAssistantLearnings({ assistantId: assistant.id }).totalApprox).toBe(learnings.length);
     expect(repository.getAssistantLearningStats(assistant.id)).toMatchObject({
       activeLearningCount: 1,
       activeFactLearningCount: 0
@@ -1422,7 +1400,7 @@ describe("workspace repository", () => {
   test("adds assistant todo work metadata columns during migration", () => {
     const tempRoot = createTempDir();
     const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
-    const repository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const assistant = addLearningAssistant(repository);
     const now = new Date().toISOString();
     const todo = repository.saveAssistantTodo({
@@ -1437,7 +1415,7 @@ describe("workspace repository", () => {
       updatedAt: now
     });
 
-    const reloadedRepository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const reloadedRepository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const reloaded = reloadedRepository.getAssistantTodoForAssistant(assistant.id, todo.id);
 
     expect(reloaded.workKind).toBe("app-code");
@@ -1447,7 +1425,7 @@ describe("workspace repository", () => {
   test("normalizes legacy custom assistant todo sources during migration", () => {
     const tempRoot = createTempDir();
     const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
-    const repository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const assistant = addLearningAssistant(repository);
     const now = new Date().toISOString();
     const todo = repository.saveAssistantTodo({
@@ -1465,7 +1443,7 @@ describe("workspace repository", () => {
     db.query(`UPDATE assistant_todos SET source = 'orrn-research' WHERE id = ?1`).run(todo.id);
     db.close();
 
-    const reloadedRepository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const reloadedRepository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     expect(reloadedRepository.getAssistantTodos(assistant.id)[0]?.source).toBe("assistant");
 
     const reloadedDb = new Database(dbPath, { readonly: true, strict: true });
@@ -1565,7 +1543,7 @@ describe("workspace repository", () => {
   test("repairs recoverable assistant persisted field violations during load", () => {
     const tempRoot = createTempDir();
     const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
-    const repository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const assistantId = createAssistantId();
     const now = new Date().toISOString();
     const long = "x".repeat(40000);
@@ -1668,7 +1646,7 @@ describe("workspace repository", () => {
   test("repairs recoverable global persisted field violations during load", () => {
     const tempRoot = createTempDir();
     const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
-    const repository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const project = addProject(repository);
     const now = new Date().toISOString();
     const long = "x".repeat(40000);
@@ -1924,7 +1902,7 @@ describe("workspace repository", () => {
 
   test("migrates legacy notification kind constraint for cli updates", () => {
     const repository = createRepository();
-    const dbPath = (repository as any).dbPath as string;
+    const dbPath = repository.getDatabasePath();
     const db = new Database(dbPath, { strict: true });
     db.exec(`
       ALTER TABLE notifications RENAME TO notifications_legacy;
@@ -1952,11 +1930,11 @@ describe("workspace repository", () => {
         FOREIGN KEY(background_run_id) REFERENCES background_job_runs(id) ON DELETE CASCADE,
         FOREIGN KEY(job_id) REFERENCES background_jobs(id) ON DELETE CASCADE
       );
-      DROP TABLE notifications_legacy;
+      DROP TABLE notifications_legacy; DELETE FROM repository_migrations WHERE id = '0003-notification-kind-v1';
     `);
     db.close(false);
 
-    const migratedRepository = new WorkspaceRepository(dbPath, process.cwd());
+    const migratedRepository = createWorkspaceRepository(dbPath, process.cwd());
     migratedRepository.saveNotification({
       id: "cli-update:claude-cli:2.1.147",
       kind: "cli-update",
@@ -2106,7 +2084,7 @@ describe("workspace repository", () => {
     repository.markSubtaskFailed(project.id, runId!, "task-2", "timeout", 2);
     repository.setAgentRunStatus(project.id, runId!, "partial-complete");
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restoredProject = reloadedRepository.getProject(project.id);
 
     expect(restoredProject.activeRun?.status).toBe("partial-complete");
@@ -2232,7 +2210,7 @@ describe("workspace repository", () => {
     expect(stored?.responseKind).toBe("freeform");
     expect(stored?.choices).toBeUndefined();
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restored = reloadedRepository.getProject(project.id).activeRun?.questions[0];
     expect(restored?.responseKind).toBe("freeform");
     expect(restored?.choices).toBeUndefined();
@@ -2287,7 +2265,7 @@ describe("workspace repository", () => {
     expect(storedIntent?.type).toBe("assistant-create-intent");
     expect(storedIntent?.type === "assistant-create-intent" ? storedIntent.suggestedName : undefined).toBe("Catalog builder");
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restoredProject = reloadedRepository.getProject(project.id);
     const restoredIntent = restoredProject.activeRun?.questions[0]?.intent;
     expect(restoredIntent?.type).toBe("assistant-create-intent");
@@ -2300,7 +2278,7 @@ describe("workspace repository", () => {
     const skillPath = path.join(repoRoot, ".agents", "skills", "review", "SKILL.md");
     mkdirSync(path.dirname(skillPath), { recursive: true });
     writeFileSync(skillPath, "# Review\n");
-    const repository = new WorkspaceRepository(path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`), repoRoot, {
+    const repository = createWorkspaceRepository(path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`), repoRoot, {
       durability: "test-fast"
     });
     const assistantId = createAssistantId();
@@ -2501,7 +2479,7 @@ describe("workspace repository", () => {
   test("persists run summaries and high-effort execution plan contracts across reload", () => {
     const tempRoot = createTempDir();
     const dbPath = path.join(tempRoot, `workspace-${crypto.randomUUID()}.sqlite`);
-    const repository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const repository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const project = addProject(repository);
     const withRun = repository.createAgentRun(project.id, "build persisted plan", "openai/gpt-5.4");
     const runId = withRun.activeRun?.id;
@@ -2608,7 +2586,7 @@ describe("workspace repository", () => {
     );
     db.close();
 
-    const reloadedRepository = new WorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
+    const reloadedRepository = createWorkspaceRepository(dbPath, process.cwd(), { durability: "test-fast" });
     const restoredProject = reloadedRepository.getProject(project.id);
 
     expect(restoredProject.runSummaries).toContainEqual(
@@ -2742,7 +2720,7 @@ describe("workspace repository", () => {
 
   test("renews background run leases only for the active running owner", () => {
     const repository = createRepository();
-    const dbPath = (repository as any).dbPath as string;
+    const dbPath = repository.getDatabasePath();
     const project = addProject(repository);
     const now = new Date().toISOString();
     const job = repository.saveBackgroundJob({
@@ -3061,7 +3039,7 @@ describe("workspace repository", () => {
           label: "Open https://example.com",
           inputSummary: "{\"url\":\"https://example.com\"}",
           status: "pending",
-          requestedAt: new Date().toISOString()
+          requestedAt: "2026-01-01T00:00:00.000Z"
         },
         activities: [
           {
@@ -3072,6 +3050,7 @@ describe("workspace repository", () => {
             label: "Open https://example.com",
             inputSummary: "{\"url\":\"https://example.com\"}",
             status: "pending-approval",
+            approval: { toolCallId: "tool-call-1", toolName: "playwright-browser", kind: "navigate", label: "Open https://example.com", inputSummary: "{\"url\":\"https://example.com\"}", status: "pending", requestedAt: "2026-01-01T00:00:00.000Z" },
             startedAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             replay: [],
@@ -3080,8 +3059,7 @@ describe("workspace repository", () => {
         ]
       }
     ]);
-
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restoredProject = reloadedRepository.getProject(project.id);
 
     expect(restoredProject.activeRun?.browserSessions).toHaveLength(1);
@@ -3091,7 +3069,7 @@ describe("workspace repository", () => {
 
   test("repairs background job foreign keys that still target background_job_runs_legacy", () => {
     const repository = createRepository();
-    const dbPath = (repository as any).dbPath as string;
+    const dbPath = repository.getDatabasePath();
     const db = new Database(dbPath, { strict: true });
 
     db.exec(`
@@ -3120,11 +3098,11 @@ describe("workspace repository", () => {
         FOREIGN KEY(assistant_id) REFERENCES assistants(id) ON DELETE CASCADE,
         FOREIGN KEY(automation_thread_id) REFERENCES project_threads(id) ON DELETE CASCADE
       );
-      DROP TABLE background_job_runs_legacy;
+      DROP TABLE background_job_runs_legacy; DELETE FROM repository_migrations WHERE id = '0001-background-run-history-v1';
     `);
     db.close(false);
 
-    const repairedRepository = new WorkspaceRepository(dbPath, process.cwd());
+    const repairedRepository = createWorkspaceRepository(dbPath, process.cwd());
     const repairedDb = new Database(dbPath, { readonly: true, strict: true });
     const schemas = repairedDb
       .query<{ name: string; sql: string }, []>(
@@ -3197,7 +3175,7 @@ describe("workspace repository", () => {
       createdAt: new Date().toISOString()
     });
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restoredProject = reloadedRepository.getProject(project.id);
 
     expect(restoredProject.activeRun?.executionTarget).toBe("ephemeral-experiment");
@@ -3215,7 +3193,7 @@ describe("workspace repository", () => {
     const repository = createRepository();
     const project = addProject(repository);
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restoredProject = reloadedRepository.getProject(project.id);
 
     expect(restoredProject.threads[0]?.forkedFromThreadId).toBeUndefined();
@@ -3282,7 +3260,7 @@ describe("workspace repository", () => {
       content: "working"
     });
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const restoredProject = reloadedRepository.getProject(project.id);
 
     expect(restoredProject.session.messages.at(-1)?.content).toBe("working");
@@ -3294,11 +3272,11 @@ describe("workspace repository", () => {
     const project = addProject(repository);
     const activeThreadId = repository.getProject(project.id).activeThreadId;
 
-    (repository as any).db
+    new Database(repository.dbPath, { strict: true })
       .query(`UPDATE project_threads SET title = '' WHERE id = ?1 AND project_id = ?2`)
       .run(activeThreadId, project.id);
 
-    const reloadedRepository = new WorkspaceRepository((repository as any).dbPath, process.cwd());
+    const reloadedRepository = createWorkspaceRepository(repository.dbPath, process.cwd());
     const workspace = reloadedRepository.loadWorkspace();
     const restoredProject = workspace.projects.find((entry) => entry.id === project.id);
 

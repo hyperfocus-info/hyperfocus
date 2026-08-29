@@ -3,12 +3,12 @@ import {
   createThreadId,
   type Assistant,
   type AssistantQuestion,
-  type BackgroundJob,
   type BackgroundJobSchedule,
   type ProjectId
-} from "../../shared/protocol";
+} from "@hyperfocus/ai-core/protocol";
 import { previewBackgroundJobSchedule } from "./background-job-schedule";
 import { createStableBoundedId } from "./notification-ids";
+import { DEFAULT_CODING_STACK_GUIDANCE } from "./prompts/coding-stack-defaults";
 import type { WorkspaceRepository } from "./workspace-repository";
 
 export const ASSISTANT_JOB_BOOTSTRAP_DELAY_MS = 10 * 60 * 1000;
@@ -38,10 +38,10 @@ export function shouldAskAssistantJobBootstrap(
       return false;
     }
   }
-  if (repository.loadBackgroundJobsState().jobs.some((job) => job.assistantId === assistant.id)) {
+  if (repository.hasAssistantBackgroundJobs(assistant.id)) {
     return false;
   }
-  return !repository.getAssistantQuestions(assistant.id).some((question) => question.id === createAssistantJobBootstrapQuestionId(assistant.id));
+  return repository.getAssistantQuestion(createAssistantJobBootstrapQuestionId(assistant.id)) === undefined;
 }
 
 export function buildAssistantJobBootstrapQuestion(assistant: Assistant, status: AssistantQuestion["status"]): AssistantQuestion {
@@ -140,7 +140,7 @@ export function buildAssistantJobBootstrapJobs(input: {
         subagentWorktreeStrategy: "separate-worktrees" as const
       }
     }
-  ] satisfies BackgroundJob[];
+  ];
 }
 
 function buildResearchGoalPrompt(assistant: Assistant) {
@@ -153,7 +153,7 @@ function buildResearchGoalPrompt(assistant: Assistant) {
     "Make small, evidence-backed skill or TypeScript script updates only when clearly scoped and not overlapping with active implementation work; otherwise create or update todos for the script, skill, or product work.",
     "Do not spend the pass only reorganizing docs. If research exposes repeatable work, prefer creating or improving a TypeScript script over prose notes.",
     "If no buildable app/product todo exists, create one that explicitly names the smallest usable app behavior, screen, API, workflow, or code path to build next.",
-    "For new coding projects with no explicit stack, default to TypeScript, Bun runtime, bun test, bun:sqlite when persistence is needed, SolidJS + Tailwind when UI is needed, frontend tests using Bun + Happy DOM, shared primitives first, and useful documentation comments for new functions and variables.",
+    DEFAULT_CODING_STACK_GUIDANCE,
     "End with concrete build todos.",
     "",
     "Assistant operating context:",
@@ -170,7 +170,7 @@ function buildMaintainTodosPrompt(assistant: Assistant) {
     "Keep skill-building, skill-update, or TypeScript-script todos when they improve future work.",
     "Every active todo should name an app/product implementation target, a TypeScript script target, a skill-improvement target, or explain why implementation is blocked.",
     "After the first discovery runs, most active todos should be app-code or automation-code and should expect real file updates.",
-    "For new coding projects with no explicit stack, default to TypeScript, Bun runtime, bun test, bun:sqlite when persistence is needed, SolidJS + Tailwind when UI is needed, frontend tests using Bun + Happy DOM, shared primitives first, and useful documentation comments for new functions and variables.",
+    DEFAULT_CODING_STACK_GUIDANCE,
     "Do not spend the pass only reorganizing docs.",
     "",
     "Assistant operating context:",
@@ -186,7 +186,7 @@ function buildImplementTodosPrompt(assistant: Assistant) {
     "Implement skill updates when they are top actionable todos and clearly scoped.",
     "Update documentation after behavior, script, or skill changes as needed.",
     "A successful pass should build or change something real when feasible.",
-    "For new coding projects with no explicit stack, default to TypeScript, Bun runtime, bun test, bun:sqlite when persistence is needed, SolidJS + Tailwind when UI is needed, frontend tests using Bun + Happy DOM, shared primitives first, and useful documentation comments for new functions and variables.",
+    DEFAULT_CODING_STACK_GUIDANCE,
     "If top todos are docs-only but the assistant goal implies repeatable work, convert one todo into a TypeScript script or the smallest usable app/product implementation and do that first.",
     "",
     "Assistant operating context:",

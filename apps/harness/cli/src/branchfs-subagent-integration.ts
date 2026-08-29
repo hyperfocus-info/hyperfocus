@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AgentTrace, ComposerReasoningStrength, PlannerSubtask } from "../../shared/protocol";
-import { BranchfsManager, copyBranchfsPathRobust, type BranchfsExperimentLease } from "./branchfs-manager";
+import type { AgentTrace, ComposerReasoningStrength, PlannerSubtask } from "@hyperfocus/ai-core/protocol";
+import { createBranchfsManager, copyBranchfsPathRobust, type BranchfsExperimentLease, type BranchfsManager } from "./branchfs-manager";
 import type { PiAgentAdapter } from "./pi-agent-adapter";
 import type { BranchfsSubagentSnapshot } from "./pi-subagents";
 
@@ -59,7 +59,7 @@ export async function prepareBranchfsIntegrationLease(
     return undefined;
   }
 
-  const manager = new BranchfsManager(
+  const manager = createBranchfsManager(
     {
       rootPath: context.rootPath,
       runId: `${context.runId}-integration`
@@ -121,12 +121,11 @@ export async function verifyBranchfsIntegrationLease(integration: BranchfsIntegr
     message: "Running integration verification"
   });
 
-  const packageJson = JSON.parse(await readFile(path.join(integration.lease.repoMountPath, "package.json"), "utf8")) as {
-    scripts?: Record<string, string>;
-  };
+  const packageJson: unknown = JSON.parse(await readFile(path.join(integration.lease.repoMountPath, "package.json"), "utf8"));
+  const scripts = isRecord(packageJson) && isRecord(packageJson.scripts) ? packageJson.scripts : undefined;
 
-  const ranTypecheck = Boolean(packageJson.scripts?.typecheck);
-  const ranTest = Boolean(packageJson.scripts?.test);
+  const ranTypecheck = typeof scripts?.typecheck === "string";
+  const ranTest = typeof scripts?.test === "string";
 
   if (ranTypecheck) {
     await runCommand([BUN_EXECUTABLE, "run", "typecheck"], integration.lease.repoMountPath);
@@ -144,6 +143,10 @@ export async function verifyBranchfsIntegrationLease(integration: BranchfsIntegr
       ranTest ? "test" : "skip:test"
     ].join(", ")
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export async function flushBranchfsIntegrationLease(integration: BranchfsIntegrationLease) {

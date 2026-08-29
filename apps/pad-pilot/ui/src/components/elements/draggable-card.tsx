@@ -1,5 +1,5 @@
 import { Show, splitProps, type JSX } from "solid-js";
-import styles from "./draggable-card.module.css";
+import styles from "./draggable-card.stylex";
 
 /**
  * Props for DraggableCard.
@@ -74,44 +74,41 @@ export function DraggableCard(props: DraggableCardProps) {
     <section
       {...others}
       ref={local.dragRef}
-      class={`${styles.card} ${local.class ?? ""}`.trim()}
-      classList={{
-        ...(local.classList ?? {}),
-        [styles["is-dragging"]]: local.isDragging,
-        [styles["is-placeholder"]]: local.isPlaceholder,
-        [styles["is-preview"]]: local.preview,
-      }}
+      class={`${styles.card} ${local.isDragging ? styles["is-dragging"] : ""} ${local.isPlaceholder ? styles["is-placeholder"] : ""} ${local.preview ? styles["is-preview"] : ""} ${local.class ?? ""}`.trim()}
+      classList={local.classList}
       data-variant={local.variant ?? "default"}
       style={{ ...(others.style as JSX.CSSProperties | undefined), ...(local.dragStyle ?? {}) }}
       onPointerDown={local.onDragPointerDown}
     >
-      <Show when={local.header} fallback={
-        <Show when={local.title || local.subtitle || local.actions || local.dragHandle}>
-          <header class={styles.header}>
-            <div class={styles["title-row"]}>
-              <Show when={local.dragHandle}>
-                <DraggableCardHandle />
+      <div class={styles["card-content"]}>
+        <Show when={local.header} fallback={
+          <Show when={local.title || local.subtitle || local.actions || local.dragHandle}>
+            <header class={styles.header}>
+              <div class={styles["title-row"]}>
+                <Show when={local.dragHandle}>
+                  <DraggableCardHandle />
+                </Show>
+                <Show when={local.title || local.subtitle}>
+                  <div class={styles.copy}>
+                    <Show when={local.title}>
+                      <strong>{local.title}</strong>
+                    </Show>
+                    <Show when={local.subtitle}>
+                      <small class={styles["copy-small"]}>{local.subtitle}</small>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
+              <Show when={local.actions}>
+                <div>{local.actions}</div>
               </Show>
-              <Show when={local.title || local.subtitle}>
-                <div class={styles.copy}>
-                  <Show when={local.title}>
-                    <strong>{local.title}</strong>
-                  </Show>
-                  <Show when={local.subtitle}>
-                    <small>{local.subtitle}</small>
-                  </Show>
-                </div>
-              </Show>
-            </div>
-            <Show when={local.actions}>
-              <div>{local.actions}</div>
-            </Show>
-          </header>
+            </header>
+          </Show>
+        }>
+          {(header) => header()}
         </Show>
-      }>
-        {(header) => header()}
-      </Show>
-      {local.children}
+        {local.children}
+      </div>
     </section>
   );
 }
@@ -126,4 +123,3 @@ export function DraggableCardHandle() {
 }
 
 (DraggableCard as DraggableCardComponent).Handle = DraggableCardHandle;
-

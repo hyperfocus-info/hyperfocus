@@ -2,7 +2,7 @@ import { createEffect, createSignal, on, onCleanup } from "solid-js";
 import { PadPilot } from "../../padpilot/index";
 import { createProducerActions } from "../../padpilot/producer-actions";
 import { mapStickToMidiNote, type RootNote, type ScaleMode } from "./note-mapper";
-import styles from "./performance-module.module.css";
+import styles from "./performance-module.stylex";
 
 type PerformanceState = {
   root: RootNote;

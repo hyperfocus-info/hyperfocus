@@ -1,5 +1,5 @@
 import { PadPilot } from "../../../padpilot/index";
-import styles from "../fx-module.module.css";
+import styles from "../fx-module.stylex";
 
 export function FxDragPreview(props: { subtitle?: string; title: string; tone: "chain" | "node" }) {
   return (

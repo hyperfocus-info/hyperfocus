@@ -80,8 +80,7 @@ export function ButtonGroup(props: ButtonGroupProps) {
     <div
       {...others}
       ref={setRoot}
-      {...stylex.attrs(styles.root, local.column && styles.column)}
-      classList={{ [local.class ?? ""]: Boolean(local.class) }}
+      class={`${stylex.attrs(styles.root, local.column && styles.column).class} ${local.class ?? ""}`.trim()}
       data-column={local.column ? "true" : "false"}
     >
       <Show when={collapsed()} fallback={resolvedChildren()}>

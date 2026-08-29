@@ -1,4 +1,4 @@
-import styles from "../recut-module.module.css";
+import styles from "../recut-module.stylex";
 import { PadPilot } from "../../../padpilot/index";
 import { useRecutModuleStore } from "../recut-module-store";
 

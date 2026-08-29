@@ -4,7 +4,7 @@ import {
   midiNoteLabel,
 } from "../../modules/analyzer/analyzer-state";
 import { clamp } from "../../utils/math";
-import styles from "./note-heatmap.module.css";
+import styles from "./note-heatmap.stylex";
 
 type NoteHeatmapClassNames = {
   event: string;
@@ -157,8 +157,8 @@ export function NoteHeatmap(props: NoteHeatmapProps) {
           >
             {(label) => (
               <>
-                <strong>{label().note}</strong>
-                <span>{label().frequencyHz.toFixed(2)} Hz</span>
+                <strong class={styles["readout-strong"]}>{label().note}</strong>
+                <span class={styles["readout-span"]}>{label().frequencyHz.toFixed(2)} Hz</span>
               </>
             )}
           </Show>

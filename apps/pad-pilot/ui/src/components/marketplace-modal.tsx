@@ -6,7 +6,7 @@ import { Modal } from "./elements/modal";
 import { PadPilot } from "../padpilot/index";
 import { TextAreaField } from "./elements/text-area-field";
 import { TextField } from "./elements/text-field";
-import styles from "./marketplace-modal.module.css";
+import styles from "./marketplace-modal.stylex";
 
 const formatPrice = (priceCents: number, currency: string) =>
   new Intl.NumberFormat("en-US", {
@@ -47,17 +47,15 @@ export function MarketplaceModal() {
         <aside class={styles["marketplace-sidebar"]}>
           <div class={styles["marketplace-actions"]}>
             <Button
-              class={styles["marketplace-tab"]}
+              class={`${styles["marketplace-tab"]} ${state.view === "browse" ? styles["is-active"] : ""}`.trim()}
               variant={state.view === "browse" ? "primary" : "secondary"}
-              classList={{ [styles["is-active"]]: state.view === "browse" }}
               onClick={actions.setBrowseView}
             >
               Browse catalog
             </Button>
             <Button
-              class={styles["marketplace-tab"]}
+              class={`${styles["marketplace-tab"]} ${state.view === "upload" ? styles["is-active"] : ""}`.trim()}
               variant={state.view === "upload" ? "primary" : "secondary"}
-              classList={{ [styles["is-active"]]: state.view === "upload" }}
               onClick={actions.setUploadView}
             >
               Prepare upload

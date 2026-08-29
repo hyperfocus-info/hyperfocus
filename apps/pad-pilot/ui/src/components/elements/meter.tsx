@@ -2,7 +2,8 @@ import { For, Show, createMemo, splitProps, type JSX } from "solid-js";
 import { Tooltip } from "./tooltip";
 import { type ElementSkin, resolveElementSkin, type TooltipPlacement } from "./element-skin";
 import { clamp } from "../../utils/math";
-import styles from "./meter.module.css";
+import styles from "./meter.stylex";
+import { labelTypographyClass } from "./element-typography.stylex";
 
 /**
  * Props for Meter.
@@ -118,7 +119,7 @@ export function Meter(props: MeterProps) {
                     <For each={Array.from({ length: 24 })}>{() => <span class={styles.segment} />}</For>
                   </div>
                   <Show when={presentation().stereoEnabled}>
-                    <span class={`${styles["channel-label"]} pad-pilot-label`.trim()}>{channel.label}</span>
+                    <span class={`${styles["channel-label"]} ${labelTypographyClass}`.trim()}>{channel.label}</span>
                   </Show>
                 </div>
               )}
@@ -129,7 +130,7 @@ export function Meter(props: MeterProps) {
           <Show when={!local.labelPosition || local.labelPosition === "bottom"}>
             <span class={styles.label}>{local.label ?? ""}</span>
           </Show>
-          <span class={`${styles.readout} pad-pilot-label`.trim()}>{presentation().readout}</span>
+          <span class={`${styles.readout} ${labelTypographyClass}`.trim()}>{presentation().readout}</span>
         </div>
       </div>
     </Tooltip>

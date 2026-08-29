@@ -7,8 +7,8 @@ import { FxMasterIoRack } from "./fx-master-io-rack";
 import { FxPresetRail } from "./fx-preset-rail";
 import { FxCreativeTools } from "./fx-creative-tools";
 import { For } from "solid-js";
-import styles from "../fx-console-shell.module.css";
-import tabStyles from "./fx-chain-tabs.module.css";
+import styles from "../fx-console-shell.stylex";
+import tabStyles from "./fx-chain-tabs.stylex";
 
 /** FxConsoleShell owns the three-column FX console layout. */
 export function FxConsoleShell() {
@@ -20,7 +20,7 @@ export function FxConsoleShell() {
       <header class={styles.toolbar}>
         <div class={styles["toolbar-copy"]}>
           <span class={styles["console-kicker"]}>PadPilot</span>
-          <h2>FX Console</h2>
+          <h2 class={styles["toolbar-copy-h2"]}>FX Console</h2>
         </div>
         <PadPilot.ButtonGroup class={styles["toolbar-actions"]} collapseWidth={360}>
           <PadPilot.ButtonGroup.Item disabled={!actions.history.canUndo()} icon={<Undo2 size={14} />} onClick={actions.history.undo} tooltip="Undo">

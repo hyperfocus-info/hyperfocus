@@ -4,7 +4,8 @@ import { PadPilot } from "../../../padpilot/index";
 import { createChainAccessor, createNodeAccessor } from "../fx-live-accessors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { FxNodePresetDropdown } from "./fx-node-preset-dropdown";
-import styles from "../fx-node-registry.module.css";
+import styles from "../fx-node-registry.stylex";
+import moduleStyles from "../fx-module.stylex";
 import { getNodeName } from "../node-registry/registry";
 
 export type FxNodeHeaderProps = {
@@ -26,30 +27,26 @@ export function FxNodeHeader(props: FxNodeHeaderProps) {
           <DraggableCardHandle />
           <PadPilot.Button
             aria-pressed={node()?.bypassed ?? false}
-            class={styles["icon-action"]}
-            classList={{ [styles["icon-action-active"]]: node()?.bypassed ?? false }}
+            class={`${moduleStyles["icon-action"]} ${node()?.bypassed ? moduleStyles["icon-action-active"] : ""}`.trim()}
             data-testid={`node-bypass-button-${props.chainId}-${props.nodeId}`}
             icon={bypassIcon()}
             onClick={() => actions.nodes.toggleBypass(props.chainId, props.nodeId)}
             tooltip={node()?.bypassed ? "Enable node" : "Bypass node"}
-            anchorClass={styles["icon-action-anchor"]}
           />
           <PadPilot.Button
             aria-pressed={node()?.solo ?? false}
-            class={styles["icon-action"]}
-            classList={{ [styles["icon-action-active"]]: node()?.solo ?? false }}
+            class={`${moduleStyles["icon-action"]} ${node()?.solo ? moduleStyles["icon-action-active"] : ""}`.trim()}
             data-testid={`node-solo-button-${props.chainId}-${props.nodeId}`}
             icon={Headphones}
             onClick={() => actions.nodes.toggleSolo(props.chainId, props.nodeId)}
             tooltip={node()?.solo ? "Disable node solo" : "Solo node"}
-            anchorClass={styles["icon-action-anchor"]}
           />
         </div>
 
         <div class={styles["node-center"]}>
           <div class={styles["node-title-stack"]}>
             <div class={styles["node-name"]}>
-              <strong>{(node() && getNodeName(node()!.type)) ?? node()?.name}</strong>
+              <strong class={styles["node-name-strong"]}>{(node() && getNodeName(node()!.type)) ?? node()?.name}</strong>
             </div>
             <FxNodePresetDropdown chainId={props.chainId} nodeId={props.nodeId} />
           </div>
@@ -70,12 +67,12 @@ export function FxNodeHeader(props: FxNodeHeaderProps) {
             size={28}
           />
           <PadPilot.Button
-            class={`${styles["icon-action"]} ${styles["icon-action-danger"]}`.trim()}
+            class={moduleStyles["icon-action"]}
             data-testid={`node-remove-button-${props.chainId}-${props.nodeId}`}
             icon={X}
             onClick={() => actions.nodes.remove(props.chainId, props.nodeId)}
             tooltip="Remove node"
-            anchorClass={`${styles["icon-action-anchor"]} ${styles["icon-action-anchor-danger"]}`.trim()}
+            anchorClass={moduleStyles["icon-action-anchor-danger"]}
           />
         </div>
       </div>

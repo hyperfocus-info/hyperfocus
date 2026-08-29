@@ -1,6 +1,6 @@
 import { Show, splitProps, type JSX } from "solid-js";
 import { joinElementClasses as joinClasses } from "./element-helpers";
-import styles from "./preference-panel.module.css";
+import styles from "./preference-panel.stylex";
 
 export type PreferencePanelClassNames = {
   body?: string;
@@ -45,10 +45,10 @@ function PreferencePanelRoot(props: PreferencePanelProps) {
       <Show when={local.title || local.description}>
         <header class={joinClasses(styles.header, local.classNames?.header)}>
           <Show when={local.title}>
-            <h3>{local.title}</h3>
+            <h3 class={styles["header-h3"]}>{local.title}</h3>
           </Show>
           <Show when={local.description}>
-            <p>{local.description}</p>
+            <p class={styles["header-p"]}>{local.description}</p>
           </Show>
         </header>
       </Show>
@@ -67,9 +67,9 @@ function PreferencePanelSection(props: PreferencePanelSectionProps) {
       data-preference-section="true"
     >
       <header class={styles["section-header"]}>
-        <h4>{local.title}</h4>
+        <h4 class={styles["section-header-h4"]}>{local.title}</h4>
         <Show when={local.description}>
-          <p>{local.description}</p>
+          <p class={styles["section-header-p"]}>{local.description}</p>
         </Show>
       </header>
       {local.children}

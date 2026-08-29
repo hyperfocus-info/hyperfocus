@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { Trash2, Plus, Gamepad2 } from "lucide-solid";
 import { PadPilot } from "../padpilot/index";
-import styles from "./controller-preferences-modal.module.css";
+import styles from "./controller-preferences-modal.stylex";
 import { ControllerInputPreview } from "./controller-input-preview";
 import {
   CANONICAL_AXIS_LABELS,
@@ -247,8 +247,8 @@ export function ControllerPreferencesModal(props: ControllerPreferencesModalProp
                       <div class={styles["mapping-row"]}>
                         <div class={styles["mapping-row-header"]}>
                           <div class={styles["mapping-row-title"]}>
-                            <strong>Device {index() + 1}</strong>
-                            <span>{liveDevice()?.displayName || row.hardwareId || "No hardware assigned"}</span>
+                            <strong class={styles["mapping-row-title-strong"]}>Device {index() + 1}</strong>
+                            <span class={styles["mapping-row-title-span"]}>{liveDevice()?.displayName || row.hardwareId || "No hardware assigned"}</span>
                           </div>
                           <div class={styles["mapping-row-actions"]}>
                             <PadPilot.Button
@@ -360,8 +360,8 @@ export function ControllerPreferencesModal(props: ControllerPreferencesModalProp
               <For each={CANONICAL_BUTTON_LABELS}>
                 {(label, index) => (
                   <div class={styles["learn-item"]}>
-                    <strong>{label}</strong>
-                    <span>{bindingLabel(draftLayout().buttonBindings[index()]!)}</span>
+                    <strong class={styles["learn-item-strong"]}>{label}</strong>
+                    <span class={styles["learn-item-span"]}>{bindingLabel(draftLayout().buttonBindings[index()]!)}</span>
                     <div class={styles["learn-actions"]}>
                       <PadPilot.Button
                         variant={learnTarget()?.kind === "button" && learnTarget()?.index === index() ? "primary" : "secondary"}
@@ -381,8 +381,8 @@ export function ControllerPreferencesModal(props: ControllerPreferencesModalProp
               <For each={CANONICAL_AXIS_LABELS}>
                 {(label, index) => (
                   <div class={styles["learn-item"]}>
-                    <strong>{label}</strong>
-                    <span>
+                    <strong class={styles["learn-item-strong"]}>{label}</strong>
+                    <span class={styles["learn-item-span"]}>
                       Axis {draftLayout().axisBindings[index()]?.sourceIndex ?? 0}
                       {draftLayout().axisBindings[index()]?.inverted ? " (inverted)" : ""}
                     </span>

@@ -5,6 +5,7 @@ import h from "solid-js/h";
 import { Fragment } from "solid-js/h/jsx-runtime";
 
 mock.module("@stylexjs/stylex", () => {
+  let markerIndex = 0;
   const classNames = (...styles: Array<{ __stylexTestClass?: string } | false | null | undefined>) =>
     styles.flatMap((style) => style && style.__stylexTestClass ? [style.__stylexTestClass] : []).join(" ");
   const create = (definitions: Record<string, unknown>) => Object.fromEntries(
@@ -19,14 +20,23 @@ mock.module("@stylexjs/stylex", () => {
   const defineVars = (variables: Record<string, unknown>) => Object.fromEntries(
     Object.keys(variables).map((key) => [key, `--pad-pilot-${key}`])
   );
+  const defineMarker = () => ({ __stylexTestClass: `marker-${markerIndex += 1}` });
+  const conditionalKey = (relation: string, selector: string, marker: { __stylexTestClass: string }) =>
+    `@stylex-${relation} ${selector} ${marker.__stylexTestClass}`;
+  const when = {
+    ancestor: (selector: string, marker: { __stylexTestClass: string }) => conditionalKey("ancestor", selector, marker),
+    siblingBefore: (selector: string, marker: { __stylexTestClass: string }) => conditionalKey("sibling-before", selector, marker),
+  };
   const keyframes = () => "stylex-test-keyframes";
 
   return {
-    default: { create, attrs, props, defineVars, keyframes },
+    default: { create, attrs, props, defineVars, defineMarker, when, keyframes },
     create,
     attrs,
     props,
     defineVars,
+    defineMarker,
+    when,
     keyframes
   };
 });

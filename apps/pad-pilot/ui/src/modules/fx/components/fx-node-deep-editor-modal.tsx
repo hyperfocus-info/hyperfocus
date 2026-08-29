@@ -4,7 +4,7 @@ import { createChainAccessor, createNodeAccessor } from "../fx-live-accessors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { getNodeDefinition, resolveNodeConfig } from "../node-registry/registry";
 import { getNodeRenderers } from "../node-registry/renderer-registry";
-import styles from "./fx-node-deep-editor-modal.module.css";
+import styles from "./fx-node-deep-editor-modal.stylex";
 
 /** FxNodeDeepEditorModal renders the node-specific large-format modal editor. */
 export function FxNodeDeepEditorModal() {

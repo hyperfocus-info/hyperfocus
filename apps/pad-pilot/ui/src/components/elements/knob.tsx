@@ -2,7 +2,8 @@ import { JSX, Show, createMemo, createSignal, onCleanup, splitProps } from "soli
 import { Tooltip } from "./tooltip";
 import { type ElementSkin, resolveElementSkin, type TooltipPlacement } from "./element-skin";
 import { clamp } from "../../utils/math";
-import styles from "./knob.module.css";
+import styles from "./knob.stylex";
+import { labelTypographyClass } from "./element-typography.stylex";
 
 /**
  * Props for Knob.
@@ -323,8 +324,7 @@ export function Knob(props: KnobProps) {
             {...others}
             type={others.type ?? "button"}
             disabled={local.disabled}
-            class={`${styles.shell} ${local.class ?? ""}`.trim()}
-            classList={{ [styles["shell-dragging"]]: dragging(), [styles["shell-with-track"]]: local.showValueBar }}
+            class={`${styles.shell} ${dragging() ? styles["shell-dragging"] : ""} ${local.showValueBar ? styles["shell-with-track"] : ""} ${local.class ?? ""}`.trim()}
             role="slider"
             aria-label={(others["aria-label"] as string | undefined) ?? local.label ?? local.tooltip}
             aria-valuemin={local.min}
@@ -373,12 +373,12 @@ export function Knob(props: KnobProps) {
       </Show>
       <span class={styles.label}>{local.label ?? ""}</span>
       <Show when={!local.hideValue}>
-        <span class={`${styles["value-readout"]} pad-pilot-label`.trim()}>{currentValueText()}</span>
+        <span class={`${styles["value-readout"]} ${labelTypographyClass}`.trim()}>{currentValueText()}</span>
       </Show>
       <Show when={local.showRangeLabels}>
         <div class={styles["range-labels"]}>
-          <span class={`${styles["value-label"]} pad-pilot-label`.trim()}>{local.min}</span>
-          <span class={`${styles["value-label"]} pad-pilot-label`.trim()}>{local.max}</span>
+          <span class={`${styles["value-label"]} ${labelTypographyClass}`.trim()}>{local.min}</span>
+          <span class={`${styles["value-label"]} ${labelTypographyClass}`.trim()}>{local.max}</span>
         </div>
       </Show>
     </div>

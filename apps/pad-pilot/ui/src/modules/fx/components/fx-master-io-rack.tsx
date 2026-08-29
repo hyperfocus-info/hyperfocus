@@ -3,7 +3,7 @@ import { createMemo } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { getFxMasterMeters, getFxMasterState } from "../fx-module-selectors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "./fx-master-io-rack.module.css";
+import styles from "./fx-master-io-rack.stylex";
 
 /** FxMasterIoRack renders the strict Master I/O right rail with no GR meter. */
 export function FxMasterIoRack() {
@@ -15,7 +15,7 @@ export function FxMasterIoRack() {
   return (
     <aside class={styles.rack} data-testid="fx-master-io-rack">
       <div class={styles.header}>
-        <strong>Master I/O</strong>
+        <strong class={styles["header-strong"]}>Master I/O</strong>
       </div>
 
       <div class={styles["meter-row"]}>
@@ -85,6 +85,7 @@ export function FxMasterIoRack() {
 
       <div class={styles["compare-row"]}>
         <PadPilot.ToggleButton
+          class={styles["compare-row-child"]}
           data-testid="fx-dry-compare"
           icon={<Ear size={13} />}
           onClick={() => actions.audition.setDryCompare(!state.ui.dryCompare)}
@@ -94,6 +95,7 @@ export function FxMasterIoRack() {
           {state.ui.dryCompare ? "Processed" : "Dry A/B"}
         </PadPilot.ToggleButton>
         <PadPilot.Button
+          class={styles["compare-row-child"]}
           data-testid="fx-peak-match"
           icon={<Scale size={13} />}
           onClick={actions.master.matchOutputPeak}

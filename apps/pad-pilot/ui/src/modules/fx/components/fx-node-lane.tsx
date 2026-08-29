@@ -8,7 +8,7 @@ import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { FxNodeType, NODE_LIBRARY } from "../fx-chain-state";
 import { FxNodeCard } from "./fx-node-card";
 import { FxDragPreview } from "./fx-drag-preview";
-import styles from "../fx-module.module.css";
+import styles from "../fx-module.stylex";
 
 export type FxNodeLaneProps = {
   chainId: number;
@@ -85,6 +85,7 @@ export function FxNodeLane(props: FxNodeLaneProps) {
         </For>
         <div class={styles["node-add-card"]}>
           <PadPilot.SearchableCombobox
+            class={styles["node-add-card-child"]}
             emptyText="No FX nodes match."
             items={nodeItems()}
             onOpenChange={setAddFxOpen}

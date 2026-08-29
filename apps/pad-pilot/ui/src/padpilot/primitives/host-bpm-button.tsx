@@ -7,6 +7,8 @@ import { primitiveStyles as styles } from "./primitives.stylex";
 export interface HostBpmButtonProps {
   /** Tempo value sent to the PadPilot host bridge. */
   bpm: number;
+  /** Optional visual class applied to the underlying button. */
+  class?: string;
   /** Optional compact action label. */
   label?: string;
 }
@@ -19,7 +21,7 @@ function formatBpm(bpm: number) {
 export function HostBpmButton(props: HostBpmButtonProps) {
   return (
     <Button
-      class={stylex.props(styles.hostBpmButton).className}
+      class={`${stylex.props(styles.hostBpmButton).className ?? ""} ${props.class ?? ""}`.trim()}
       icon={Clock3}
       onClick={() => host.setTempo(props.bpm)}
       tooltip={`${props.label ?? "Set host tempo"}: ${formatBpm(props.bpm)}`}

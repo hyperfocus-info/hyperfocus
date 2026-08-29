@@ -9,7 +9,7 @@ import { DiagnosticsModal } from "./components/diagnostics-modal";
 import { ControllerPreferencesModal } from "./components/controller-preferences-modal";
 import { CreateModuleModal } from "./components/create-module-modal";
 import { GlobalSettingsDrawer } from "./components/global-settings-drawer";
-import marketplaceToastStyles from "./components/marketplace-toast-viewport.module.css";
+import marketplaceToastStyles from "./components/marketplace-toast-viewport.stylex";
 import { decodeFxChainStateBase64 } from "./modules/fx/fx-chain-state";
 import { loadPadPilotModule, MissingModuleView } from "./module-runtime";
 import { fxGraph } from "./padpilot/fx-capabilities";

@@ -5,7 +5,7 @@ import { createChainAccessor, createNodeAccessor } from "../fx-live-accessors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { getNodeDefinition, resolveNodeConfig } from "../node-registry/registry";
 import { getNodeRenderers } from "../node-registry/renderer-registry";
-import styles from "./fx-inline-node-editor.module.css";
+import styles from "./fx-inline-node-editor.stylex";
 
 export type FxInlineNodeEditorProps = {
   chainId: number;
@@ -29,7 +29,7 @@ export function FxInlineNodeEditor(props: FxInlineNodeEditorProps) {
       <section class={styles.editor} data-testid={`inline-node-editor-${props.chainId}-${props.nodeId}`}>
         <div class={styles["editor-header"]}>
           <div class={styles["editor-copy"]}>
-            <strong>{node()!.name}</strong>
+            <strong class={styles["editor-copy-strong"]}>{node()!.name}</strong>
           </div>
           <div class={styles["editor-actions"]}>
             <PadPilot.Button onClick={() => actions.nodes.openDeepEditor(props.chainId, props.nodeId)} tooltip="Open the deep editor modal">

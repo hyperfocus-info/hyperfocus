@@ -10,7 +10,7 @@ import { createMeterVisual, meterDbFromMix } from "../fx-visuals";
 import { FxInlineNodeEditor } from "./fx-inline-node-editor";
 import { FxNodeHeader } from "./fx-node-header";
 import { FxNodeRack } from "./fx-node-rack";
-import shellStyles from "../fx-console-shell.module.css";
+import shellStyles from "../fx-console-shell.stylex";
 
 export type FxNodeCardProps = {
   chainId: number;
@@ -93,15 +93,7 @@ export function FxNodeCard(props: FxNodeCardProps) {
           dragRef={dragBinding.ref}
           dragStyle={dragBinding.style()}
           header={<FxNodeHeader chainId={props.chainId} nodeId={props.nodeId} />}
-          class={shellStyles["node-card"]}
-          classList={{
-            [shellStyles["is-bypassed"]]: node()?.bypassed ?? false,
-            [shellStyles["is-muted"]]: node()?.muted ?? false,
-            [shellStyles["node-solo-ghosted"]]: soloState() === "ghosted",
-            [shellStyles["node-solo-active"]]: soloState() === "active",
-            [shellStyles["node-solo-darkened"]]: soloState() === "darkened",
-            [shellStyles["node-focused"]]: focused(),
-          }}
+          class={`${shellStyles["node-card"]} ${node()?.bypassed ? shellStyles["is-bypassed"] : ""} ${node()?.muted ? shellStyles["is-muted"] : ""} ${soloState() === "ghosted" ? shellStyles["node-solo-ghosted"] : ""} ${soloState() === "active" ? shellStyles["node-solo-active"] : ""} ${soloState() === "darkened" ? shellStyles["node-solo-darkened"] : ""} ${focused() ? shellStyles["node-focused"] : ""}`.trim()}
           data-testid={`node-card-${props.chainId}-${props.nodeId}`}
           isDragging={dragBinding.isActiveDraggable()}
           isPlaceholder={props.isPlaceholder}
@@ -151,4 +143,3 @@ export function FxNodeCard(props: FxNodeCardProps) {
     </Show>
   );
 }
-

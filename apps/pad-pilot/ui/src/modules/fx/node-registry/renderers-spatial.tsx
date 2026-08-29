@@ -2,7 +2,7 @@ import { For } from "solid-js";
 import { resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
 import type { AnyNodeConfig } from "./types";
-import styles from "../fx-node-registry.module.css";
+import styles from "../fx-node-registry.stylex";
 import { clampSeriesValue, renderControlGrid } from "./renderer-primitives";
 
 type DelayVisualizerShape = {
@@ -71,7 +71,7 @@ export function renderDelayNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Rack controls</strong>
-          <small>Time, feedback, and mix stay available while focused.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Time, feedback, and mix stay available while focused.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
@@ -160,14 +160,14 @@ export function renderStereoImagerNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Width</strong>
-          <small>Compact rack control with vectorscope feedback.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Compact rack control with vectorscope feedback.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Image shaping</strong>
-          <small>Bass mono crossover, stereo balance, and pan.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Bass mono crossover, stereo balance, and pan.</small>
         </div>
         {renderControlGrid(focusControls, config, updateControl)}
       </div>

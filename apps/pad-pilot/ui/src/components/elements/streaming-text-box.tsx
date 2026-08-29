@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, splitProps, type JSX } from "solid-js";
 import { ArrowDownToLine, Copy } from "lucide-solid";
 import { Button } from "./button";
-import styles from "./streaming-text-box.module.css";
+import styles from "./streaming-text-box.stylex";
 
 export type StreamingTextBoxProps = JSX.HTMLAttributes<HTMLDivElement> & {
   autoScroll?: boolean;

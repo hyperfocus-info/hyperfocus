@@ -3,7 +3,7 @@ import { FloatingLayer } from "./floating-layer";
 import { joinElementClasses as joinClasses } from "./element-helpers";
 import { filterSearchableComboboxItems, resolveSearchableComboboxItemId } from "./searchable-combobox-utils";
 import { Tooltip } from "./tooltip";
-import styles from "./searchable-combobox.module.css";
+import styles from "./searchable-combobox.stylex";
 
 /**
  * Shared item shape for searchable combobox options.
@@ -23,6 +23,7 @@ export type SearchableComboboxClassNames = {
   field?: string;
   input?: string;
   item?: string;
+  itemDescription?: string;
   itemMeta?: string;
   itemText?: string;
   list?: string;
@@ -330,8 +331,7 @@ export function SearchableCombobox(props: SearchableComboboxProps) {
                 <button
                   ref={(element) => itemRefs.set(item.id, element)}
                   type="button"
-                  class={joinClasses(styles.item, local.classNames?.item)}
-                  classList={{ [styles["is-active"]]: local.selectedId === item.id || activeId() === item.id }}
+                  class={joinClasses(styles.item, (local.selectedId === item.id || activeId() === item.id) ? styles["is-active"] : undefined, local.classNames?.item)}
                   disabled={local.disabled}
                   id={optionId(item.id)}
                   role="option"
@@ -346,7 +346,7 @@ export function SearchableCombobox(props: SearchableComboboxProps) {
                   <div class={joinClasses(styles["item-text"], local.classNames?.itemText)}>
                     <strong>{item.label}</strong>
                     <Show when={item.description}>
-                      <small>{item.description}</small>
+                      <small class={joinClasses(styles["item-text-small"], local.classNames?.itemDescription)}>{item.description}</small>
                     </Show>
                   </div>
                   <div class={joinClasses(styles["item-meta"], local.classNames?.itemMeta)}>

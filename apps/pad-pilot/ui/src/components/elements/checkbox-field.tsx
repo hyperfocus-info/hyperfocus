@@ -1,5 +1,5 @@
 import { Show, splitProps, type JSX } from "solid-js";
-import styles from "./field.module.css";
+import styles from "./field.stylex";
 
 export type CheckboxFieldProps = Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "children" | "type"> & {
   description?: string;
@@ -11,11 +11,11 @@ export function CheckboxField(props: CheckboxFieldProps) {
 
   return (
     <label class={`${styles["checkbox-row"]} ${local.class ?? ""}`.trim()}>
-      <input {...others} type="checkbox" />
+      <input {...others} class={styles["checkbox-row-input"]} type="checkbox" />
       <div class={styles["checkbox-copy"]}>
-        <strong>{local.label}</strong>
+        <strong class={styles["checkbox-copy-strong"]}>{local.label}</strong>
         <Show when={local.description}>
-          <small>{local.description}</small>
+          <small class={styles["checkbox-copy-small"]}>{local.description}</small>
         </Show>
       </div>
     </label>

@@ -22,13 +22,13 @@
 - Wired PadPilot into root workspaces, scripts, lockfile, release manifests, license coverage, docs, and fast verification.
 - Moved generic PadPilot-origin skills to repository scope, kept product-specific skills app-local, and rewrote Module/element workflows for shared UI plus StyleX.
 - Reused `@hyperfocus/ui` for viewport-safe floating behavior and migrated the first PadPilot primitive family to StyleX.
+- Migrated all 44 remaining PadPilot CSS Modules to colocated StyleX, including app chrome, shared elements, and factory Module surfaces.
 
 ## Remaining migration debt
 
 - Port the editor's remaining imperative Atlas, Tilemap, Post FX, Sequence, Diagnostics, and Production Lab lists/forms from `client.ts` into Solid feature components without routing canvas, WebGL, SVG-path generation, or frame-loop work through Solid.
 - Move harness-specific workbench and terminal session composition onto the shared presentation surfaces while keeping transport and process ownership in the harness.
 - Publish package/release signing identities and settle license owner/reporting details.
-- Finish remaining PadPilot branded/domain CSS Module zipper slices; see [StyleX migration](../pad-pilot/tasks/finish-stylex-migration.md).
 - Run unavailable PadPilot native/validator/FL Studio release gates from a fully provisioned Windows host before first monorepo release.
 
 New UI must use colocated StyleX. Global CSS is limited to document defaults and third-party vendor boundaries that cannot be expressed as component styles.

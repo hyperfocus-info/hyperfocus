@@ -84,8 +84,7 @@ export function Tooltip(props: TooltipProps) {
       <span
         aria-describedby={tooltipId}
         ref={anchorRef}
-        {...stylex.attrs(styles.anchor)}
-        classList={{ [props.class ?? ""]: Boolean(props.class) }}
+        class={`${stylex.attrs(styles.anchor).class} ${props.class ?? ""}`.trim()}
         data-placement={props.placement ?? "top"}
         data-testid="tooltip-container"
         onMouseEnter={triggerBindings.onMouseEnter}

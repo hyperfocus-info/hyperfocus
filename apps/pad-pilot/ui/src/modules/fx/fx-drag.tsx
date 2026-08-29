@@ -1,7 +1,7 @@
 import { createDraggable, createDroppable, maybeTransformStyle } from "@thisbeyond/solid-dnd";
 import { JSX } from "solid-js";
 import { CARD_DRAG_INTERACTIVE_SELECTOR, shouldStartCardDrag } from "./fx-card-drag";
-import styles from "./fx-console-shell.module.css";
+import styles from "./fx-console-shell.stylex";
 
 export function bindCardDraggable(
   draggable: ReturnType<typeof createDraggable>,

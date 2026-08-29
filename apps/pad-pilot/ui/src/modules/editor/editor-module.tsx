@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
 import { PadPilot } from "../../padpilot/index";
 import { createProducerActions } from "../../padpilot/producer-actions";
-import styles from "./editor-module.module.css";
+import styles from "./editor-module.stylex";
 
 type MappingItem = {
   control: string;

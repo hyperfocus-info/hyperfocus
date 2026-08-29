@@ -1,7 +1,7 @@
 import { For, Show, createSignal, onCleanup } from "solid-js";
 import { Button } from "../../../components/elements/button";
 import { extractFileUploadSelection, FileUploadInput } from "../../../components/elements/file-upload-dropzone";
-import styles from "../recut-module.module.css";
+import styles from "../recut-module.stylex";
 import { RecutAnalysisMode, RecutBpmSource } from "../recut-state";
 import { PadPilot } from "../../../padpilot/index";
 import { useRecutModuleStore } from "../recut-module-store";
@@ -247,10 +247,7 @@ export function WaveformDisplay() {
   const renderWaveformEditor = () => (
     <div
       ref={waveformRef}
-      class={styles["waveform-canvas"]}
-      classList={{
-        [styles["is-file-dragging"]]: draggingFile(),
-      }}
+      class={`${styles["waveform-canvas"]} ${draggingFile() ? styles["is-file-dragging"] : ""}`.trim()}
       role="group"
       tabindex={store.derived.loaded() ? 0 : -1}
       aria-label="Recut waveform editor"
@@ -299,7 +296,7 @@ export function WaveformDisplay() {
         accept=".wav,.aif,.aiff,.flac,.mp3,.ogg,audio/*"
         onSelection={importSelection}
       />
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Recut waveform and slice view">
+      <svg class={styles["waveform-canvas-svg"]} viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Recut waveform and slice view">
         <polyline
           class={styles["waveform-line"]}
           points={store.derived.waveformPeaks().map((peak, index) => {
@@ -323,10 +320,7 @@ export function WaveformDisplay() {
             <>
               <Button
                 appearance="unstyled"
-                class={styles["slice-region"]}
-                classList={{
-                  [styles["is-selected-range"]]: index() === store.derived.selectedMarkerIndex(),
-                }}
+                class={`${styles["slice-region"]} ${index() === store.derived.selectedMarkerIndex() ? styles["is-selected-range"] : ""}`.trim()}
                 style={{
                   left: `${markerPercent(marker.startFrame, totalFrames())}%`,
                   width: `${Math.max(0.5, markerPercent(marker.endFrame, totalFrames()) - markerPercent(marker.startFrame, totalFrames()))}%`,
@@ -345,10 +339,7 @@ export function WaveformDisplay() {
               </Button>
               <Button
                 appearance="unstyled"
-                class={styles["slice-handle"]}
-                classList={{
-                  [styles["is-selected"]]: index() === store.derived.selectedMarkerIndex(),
-                }}
+                class={`${styles["slice-handle"]} ${index() === store.derived.selectedMarkerIndex() ? styles["is-selected"] : ""}`.trim()}
                 style={{ left: `${markerPercent(marker.startFrame, totalFrames())}%` }}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -384,10 +375,7 @@ export function WaveformDisplay() {
           <span>{analysisBusyLabel()}</span>
           <div class={styles["analysis-meter"]}>
             <div
-              class={styles["analysis-meter-fill"]}
-              classList={{
-                [styles["is-indeterminate"]]: !(store.derived.analysisProgress() > 0 && store.derived.analysisProgress() < 1),
-              }}
+              class={`${styles["analysis-meter-fill"]} ${!(store.derived.analysisProgress() > 0 && store.derived.analysisProgress() < 1) ? styles["is-indeterminate"] : ""}`.trim()}
               style={{
                 width: store.derived.analysisProgress() > 0 && store.derived.analysisProgress() < 1
                   ? `${Math.max(8, Math.round(store.derived.analysisProgress() * 100))}%`
@@ -504,10 +492,10 @@ export function WaveformDisplay() {
       <Show when={selectedMarker()}>
         {(marker) => (
           <div class={styles["marker-readout"]}>
-            <span class={styles["section-label"]}>Selected Chop</span>
+            <span class={`${styles["section-label"]} ${styles["marker-readout-span"]}`.trim()}>Selected Chop</span>
             <strong>Start {marker().startFrame}</strong>
-            <span>End {marker().endFrame}</span>
-            <span>Pad {marker().padIndex + 1}</span>
+            <span class={styles["marker-readout-span"]}>End {marker().endFrame}</span>
+            <span class={styles["marker-readout-span"]}>Pad {marker().padIndex + 1}</span>
           </div>
         )}
       </Show>

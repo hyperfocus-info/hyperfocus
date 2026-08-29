@@ -2,12 +2,19 @@ import { Show, createMemo, createSignal, onCleanup, splitProps, type JSX } from 
 import { Tooltip } from "./tooltip";
 import { type ElementSkin, resolveElementSkin, type TooltipPlacement } from "./element-skin";
 import { clamp } from "../../utils/math";
-import styles from "./slider.module.css";
+import styles from "./slider.stylex";
 
 /**
  * Props for Slider.
  */
 export type SliderProps = Omit<JSX.HTMLAttributes<HTMLDivElement>, "onChange"> & {
+  classNames?: {
+    fill?: string;
+    label?: string;
+    root?: string;
+    thumb?: string;
+    tooltip?: string;
+  };
   /** Minimum slider value. */
   min: number;
   /** Maximum slider value. */
@@ -52,6 +59,7 @@ export function Slider(props: SliderProps) {
     }
   };
   const [local, others] = splitProps(props, [
+    "classNames",
     "class",
     "disabled",
     "height",
@@ -270,16 +278,12 @@ export function Slider(props: SliderProps) {
   });
 
   return (
-    <div class={styles.root}>
-      <Tooltip content={local.tooltip} placement={local.tooltipPlacement}>
+    <div class={`${styles.root} ${local.classNames?.root ?? ""}`.trim()}>
+      <Tooltip class={local.classNames?.tooltip} content={local.tooltip} placement={local.tooltipPlacement}>
         <div
           {...others}
           ref={trackRef}
-          class={`${styles.track} ${local.class ?? ""}`.trim()}
-          classList={{
-            [styles.vertical]: orientation() === "vertical",
-            [styles.horizontal]: orientation() === "horizontal",
-          }}
+          class={`${styles.track} ${orientation() === "vertical" ? styles.vertical : styles.horizontal} ${local.class ?? ""}`.trim()}
           role="slider"
           tabindex={local.disabled ? -1 : 0}
           aria-disabled={local.disabled ? "true" : undefined}
@@ -309,11 +313,11 @@ export function Slider(props: SliderProps) {
           <Show when={skinState()}>
             {(skinItem) => <img class={styles["skin-image"]} src={skinItem().src} alt={skinItem().alt ?? ""} />}
           </Show>
-          <span class={styles.fill} />
-          <span class={styles.thumb} />
+          <span class={`${styles.fill} ${local.classNames?.fill ?? ""}`.trim()} />
+          <span class={`${styles.thumb} ${local.classNames?.thumb ?? ""}`.trim()} />
         </div>
       </Tooltip>
-      <span class={styles.label}>{local.label ?? ""}</span>
+      <span class={`${styles.label} ${local.classNames?.label ?? ""}`.trim()}>{local.label ?? ""}</span>
     </div>
   );
 }

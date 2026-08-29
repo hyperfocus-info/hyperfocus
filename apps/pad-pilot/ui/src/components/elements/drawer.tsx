@@ -2,7 +2,7 @@ import { Show, createEffect, onCleanup, splitProps, type Accessor, type JSX } fr
 import { XIcon } from "lucide-solid";
 import { Button } from "./button";
 import { joinElementClasses as joinClasses } from "./element-helpers";
-import styles from "./drawer.module.css";
+import styles from "./drawer.stylex";
 
 export type DrawerClassNames = {
   body?: string;
@@ -133,10 +133,10 @@ export function Drawer(props: DrawerProps) {
             <header class={joinClasses(styles.header, local.classNames?.header)}>
               <div class={styles["header-copy"]}>
                 <Show when={local.title}>
-                  <h3>{local.title}</h3>
+                  <h3 class={styles["header-copy-h3"]}>{local.title}</h3>
                 </Show>
                 <Show when={local.description}>
-                  <p>{local.description}</p>
+                  <p class={styles["header-copy-p"]}>{local.description}</p>
                 </Show>
               </div>
               <Show when={local.closeable !== false}>

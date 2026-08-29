@@ -1,6 +1,6 @@
 import { resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
-import styles from "../fx-node-registry.module.css";
+import styles from "../fx-node-registry.stylex";
 import { renderControlGrid, renderMeterFill, renderSeries, renderSignedSeries } from "./renderer-primitives";
 
 type CompressorConfigShape = {
@@ -67,14 +67,14 @@ export function renderCompressorNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Rack controls</strong>
-          <small>Threshold, ratio, and makeup remain available while focused.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Threshold, ratio, and makeup remain available while focused.</small>
         </div>
         {renderControlGrid(primaryControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Timing</strong>
-          <small>Attack and release shape the detector response.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Attack and release shape the detector response.</small>
         </div>
         {renderControlGrid(timingControls, config, updateControl)}
       </div>
@@ -170,14 +170,14 @@ export function renderNoiseGateNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Rack controls</strong>
-          <small>Threshold and range stay mirrored into the compact card.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Threshold and range stay mirrored into the compact card.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Timing</strong>
-          <small>Attack, hold, and release define the open/close contour.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Attack, hold, and release define the open/close contour.</small>
         </div>
         {renderControlGrid(timingControls, config, updateControl)}
       </div>

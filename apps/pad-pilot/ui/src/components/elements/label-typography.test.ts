@@ -5,28 +5,27 @@ import { resolve } from "node:path";
 const read = (relativePath: string) => readFileSync(resolve(import.meta.dir, relativePath), "utf8");
 
 describe("PadPilot dynamic label typography", () => {
-  it("defines the shared pad-pilot-label utility with tabular numerals", () => {
-    const css = read("./element-typography.module.css");
+  it("defines shared label typography with tabular numerals", () => {
+    const stylex = read("./element-typography.stylex.ts");
 
-    expect(css).toContain(":global(.pad-pilot-label)");
-    expect(css).toContain("font-variant-numeric: tabular-nums;");
-    expect(css).toContain('font-feature-settings: "tnum";');
+    expect(stylex).toContain('fontVariantNumeric: "tabular-nums"');
+    expect(stylex).toContain("fontFeatureSettings: '\"tnum\"'");
   });
 
   it("applies the shared utility class to frequently changing element labels", () => {
     const knob = read("./knob.tsx");
     const meter = read("./meter.tsx");
 
-    expect(knob).toContain('pad-pilot-label');
-    expect(meter).toContain('pad-pilot-label');
+    expect(knob).toContain("labelTypographyClass");
+    expect(meter).toContain("labelTypographyClass");
   });
 
   it("does not force uppercase in element visuals that render dynamic labels", () => {
-    const waveformCss = read("./waveform-view.module.css");
-    const dropzoneCss = read("./file-upload-dropzone.module.css");
+    const waveformCss = read("./waveform-view.stylex.ts");
+    const dropzoneCss = read("./file-upload-dropzone.stylex.ts");
 
-    expect(waveformCss).not.toContain("text-transform: uppercase;");
-    expect(dropzoneCss).not.toContain("text-transform: uppercase;");
+    expect(waveformCss).not.toContain("textTransform: \"uppercase\"");
+    expect(dropzoneCss).not.toContain("textTransform: \"uppercase\"");
   });
 });
 

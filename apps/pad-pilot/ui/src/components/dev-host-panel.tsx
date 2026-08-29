@@ -4,7 +4,7 @@ import { getDevHostRuntime } from "../dev-host/runtime";
 import type { DevHostDebugState, DevSignalProfile } from "../dev-host/types";
 import { PadPilot } from "../padpilot/index";
 import { isPadPilotDevtoolsEnabled } from "../runtime-flags";
-import styles from "./dev-host-panel.module.css";
+import styles from "./dev-host-panel.stylex";
 
 const PROFILE_OPTIONS: DevSignalProfile[] = ["idle", "steady-tone", "pulsed-groove", "noise-burst", "sweep"];
 const DEV_HOST_PANEL_OPEN_KEY = "padpilot.dev-host.panel-open";
@@ -53,12 +53,12 @@ export function DevHostPanel() {
           <div class={styles["dev-host-body"]}>
             <div class={styles["dev-host-status-grid"]}>
               <div class={styles["dev-host-status-card"]}>
-                <span>Browser gamepad</span>
-                <strong>{state().browserGamepadSupported ? "supported" : "unavailable"}</strong>
+                <span class={styles["dev-host-status-card-span"]}>Browser gamepad</span>
+                <strong class={styles["dev-host-status-card-strong"]}>{state().browserGamepadSupported ? "supported" : "unavailable"}</strong>
               </div>
               <div class={styles["dev-host-status-card"]}>
-                <span>Controllers</span>
-                <strong>{`${state().connectedControllerCount} connected`}</strong>
+                <span class={styles["dev-host-status-card-span"]}>Controllers</span>
+                <strong class={styles["dev-host-status-card-strong"]}>{`${state().connectedControllerCount} connected`}</strong>
               </div>
             </div>
             <div class={styles["dev-host-row"]}>

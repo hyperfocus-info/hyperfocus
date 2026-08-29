@@ -61,15 +61,14 @@ export function Toggle(props: ToggleProps) {
           {...others}
           type={others.type ?? "button"}
           disabled={local.disabled}
-          {...stylex.attrs(
+          class={`${stylex.attrs(
             styles.button,
             styles.buttonInline,
             styles.toggle,
             !local.disabled && styles.buttonInteractive,
             local.value && styles.toggleOn,
             local.disabled && styles.buttonDisabled,
-          )}
-          classList={{ [local.class ?? ""]: Boolean(local.class) }}
+          ).class} ${local.class ?? ""}`.trim()}
           aria-label={(others["aria-label"] as string | undefined) ?? local.label ?? local.tooltip}
           aria-pressed={local.value}
           onClick={(event) => {

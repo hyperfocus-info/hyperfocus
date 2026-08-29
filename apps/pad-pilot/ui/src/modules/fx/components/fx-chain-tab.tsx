@@ -3,7 +3,7 @@ import { Show, createMemo } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { createChainAccessor } from "../fx-live-accessors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "./fx-chain-tabs.module.css";
+import styles from "./fx-chain-tabs.stylex";
 
 export type FxChainTabProps = {
   chainId: number;
@@ -23,7 +23,7 @@ export function FxChainTab(props: FxChainTabProps) {
 
   return (
     <Show when={chain()}>
-      <section class={styles["tab-column"]} classList={{ [styles["is-active"]]: active() }} data-testid={`chain-tab-${props.chainId}`}>
+      <section class={`${styles["tab-column"]} ${active() ? styles["is-active"] : ""}`.trim()} data-testid={`chain-tab-${props.chainId}`}>
         <PadPilot.Tab
           class={styles.tab}
           selected={active()}
@@ -45,8 +45,7 @@ export function FxChainTab(props: FxChainTabProps) {
           <div class={styles["tab-controls"]} data-testid={`chain-tab-controls-${props.chainId}`}>
             <PadPilot.ToggleButton
               type="button"
-              class={styles["tab-toggle"]}
-              classList={{ [styles["is-pressed"]]: chain()?.muted ?? false }}
+              class={`${styles["tab-toggle"]} ${chain()?.muted ? styles["is-pressed"] : ""}`.trim()}
               data-testid={`chain-tab-mute-${props.chainId}`}
               icon={<VolumeX size={12} />}
               value={chain()?.muted ?? false}
@@ -56,8 +55,7 @@ export function FxChainTab(props: FxChainTabProps) {
             />
             <PadPilot.ToggleButton
               type="button"
-              class={styles["tab-toggle"]}
-              classList={{ [styles["is-pressed"]]: chain()?.solo ?? false }}
+              class={`${styles["tab-toggle"]} ${chain()?.solo ? styles["is-pressed"] : ""}`.trim()}
               data-testid={`chain-tab-solo-${props.chainId}`}
               icon={<Headphones size={12} />}
               value={chain()?.solo ?? false}

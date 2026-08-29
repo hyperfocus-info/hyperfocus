@@ -1,7 +1,7 @@
 import { For, Show } from "solid-js";
 import { Download, Minus, Plus, PowerIcon, RotateCcw, Save } from "lucide-solid";
 import { NoteHeatmap } from "../../components/elements/note-heatmap";
-import styles from "./analyzer-module.module.css";
+import styles from "./analyzer-module.stylex";
 import { AnalyzerModuleStoreProvider, useAnalyzerModuleStore } from "./analyzer-module-store";
 import { PadPilot } from "../../padpilot/index";
 
@@ -20,7 +20,7 @@ function AnalyzerModuleView() {
   return (
     <section class={styles["module-root"]}>
       <header class={styles.brand}>
-        <h2>ANALYZER</h2>
+        <h2 class={styles["brand-h2"]}>ANALYZER</h2>
       </header>
 
       <div class={styles.console}>
@@ -40,7 +40,7 @@ function AnalyzerModuleView() {
               <Show when={store.derived.reanalyzing()}>
                 <span class={styles["analysis-chip"]}>Analyzing...</span>
               </Show>
-              <strong>{store.derived.detectedKeyLabel()}</strong>
+              <strong class={styles["key-banner-strong"]}>{store.derived.detectedKeyLabel()}</strong>
               <Show when={!store.derived.reanalyzing() && store.derived.alternateMatchLabels().length > 0}>
                 <div class={styles.alternates}>
                   <For each={store.derived.alternateMatchLabels()}>
@@ -162,7 +162,7 @@ function AnalyzerModuleView() {
             <section class={styles["review-panel"]} aria-label="Detected note corrections">
               <div class={styles["review-heading"]}>
                 <strong>Review notes</strong>
-                <span>Lowest confidence first</span>
+                <span class={styles["review-heading-span"]}>Lowest confidence first</span>
               </div>
               <div class={styles["review-list"]}>
                 <For each={store.derived.reviewEvents()}>
@@ -170,23 +170,26 @@ function AnalyzerModuleView() {
                     <div class={styles["review-row"]}>
                       <div class={styles["review-note"]}>
                         <strong>{event.noteLabel}</strong>
-                        <span>{event.confidenceLabel}</span>
+                        <span class={styles["review-note-span"]}>{event.confidenceLabel}</span>
                         <Show when={event.corrected}>
-                          <small>Detected {event.detectedNoteLabel}</small>
+                          <small class={styles["review-note-small"]}>Detected {event.detectedNoteLabel}</small>
                         </Show>
                       </div>
                       <div class={styles["review-actions"]}>
                         <PadPilot.Button
+                          class={styles["review-actions-button"]}
                           icon={<Minus size={14} />}
                           tooltip={`Lower ${event.noteLabel} one semitone`}
                           onClick={() => store.actions.correctNote(event.eventId, event.midiNote - 1)}
                         />
                         <PadPilot.Button
+                          class={styles["review-actions-button"]}
                           icon={<Plus size={14} />}
                           tooltip={`Raise ${event.noteLabel} one semitone`}
                           onClick={() => store.actions.correctNote(event.eventId, event.midiNote + 1)}
                         />
                         <PadPilot.Button
+                          class={styles["review-actions-button"]}
                           disabled={!event.corrected}
                           icon={<RotateCcw size={14} />}
                           tooltip={`Reset ${event.noteLabel} to detected pitch`}

@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js";
-import styles from "./envelope-visualizer.module.css";
+import styles from "./envelope-visualizer.stylex";
 
 /**
  * Props for EnvelopeVisualizer.

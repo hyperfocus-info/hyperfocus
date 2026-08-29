@@ -2,7 +2,7 @@ import type { NodeVisualizerFrame } from "../../../proto/generated/fx-chain-pb";
 import { resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
 import type { AnyNodeConfig } from "./types";
-import styles from "../fx-node-registry.module.css";
+import styles from "../fx-node-registry.stylex";
 import { clampSeriesValue, renderControlGrid, renderOrb, renderScalarRows, renderSeries } from "./renderer-primitives";
 
 type TapeSaturationConfigShape = {
@@ -57,14 +57,14 @@ export function renderTapeSaturationNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Drive stage</strong>
-          <small>Compact drive and warmth controls.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Compact drive and warmth controls.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Tape character</strong>
-          <small>Speed, wow/flutter, hysteresis, and bias.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Speed, wow/flutter, hysteresis, and bias.</small>
         </div>
         {renderControlGrid(focusControls, config, updateControl)}
       </div>
@@ -110,14 +110,14 @@ export function renderBitcrusherNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Bit depth</strong>
-          <small>Bits and downsample set the rack macro.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Bits and downsample set the rack macro.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Texture cleanup</strong>
-          <small>Jitter, post-filter, and wet/dry blend.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Jitter, post-filter, and wet/dry blend.</small>
         </div>
         {renderControlGrid(focusControls, config, updateControl)}
       </div>
@@ -169,14 +169,14 @@ export function renderExciterNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Drive</strong>
-          <small>Harmonic drive and mix define the rack behavior.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Harmonic drive and mix define the rack behavior.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Harmonic balance</strong>
-          <small>Target band and odd/even weighting.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Target band and odd/even weighting.</small>
         </div>
         {renderControlGrid(focusControls, config, updateControl)}
       </div>
@@ -221,14 +221,14 @@ export function renderChorusNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Motion</strong>
-          <small>Rate and depth control the chorus sweep.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Rate and depth control the chorus sweep.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Delay field</strong>
-          <small>Width, delay, and feedback shape the chorus.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Width, delay, and feedback shape the chorus.</small>
         </div>
         {renderControlGrid(focusControls, config, updateControl)}
       </div>

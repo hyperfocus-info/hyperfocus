@@ -13,7 +13,7 @@ import {
   clampTimingSyncDivisionIndex,
   getTimingSyncLabel,
 } from "../timing-sync";
-import styles from "../fx-node-registry.module.css";
+import styles from "../fx-node-registry.stylex";
 
 export function resolveFxControls<TConfig>(
   controls: readonly FxNodeControlDefinition<TConfig>[],
@@ -109,9 +109,8 @@ export function renderFxControlField<TConfig>(
                 size={size}
               />
               <ToggleButton
-                class={styles["timing-sync-toggle"]}
+                class={`${styles["timing-sync-toggle"]} ${syncEnabled() ? styles["timing-sync-toggle-on"] : ""}`.trim()}
                 variant="ghost"
-                classList={{ [styles["timing-sync-toggle-on"]]: syncEnabled() }}
                 value={syncEnabled()}
                 data-no-drag
                 onClick={() => {

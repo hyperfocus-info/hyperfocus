@@ -2,7 +2,6 @@ import * as stylex from "@stylexjs/stylex";
 
 export const primitiveStyles = stylex.create({
   hostBpmButton: {
-    background: "var(--pp-midi-bpm-bg, linear-gradient(180deg, rgba(33, 55, 62, 0.95), rgba(9, 18, 28, 0.98)), linear-gradient(90deg, rgba(92, 215, 177, 0.16), transparent 68%))",
     padding: 0,
     borderColor: {
       default: "var(--pp-midi-bpm-border, rgba(125, 214, 190, 0.46))",
@@ -11,6 +10,8 @@ export const primitiveStyles = stylex.create({
     },
     borderRadius: "8px",
     transition: "border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease",
+    "backgroundColor": "var(--pp-midi-bpm-bg, rgba(9, 18, 28, 0.98))",
+    "backgroundImage": "var(--pp-midi-bpm-background-image, linear-gradient(180deg, rgba(33, 55, 62, 0.95), rgba(9, 18, 28, 0.98)), linear-gradient(90deg, rgba(92, 215, 177, 0.16), transparent 68%))",
     boxShadow: {
       default: "inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 22px rgba(0, 0, 0, 0.24)",
       ":focus-visible": "var(--pp-midi-bpm-hover-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 0 0 2px rgba(95, 225, 184, 0.1), 0 14px 26px rgba(0, 0, 0, 0.3))",
@@ -23,7 +24,6 @@ export const primitiveStyles = stylex.create({
     width: "42px",
   },
   midiDragBlock: {
-    background: "var(--pp-midi-card-bg, linear-gradient(180deg, rgba(18, 32, 44, 0.98), rgba(8, 15, 23, 0.98)), linear-gradient(135deg, rgba(86, 187, 235, 0.12), rgba(245, 203, 102, 0.08)))",
     padding: 'var(--pp-midi-card-padding,14px)',
     borderColor: {
       default: "var(--pp-midi-card-border, rgba(113, 164, 201, 0.34))",
@@ -36,6 +36,8 @@ export const primitiveStyles = stylex.create({
     gap: "var(--pp-midi-card-gap, 12px)",
     overflow: "hidden",
     transition: "border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease",
+    "backgroundColor": "var(--pp-midi-card-bg, rgba(8, 15, 23, 0.98))",
+    "backgroundImage": "var(--pp-midi-card-background-image, linear-gradient(180deg, rgba(18, 32, 44, 0.98), rgba(8, 15, 23, 0.98)), linear-gradient(135deg, rgba(86, 187, 235, 0.12), rgba(245, 203, 102, 0.08)))",
     boxShadow: {
       default: null,
       ":focus-visible": "var(--pp-midi-card-hover-shadow, 0 0 0 2px rgba(107, 207, 239, 0.1), 0 14px 28px rgba(0, 0, 0, 0.28))",
@@ -77,17 +79,24 @@ export const primitiveStyles = stylex.create({
   titleStrong: { overflow: "hidden", fontSize: "0.98rem", lineHeight: 1.2, textOverflow: "ellipsis", whiteSpace: "nowrap" },
   titleSmall: { color: "var(--pp-midi-card-muted, rgba(202, 224, 239, 0.7))", fontSize: "0.74rem", lineHeight: 1.35 },
   indicators: { gap: "5px", display: "flex", },
-  light: { background: "var(--pp-midi-light-off, rgba(87, 126, 154, 0.6))", borderRadius: "999px", boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)", height: "8px", width: "8px", },
-  lightActive: { background: "var(--pp-midi-light-on, #8ef0c8)", boxShadow: "0 0 12px var(--pp-midi-light-glow, rgba(142, 240, 200, 0.42))" },
+  light: { borderRadius: "999px",
+ "backgroundColor": "var(--pp-midi-light-off, rgba(87, 126, 154, 0.6))",
+  "backgroundImage": "none",
+ boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.08)",
+ height: "8px",
+ width: "8px", },
+  lightActive: { "backgroundColor": "var(--pp-midi-light-on, #8ef0c8)",
+  "backgroundImage": "none", boxShadow: "0 0 12px var(--pp-midi-light-glow, rgba(142, 240, 200, 0.42))" },
   markers: { gap: "var(--pp-midi-marker-gap, 5px)", display: "grid", gridTemplateColumns: "repeat(8, minmax(0, 1fr))", },
   marker: {
-    background: "var(--pp-midi-marker-bg, rgba(7, 13, 21, 0.52))",
     borderColor: "var(--pp-midi-marker-border, rgba(125, 168, 198, 0.22))",
     borderRadius: "6px",
     borderStyle: "solid",
     borderWidth: "1px",
     alignItems: "center",
     aspectRatio: "1",
+    "backgroundColor": "var(--pp-midi-marker-bg, rgba(7, 13, 21, 0.52))",
+    "backgroundImage": "none",
     color: "var(--pp-midi-marker-color, rgba(214, 229, 241, 0.7))",
     display: "flex",
     fontSize: "0.66rem",
@@ -95,5 +104,8 @@ export const primitiveStyles = stylex.create({
     justifyContent: "center",
     minWidth: 0,
   },
-  markerHot: { background: "var(--pp-midi-marker-hot-bg, rgba(247, 202, 94, 0.11))", borderColor: "var(--pp-midi-marker-hot-border, rgba(247, 202, 94, 0.52))", color: "var(--pp-midi-marker-hot-color, #ffe0a0)", },
+  markerHot: { borderColor: "var(--pp-midi-marker-hot-border, rgba(247, 202, 94, 0.52))",
+ "backgroundColor": "var(--pp-midi-marker-hot-bg, rgba(247, 202, 94, 0.11))",
+  "backgroundImage": "none",
+ color: "var(--pp-midi-marker-hot-color, #ffe0a0)", },
 });

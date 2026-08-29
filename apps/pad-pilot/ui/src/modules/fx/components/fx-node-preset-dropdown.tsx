@@ -3,7 +3,7 @@ import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { createChainAccessor, createNodeAccessor } from "../fx-live-accessors";
 import { type SearchableComboboxItem } from "../../../padpilot/types";
 import { PadPilot } from "../../../padpilot/index";
-import styles from "../fx-node-registry.module.css";
+import styles from "../fx-node-registry.stylex";
 
 export type FxNodePresetDropdownProps = {
   chainId: number;
@@ -36,10 +36,10 @@ export function FxNodePresetDropdown(props: FxNodePresetDropdownProps) {
           field: styles["preset-field"],
           input: styles["preset-input"],
           item: styles["preset-item"],
-          itemMeta: styles["preset-item-meta"],
+          itemDescription: styles["preset-item-text-small"],
           itemText: styles["preset-item-text"],
           list: styles["preset-list"],
-          root: styles["preset-root"],
+          root: `${styles["preset-root"]} ${styles["preset-shell-div"]}`.trim(),
           searchIcon: styles["preset-search-icon"],
           toggle: styles["preset-toggle"],
         }}
@@ -56,4 +56,3 @@ export function FxNodePresetDropdown(props: FxNodePresetDropdownProps) {
     </div>
   );
 }
-

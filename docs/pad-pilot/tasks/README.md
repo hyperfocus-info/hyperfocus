@@ -3,7 +3,6 @@
 Owned long-term PadPilot work. Each task should name status, owner, exit criteria,
 and deadline where an exception is time-bound.
 
-- [StyleX migration](finish-stylex-migration.md)
 - [Imported source decomposition](decompose-imported-source.md)
 - [External Module UI sandbox](sandbox-external-module-ui.md)
 - [Marketplace admission control](marketplace-distributed-admission-control.md)

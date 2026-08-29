@@ -10,6 +10,8 @@ export type DropdownOption = { value: string; label: string };
  * Props for Dropdown.
  */
 export type DropdownProps = {
+  /** Optional class names applied to the label shell. */
+  class?: string;
   /** Currently selected option value */
   value: string;
   /** Optional text label shown above the select */
@@ -25,7 +27,7 @@ export type DropdownProps = {
  */
 export function Dropdown(props: DropdownProps) {
   return (
-    <label {...stylex.attrs(styles.label)}>
+    <label class={`${stylex.attrs(styles.label).class} ${props.class ?? ""}`.trim()}>
       <span>{props.label ?? ""}</span>
       <select
         {...stylex.attrs(styles.select)}

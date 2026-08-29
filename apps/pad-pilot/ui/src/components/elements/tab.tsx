@@ -1,6 +1,6 @@
 import { splitProps, type JSX } from "solid-js";
 import { Button, type ButtonProps } from "./button";
-import styles from "./tab.module.css";
+import styles from "./tab.stylex";
 
 export type TabListProps = JSX.HTMLAttributes<HTMLDivElement> & {
   ariaLabel?: string;

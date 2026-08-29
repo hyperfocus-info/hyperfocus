@@ -3,7 +3,7 @@ import { createEffect, createSignal, Show } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { MAX_COMPACT_FX_PRESET_CODE_CHARS } from "../fx-compact-preset";
 import { useFxModuleActions } from "../fx-module-store";
-import styles from "../fx-module.module.css";
+import styles from "../fx-module.stylex";
 
 export type FxCompactPresetModalProps = {
   /** Whether the controlled compact-Preset dialog is visible. */
@@ -52,6 +52,7 @@ export function FxCompactPresetModal(props: FxCompactPresetModalProps) {
     >
       <div class={styles["compact-preset-form"]}>
         <PadPilot.TextAreaField
+          controlClass={styles["compact-preset-form-textarea"]}
           autocomplete="off"
           description="Applying is undoable and syncs through canonical host state. Use Save New afterward to add it to your preset library."
           label="Compressed preset code"

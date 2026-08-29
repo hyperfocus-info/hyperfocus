@@ -1,7 +1,8 @@
 import { Show, splitProps, type JSX } from "solid-js";
 import { XIcon } from "lucide-solid";
 import { Button } from "./button";
-import styles from "./toast.module.css";
+import styles from "./toast.stylex";
+import { labelTypographyClass } from "./element-typography.stylex";
 
 /**
  * Props for Toast.
@@ -29,7 +30,7 @@ export function Toast(props: ToastProps) {
       aria-live="polite"
     >
       <div class={styles.copy}>
-        <strong class="pad-pilot-label">{local.message}</strong>
+        <strong class={labelTypographyClass}>{local.message}</strong>
       </div>
       <Show when={local.onDismiss}>
         <Button class={styles.dismiss} icon={XIcon} onClick={() => local.onDismiss?.()} tooltip={local.dismissLabel ?? "Dismiss notification"} variant="ghost" />

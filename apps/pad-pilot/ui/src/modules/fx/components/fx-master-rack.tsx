@@ -2,7 +2,7 @@ import { Show, createMemo } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { getActiveFxChain, getFxMasterMeters, getFxMasterState } from "../fx-module-selectors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "../fx-module.module.css";
+import styles from "../fx-module.stylex";
 
 export function FxMasterRack() {
   const state = useFxModuleState();
@@ -15,7 +15,7 @@ export function FxMasterRack() {
     <aside class={styles["master-rack"]}>
       <div class={styles["master-rack-header"]}>
         <span>Master Rack</span>
-        <small>PadPilot master metering stays live while structural edits commit on drop.</small>
+        <small class={styles["master-rack-header-small"]}>PadPilot master metering stays live while structural edits commit on drop.</small>
       </div>
       <div class={styles["master-meter-grid"]} data-testid="master-meter-grid">
         <PadPilot.Meter

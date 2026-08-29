@@ -11,7 +11,7 @@ import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { type TapView } from "../fx-types";
 import { createMeterVisual, meterDbFromMix } from "../fx-visuals";
 import { FxNodeLane } from "./fx-node-lane";
-import styles from "../fx-module.module.css";
+import styles from "../fx-module.stylex";
 
 export type FxChainCardProps = {
   activeDraggedChainId: Accessor<number | null>;
@@ -84,30 +84,26 @@ export function FxChainCard(props: FxChainCardProps) {
                   <span class={styles["chain-index"]}>{`Chain ${(chain()?.order ?? 0) + 1}`}</span>
                   <div class={styles["chain-title-copy"]}>
                     <strong>{chain()?.name}</strong>
-                    <small>{`${chain()?.nodes.length ?? 0} nodes`}</small>
+                    <small class={styles["chain-title-copy-small"]}>{`${chain()?.nodes.length ?? 0} nodes`}</small>
                   </div>
                 </div>
               </div>
               <div class={styles["chain-header-controls"]}>
                 <PadPilot.Button
                   aria-pressed={chain()?.muted ?? false}
-                  class={styles["icon-action"]}
-                  classList={{ [styles["icon-action-active"]]: chain()?.muted ?? false }}
+                  class={`${styles["icon-action"]} ${chain()?.muted ? styles["icon-action-active"] : ""}`.trim()}
                   data-testid={`chain-mute-button-${props.chainId}`}
                   icon={muteIcon()}
                   onClick={() => actions.chains.toggleMute(props.chainId)}
                   tooltip={chain()?.muted ? "Unmute chain" : "Mute chain"}
-                  anchorClass={styles["icon-action-anchor"]}
                 />
                 <PadPilot.Button
                   aria-pressed={chain()?.solo ?? false}
-                  class={styles["icon-action"]}
-                  classList={{ [styles["icon-action-active"]]: chain()?.solo ?? false }}
+                  class={`${styles["icon-action"]} ${chain()?.solo ? styles["icon-action-active"] : ""}`.trim()}
                   data-testid={`chain-solo-button-${props.chainId}`}
                   icon={Headphones}
                   onClick={() => actions.chains.toggleSolo(props.chainId)}
                   tooltip={chain()?.solo ? "Disable solo" : "Solo chain"}
-                  anchorClass={styles["icon-action-anchor"]}
                 />
                 <PadPilot.Knob
                   data-testid={`chain-mix-knob-${props.chainId}`}
@@ -127,11 +123,7 @@ export function FxChainCard(props: FxChainCardProps) {
               </div>
             </header>
           }
-          class={styles["chain-card"]}
-          classList={{
-            [styles["is-active"]]: state.ui.activeChainId === props.chainId,
-            [styles["is-muted"]]: chain()?.muted ?? false,
-          }}
+          class={`${styles["chain-card"]} ${state.ui.activeChainId === props.chainId ? styles["is-active"] : ""} ${chain()?.muted ? styles["is-muted"] : ""}`.trim()}
           data-testid={`chain-card-${props.chainId}`}
           isDragging={dragBinding.isActiveDraggable()}
           isPlaceholder={props.activeDraggedChainId() === props.chainId}

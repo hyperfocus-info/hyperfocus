@@ -1,4 +1,4 @@
-import styles from "./recut-module.module.css";
+import styles from "./recut-module.stylex";
 import { PadGrid } from "./components/pad-grid";
 import { ParameterControls } from "./components/parameter-controls";
 import { WaveformDisplay } from "./components/waveform-display";
@@ -18,7 +18,7 @@ function RecutModuleView() {
   return (
     <section class={styles["module-root"]}>
       <header class={styles.brand}>
-        <h2>RECUT</h2>
+        <h2 class={styles["brand-h2"]}>RECUT</h2>
         <span>Sample slicer</span>
       </header>
 

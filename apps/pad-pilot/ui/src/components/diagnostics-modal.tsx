@@ -4,7 +4,7 @@ import { Button } from "./elements/button";
 import { moduleSdk } from "../module-sdk";
 import { isPadPilotDevtoolsEnabled } from "../runtime-flags";
 import { Modal } from "./elements/modal";
-import styles from "./diagnostics-modal.module.css";
+import styles from "./diagnostics-modal.stylex";
 
 const formatNumber = (value: number | undefined, suffix = "") => {
   if (value === undefined || Number.isNaN(value)) return "n/a";

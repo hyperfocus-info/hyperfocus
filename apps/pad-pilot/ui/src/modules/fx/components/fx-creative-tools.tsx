@@ -5,7 +5,7 @@ import { FX_IDEA_TAGS } from "../fx-idea-generator";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { getNodeDefinition } from "../node-registry/registry";
 import { TIMING_SYNC_LABELS } from "../timing-sync";
-import styles from "./fx-creative-tools.module.css";
+import styles from "./fx-creative-tools.stylex";
 
 type ModulationTarget = {
   baseValue: number;
@@ -88,9 +88,9 @@ export function FxCreativeTools() {
     <section class={styles.root} data-testid="fx-creative-tools">
       <div class={styles.generator}>
         <div class={styles.heading}>
-          <div>
+          <div class={styles["heading-div"]}>
             <strong>Idea Generator</strong>
-            <small>Human-curated recipes. Pick vibe tags, build chain.</small>
+            <small class={styles["heading-small"]}>Human-curated recipes. Pick vibe tags, build chain.</small>
           </div>
           <PadPilot.Button icon={<Sparkles size={14} />} onClick={() => actions.generator.generate(selectedTags())} tooltip="Generate tagged FX chain">
             Generate
@@ -115,16 +115,16 @@ export function FxCreativeTools() {
 
       <div class={styles.modulation}>
         <div class={styles.heading}>
-          <div>
+          <div class={styles["heading-div"]}>
             <strong>Dual LFO Matrix</strong>
-            <small>Public FX-state routes; fixed-capacity realtime DSP.</small>
+            <small class={styles["heading-small"]}>Public FX-state routes; fixed-capacity realtime DSP.</small>
           </div>
         </div>
         <div class={styles.sources}>
           <For each={state.session.working.modulators}>
             {(modulator) => (
               <div class={styles.source} data-testid={`fx-lfo-${modulator.id}`}>
-                <strong>LFO {modulator.id}</strong>
+                <strong class={styles["source-strong"]}>LFO {modulator.id}</strong>
                 <PadPilot.Toggle label="On" value={modulator.enabled} onChange={(value) => actions.modulation.setEnabled(modulator.id, value)} />
                 <PadPilot.Dropdown label="Shape" value={modulator.shape} options={LFO_SHAPE_OPTIONS} onChange={(value) => actions.modulation.setShape(modulator.id, value)} />
                 <PadPilot.Knob
@@ -152,7 +152,7 @@ export function FxCreativeTools() {
         </div>
         <div class={styles["route-builder"]}>
           <PadPilot.Dropdown label="Source" value={String(selectedModulatorId())} options={LFO_SOURCE_OPTIONS} onChange={(value) => setSelectedModulatorId(Number(value))} />
-          <PadPilot.Dropdown label="Destination" value={selectedTargetId()} options={targetOptions()} onChange={setSelectedTargetId} />
+          <PadPilot.Dropdown class={styles["route-builder-child-2"]} label="Destination" value={selectedTargetId()} options={targetOptions()} onChange={setSelectedTargetId} />
           <PadPilot.Button disabled={!selectedTargetId()} icon={<Plus size={14} />} onClick={addRoute} tooltip="Add modulation route">
             Route
           </PadPilot.Button>
@@ -161,7 +161,7 @@ export function FxCreativeTools() {
           <For each={state.session.working.modulationRoutes}>
             {(route, index) => (
               <div class={styles.route}>
-                <span>LFO {route.modulatorId} → {routeLabel(route.chainId, route.nodeId, route.parameterId)}</span>
+                <span class={styles["route-span"]}>LFO {route.modulatorId} → {routeLabel(route.chainId, route.nodeId, route.parameterId)}</span>
                 <PadPilot.Slider
                   aria-label={`Route ${index() + 1} depth`}
                   label="Depth"

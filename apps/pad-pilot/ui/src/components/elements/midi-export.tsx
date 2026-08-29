@@ -1,6 +1,6 @@
 import { splitProps, type JSX } from "solid-js";
 import { Button } from "./button";
-import styles from "./midi-export.module.css";
+import styles from "./midi-export.stylex";
 
 type MidiExportClassNames = {
   actions: string;

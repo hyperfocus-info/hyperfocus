@@ -4,7 +4,7 @@ import { PadPilot } from "../../../padpilot/index";
 import { mergeFxPresetSummaries } from "../fx-bundled-presets";
 import { buildFxPresetItems, filterFxPresetCatalogItems, type FxPresetCatalogFilter } from "../fx-module-selectors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "./fx-preset-rail.module.css";
+import styles from "./fx-preset-rail.stylex";
 
 const PRESET_FILTERS = [
   { id: "all", label: "All" },
@@ -61,7 +61,7 @@ export function FxPresetRail() {
   return (
     <aside class={styles.rail} data-testid="fx-preset-rail">
       <div class={styles["status-row"]}>
-        <strong>Chain Presets</strong>
+        <strong class={styles["status-row-strong"]}>Chain Presets</strong>
         <div class={styles["preset-actions"]}>
           <PadPilot.Button
             class={styles["action-button"]}
@@ -131,16 +131,15 @@ export function FxPresetRail() {
           <For each={filteredPresetItems()}>
             {(preset) => (
               <PadPilot.Button
-                class={styles["preset-item"]}
+                class={`${styles["preset-item"]} ${selectedPresetId() === preset.id ? styles["is-active"] : ""}`.trim()}
                 variant="ghost"
-                classList={{ [styles["is-active"]]: selectedPresetId() === preset.id }}
                 data-testid={`chain-preset-item-${preset.id}`}
                 onClick={() => actions.modulePresets.select(preset.id)}
               >
                 <div class={styles["preset-copy"]}>
                   <strong>{preset.label}</strong>
                   <Show when={preset.description}>
-                    <small>{preset.description}</small>
+                    <small class={styles["preset-copy-small"]}>{preset.description}</small>
                   </Show>
                 </div>
                 <span class={styles["preset-icons"]}>

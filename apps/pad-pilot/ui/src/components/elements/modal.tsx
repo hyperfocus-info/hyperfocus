@@ -186,11 +186,10 @@ export function Modal(props: ModalProps) {
         <div
           {...others}
           ref={panelRef}
-          {...stylex.attrs(
+          class={`${stylex.attrs(
             styles.panel,
             styles[local.size === "sm" ? "sizeSm" : local.size === "lg" ? "sizeLg" : "sizeMd"],
-          )}
-          classList={{ [local.class ?? ""]: Boolean(local.class) }}
+          ).class} ${local.class ?? ""}`.trim()}
           role="dialog"
           aria-modal="true"
           aria-label={local.title}

@@ -12,7 +12,7 @@ import {
   saveGeneratorAiSettings,
 } from "../modules/generator/utils/generator-ai-settings";
 import { resolveSearchableComboboxItemId } from "./elements/searchable-combobox-utils";
-import styles from "./global-settings-drawer.module.css";
+import styles from "./global-settings-drawer.stylex";
 
 export type GlobalSettingsDrawerProps = {
   open: boolean;
@@ -54,7 +54,7 @@ export function GlobalSettingsDrawer(props: GlobalSettingsDrawerProps) {
         >
           <div class={styles["section-body"]}>
             <div class={styles["setting-row"]}>
-              <span>AI Provider</span>
+              <span class={styles["setting-row-span"]}>AI Provider</span>
               <PadPilot.SearchableCombobox
                 emptyText="No providers"
                 items={GENERATOR_AI_PROVIDER_OPTIONS}
@@ -70,7 +70,7 @@ export function GlobalSettingsDrawer(props: GlobalSettingsDrawerProps) {
               />
             </div>
             <div class={styles["setting-row"]}>
-              <span>Model</span>
+              <span class={styles["setting-row-span"]}>Model</span>
               <PadPilot.SearchableCombobox
                 emptyText="No models"
                 items={GENERATOR_AI_MODEL_OPTIONS}

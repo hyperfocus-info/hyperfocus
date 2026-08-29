@@ -13,7 +13,7 @@ import {
   GENERATOR_AI_SETTINGS_CHANGED_EVENT,
   loadGeneratorAiSettings,
 } from "./utils/generator-ai-settings";
-import styles from "./generator-module.module.css";
+import styles from "./generator-module.stylex";
 
 type GeneratorRunStatus = "error" | "idle" | "loading" | "ready";
 
@@ -448,7 +448,7 @@ export function GeneratorModule() {
         <aside class={styles["side-panel"]} data-open={viewState().statusDrawerOpen ? "true" : "false"} aria-label="Generator status">
           <div class={styles["status-header"]}>
             <div class={styles["drawer-heading-row"]}>
-              <h3>{statusLabel()}</h3>
+              <h3 class={styles["status-header-h3"]}>{statusLabel()}</h3>
               <PadPilot.Button
                 class={styles["drawer-button"]}
                 icon={viewState().statusDrawerOpen ? ChevronUp : ChevronDown}
@@ -459,7 +459,7 @@ export function GeneratorModule() {
               />
             </div>
             <Show when={viewState().statusDrawerOpen}>
-              <small>{template() ? `${template()!.tracks.length} instrument tracks at ${template()!.bpm} BPM` : "Waiting for template request"}</small>
+              <small class={styles["status-header-small"]}>{template() ? `${template()!.tracks.length} instrument tracks at ${template()!.bpm} BPM` : "Waiting for template request"}</small>
             </Show>
           </div>
           <Show when={viewState().statusDrawerOpen}>
@@ -488,21 +488,21 @@ export function GeneratorModule() {
             lines={run.logs}
           />
           <div class={styles["status-stats"]} aria-label="Generated template summary">
-            <span>
-              <strong>{template()?.tracks.length ?? "--"}</strong>
-              <small>Tracks</small>
+            <span class={styles["status-stats-span"]}>
+              <strong class={styles["status-stats-strong"]}>{template()?.tracks.length ?? "--"}</strong>
+              <small class={styles["status-stats-small"]}>Tracks</small>
             </span>
-            <span>
-              <strong>{template()?.lengthBars ?? "--"}</strong>
-              <small>Bars</small>
+            <span class={styles["status-stats-span"]}>
+              <strong class={styles["status-stats-strong"]}>{template()?.lengthBars ?? "--"}</strong>
+              <small class={styles["status-stats-small"]}>Bars</small>
             </span>
-            <span>
-              <strong>{template()?.bpm ?? "--"}</strong>
-              <small>BPM</small>
+            <span class={styles["status-stats-span"]}>
+              <strong class={styles["status-stats-strong"]}>{template()?.bpm ?? "--"}</strong>
+              <small class={styles["status-stats-small"]}>BPM</small>
             </span>
-            <span>
-              <strong>{template()?.selectedScale.split(" ")[0] ?? "--"}</strong>
-              <small>Scale</small>
+            <span class={styles["status-stats-span"]}>
+              <strong class={styles["status-stats-strong"]}>{template()?.selectedScale.split(" ")[0] ?? "--"}</strong>
+              <small class={styles["status-stats-small"]}>Scale</small>
             </span>
           </div>
           </Show>
@@ -511,10 +511,10 @@ export function GeneratorModule() {
         <Show when={showMidiDrawer()}>
         <section class={styles["result-panel"]} data-open={viewState().midiDrawerOpen ? "true" : "false"}>
           <div class={styles["result-header"]}>
-            <h3>MIDI OUTPUT</h3>
-            <small>{template() ? `${template()!.filename} - ${template()!.selectedScale} - ${template()!.lengthBars} bars` : "Generate a template to unlock MIDI drag blocks"}</small>
+            <h3 class={styles["result-header-h3"]}>MIDI OUTPUT</h3>
+            <small class={styles["result-header-small"]}>{template() ? `${template()!.filename} - ${template()!.selectedScale} - ${template()!.lengthBars} bars` : "Generate a template to unlock MIDI drag blocks"}</small>
             <PadPilot.Button
-              class={styles["drawer-button"]}
+              class={`${styles["drawer-button"]} ${styles["result-panel-button"]}`.trim()}
               icon={viewState().midiDrawerOpen ? ChevronDown : ChevronUp}
               onClick={() => setViewState({ midiDrawerOpen: !viewState().midiDrawerOpen })}
               size="sm"
@@ -529,9 +529,10 @@ export function GeneratorModule() {
             {(generated) => (
               <>
                 <div class={styles["result-actions"]}>
-                  <PadPilot.HostBpmButton bpm={generated().bpm} />
+                  <PadPilot.HostBpmButton bpm={generated().bpm} class={styles["result-panel-button"]} />
                   <div class={styles["primary-midi"]}>
                     <PadPilot.MidiDragBlock
+                      classNames={{ downloadButton: styles["result-panel-button"] }}
                       filename={generated().filename}
                       label="Complete Multi-track MIDI"
                       midiData={generated().combinedMidi}
@@ -541,6 +542,7 @@ export function GeneratorModule() {
                     {(originalModel) => (
                       <div class={styles["primary-midi"]}>
                         <PadPilot.MidiDragBlock
+                          classNames={{ downloadButton: styles["result-panel-button"] }}
                           filename={originalModel().filename}
                           label={originalModel().label}
                           midiData={originalModel().midiData}
@@ -562,6 +564,11 @@ export function GeneratorModule() {
                       <div class={styles["track-item"]}>
                         <span class={styles["track-number"]}>{String(index() + 1).padStart(2, "0")}</span>
                         <PadPilot.MidiDragBlock
+                          classNames={{
+                            downloadButton: styles["result-panel-button"],
+                            root: styles["track-item-div"],
+                            titleStrong: styles["track-item-strong"],
+                          }}
                           filename={trackFile.filename}
                           label={trackFile.label}
                           midiData={trackFile.midiData}

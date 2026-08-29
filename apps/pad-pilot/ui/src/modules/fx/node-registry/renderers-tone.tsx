@@ -4,7 +4,7 @@ import type { NodeVisualizerFrame } from "../../../proto/generated/fx-chain-pb";
 import { IO } from "../../../padpilot/provider";
 import { renderFxControlField, resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
-import styles from "../fx-node-registry.module.css";
+import styles from "../fx-node-registry.stylex";
 import { clampSeriesValue, renderControlGrid, renderOrb, renderScalarRows, renderSeries } from "./renderer-primitives";
 import { PADPILOT_FILE_IMPORT_MAX_BYTES } from "@hyperfocus/pad-pilot/file-import";
 
@@ -58,14 +58,14 @@ export function renderEqNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Band editor</strong>
-          <small>Primary interactive band controls while the multi-band surface is staged.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Primary interactive band controls while the multi-band surface is staged.</small>
         </div>
         {renderControlGrid(bandControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Shelves and output</strong>
-          <small>Low shelf, high shelf, and master gain.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Low shelf, high shelf, and master gain.</small>
         </div>
         {renderControlGrid(shelfControls, config, updateControl)}
       </div>
@@ -127,14 +127,14 @@ export function renderTransientShaperNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Transient shape</strong>
-          <small>Attack and sustain define the rack macro response.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Attack and sustain define the rack macro response.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Output contour</strong>
-          <small>Soft clip, gain staging, and detector sensitivity.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Soft clip, gain staging, and detector sensitivity.</small>
         </div>
         {renderControlGrid(focusControls, config, updateControl)}
       </div>
@@ -225,14 +225,14 @@ export function renderReverbNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Reverb shape</strong>
-          <small>Decay, size, and mix define the compact behavior.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Decay, size, and mix define the compact behavior.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Ambience details</strong>
-          <small>Damping, pre-delay, and modulation shape the ambience.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Damping, pre-delay, and modulation shape the ambience.</small>
         </div>
         {renderControlGrid(focusControls, config, updateControl)}
       </div>
@@ -305,7 +305,7 @@ export function renderConvolverNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Convolution mix</strong>
-          <small>Blend the loaded impulse response with the dry signal.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Blend the loaded impulse response with the dry signal.</small>
         </div>
         {renderControlGrid(blendControl, config, updateControl)}
       </div>

@@ -1,7 +1,7 @@
 import { For, Show, createMemo } from "solid-js";
 import { createHotkey } from "../../padpilot/hotkeys";
 import { PadPilot } from "../../padpilot/index";
-import styles from "./components/fx-toast-viewport.module.css";
+import styles from "./components/fx-toast-viewport.stylex";
 import { FxChainPresetModal } from "./components/fx-chain-preset-modal";
 import { FxCompactPresetModal } from "./components/fx-compact-preset-modal";
 import { FxConsoleShell } from "./components/fx-console-shell";
@@ -53,7 +53,7 @@ function FxModuleContent() {
       <FxConsoleShell />
       <div class={styles.viewport} aria-live="polite">
         <For each={state.ui.toastQueue}>
-          {(toast) => <PadPilot.Toast message={toast.message} onDismiss={() => actions.ui.dismissToast(toast.id)} tone={toast.tone} />}
+          {(toast) => <PadPilot.Toast class={styles["viewport-child"]} message={toast.message} onDismiss={() => actions.ui.dismissToast(toast.id)} tone={toast.tone} />}
         </For>
       </div>
 

@@ -1,5 +1,5 @@
 import { JSX, createSignal, splitProps } from "solid-js";
-import styles from "./file-upload-dropzone.module.css";
+import styles from "./file-upload-dropzone.stylex";
 
 type FileWithPath = File & {
   path?: string;
@@ -196,8 +196,7 @@ export function FileUploadDropzone(props: FileUploadDropzoneProps) {
     <div
       role="button"
       tabindex={props.disabled ? -1 : 0}
-      class={`${styles.dropzone} ${props.class ?? ""}`.trim()}
-      classList={{ [styles["is-dragging"]]: isDragging(), [styles.disabled]: !!props.disabled }}
+      class={`${styles.dropzone} ${isDragging() ? styles["is-dragging"] : ""} ${props.disabled ? styles.disabled : ""} ${props.class ?? ""}`.trim()}
       onClick={requestBrowse}
       onKeyDown={(event) => {
         if (props.disabled) return;

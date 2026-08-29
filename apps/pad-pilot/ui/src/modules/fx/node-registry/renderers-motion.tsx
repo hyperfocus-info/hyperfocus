@@ -1,7 +1,7 @@
 import { resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
 import type { AnyNodeConfig } from "./types";
-import styles from "../fx-node-registry.module.css";
+import styles from "../fx-node-registry.stylex";
 import { renderControlGrid, renderMotionLane, renderScalarRows, renderSeries } from "./renderer-primitives";
 
 type PhaserVisualizerShape = {
@@ -96,14 +96,14 @@ export function renderAutoPanNodeEditor({
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>Sweep macro</strong>
-          <small>Rate and amount stay mirrored in rack mode.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Rate and amount stay mirrored in rack mode.</small>
         </div>
         {renderControlGrid(rackControls, config, updateControl)}
       </div>
       <div class={styles["focus-section"]}>
         <div class={styles["focus-section-header"]}>
           <strong>LFO shape</strong>
-          <small>Shape, phase offset, and smoothing.</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Shape, phase offset, and smoothing.</small>
         </div>
         {renderControlGrid(focusControls, config, updateControl)}
       </div>

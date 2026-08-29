@@ -1,6 +1,6 @@
 import { Plus, Save, Settings2, Star, Trash2 } from "lucide-solid";
 import { PadPilot } from "../../../padpilot/index";
-import styles from "../fx-module.module.css";
+import styles from "../fx-module.stylex";
 
 export type FxPresetManageModalProps = {
   canDelete?: boolean;
@@ -27,7 +27,7 @@ export function FxPresetManageModal(props: FxPresetManageModalProps) {
       title={props.title}
       description="Use searchable selection for browsing. Management actions stay here."
       footer={
-        <PadPilot.ButtonGroup class={styles["modal-actions"]} collapseWidth={420}>
+        <PadPilot.ButtonGroup collapseWidth={420}>
           <PadPilot.ButtonGroup.Item icon={<Plus size={14} />} onClick={props.onCreate} tooltip="Save as a new preset">
             Save New
           </PadPilot.ButtonGroup.Item>
@@ -51,7 +51,7 @@ export function FxPresetManageModal(props: FxPresetManageModalProps) {
         </PadPilot.ButtonGroup>
       }
     >
-      <PadPilot.TextField class={styles["modal-field"]} label="Name" value={props.name} onInput={(event) => props.onNameChange(event.currentTarget.value)} />
+      <PadPilot.TextField class={styles["modal-field"]} controlClass={styles["modal-field-input"]} label="Name" value={props.name} onInput={(event) => props.onNameChange(event.currentTarget.value)} />
     </PadPilot.Modal>
   );
 }

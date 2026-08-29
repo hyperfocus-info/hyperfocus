@@ -3,7 +3,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { buildFxPresetItems } from "../fx-module-selectors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "../fx-module.module.css";
+import styles from "../fx-module.stylex";
 
 type SidebarActionProps = {
   disabled?: boolean;
@@ -37,7 +37,7 @@ export function FxSidebar(props: FxSidebarProps) {
       <div class={styles["sidebar-header"]}>
         <div class={styles["sidebar-heading"]}>
           <span>Module Presets</span>
-          <small>PadPilot FX</small>
+          <small class={styles["sidebar-heading-small"]}>PadPilot FX</small>
         </div>
         <div class={styles["sidebar-badges"]}>
           <span class={styles["status-pill"]} data-state={state.session.dirty ? "dirty" : "clean"}>
@@ -80,9 +80,8 @@ export function FxSidebar(props: FxSidebarProps) {
         <For each={presetItems().slice(0, 6)}>
           {(preset) => (
             <PadPilot.Button
-              class={styles["preset-summary-item"]}
+              class={`${styles["preset-summary-item"]} ${selectedPresetId() === preset.id ? styles["is-active"] : ""}`.trim()}
               variant="ghost"
-              classList={{ [styles["is-active"]]: selectedPresetId() === preset.id }}
               onClick={() => actions.modulePresets.select(preset.id)}
             >
               <div>

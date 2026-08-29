@@ -31,8 +31,8 @@ slice. The applied state is summarized under [Decisions applied](#decisions-appl
   expose private source paths such as `@hyperfocus/pad-pilot/ui/src/...` through
   TypeScript aliases. Hyperfocus explicitly forbids aliases masking package
   ownership gaps.
-- PadPilot UI has 431 files, 22 element CSS Modules, 18 Module CSS Modules, and no
-  StyleX components. Hyperfocus has a compiled Solid/StyleX pipeline, semantic
+- Imported PadPilot UI had 431 files, 22 element CSS Modules, 18 Module CSS
+  Modules, and no StyleX components. Hyperfocus has a compiled Solid/StyleX pipeline, semantic
   tokens, overlay stack, preference registry, workbench layout, and shared UI
   package.
 - Primitive names overlap only at `Button`, `ButtonGroup`, `Toast`, and `Tooltip`,
@@ -300,8 +300,8 @@ recoverable archive; no compatibility facade silently owns divergent behavior.
 2. Marketplace is a separate `apps/pad-pilot-marketplace` deployment boundary.
 3. Relocation parity was proven first; portable identities, schemas, limits, and
    bounded utilities were then extracted to `packages/pad-pilot`.
-4. Hyperfocus's combined Solid/StyleX compiler is the UI build owner. Primitive
-   conversion proceeds by behavior family; remaining branded CSS is tracked in
-   [Finish PadPilot StyleX migration](tasks/finish-stylex-migration.md).
+4. Hyperfocus's combined Solid/StyleX compiler is the UI build owner. Shared
+   elements, app chrome, and all branded Module surfaces now use colocated
+   StyleX; no CSS Modules remain under PadPilot UI source.
 5. PadPilot's 1.0 license remains attached to both apps and the public package;
    Hyperfocus root licensing and release checks explicitly route that boundary.

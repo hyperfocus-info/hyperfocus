@@ -96,7 +96,7 @@ export function Button(props: ButtonProps) {
       }}
       type={others.type ?? "button"}
       disabled={local.disabled}
-      {...(local.appearance === "unstyled" ? {} : stylex.attrs(
+      class={`${local.appearance === "unstyled" ? "" : stylex.attrs(
         styles.button,
         styles.buttonInline,
         styles[local.variant ?? "secondary"],
@@ -105,8 +105,7 @@ export function Button(props: ButtonProps) {
         !local.disabled && others["aria-disabled"] !== "true" && styles.buttonInteractive,
         (others["aria-pressed"] === true || others["aria-pressed"] === "true" || others["aria-selected"] === true || others["aria-selected"] === "true") && styles.buttonActive,
         (local.disabled || others["aria-disabled"] === "true") && styles.buttonDisabled,
-      ))}
-      classList={{ [local.class ?? ""]: Boolean(local.class) }}
+      ).class} ${local.class ?? ""}`.trim()}
       data-appearance={local.appearance ?? "control"}
       data-icon-only={isIconOnly() ? "true" : "false"}
       data-size={local.size ?? "md"}

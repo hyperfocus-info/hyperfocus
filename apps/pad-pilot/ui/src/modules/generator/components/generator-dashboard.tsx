@@ -24,7 +24,7 @@ import {
   type GeneratorLockKey,
   type GeneratorRangeKey,
 } from "../utils/generator-options";
-import styles from "./generator-dashboard.module.css";
+import styles from "./generator-dashboard.stylex";
 
 export interface GeneratorDashboardProps {
   /** Disables generation while local model work is in flight. */
@@ -106,6 +106,14 @@ const comboboxClasses = {
   list: styles["combo-list"],
   searchIcon: styles["combo-search-icon"],
   toggle: styles["combo-toggle"],
+};
+
+const sliderClasses = {
+  fill: styles["slider-span"],
+  label: styles["slider-frame-div-span"],
+  root: styles["slider-frame-div"],
+  thumb: styles["slider-span"],
+  tooltip: styles["slider-frame-div-tooltip-container"],
 };
 
 function emptyFields() {
@@ -467,7 +475,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
     <div class={`${styles["control-row"]} ${styles["slider-row"]}`}>
       <Tooltip content={config.tooltip} placement="bottom" class={styles["label-tooltip"]}>
         <span class={styles["row-label"]}>
-          <config.icon size={15} aria-hidden="true" />
+          <config.icon class={styles["row-label-svg"]} size={15} aria-hidden="true" />
           {config.label}
         </span>
       </Tooltip>
@@ -476,6 +484,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
           <PadPilot.Slider
             aria-label={config.label}
             class={styles.slider}
+            classNames={sliderClasses}
             label=""
             disabled={props.disabled}
             max={1}
@@ -496,7 +505,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
     <section class={styles.dashboard} data-theme={resolvedTheme()} data-theme-mode={themeMode()} aria-label="Generator dashboard">
       <div class={styles.header}>
         <div class={styles["title-group"]}>
-          <h2>Generator<span>.</span></h2>
+          <h2 class={styles["title-group-h2"]}>Generator<span class={styles["title-group-h2-span"]}>.</span></h2>
         </div>
         <div class={styles["top-tools"]}>
           <div class={styles["action-buttons"]} aria-label="Generator actions">
@@ -595,6 +604,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
                 <PadPilot.Slider
                   aria-label="Chaos/Risk"
                   class={styles.slider}
+                  classNames={sliderClasses}
                   label=""
                   disabled={props.disabled}
                   max={1}
@@ -615,7 +625,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
           <div class={styles["control-row"]}>
             <Tooltip content={selector.tooltip} placement="bottom" class={styles["label-tooltip"]}>
               <span class={styles["row-label"]}>
-                {selector.icon ? <selector.icon size={15} aria-hidden="true" /> : null}
+                {selector.icon ? <selector.icon class={styles["row-label-svg"]} size={15} aria-hidden="true" /> : null}
                 {selector.label}
               </span>
             </Tooltip>
@@ -652,7 +662,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
         <div class={`${styles["control-row"]} ${styles["slider-row"]}`}>
           <Tooltip content={lengthTooltip} placement="bottom" class={styles["label-tooltip"]}>
             <span class={`${styles["row-label"]} ${styles["length-label"]}`}>
-              <Clock3 size={15} aria-hidden="true" />
+              <Clock3 class={styles["row-label-svg"]} size={15} aria-hidden="true" />
               Bar Length
             </span>
           </Tooltip>
@@ -661,6 +671,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
               <PadPilot.Slider
                 aria-label="Bar Length"
                 class={styles.slider}
+                classNames={sliderClasses}
                 label=""
                 disabled={props.disabled}
                 max={32}
@@ -673,7 +684,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
               />
               <span class={styles["length-ticks"]} aria-hidden="true">
                 {lengthSliderOptions.map((option) => (
-                  <span style={lengthTickStyle(option.value)}>{option.value}</span>
+                  <span class={styles["length-ticks-span"]} style={lengthTickStyle(option.value)}>{option.value}</span>
                 ))}
               </span>
             </span>
@@ -686,6 +697,8 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
       <div class={styles["notes-row"]}>
         <PadPilot.TextAreaField
           class={styles["notes-field"]}
+          controlClass={styles["notes-field-textarea"]}
+          labelClass={styles["notes-field-span"]}
           labelIcon={FileText}
           label="Extra Description Notes"
           disabled={props.disabled}

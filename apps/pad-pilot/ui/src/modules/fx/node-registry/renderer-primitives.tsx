@@ -4,7 +4,7 @@ import { type FxNodeFocusRenderProps } from "./renderer-types";
 import { FX_VISUALIZER_DISPLAY_BIN_COUNT, resampleVisualizerSeries } from "../fx-visualizer-smoothing";
 import { renderFxControlField } from "../components/fx-control-field";
 import { clamp01Or } from "../../../utils/math";
-import styles from "../fx-node-registry.module.css";
+import styles from "../fx-node-registry.stylex";
 
 export function clampSeriesValue(value: number) {
   return clamp01Or(value, 0);
@@ -157,7 +157,7 @@ export function renderStandardNodeEditor<TConfig extends AnyNodeConfig, TVisuali
       <div class={styles["focus-visualizer"]}>
         <div class={styles["focus-visualizer-header"]}>
           <strong>{name}</strong>
-          <small>Latest visualizer frame</small>
+          <small class={`${styles["focus-visualizer-header-small"]} ${styles["focus-section-header-small"]}`.trim()}>Latest visualizer frame</small>
         </div>
         {renderVisualizerSummary(visualizer)}
       </div>

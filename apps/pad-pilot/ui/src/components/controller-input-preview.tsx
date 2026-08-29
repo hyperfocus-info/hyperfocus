@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
-import styles from "./controller-input-preview.module.css";
+import styles from "./controller-input-preview.stylex";
 import {
   buildControllerPreviewGeometry,
   traceControllerPreviewShellPath,
@@ -481,6 +481,7 @@ export function ControllerInputPreview(props: ControllerInputPreviewProps) {
     <section class={styles.root}>
       <div class={styles["controls-row"]}>
         <PadPilot.Dropdown
+          class={styles["controls-row-label"]}
           label="Preview Scope"
           value={previewModel().resolvedScope}
           options={previewOptions()}
@@ -504,19 +505,19 @@ export function ControllerInputPreview(props: ControllerInputPreviewProps) {
 
       <div class={styles["status-grid"]}>
         <article class={styles["status-card"]}>
-          <span>Scope</span>
-          <strong>{previewModel().scopeLabel}</strong>
-          <p>Current preview source</p>
+          <span class={styles["status-card-span"]}>Scope</span>
+          <strong class={styles["status-card-strong"]}>{previewModel().scopeLabel}</strong>
+          <p class={styles["status-card-p"]}>Current preview source</p>
         </article>
         <article class={styles["status-card"]}>
-          <span>Connection</span>
-          <strong>{previewModel().connectionSummary}</strong>
-          <p>{previewModel().connectedDeviceCount} device(s) available</p>
+          <span class={styles["status-card-span"]}>Connection</span>
+          <strong class={styles["status-card-strong"]}>{previewModel().connectionSummary}</strong>
+          <p class={styles["status-card-p"]}>{previewModel().connectedDeviceCount} device(s) available</p>
         </article>
         <article class={styles["status-card"]}>
-          <span>Activity</span>
-          <strong>{previewModel().activeSummary}</strong>
-          <p>Live canonical controller readout</p>
+          <span class={styles["status-card-span"]}>Activity</span>
+          <strong class={styles["status-card-strong"]}>{previewModel().activeSummary}</strong>
+          <p class={styles["status-card-p"]}>Live canonical controller readout</p>
         </article>
       </div>
 
@@ -528,8 +529,8 @@ export function ControllerInputPreview(props: ControllerInputPreviewProps) {
               {(group) => (
                 <article class={styles["overflow-group"]}>
                   <div class={styles["overflow-group-header"]}>
-                    <strong>{group.deviceLabel}</strong>
-                    <span>{group.hasActivity ? "Active overflow" : "Overflow present"}</span>
+                    <strong class={styles["overflow-group-header-strong"]}>{group.deviceLabel}</strong>
+                    <span class={styles["overflow-group-header-span"]}>{group.hasActivity ? "Active overflow" : "Overflow present"}</span>
                   </div>
                   <div class={styles["overflow-list"]}>
                     <For each={group.buttons}>
@@ -537,7 +538,7 @@ export function ControllerInputPreview(props: ControllerInputPreviewProps) {
                         <div class={styles["overflow-chip"]}>
                           <span>{`B${button.index}`}</span>
                           <span class={styles["overflow-chip-meter"]}>
-                            <span style={{ width: `${Math.round(clamp01(button.value) * 100)}%` }} />
+                            <span class={styles["overflow-chip-meter-span"]} style={{ width: `${Math.round(clamp01(button.value) * 100)}%` }} />
                           </span>
                           <span class={styles["overflow-chip-value"]}>{Math.round(button.value * 100)}%</span>
                         </div>
@@ -548,7 +549,7 @@ export function ControllerInputPreview(props: ControllerInputPreviewProps) {
                         <div class={styles["overflow-chip"]}>
                           <span>{`A${axis.index}`}</span>
                           <span class={styles["overflow-chip-meter"]}>
-                            <span style={{ width: `${Math.round(clamp01(Math.abs(axis.value)) * 100)}%` }} />
+                            <span class={styles["overflow-chip-meter-span"]} style={{ width: `${Math.round(clamp01(Math.abs(axis.value)) * 100)}%` }} />
                           </span>
                           <span class={styles["overflow-chip-value"]}>{formatSignedValue(axis.value)}</span>
                         </div>

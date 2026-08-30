@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal } from "solid-js";
 import { SearchableCombobox } from "../../../components/elements/searchable-combobox";
 import type { DropdownOption } from "../../../padpilot/types";
-import styles from "./fx-select-field.stylex";
+import styles from "./styles/fx-select-field.stylex";
 
 export type FxSelectFieldProps = {
   label: string;

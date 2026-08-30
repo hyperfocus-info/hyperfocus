@@ -1,8 +1,6 @@
 # PadPilot Long-Term TODO
 
-- [ ] [Harden guest/demo enforcement](harden-guest-demo-mode.md).
 - [ ] [Add updater signing-key lifecycle management](manage-updater-signing-keys.md).
-- [ ] [Remove factory-ID coupling from generic FX graph state ownership](generic-fx-graph-state-ownership.md).
 - [ ] [Add a first-party processor host-state round-trip harness](host-state-roundtrip-harness.md).
 - [ ] Enable users to add multiple tests and multiple files in one custom module.
 - [ ] Add a user-facing directory import flow for module audio assets
@@ -14,8 +12,8 @@
 ## Frontend Documentation
 
 - [ ] Flesh out frontend documentation with a JSDoc compilation pipeline and publishable reference output.
-- [ ] Add a frontend getting started guide for module authors.
-- [ ] Add a few tutorial modules that show host state, UI state, presets, and bridge usage end to end.
+- [x] Add a frontend getting started guide for Module authors and a public-contract consumer fixture.
+- [ ] Add broader tutorial Modules for Presets and each capability family after external UI sandboxing ships.
 
 ## Stretch Goals - Module Library at Scale
 

@@ -19,8 +19,8 @@ Use `--write .agents/skills/generator-audit/references/current-inventory.md` onl
 
 Inspect these files before findings:
 
-- `apps/pad-pilot/ui/src/modules/generator/utils/generator-options.ts`: selector inventories, tag rules, Magic Suggestion graph.
-- `apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts`: system prompt, user prompt, style DNA, parser, repair, quality gate, fallback.
+- `apps/pad-pilot/ui/src/modules/generator/utils/generator-selector-options.ts` and `generator-magic-options.ts`: selector inventories, tag rules, and Magic Suggestion graph.
+- `apps/pad-pilot/ui/src/modules/generator/utils/generator-prompt.ts`, `generator-style-dna.ts`, `generator-tracker.ts`, `generator-massage-*.ts`, `generator-fallback.ts`, and `generator-client.ts`: system/user prompts, style DNA, parsing, repair, quality gates, fallback, and model handoff.
 - `apps/pad-pilot/ui/src/modules/generator/components/generator-dashboard.tsx`: user-facing controls and wording.
 - `apps/pad-pilot/ui/src/modules/generator/*.test.tsx` and `apps/pad-pilot/ui/src/modules/generator/utils/*.test.ts`: current behavior coverage.
 

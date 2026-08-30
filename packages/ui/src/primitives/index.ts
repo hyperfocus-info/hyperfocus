@@ -32,6 +32,7 @@ export {
   type PanelSurfaceProps,
 } from "./panel";
 export { Popover, type PopoverState } from "./popover";
+export { isTopOverlay, registerOverlay, type OverlayEntry } from "./overlay-stack";
 export {
   SegmentedControl,
   type SegmentedControlOption,

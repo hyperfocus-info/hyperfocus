@@ -227,7 +227,11 @@ std::string PadPilotAudioProcessor::buildVisualizerFrameBase64() {
   padpilot::fx::FxChainState state;
   {
     std::lock_guard<std::mutex> guard(stateMutex_);
-    const auto bytes = getModuleStateBytesLocked(kFxModuleId);
+    const auto fxGraphOwner = getSelectedFxGraphOwnerLocked();
+    if (fxGraphOwner.empty()) {
+      return {};
+    }
+    const auto bytes = getModuleStateBytesLocked(fxGraphOwner);
     if (!bytes.empty()) {
       padpilot::proto::parseFxChainState(bytes, &state);
     }

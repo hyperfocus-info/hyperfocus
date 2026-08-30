@@ -13,7 +13,7 @@ import {
   clampTimingSyncDivisionIndex,
   getTimingSyncLabel,
 } from "../timing-sync";
-import styles from "../fx-node-registry.stylex";
+import styles from "../styles/fx-node-registry.stylex";
 
 export function resolveFxControls<TConfig>(
   controls: readonly FxNodeControlDefinition<TConfig>[],

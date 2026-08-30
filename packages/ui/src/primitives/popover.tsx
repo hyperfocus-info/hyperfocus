@@ -28,6 +28,7 @@ export function Popover(props: {
   defaultOpen?: boolean;
   portal?: boolean;
   contentRole?: "dialog" | "menu";
+  contentClass?: string;
   onContentKeyDown?: JSX.EventHandler<HTMLDivElement, KeyboardEvent>;
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -97,7 +98,7 @@ export function Popover(props: {
         id={id}
         role={props.contentRole ?? "dialog"}
         aria-label={props.ariaLabel ?? "More actions"}
-        {...stylex.attrs(styles.content)}
+        class={`${stylex.attrs(styles.content).class} ${props.contentClass ?? ""}`.trim()}
         onKeyDown={(event) => {
           props.onContentKeyDown?.(event);
           if (event.key === "Escape" && isTopOverlay(id)) close(true);

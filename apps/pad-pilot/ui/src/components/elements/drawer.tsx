@@ -1,8 +1,13 @@
 import { Show, createEffect, onCleanup, splitProps, type Accessor, type JSX } from "solid-js";
+import { Portal } from "solid-js/web";
 import { XIcon } from "lucide-solid";
+import { isTopOverlay, registerOverlay } from "@hyperfocus/ui/primitives";
 import { Button } from "./button";
 import { joinElementClasses as joinClasses } from "./element-helpers";
-import styles from "./drawer.stylex";
+import { ensureOverlayRoot } from "./overlay-root";
+import styles from "./styles/drawer.stylex";
+
+let drawerSequence = 0;
 
 export type DrawerClassNames = {
   body?: string;
@@ -71,6 +76,7 @@ export function Drawer(props: DrawerProps) {
     "title",
   ]);
 
+  const overlayId = `padpilot-drawer-${++drawerSequence}`;
   let panelRef: HTMLDivElement | undefined;
 
   createEffect(() => {
@@ -79,22 +85,32 @@ export function Drawer(props: DrawerProps) {
     }
 
     let active = true;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const unregister = registerOverlay({
+      id: overlayId,
+      close: () => {
+        if (local.closeable !== false) {
+          local.onOpenChange?.(false);
+        }
+      },
+    });
     queueMicrotask(() => {
       if (active && local.open) {
-        local.initialFocusRef?.()?.focus();
+        const initialFocus = local.initialFocusRef?.();
+        const firstFocusable = panelRef?.querySelector<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        (initialFocus ?? firstFocusable ?? panelRef)?.focus();
       }
     });
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && local.closeable !== false) {
-        local.onOpenChange?.(false);
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
     onCleanup(() => {
       active = false;
-      window.removeEventListener("keydown", onKeyDown);
+      unregister();
+      queueMicrotask(() => {
+        if (previousFocus?.isConnected) {
+          previousFocus.focus();
+        }
+      });
     });
   });
 
@@ -102,60 +118,63 @@ export function Drawer(props: DrawerProps) {
 
   return (
     <Show when={shouldRender()}>
-      <div
-        class={joinClasses(styles.root, local.class, local.classNames?.root)}
-        data-open={local.open ? "true" : "false"}
-      >
-        <Show when={local.showScrim}>
-          <button
-            type="button"
-            class={joinClasses(styles.scrim, local.classNames?.scrim)}
-            aria-hidden="true"
-            tabIndex={local.open ? 0 : -1}
-            onClick={() => {
-              if (local.closeOnScrim === false) {
-                return;
-              }
-              local.onOpenChange?.(false);
-            }}
-          />
-        </Show>
+      <Portal mount={ensureOverlayRoot()}>
         <div
-          {...others}
-          ref={panelRef}
-          role="complementary"
-          aria-hidden={local.open ? "false" : "true"}
-          class={joinClasses(styles.panel, local.classNames?.panel)}
-          data-edge={local.edge ?? "right"}
-          data-size={local.size ?? "md"}
+          class={joinClasses(styles.root, local.class, local.classNames?.root)}
+          data-open={local.open ? "true" : "false"}
         >
-          <Show when={local.title || local.description || local.closeable !== false}>
-            <header class={joinClasses(styles.header, local.classNames?.header)}>
-              <div class={styles["header-copy"]}>
-                <Show when={local.title}>
-                  <h3 class={styles["header-copy-h3"]}>{local.title}</h3>
-                </Show>
-                <Show when={local.description}>
-                  <p class={styles["header-copy-p"]}>{local.description}</p>
-                </Show>
-              </div>
-              <Show when={local.closeable !== false}>
-                <Button
-                  class={joinClasses(styles["close-button"], local.classNames?.closeButton)}
-                  icon={XIcon}
-                  onClick={() => local.onOpenChange?.(false)}
-                  tooltip={local.closeLabel ?? "Close drawer"}
-                  variant="ghost"
-                />
-              </Show>
-            </header>
+          <Show when={local.showScrim}>
+            <button
+              type="button"
+              class={joinClasses(styles.scrim, local.classNames?.scrim)}
+              aria-hidden="true"
+              tabIndex={-1}
+              onClick={() => {
+                if (local.closeOnScrim === false || !isTopOverlay(overlayId)) {
+                  return;
+                }
+                local.onOpenChange?.(false);
+              }}
+            />
           </Show>
-          <div class={joinClasses(styles.body, local.classNames?.body)}>{local.children}</div>
-          <Show when={local.footer}>
-            <footer class={joinClasses(styles.footer, local.classNames?.footer)}>{local.footer}</footer>
-          </Show>
+          <div
+            {...others}
+            ref={panelRef}
+            role="complementary"
+            aria-hidden={local.open ? "false" : "true"}
+            class={joinClasses(styles.panel, local.classNames?.panel)}
+            data-edge={local.edge ?? "right"}
+            data-size={local.size ?? "md"}
+            tabIndex={-1}
+          >
+            <Show when={local.title || local.description || local.closeable !== false}>
+              <header class={joinClasses(styles.header, local.classNames?.header)}>
+                <div class={styles["header-copy"]}>
+                  <Show when={local.title}>
+                    <h3 class={styles["header-copy-h3"]}>{local.title}</h3>
+                  </Show>
+                  <Show when={local.description}>
+                    <p class={styles["header-copy-p"]}>{local.description}</p>
+                  </Show>
+                </div>
+                <Show when={local.closeable !== false}>
+                  <Button
+                    class={joinClasses(styles["close-button"], local.classNames?.closeButton)}
+                    icon={XIcon}
+                    onClick={() => local.onOpenChange?.(false)}
+                    tooltip={local.closeLabel ?? "Close drawer"}
+                    variant="ghost"
+                  />
+                </Show>
+              </header>
+            </Show>
+            <div class={joinClasses(styles.body, local.classNames?.body)}>{local.children}</div>
+            <Show when={local.footer}>
+              <footer class={joinClasses(styles.footer, local.classNames?.footer)}>{local.footer}</footer>
+            </Show>
+          </div>
         </div>
-      </div>
+      </Portal>
     </Show>
   );
 }

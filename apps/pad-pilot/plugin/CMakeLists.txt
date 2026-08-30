@@ -98,6 +98,7 @@ if(PADPILOT_ENABLE_TESTS)
       juce::juce_dsp
       protobuf::libprotobuf-lite
       qjs
+      SDL2::SDL2-static
       crypt32
       bcrypt
       user32
@@ -156,7 +157,7 @@ if(BUN_EXECUTABLE)
     "${CMAKE_CURRENT_SOURCE_DIR}/../ui/index.html"
     "${CMAKE_CURRENT_SOURCE_DIR}/../bunfig.toml"
     "${CMAKE_CURRENT_SOURCE_DIR}/../package.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../bun.lock"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../bun.lock"
     "${CMAKE_CURRENT_SOURCE_DIR}/../tsconfig.base.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/../tsconfig.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/build-ui.ts"
@@ -333,6 +334,40 @@ target_link_libraries(PadPilot
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
 )
+
+if(PADPILOT_ENABLE_TESTS)
+  add_executable(padpilot-processor-tests
+    runtime/padpilot-processor-tests-main.cpp
+  )
+  target_include_directories(padpilot-processor-tests
+    PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}
+      ${CMAKE_CURRENT_SOURCE_DIR}/generated/proto
+  )
+  target_link_libraries(padpilot-processor-tests
+    PRIVATE
+      PadPilot
+      juce::juce_audio_utils
+      protobuf::libprotobuf-lite
+      qjs
+  )
+  target_include_directories(padpilot-processor-tests
+    SYSTEM PRIVATE
+      "${webview2_SOURCE_DIR}/build/native/include"
+      "${quickjs_SOURCE_DIR}"
+      "${SDL2_SOURCE_DIR}/include"
+  )
+  target_compile_definitions(padpilot-processor-tests
+    PRIVATE
+      JUCE_WEB_BROWSER=1
+      JUCE_USE_WIN_WEBVIEW2=1
+      JUCE_USE_CURL=0
+      SDL_MAIN_HANDLED=1
+  )
+  if(MSVC)
+    target_compile_options(padpilot-processor-tests PRIVATE /wd4324 /wd5054 /external:W0)
+  endif()
+endif()
 
 if(WIN32)
   add_dependencies(PadPilot_VST3 padpilot-updater)

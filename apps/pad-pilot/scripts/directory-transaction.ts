@@ -242,13 +242,15 @@ function transactionPaths(destination: string) {
     journal: path.join(parent, `.${base}.padpilot-transaction.json`),
     lock: path.join(parent, `.${base}.padpilot-transaction.lock`),
     parent,
-    safeBackupPrefix: `.${base}.padpilot-backup-`,
-    safeStagePrefix: `.${base}.padpilot-stage-`,
+    legacyBackupPrefix: `.${base}.padpilot-backup-`,
+    legacyStagePrefix: `.${base}.padpilot-stage-`,
+    safeBackupPrefix: `.${base}.pp-b-`,
+    safeStagePrefix: `.${base}.pp-s-`,
   };
 }
 
-function resolveTransactionChild(parent: string, name: string, prefix: string) {
-  if (!name.startsWith(prefix) || path.basename(name) !== name) {
+function resolveTransactionChild(parent: string, name: string, prefixes: readonly string[]) {
+  if (!prefixes.some((prefix) => name.startsWith(prefix)) || path.basename(name) !== name) {
     throw new Error("Directory transaction journal contains an unsafe path.");
   }
   const resolved = path.resolve(parent, name);
@@ -274,9 +276,15 @@ async function readDirectoryTransaction(destination: string) {
     throw new Error(`Invalid directory transaction journal: ${paths.journal}`);
   }
   return {
-    backup: resolveTransactionChild(paths.parent, parsed.backupName, paths.safeBackupPrefix),
+    backup: resolveTransactionChild(paths.parent, parsed.backupName, [
+      paths.safeBackupPrefix,
+      paths.legacyBackupPrefix,
+    ]),
     hadDestination: parsed.hadDestination,
-    staged: resolveTransactionChild(paths.parent, parsed.stagedName, paths.safeStagePrefix),
+    staged: resolveTransactionChild(paths.parent, parsed.stagedName, [
+      paths.safeStagePrefix,
+      paths.legacyStagePrefix,
+    ]),
   };
 }
 

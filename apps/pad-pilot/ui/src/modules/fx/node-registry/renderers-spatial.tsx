@@ -2,7 +2,7 @@ import { For } from "solid-js";
 import { resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
 import type { AnyNodeConfig } from "./types";
-import styles from "../fx-node-registry.stylex";
+import styles from "../styles/fx-node-registry.stylex";
 import { clampSeriesValue, renderControlGrid } from "./renderer-primitives";
 
 type DelayVisualizerShape = {

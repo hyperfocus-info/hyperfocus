@@ -45,7 +45,10 @@ async function trackedJavaScriptRuntimeFiles() {
 }
 
 async function repositorySkillScriptFiles() {
-  const scriptRoot = path.join(repoRoot, ".agents", "skills");
+  const skillRoots = [
+    path.join(repoRoot, ".agents", "skills"),
+    path.join(repoRoot, "apps", "pad-pilot", ".agents", "skills")
+  ];
   const files: string[] = [];
 
   async function visit(directory: string) {
@@ -59,8 +62,45 @@ async function repositorySkillScriptFiles() {
     }
   }
 
-  await visit(scriptRoot);
+  for (const skillRoot of skillRoots) {
+    await visit(skillRoot);
+  }
   return files;
+}
+
+async function markdownFilesUnder(relativeRoots: readonly string[]) {
+  const files: string[] = [];
+  async function visit(directory: string) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const absolutePath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(absolutePath);
+      } else if (entry.name.endsWith(".md")) {
+        files.push(path.relative(repoRoot, absolutePath).replaceAll("\\", "/"));
+      }
+    }
+  }
+  for (const relativeRoot of relativeRoots) {
+    await visit(path.join(repoRoot, relativeRoot));
+  }
+  return files;
+}
+
+async function brokenLocalMarkdownLinks(filePaths: readonly string[]) {
+  const failures: string[] = [];
+  for (const filePath of filePaths) {
+    const source = await read(filePath);
+    for (const match of source.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
+      const rawTarget = match[1]?.trim().replace(/^<|>$/g, "") ?? "";
+      if (!rawTarget || rawTarget.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(rawTarget)) continue;
+      const target = decodeURIComponent(rawTarget.split("#", 1)[0]!.split("?", 1)[0]!);
+      const absoluteTarget = target.startsWith("/")
+        ? path.join(repoRoot, target.slice(1))
+        : path.resolve(repoRoot, path.dirname(filePath), target);
+      if (!existsSync(absoluteTarget)) failures.push(`${filePath} -> ${rawTarget}`);
+    }
+  }
+  return failures;
 }
 
 async function rootScriptFiles() {
@@ -89,7 +129,21 @@ describe("documentation policy", () => {
     const storyMap = await read("docs/user-stories.md");
     expect(storyMap).toContain("docs/harness/user-stories.md");
     expect(storyMap).toContain("apps/engine-editor/user-stories.md");
+    expect(storyMap).toContain("docs/pad-pilot/user-stories.md");
+    expect(storyMap).toContain("docs/pad-pilot/marketplace-user-stories.md");
     expect(storyMap).toContain("packages/ui/user-stories.md");
+  });
+
+  test("maps every shipped PadPilot story to coverage", async () => {
+    const [appStories, marketplaceStories, coverage] = await Promise.all([
+      read("docs/pad-pilot/user-stories.md"),
+      read("docs/pad-pilot/marketplace-user-stories.md"),
+      read("docs/pad-pilot/coverage-matrix.md")
+    ]);
+    const storyIds = `${appStories}\n${marketplaceStories}`.match(/^(?:PP|PPM)-[A-Z]+-\d{3}(?=:)/gm) ?? [];
+    expect(storyIds.length).toBeGreaterThan(0);
+    expect(new Set(storyIds).size).toBe(storyIds.length);
+    expect(storyIds.filter((storyId) => !coverage.includes(`| ${storyId} |`))).toEqual([]);
   });
 
   test("uses .tmp.md for tracked temporary Markdown files", async () => {
@@ -98,6 +152,16 @@ describe("documentation policy", () => {
 
   test("keeps repository skill scripts on Bun TypeScript", async () => {
     expect((await repositorySkillScriptFiles()).filter((filePath) => !filePath.endsWith(".ts"))).toEqual([]);
+  });
+
+  test("keeps PadPilot docs, package routes, and skill references resolvable", async () => {
+    const markdownFiles = await markdownFilesUnder([
+      "docs/pad-pilot",
+      "packages/pad-pilot",
+      "packages/ui",
+      "apps/pad-pilot/.agents/skills"
+    ]);
+    expect(await brokenLocalMarkdownLinks(markdownFiles)).toEqual([]);
   });
 
   test("keeps root repository scripts on Bun TypeScript", async () => {

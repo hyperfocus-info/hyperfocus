@@ -2,8 +2,8 @@ import { JSX, Show, createMemo, createSignal, onCleanup, splitProps } from "soli
 import { Tooltip } from "./tooltip";
 import { type ElementSkin, resolveElementSkin, type TooltipPlacement } from "./element-skin";
 import { clamp } from "../../utils/math";
-import styles from "./knob.stylex";
-import { labelTypographyClass } from "./element-typography.stylex";
+import styles from "./styles/knob.stylex";
+import { labelTypographyClass } from "./styles/element-typography.stylex";
 
 /**
  * Props for Knob.

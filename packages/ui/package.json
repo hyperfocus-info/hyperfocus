@@ -26,7 +26,7 @@
     "bench:measured-window": "bun benchmarks/measured-window-benchmark.ts",
     "build": "bun build.ts",
     "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json",
-    "test": "bun test"
+    "test": "bun test --cwd ../.. packages/ui"
   },
   "peerDependencies": {
     "solid-js": "^1.9.12"

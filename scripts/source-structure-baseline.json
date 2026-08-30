@@ -1,48 +1,6 @@
 {
   "version": 1,
   "exceptions": {
-    "apps/pad-pilot-marketplace/src/billing-webhooks.ts": {
-      "maxLines": 1211,
-      "owner": "apps/pad-pilot-marketplace",
-      "reason": "Imported service composition predates the repository source-file limit.",
-      "boundary": "Separate checkout completion, webhook verification, and persistence transactions.",
-      "removalTarget": "Split below 1000 lines before PadPilot public beta."
-    },
-    "apps/pad-pilot-marketplace/src/server.ts": {
-      "maxLines": 1150,
-      "owner": "apps/pad-pilot-marketplace",
-      "reason": "Imported HTTP composition root predates the repository source-file limit.",
-      "boundary": "Extract route domains while retaining one thin injected HTTP composition root.",
-      "removalTarget": "Split below 1000 lines before PadPilot public beta."
-    },
-    "apps/pad-pilot/scripts/synaesthetic-evaluator/audio-utils.ts": {
-      "maxLines": 1057,
-      "owner": "apps/pad-pilot",
-      "reason": "Imported evaluator implementation predates the repository source-file limit.",
-      "boundary": "Separate decoding, resampling, spectral analysis, and safety classification.",
-      "removalTarget": "Split below 1000 lines before PadPilot public beta."
-    },
-    "apps/pad-pilot/ui/src/dev-host/runtime.ts": {
-      "maxLines": 1539,
-      "owner": "apps/pad-pilot",
-      "reason": "Imported dev-host simulator predates the repository source-file limit.",
-      "boundary": "Separate transport, capability intent, state, and fixture responsibilities.",
-      "removalTarget": "Split below 1000 lines before PadPilot public beta."
-    },
-    "apps/pad-pilot/ui/src/modules/fx/fx-module-store.tsx": {
-      "maxLines": 1716,
-      "owner": "apps/pad-pilot",
-      "reason": "Imported FX editor store predates the repository source-file limit.",
-      "boundary": "Separate graph commands, presets, selection, transport sync, and derived selectors.",
-      "removalTarget": "Split below 1000 lines before PadPilot public beta."
-    },
-    "apps/pad-pilot/ui/src/proto/generated/fx-chain-pb.ts": {
-      "maxLines": 2267,
-      "owner": "apps/pad-pilot",
-      "reason": "Generated protobuf output is kept colocated with its owning bridge contract.",
-      "boundary": "Regenerate from utils/proto/fx-chain.proto; do not hand-split generated output.",
-      "removalTarget": "Remove exception when source policy excludes deterministic generated protobuf output."
-    },
     "apps/engine-editor/src/client.ts": {
       "maxLines": 3616,
       "owner": "apps/engine-editor",
@@ -122,13 +80,6 @@
     }
   },
   "directoryExceptions": {
-    "apps/pad-pilot-marketplace/src": {
-      "maxFiles": 32,
-      "owner": "apps/pad-pilot-marketplace",
-      "reason": "Imported service domains predate the repository directory file limit.",
-      "boundary": "Group auth, billing, catalog, transfer, and release domains without cross-app imports.",
-      "removalTarget": "Ratchet during service decomposition and remove at 25 files."
-    },
     "apps/pad-pilot/scripts": {
       "maxFiles": 50,
       "owner": "apps/pad-pilot",
@@ -144,7 +95,7 @@
       "removalTarget": "Ratchet during evaluator decomposition and remove at 25 files."
     },
     "apps/pad-pilot/ui/src/components/elements": {
-      "maxFiles": 54,
+      "maxFiles": 52,
       "owner": "apps/pad-pilot",
       "reason": "Imported PadPilot element catalog predates the repository directory file limit.",
       "boundary": "Move generic interaction to @hyperfocus/ui and group remaining domain element families.",
@@ -258,20 +209,6 @@
       "reason": "Harness UI declaration decomposition is owned by a separate active workstream.",
       "boundary": "That workstream will separate feature state, workflows, and presentation components.",
       "removalTarget": "Remove this staged deferral when the UI workstream enables declaration enforcement."
-    },
-    {
-      "pathPrefix": "apps/pad-pilot/",
-      "owner": "apps/pad-pilot",
-      "reason": "Imported PadPilot declarations require behavior-preserving zipper decomposition.",
-      "boundary": "Split host simulation, Module stores, and UI components around tested public boundaries.",
-      "removalTarget": "Remove before PadPilot public beta after declarations are below 400 lines."
-    },
-    {
-      "pathPrefix": "apps/pad-pilot-marketplace/",
-      "owner": "apps/pad-pilot-marketplace",
-      "reason": "Imported marketplace declarations require transaction-preserving service decomposition.",
-      "boundary": "Keep HTTP composition thin while domain services own auth, billing, catalog, and transfer behavior.",
-      "removalTarget": "Remove before PadPilot public beta after declarations are below 400 lines."
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
-import { createEffect, onCleanup, onMount } from "solid-js";
+import { onCleanup, onMount } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { subscribeHostState } from "./bridge";
+import * as stylex from "@stylexjs/stylex";
 import { MarketplaceModal } from "./components/marketplace-modal";
 import { UpdateModal } from "./components/update-modal";
 import { DevHostPanel } from "./components/dev-host-panel";
@@ -10,9 +10,7 @@ import { ControllerPreferencesModal } from "./components/controller-preferences-
 import { CreateModuleModal } from "./components/create-module-modal";
 import { GlobalSettingsDrawer } from "./components/global-settings-drawer";
 import marketplaceToastStyles from "./components/marketplace-toast-viewport.stylex";
-import { decodeFxChainStateBase64 } from "./modules/fx/fx-chain-state";
 import { loadPadPilotModule, MissingModuleView } from "./module-runtime";
-import { fxGraph } from "./padpilot/fx-capabilities";
 import {
   ModuleSurface,
   PadPilot,
@@ -29,7 +27,7 @@ import {
 } from "./state/pad-pilot-store";
 import { isPadPilotDevtoolsEnabled } from "./runtime-flags";
 import { resolveMarketplaceWebSocketUrl } from "../../utils/marketplace-runtime";
-import "./styles/app.css";
+import { styles } from "./styles/app.stylex";
 import { HatGlasses, LogIn, Plus, Settings2, SquareChevronLeft, SquareChevronRight, Star, Store } from "lucide-solid";
 
 const createDebouncedCallback = (func: () => void, delay: number) => {
@@ -129,9 +127,9 @@ function ActiveModule() {
   });
 
   return (
-    <ModuleSurface scopeId={moduleId()} class="module-surface">
+    <ModuleSurface scopeId={moduleId()} class={stylex.attrs(styles.moduleSurface).class}>
       <Show when={definition.loading && !blockedLoadStatus()}>
-        <section class="module-runtime-loading">
+        <section {...stylex.attrs(styles.moduleRuntimeLoading)}>
           <p>Loading module...</p>
         </section>
       </Show>
@@ -207,17 +205,14 @@ function AppShell() {
 
   return (
     <main
-      class="padpilot-shell main-container"
-      classList={{ "sidebar-collapsed": sidebarCollapsed() }}
+      {...stylex.attrs(styles.shell, sidebarCollapsed() && styles.shellCollapsed)}
     >
       <aside
-        class="padpilot-sidebar"
-        classList={{ "is-collapsed": sidebarCollapsed() }}
+        {...stylex.attrs(styles.sidebar, sidebarCollapsed() && styles.sidebarCollapsed)}
         onMouseLeave={() => setSidebarPeek(false)}
       >
         <Show when={!sidebarCollapsed()}>
           <PadPilot.Button
-            class="bar-tab"
             variant="toolbar"
             size="sm"
             aria-expanded={!sidebarCollapsed()}
@@ -228,28 +223,26 @@ function AppShell() {
         </Show>
 
         <div
-          class="padpilot-sidebar-content"
-          classList={{ "is-hidden": sidebarCollapsed() }}
+          {...stylex.attrs(styles.sidebarContent, sidebarCollapsed() && styles.sidebarContentHidden)}
         >
           <img
-            class="padpilot-logo"
+            {...stylex.attrs(styles.logo)}
             src="./pad-pilot-logo.png"
             alt="Pad Pilot logo"
           />
-          <h2>Modules</h2>
-          <div class="padpilot-module-toolbar">
+          <h2 {...stylex.attrs(styles.sidebarHeading)}>Modules</h2>
+          <div {...stylex.attrs(styles.moduleToolbar)}>
             <PadPilot.TextField
               type="text"
-              class="padpilot-module-filter text-selectable"
+              class={stylex.attrs(styles.moduleFilter).class}
               value={moduleFilter()}
               onInput={(event) => setModuleFilter(event.currentTarget.value)}
               placeholder="Filter modules..."
             />
             <PadPilot.ToggleButton
-              class="padpilot-toolbar-button"
+              class={stylex.attrs(styles.toolbarButton, favoritesOnly() && styles.toolbarButtonActive).class}
               variant="toolbar"
               size="sm"
-              classList={{ "is-active": favoritesOnly() }}
               value={favoritesOnly()}
               onClick={() => setFavoritesOnly((current) => !current)}
               tooltip={
@@ -258,7 +251,7 @@ function AppShell() {
               icon={<Star size={14} />}
             />
             <PadPilot.Button
-              class="padpilot-toolbar-button"
+              class={stylex.attrs(styles.toolbarButton).class}
               variant="toolbar"
               size="sm"
               onClick={actions.openCreateModule}
@@ -267,7 +260,7 @@ function AppShell() {
             />
             <Show when={showMarketplaceButton()}>
               <PadPilot.Button
-                class="padpilot-toolbar-button"
+                class={stylex.attrs(styles.toolbarButton).class}
                 variant="toolbar"
                 size="sm"
                 onClick={marketplace.actions.openMarketplace}
@@ -276,7 +269,7 @@ function AppShell() {
               />
             </Show>
             <PadPilot.Button
-              class="padpilot-toolbar-button"
+              class={stylex.attrs(styles.toolbarButton).class}
               variant="toolbar"
               size="sm"
               onClick={() => setGlobalSettingsOpen(true)}
@@ -284,26 +277,28 @@ function AppShell() {
               icon={<Settings2 size={14} />}
             />
           </div>
-          <div class="padpilot-module-list">
+          <div {...stylex.attrs(styles.moduleList)}>
             <For each={visibleModules()}>
               {(moduleItem) => (
-                <div class="padpilot-module-row">
+                <div {...stylex.attrs(styles.moduleRow)}>
                   <PadPilot.Button
-                    class="padpilot-module-item"
+                    class={stylex.attrs(
+                      styles.moduleItem,
+                      state.activeModuleId === moduleItem.id && styles.moduleItemActive,
+                    ).class}
                     variant="toolbar"
                     size="sm"
-                    classList={{
-                      "is-active": state.activeModuleId === moduleItem.id,
-                    }}
                     onClick={() => actions.setActiveModuleId(moduleItem.id)}
                   >
                     {moduleItem.name}
                   </PadPilot.Button>
                   <PadPilot.ToggleButton
-                    class="padpilot-favorite-button"
+                    class={stylex.attrs(
+                      styles.favoriteButton,
+                      isFavorite(moduleItem.id) && styles.favoriteButtonActive,
+                    ).class}
                     variant="toolbar"
                     size="sm"
-                    classList={{ "is-active": isFavorite(moduleItem.id) }}
                     value={isFavorite(moduleItem.id)}
                     onClick={() => toggleFavorite(moduleItem.id)}
                     tooltip={
@@ -321,15 +316,17 @@ function AppShell() {
       </aside>
       <Show when={sidebarCollapsed()}>
         <div
-          class="padpilot-sidebar-trigger-zone"
+          {...stylex.attrs(styles.sidebarTriggerZone)}
           onMouseEnter={() => setSidebarPeek(true)}
           onMouseLeave={() => setSidebarPeek(false)}
         >
           <PadPilot.Button
-            class="padpilot-sidebar-trigger-button"
+            class={stylex.attrs(
+              styles.sidebarTriggerButton,
+              sidebarPeek() && styles.sidebarTriggerButtonVisible,
+            ).class}
             variant="toolbar"
             size="sm"
-            classList={{ "is-visible": sidebarPeek() }}
             tooltip="Expand modules menu"
             onClick={() => {
               setChromeViewState({ sidebarCollapsed: false });
@@ -339,11 +336,11 @@ function AppShell() {
           />
         </div>
       </Show>
-      <section class="padpilot-workspace">
+      <section {...stylex.attrs(styles.workspace)}>
         <ActiveModule />
       </section>
       <Show when={isPadPilotDevtoolsEnabled()}>
-        <div style={{ display: "flex", gap: ".5rem", "position": "fixed", "bottom": "1rem", "right": "2rem", "z-index": "4" }}>
+        <div {...stylex.attrs(styles.devtoolsDock)}>
           <DiagnosticsModal />
           <DevHostPanel />
         </div>
@@ -383,28 +380,12 @@ function AppEntryGate() {
     <Show
       when={canEnterApp()}
       fallback={
-        <main class="padpilot-shell main-container">
+        <main {...stylex.attrs(styles.shell)}>
           <section
-            class="padpilot-workspace"
-            style={{
-              "align-items": "center",
-              display: "flex",
-              "justify-content": "center",
-              padding: "2rem",
-              width: "100vw",
-            }}
+            {...stylex.attrs(styles.workspace, styles.entryWorkspace)}
           >
             <div
-              style={{
-                display: "grid",
-                gap: "1rem",
-                "max-width": "28rem",
-                padding: "2rem",
-                border: "1px solid rgba(255,255,255,0.1)",
-                "border-radius": "1rem",
-                background: "rgba(0,0,0,0.35)",
-                "place-items": "center",
-              }}
+              {...stylex.attrs(styles.entryCard)}
             >
               <img src="pad-pilot-logo.png" width="300px" />
               <Show
@@ -437,76 +418,12 @@ function AppEntryGate() {
   );
 }
 
-function GuestModeEnforcer() {
-  const marketplace = useMarketplaceStore();
-  const [fxModuleActive, setFxModuleActive] = createSignal(false);
-  let observedWetDry = 1;
-  const guestSeed = Math.floor(Date.now() / 1000);
-
-  onMount(() => {
-    const unsubscribe = subscribeHostState((hostState) => {
-      const activeModuleId = hostState.activeModuleId ?? hostState.selectedModuleId ?? "";
-      const isFxModule = activeModuleId === "fx" || activeModuleId === "reverb";
-      setFxModuleActive(isFxModule);
-      const payload = hostState.activeModuleStateBase64;
-      if (!payload || !isFxModule || marketplace.state.guestMode) {
-        return;
-      }
-      try {
-        observedWetDry =
-          decodeFxChainStateBase64(payload).master?.wetDry ?? observedWetDry;
-      } catch {
-        observedWetDry = observedWetDry;
-      }
-    });
-    onCleanup(unsubscribe);
-  });
-
-  createEffect(() => {
-    const isFxModule = fxModuleActive();
-    if (!marketplace.state.guestMode) {
-      if (isFxModule) {
-        fxGraph.setMasterWetDry(observedWetDry);
-      }
-      return;
-    }
-
-    const barsPerCycle = 16;
-    const muteBars = 2;
-    const beatsPerBar = 4;
-    const bpm = 120;
-    const barDurationMs = (60_000 / bpm) * beatsPerBar;
-    const cycleDurationMs = barsPerCycle * barDurationMs;
-    const muteDurationMs = muteBars * barDurationMs;
-    const interval = window.setInterval(() => {
-      const cycleIndex = Math.floor(Date.now() / cycleDurationMs);
-      const cycleStart = cycleIndex * cycleDurationMs;
-      const muteOffsetBar =
-        (Math.abs(Math.sin((cycleIndex + 1) * guestSeed)) *
-          (barsPerCycle - muteBars)) |
-        0;
-      const muteStart = cycleStart + muteOffsetBar * barDurationMs;
-      const muteEnd = muteStart + muteDurationMs;
-      const muted = Date.now() >= muteStart && Date.now() < muteEnd;
-      fxGraph.setMasterWetDry(muted ? 0 : observedWetDry);
-    }, 400);
-
-    onCleanup(() => {
-      window.clearInterval(interval);
-      fxGraph.setMasterWetDry(observedWetDry);
-    });
-  });
-
-  return null;
-}
-
 export default function App() {
   return (
     <PadPilotStoreProvider>
       <MarketplaceStoreProvider>
         <PadPilotProvider>
           <DevtoolsBridge />
-          <GuestModeEnforcer />
           <PadPilot.OverlayRoot />
           <AppEntryGate />
           <MarketplaceToasts />

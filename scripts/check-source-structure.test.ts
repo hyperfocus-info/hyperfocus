@@ -49,6 +49,7 @@ describe("source structure limits", () => {
     expect(getSourceLineLimit("packages/engine/examples/demo/src/client.ts")).toBe(1_000);
     expect(getSourceLineLimit("packages/engine/examples/demo/src/client.test.ts")).toBe(1_500);
     expect(getSourceLineLimit("packages/core/src/catalog.data.ts")).toBe(2_000);
+    expect(getSourceLineLimit("apps/tool/src/proto/generated/state-pb.ts")).toBeUndefined();
     expect(getSourceLineLimit("packages/engine/examples/demo/src/catalog.data.ts")).toBe(2_000);
     expect(getSourceLineLimit("README.md")).toBeUndefined();
   });

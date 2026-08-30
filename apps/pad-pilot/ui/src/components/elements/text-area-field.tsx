@@ -1,5 +1,5 @@
 import { Show, splitProps, type Component, type JSX } from "solid-js";
-import styles from "./field.stylex";
+import styles from "./styles/field.stylex";
 
 export type TextAreaFieldProps = Omit<JSX.TextareaHTMLAttributes<HTMLTextAreaElement>, "children"> & {
   controlClass?: string;

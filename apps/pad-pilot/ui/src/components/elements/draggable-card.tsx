@@ -1,5 +1,5 @@
 import { Show, splitProps, type JSX } from "solid-js";
-import styles from "./draggable-card.stylex";
+import styles from "./styles/draggable-card.stylex";
 
 /**
  * Props for DraggableCard.

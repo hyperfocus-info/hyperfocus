@@ -33,7 +33,7 @@ PadPilot keeps tests next to the files they verify. Do not create separate `test
 ## UI Rules
 
 - Current state:
-  - `apps/pad-pilot/ui/src` currently contains 31 test files.
+  - `apps/pad-pilot/scripts/test-ui.ts` discovers every colocated UI test at run time; no hand-maintained file count can drift.
   - UI behavior tests have been migrated off `Bun.file(...).text()` source-string assertions.
   - non-UI native contract coverage was moved out of `apps/pad-pilot/ui/src` into `apps/pad-pilot/plugin/runtime`.
 - New goals:
@@ -65,7 +65,7 @@ PadPilot keeps tests next to the files they verify. Do not create separate `test
   - provider, bridge, and runtime tests are stable only when they exercise public methods and emitted state, not source text.
   - cross-layer contract coverage is easier to reason about when it lives with the owning layer instead of under `apps/pad-pilot/ui/src`.
 - Remaining gaps to improve:
-  - deeper keyboard-path coverage in complex controls such as comboboxes, drawers, and module editors
+  - deeper keyboard-path coverage in complex module editors
   - broader accessibility assertions for labels, focus movement, and escape-key behavior
   - higher coverage on the largest FX surfaces where render branches are still wide
 - Coverage target:

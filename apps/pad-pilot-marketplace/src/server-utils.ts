@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import type { UserRow } from "./db";
 import type { MarketplaceEnv } from "./env";
 import { fail } from "./responses";
-import { cookies } from "./session";
+import { cookies } from "./auth/session";
 import { resolveContainedFile } from "./static";
 import { BoundedStreamLimitError, readBoundedStreamBytes } from "@hyperfocus/pad-pilot/bounded-stream";
 

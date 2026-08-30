@@ -260,6 +260,9 @@ class PadPilotAudioProcessor final : public juce::AudioProcessor,
   std::string getModuleStatePayloadBase64Locked(const std::string& moduleId) const;
   std::string getModuleStateBytesLocked(const std::string& moduleId) const;
   const padpilot::ModuleRecord* findModuleRecordLocked(const std::string& moduleId) const;
+  bool moduleProvidesCapabilityLocked(const std::string& moduleId,
+                                      std::string_view capability) const;
+  std::string getSelectedFxGraphOwnerLocked() const;
   padpilot::ScriptModuleLoadRequest getScriptModuleLoadRequestLocked(const std::string& moduleId) const;
   bool migrateModuleStateAfterScriptLoad(const std::string& moduleId,
                                          std::string* payload);
@@ -308,6 +311,7 @@ class PadPilotAudioProcessor final : public juce::AudioProcessor,
   std::vector<padpilot::PresetRecord> presets_;
   std::string selectedModuleId_;
   std::string selectedPresetId_;
+  std::string fxGraphOwnerModuleId_;
   std::unordered_map<std::string, std::string> moduleStatePayloadById_;
   std::unordered_map<std::string, std::string> editorViewStatePayloadByScope_;
   std::unordered_map<std::string, std::uint64_t> acceptedRevisionByModuleId_;

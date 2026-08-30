@@ -2,19 +2,22 @@
 
 - Owner: Product/licensing and native runtime maintainers
 - Deadline: Before guest-mode degradation is relied on as a paid production entitlement boundary
-- Status: Open; current UI heuristic is explicitly non-security enforcement
+- Status: Resolved for the current product policy on 2026-08-29
 
 ## Problem
 
-`GuestModeEnforcer` changes FX wet/dry from client-visible UI code. An open-source client can patch or bypass that behavior, and an editor lifecycle failure can also make product policy mutate canonical audio state unexpectedly.
+The imported `GuestModeEnforcer` changed FX wet/dry from client-visible UI code.
+An open-source client could bypass it, and editor lifecycle failure could mutate
+canonical audio state unexpectedly.
 
-Until this task is complete, guest-mode degradation must be described as a demo affordance, not tamper-resistant licensing or authorization.
+PadPilot now treats guest mode as an account/marketplace state only. It never
+degrades audio, writes a Preset, or mutates processor-owned Module state. A future
+paid runtime entitlement must begin with a new threat model and native contract;
+the removed heuristic is not an acceptable starting point.
 
-## Exit Criteria
+## Resolution
 
-- Product policy defines which guest limitations are server-enforced, native-enforced, or intentionally advisory in an open-source client.
-- Entitlement decisions use authenticated, expiring, replay-resistant evidence and fail predictably while offline.
-- Enforcement does not persist degradation values into user Presets or DAW project state.
-- Editor close/reopen, Module switch, project restore, login/logout, and network-loss tests prove original audio state is restored exactly once.
-- Threat-model documentation states what a user controlling the client binary can still bypass.
-- The temporary `GuestModeEnforcer` FX mutation path and its special-case app-shell routing are removed.
+- Guest restrictions remain limited to authenticated marketplace/account actions.
+- The temporary `GuestModeEnforcer` and factory-FX special case are removed.
+- Guest entry cannot write audio state, so editor and network lifecycle events have
+  no degradation value to restore or accidentally persist.

@@ -1,5 +1,5 @@
 import { Show, splitProps, type JSX } from "solid-js";
-import styles from "./field.stylex";
+import styles from "./styles/field.stylex";
 
 export type TextFieldProps = Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "children"> & {
   controlClass?: string;

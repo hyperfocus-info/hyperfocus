@@ -12,6 +12,7 @@
 #include "runtime/midi-output-runtime.h"
 #include "runtime/lock-free-queue.h"
 #include "runtime/module-identity.h"
+#include "runtime/module-capability.h"
 #include "runtime/module-manifest-limits.h"
 #include "runtime/module-store.h"
 #include "runtime/preset-store.h"
@@ -309,6 +310,24 @@ void runGraphEpochTests() {
          "Concurrent graph epoch advancement must return one unique generation per discontinuity.");
   expect(epoch.load(std::memory_order_acquire) == 1,
          "Graph epoch advancement should roll the maximum generation directly to one.");
+}
+
+void runModuleCapabilityTests() {
+  padpilot::ModuleRecord customFx;
+  customFx.id = "custom-fx";
+  customFx.loadStatus = "ready";
+  customFx.capabilities = {"fx-graph", "fx-visualizer"};
+  padpilot::ModuleRecord unavailableFx = customFx;
+  unavailableFx.id = "unavailable-fx";
+  unavailableFx.loadStatus = "error";
+  const std::vector<padpilot::ModuleRecord> modules {customFx, unavailableFx};
+
+  expect(padpilot::moduleProvidesCapability(modules, "custom-fx", "fx-graph"),
+         "A ready non-factory Module should own a capability it declares.");
+  expect(!padpilot::moduleProvidesCapability(modules, "custom-fx", "automation"),
+         "Capability ownership must not widen to undeclared operations.");
+  expect(!padpilot::moduleProvidesCapability(modules, "unavailable-fx", "fx-graph"),
+         "A non-ready Module must not own runtime capabilities.");
 }
 
 juce::File createModuleBundle(const juce::File& root,
@@ -2796,6 +2815,25 @@ void runProcessorSourceContracts() {
   expect(!saveImplementation.contains("moduleStatePayloadById_[moduleId] = preset.payloadJson") &&
              !saveImplementation.contains("acceptedRevisionByModuleId_[moduleId] = 0"),
          "Saving a preset must not silently replace active canonical state without applying its runtime.");
+
+  const std::array<const char*, 4> capabilityOwnedSources {
+      "core/pad-pilot-processor-automation.cpp",
+      "core/pad-pilot-processor-bridge.cpp",
+      "core/pad-pilot-processor-modules.cpp",
+      "core/pad-pilot-processor-persistence.cpp",
+  };
+  for (const auto* relativePath : capabilityOwnedSources) {
+    const auto source = pluginRoot.getChildFile(relativePath).loadFileAsString();
+    expect(!source.contains("kFxModuleId"),
+           "Generic FX graph ownership must not branch on the factory Module ID: " +
+               juce::String(relativePath));
+  }
+  const auto persistenceSource = pluginRoot
+                                     .getChildFile("core/pad-pilot-processor-persistence.cpp")
+                                     .loadFileAsString();
+  expect(persistenceSource.contains("moduleProvidesCapability(restoredModules, moduleId, \"fx-graph\")") &&
+             persistenceSource.contains("appendImportedMediaForModuleState(moduleId, payload, state)"),
+         "Processor save/restore and managed media paths must retain non-factory FX graph owners.");
 }
 
 }  // namespace
@@ -2804,6 +2842,7 @@ int main() {
   try {
     runLockFreeQueueTests();
     runGraphEpochTests();
+    runModuleCapabilityTests();
     runModuleIdentityTests();
     runPresetIdentityTests();
     runSharedLimitTests();

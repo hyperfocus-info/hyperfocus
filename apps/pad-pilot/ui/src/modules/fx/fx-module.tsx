@@ -1,7 +1,7 @@
 import { For, Show, createMemo } from "solid-js";
 import { createHotkey } from "../../padpilot/hotkeys";
 import { PadPilot } from "../../padpilot/index";
-import styles from "./components/fx-toast-viewport.stylex";
+import styles from "./components/styles/fx-toast-viewport.stylex";
 import { FxChainPresetModal } from "./components/fx-chain-preset-modal";
 import { FxCompactPresetModal } from "./components/fx-compact-preset-modal";
 import { FxConsoleShell } from "./components/fx-console-shell";

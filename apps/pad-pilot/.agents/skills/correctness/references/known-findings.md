@@ -182,7 +182,7 @@
 - Root cause: The client accumulated an unbounded array of transport chunks and treated malformed successful JSON as a typed value.
 - Fix pattern: Bound both bytes and chunk count, grow one bounded buffer, cancel and release the reader in finally, and reject malformed or empty success payloads.
 - Regression test added: Marketplace fragmented-stream, malformed-success, oversize, cancellation, and reader-release tests.
-- Relevant files: apps/pad-pilot/ui/src/apps/pad-pilot-marketplace/api.ts, apps/pad-pilot/ui/src/apps/pad-pilot-marketplace/api.test.ts
+- Relevant files: apps/pad-pilot/ui/src/marketplace/api.ts, apps/pad-pilot/ui/src/marketplace/api.test.ts
 
 ## 2026-08-03 - Async UI fixtures accepted mixed-source capability state
 
@@ -383,3 +383,11 @@
 - Fix pattern: Materialize the optional Get-Process result with array syntax so an empty result exits successfully, then reject only non-empty PID output
 - Regression test added: FL Studio command contract asserts the safe array-materialized process query
 - Relevant files: apps/pad-pilot/scripts/fl-studio-validation.ts, apps/pad-pilot/scripts/fl-studio-validation.test.ts, apps/pad-pilot/scripts/validate-fl-studio.ts
+
+## 2026-08-29 - A Module with one related capability could make another public operation emit an unauthorized host intent
+
+- Symptom: A Module with one related capability could make another public operation emit an unauthorized host intent
+- Root cause: Capability clients first resolved a Module through any related grant or fx-graph, then derived session, MIDI-export, automation, or visualizer handles without re-checking the exact operation grant
+- Fix pattern: Resolve the selected ready Module independently for every capability operation; reject explicit Module ids unless they match that exact grant
+- Regression test added: Partial-grant analyzer and FX capability tests prove only the granted feed/session/export/graph/automation/visualizer operation can emit or subscribe
+- Relevant files: apps/pad-pilot/ui/src/padpilot/analyzer.ts, apps/pad-pilot/ui/src/padpilot/analyzer.test.tsx, apps/pad-pilot/ui/src/padpilot/fx-capabilities.ts, apps/pad-pilot/ui/src/padpilot/fx-capabilities.test.ts

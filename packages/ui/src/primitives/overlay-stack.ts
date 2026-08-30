@@ -1,4 +1,4 @@
-type OverlayEntry = {
+export type OverlayEntry = {
   id: string;
   close: () => void;
 };
@@ -30,13 +30,13 @@ function onKeyDown(event: KeyboardEvent) {
 }
 
 function ensureListener() {
-  if (listening || typeof document === "undefined") return;
-  document.addEventListener("keydown", onKeyDown, true);
+  if (listening || typeof window === "undefined") return;
+  window.addEventListener("keydown", onKeyDown, true);
   listening = true;
 }
 
 function removeListener() {
-  if (!listening || typeof document === "undefined") return;
-  document.removeEventListener("keydown", onKeyDown, true);
+  if (!listening || typeof window === "undefined") return;
+  window.removeEventListener("keydown", onKeyDown, true);
   listening = false;
 }

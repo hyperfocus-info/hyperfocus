@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { CodexGeneratorTimeoutError } from "./codex-generator";
-import { processStripeWebhook } from "./billing-webhooks";
+import { processStripeWebhook } from "./billing/billing-webhooks";
 import {
   createModule,
   createSession,

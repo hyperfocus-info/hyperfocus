@@ -1,7 +1,7 @@
 import { createDraggable, createDroppable, maybeTransformStyle } from "@thisbeyond/solid-dnd";
 import { JSX } from "solid-js";
 import { CARD_DRAG_INTERACTIVE_SELECTOR, shouldStartCardDrag } from "./fx-card-drag";
-import styles from "./fx-console-shell.stylex";
+import styles from "./styles/fx-console-shell.stylex";
 
 export function bindCardDraggable(
   draggable: ReturnType<typeof createDraggable>,
@@ -60,4 +60,3 @@ export function FxNodeDropZone(props: { chainId: number; nodeId: number; childre
     </section>
   );
 }
-

@@ -4,7 +4,7 @@ import { PadPilot } from "../../../padpilot/index";
 import { mergeFxPresetSummaries } from "../fx-bundled-presets";
 import { buildFxPresetItems, filterFxPresetCatalogItems, type FxPresetCatalogFilter } from "../fx-module-selectors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "./fx-preset-rail.stylex";
+import styles from "./styles/fx-preset-rail.stylex";
 
 const PRESET_FILTERS = [
   { id: "all", label: "All" },

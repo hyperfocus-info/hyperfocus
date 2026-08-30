@@ -32,6 +32,7 @@ export {
   type PanelSurfaceProps,
 } from "./primitives/panel";
 export { Popover, type PopoverState } from "./primitives/popover";
+export { isTopOverlay, registerOverlay, type OverlayEntry } from "./primitives/overlay-stack";
 export {
   SegmentedControl,
   type SegmentedControlOption,

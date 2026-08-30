@@ -3,7 +3,7 @@ import { FloatingLayer } from "./floating-layer";
 import { joinElementClasses as joinClasses } from "./element-helpers";
 import { filterSearchableComboboxItems, resolveSearchableComboboxItemId } from "./searchable-combobox-utils";
 import { Tooltip } from "./tooltip";
-import styles from "./searchable-combobox.stylex";
+import styles from "./styles/searchable-combobox.stylex";
 
 /**
  * Shared item shape for searchable combobox options.

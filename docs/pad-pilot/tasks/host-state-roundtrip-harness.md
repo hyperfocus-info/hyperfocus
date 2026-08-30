@@ -6,7 +6,7 @@ Deadline: 2026-09-15
 
 Status: Open
 
-Progress (2026-08-29): repository-local pinned pluginval and Steinberg validator bootstrap is complete; pluginval strictness 10 passes and Steinberg extensive passes 537/537 after correcting the advertised default program name. The FL Studio 2026/21 render harness is complete, but its four version-native `.flp` fixtures and the first-party processor-instance target below remain open.
+Progress (2026-08-29): repository-local pinned pluginval and Steinberg validator bootstrap is complete; pluginval strictness 10 passes and Steinberg extensive passes 537/537 after correcting the advertised default program name. The first-party `padpilot-processor-tests` target now proves two non-factory FX owner states survive a fresh processor instance. The broader before/after-prepare matrix, full state inventory, render comparison, corrupt/legacy fixtures, and four version-native FL Studio `.flp` fixtures remain open.
 
 ## Problem
 

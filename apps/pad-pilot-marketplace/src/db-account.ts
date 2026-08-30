@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 
-import type { VerifiedClerkIdentity } from "./auth";
+import type { VerifiedClerkIdentity } from "./auth/auth";
 import type { AccountSnapshot, FirstClassMembershipRow, FirstClassMembershipStatus, PadPilotAccessRow, PadPilotAccessStatus, PilotTokenLedgerRow, SessionRow, TokenSourceKind, UserRow } from "./db";
 const selectUserColumns =
   "users.id, users.clerk_user_id, users.email, users.username, users.display_name, users.subscription_status, users.pilot_token_balance";
@@ -339,4 +339,3 @@ export function applyPilotTokenDelta(
     throw error;
   }
 }
-

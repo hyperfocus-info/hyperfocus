@@ -5,7 +5,7 @@ import { createChainAccessor, createNodeAccessor } from "../fx-live-accessors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { getNodeDefinition, resolveNodeConfig } from "../node-registry/registry";
 import { getNodeRenderers } from "../node-registry/renderer-registry";
-import styles from "./fx-inline-node-editor.stylex";
+import styles from "./styles/fx-inline-node-editor.stylex";
 
 export type FxInlineNodeEditorProps = {
   chainId: number;

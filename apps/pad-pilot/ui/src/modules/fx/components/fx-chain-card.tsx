@@ -11,7 +11,7 @@ import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { type TapView } from "../fx-types";
 import { createMeterVisual, meterDbFromMix } from "../fx-visuals";
 import { FxNodeLane } from "./fx-node-lane";
-import styles from "../fx-module.stylex";
+import styles from "../styles/fx-module.stylex";
 
 export type FxChainCardProps = {
   activeDraggedChainId: Accessor<number | null>;

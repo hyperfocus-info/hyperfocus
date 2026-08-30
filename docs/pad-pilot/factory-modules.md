@@ -3,7 +3,7 @@
 Stock modules currently shipped with PadPilot.
 
 Canonical IDs, versions, entry paths, and capability grants live in
-`apps/pad-pilot/utils/factory-modules.ts`. `bun run generate:factory-modules` produces the
+`packages/pad-pilot/src/factory-modules.ts`. `bun run generate:factory-modules` produces the
 native catalog; the UI, browser host, and initial application state consume the
 same source directly.
 

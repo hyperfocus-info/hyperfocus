@@ -89,6 +89,33 @@ it("does not emit fx mutations for a module without fx-graph", () => {
   expect(sentIntents()).toHaveLength(0);
 });
 
+it("requires the exact FX capability for automation and visualizer operations", () => {
+  installNativeBridge();
+  window.padpilotHostReceive?.({
+    modules: [{ id: "fx", name: "FX", loadStatus: "ready", capabilities: ["fx-graph"] }],
+    selectedModuleId: "fx",
+  });
+
+  fxGraph.beginAutomationTouch("master-wet-dry");
+  const unavailableVisualizer = fxVisualizer.subscribe({ onFrame() {} });
+  expect(unavailableVisualizer.isClosed()).toBe(true);
+  expect(sentIntents()).toHaveLength(0);
+
+  window.padpilotHostReceive?.({
+    modules: [{ id: "fx", name: "FX", loadStatus: "ready", capabilities: ["automation"] }],
+    selectedModuleId: "fx",
+  });
+  fxGraph.beginAutomationTouch("master-wet-dry");
+  fxGraph.setMasterWetDry(0.5);
+
+  expect(sentIntents()).toHaveLength(1);
+  expect(sentIntents()[0]).toMatchObject({
+    action: "begin-touch",
+    capability: "automation",
+    handle: "fx::automation::primary",
+  });
+});
+
 it("replays each cached visualizer frame once and scopes cache to selected module", async () => {
   installNativeBridge();
   window.padpilotHostReceive?.({

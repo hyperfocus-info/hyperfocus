@@ -6,7 +6,7 @@ import {
   renderFxControlField,
   resolveFxControls,
 } from "./fx-control-field";
-import styles from "../fx-node-registry.stylex";
+import styles from "../styles/fx-node-registry.stylex";
 
 export type FxNodeRackProps = {
   chainId: number;

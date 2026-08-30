@@ -3,44 +3,21 @@ import { Dynamic } from "solid-js/web";
 import { registerModuleStateCodec, type ModuleStateCodec } from "./proto/registry";
 import { PadPilot } from "./padpilot/index";
 import { createFactoryModuleManifest, getFactoryModule } from "@hyperfocus/pad-pilot/factory-modules";
+import {
+  definePadPilotModule as definePublicPadPilotModule,
+  type PadPilotInstalledModuleSummary,
+  type PadPilotModuleDefinition as PublicPadPilotModuleDefinition,
+} from "@hyperfocus/pad-pilot/module-ui-contract";
+import {
+  definePadPilotModuleManifest,
+  type PadPilotModuleManifest,
+} from "@hyperfocus/pad-pilot/module-manifest";
 
-export type InstalledModuleSummary = {
-  id: string;
-  name: string;
-  version?: string;
-  capabilities?: string[];
-  loadStatus?: string;
-  loadErrorMessage?: string;
-  expectedModuleVersion?: string;
-  resolvedModuleVersion?: string;
-  uiEntryPath?: string;
-  scriptEntryPath?: string;
-};
+export type InstalledModuleSummary = PadPilotInstalledModuleSummary;
 
-export type PadPilotModuleManifest = {
-  id: string;
-  name: string;
-  version: string;
-  moduleApiVersion: string;
-  uiEntry: string;
-  scriptEntry?: string;
-  stateSchemaVersion: number;
-  capabilities: string[];
-  minHostVersion: string;
-  assets?: Record<string, string>;
-  migrations?: unknown[];
-};
+export type { PadPilotModuleManifest };
 
-export type PadPilotModuleRegistrationContext = {
-  module: InstalledModuleSummary;
-  registerModuleStateCodec: <T>(moduleId: string, codec: ModuleStateCodec<T>) => void;
-};
-
-export type PadPilotModuleDefinition = {
-  manifest: PadPilotModuleManifest;
-  register?: (context: PadPilotModuleRegistrationContext) => void;
-  Component: Component;
-};
+export type PadPilotModuleDefinition = PublicPadPilotModuleDefinition<Component>;
 
 type PadPilotModuleRuntime = {
   createStarterModuleComponent: (manifest: PadPilotModuleManifest) => Component;
@@ -106,7 +83,7 @@ const builtinLoaders: Record<string, () => Promise<PadPilotModuleDefinition>> = 
 };
 
 export function definePadPilotModule(definition: PadPilotModuleDefinition) {
-  return definition;
+  return definePublicPadPilotModule(definition);
 }
 
 function normalizeManifest(
@@ -127,7 +104,7 @@ function normalizeManifest(
       throw new Error(`Module "${summary.id}" capabilities do not match its installed manifest.`);
     }
   }
-  return {
+  return definePadPilotModuleManifest({
     id: summary.id,
     name: summary.name,
     version: summary.version ?? manifest?.version ?? "0.1.0",
@@ -139,7 +116,7 @@ function normalizeManifest(
     minHostVersion: manifest?.minHostVersion ?? "0.1.0",
     assets: manifest?.assets ?? {},
     migrations: manifest?.migrations ?? [],
-  } satisfies PadPilotModuleManifest;
+  });
 }
 
 function normalizeModuleDefinition(
@@ -173,6 +150,24 @@ async function importExternalModule(summary: InstalledModuleSummary) {
   return import(summary.uiEntryPath);
 }
 
+function createTrustedStarterDefinition(summary: InstalledModuleSummary) {
+  const manifest = definePadPilotModuleManifest({
+    id: summary.id,
+    name: summary.name,
+    version: summary.version ?? "0.1.0",
+    moduleApiVersion: "0.1.0",
+    uiEntry: "ui/ui-entry.js",
+    scriptEntry: summary.scriptEntryPath ? "script/module.js" : undefined,
+    stateSchemaVersion: 1,
+    capabilities: summary.capabilities ?? ["module-state", "script-runtime"],
+    minHostVersion: "0.1.0",
+  });
+  return definePadPilotModule({
+    manifest,
+    Component: createStarterModuleComponent(manifest),
+  });
+}
+
 function registerIfNeeded(summary: InstalledModuleSummary, definition: PadPilotModuleDefinition) {
   const registrationKey = summary.uiEntryPath ?? summary.id;
   if (!definition.register || registeredEntries.has(registrationKey)) {
@@ -198,33 +193,13 @@ export async function loadPadPilotModule(summary: InstalledModuleSummary) {
   }
 
   if (summary.uiEntryPath.startsWith("builtin://starter/")) {
-    return definePadPilotModule({
-      manifest: {
-        id: summary.id,
-        name: summary.name,
-        version: summary.version ?? "0.1.0",
-        moduleApiVersion: "0.1.0",
-        uiEntry: summary.uiEntryPath,
-        scriptEntry: summary.scriptEntryPath,
-        stateSchemaVersion: 1,
-        capabilities: summary.capabilities ?? ["module-state", "script-runtime"],
-        minHostVersion: "0.1.0",
-      },
-      Component: createStarterModuleComponent({
-        id: summary.id,
-        name: summary.name,
-        version: summary.version ?? "0.1.0",
-        moduleApiVersion: "0.1.0",
-        uiEntry: summary.uiEntryPath,
-        scriptEntry: summary.scriptEntryPath,
-        stateSchemaVersion: 1,
-        capabilities: summary.capabilities ?? ["module-state", "script-runtime"],
-        minHostVersion: "0.1.0",
-      }),
-    });
+    return createTrustedStarterDefinition(summary);
   }
 
   const builtinLoader = builtinLoaders[summary.uiEntryPath];
+  if (!builtinLoader && process.env.PADPILOT_ALLOW_UNSAFE_EXTERNAL_MODULE_UI !== "true") {
+    return createTrustedStarterDefinition(summary);
+  }
   const loaded = builtinLoader ? await builtinLoader() : await importExternalModule(summary);
   const exportedValue = "default" in loaded ? loaded.default : loaded;
   return registerIfNeeded(summary, normalizeModuleDefinition(summary, exportedValue));

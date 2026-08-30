@@ -6,13 +6,13 @@ import { FloatingLayer } from "./floating-layer";
 const styles = stylex.create({
   anchor: { display: "inline-flex" },
   bubble: {
-    background: "rgba(7, 12, 21, 0.96)",
     borderColor: "rgba(140, 196, 227, 0.24)",
     borderRadius: "8px",
     borderStyle: "solid",
     borderWidth: "1px",
     paddingBlock: "6px",
     paddingInline: "8px",
+    backgroundColor: "rgba(7, 12, 21, 0.96)",
     boxShadow: "0 12px 26px rgba(0, 0, 0, 0.28)",
     color: "#edf6ff",
     fontSize: "11px",

@@ -5,7 +5,7 @@ import { FX_IDEA_TAGS } from "../fx-idea-generator";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { getNodeDefinition } from "../node-registry/registry";
 import { TIMING_SYNC_LABELS } from "../timing-sync";
-import styles from "./fx-creative-tools.stylex";
+import styles from "./styles/fx-creative-tools.stylex";
 
 type ModulationTarget = {
   baseValue: number;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { resolveElementSkin } from "./element-skin";
-import { shouldCollapseButtonGroup } from "./button-group";
+import { shouldCollapseButtonGroup } from "./button-group/button-group";
 import { joinElementClasses } from "./element-helpers";
 
 describe("PadPilot element helpers", () => {

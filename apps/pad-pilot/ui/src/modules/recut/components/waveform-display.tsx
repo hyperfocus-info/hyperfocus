@@ -58,6 +58,56 @@ function markerPercent(frame: number, totalFrames: number) {
   return clamp01(frame / Math.max(1, totalFrames)) * 100;
 }
 
+function WaveformControls() {
+  const store = useRecutModuleStore();
+  const bpmHint = () => store.derived.bpmSuggestedValue() <= 0
+    ? `Project ${Math.round(store.derived.projectBpm())} BPM fallback`
+    : `Suggested ${Math.round(store.derived.bpmSuggestedValue())} BPM at ${Math.round(store.derived.bpmSuggestedConfidence() * 100)}%`;
+
+  return (
+    <div class={styles["waveform-footer"]}>
+      <PadPilot.Slider
+        orientation="horizontal"
+        min={0}
+        max={1}
+        value={store.derived.density()}
+        onChange={(value) => {
+          if (store.derived.canEditDensity()) store.actions.setDensity(value);
+        }}
+        onCommit={(value) => {
+          if (store.derived.canEditDensity()) store.actions.setDensity(value, { commit: true });
+        }}
+        label={`Density ${Math.round(store.derived.density() * 100)}%`}
+        tooltip={store.derived.canEditDensity()
+          ? store.derived.analysisMode() === RecutAnalysisMode.AUTO
+            ? "Controls how strict Recut is about which transients count as interesting."
+            : "Controls chop density."
+          : "Disabled in Custom mode."}
+      />
+      <Show when={store.derived.analysisMode() === RecutAnalysisMode.BPM}>
+        <div class={styles["bpm-controls"]}>
+          <PadPilot.TextField
+            label="BPM"
+            type="number"
+            min="20"
+            max="320"
+            value={String(Math.round(store.derived.bpmValue() || store.derived.projectBpm()))}
+            description={`${bpmSourceLabel(store.derived.bpmSource())} · ${Math.round(store.derived.bpmConfidence() * 100)}% confidence`}
+            onInput={(event) => {
+              const nextValue = Number(event.currentTarget.value);
+              if (Number.isFinite(nextValue)) store.actions.setBpmValue(nextValue);
+            }}
+          />
+          <div class={styles["bpm-hint"]}>{bpmHint()}</div>
+        </div>
+      </Show>
+      <PadPilot.Button variant="ghost" tooltip="Regenerate chops" onClick={store.actions.reanalyze}>
+        Reanalyze
+      </PadPilot.Button>
+    </div>
+  );
+}
+
 export function WaveformDisplay() {
   const store = useRecutModuleStore();
   const [draggingFile, setDraggingFile] = createSignal(false);
@@ -71,12 +121,6 @@ export function WaveformDisplay() {
   const sourceLabel = () => store.state().sourceName.trim() || formatSourceLabel(store.state().sourcePath);
   const totalFrames = () => Math.max(Number(store.state().lengthFrames) || 1, ...store.derived.sliceMarkers().map((marker) => marker.endFrame), 1);
   const selectedMarker = () => store.derived.sliceMarkers()[store.derived.selectedMarkerIndex()] ?? null;
-  const bpmHint = () => {
-    if (store.derived.bpmSuggestedValue() <= 0) {
-      return `Project ${Math.round(store.derived.projectBpm())} BPM fallback`;
-    }
-    return `Suggested ${Math.round(store.derived.bpmSuggestedValue())} BPM at ${Math.round(store.derived.bpmSuggestedConfidence() * 100)}%`;
-  };
   const analysisBusyLabel = () => store.derived.analysisProgress() > 0 && store.derived.analysisProgress() < 1
     ? `Rebuilding chops… ${Math.round(store.derived.analysisProgress() * 100)}%`
     : "Rebuilding chops…";
@@ -438,56 +482,7 @@ export function WaveformDisplay() {
         {renderWaveformEditor()}
       </Show>
 
-      <div class={styles["waveform-footer"]}>
-        <PadPilot.Slider
-          orientation="horizontal"
-          min={0}
-          max={1}
-          value={store.derived.density()}
-          onChange={(value) => {
-            if (store.derived.canEditDensity()) {
-              store.actions.setDensity(value);
-            }
-          }}
-          onCommit={(value) => {
-            if (store.derived.canEditDensity()) {
-              store.actions.setDensity(value, { commit: true });
-            }
-          }}
-          label={`Density ${Math.round(store.derived.density() * 100)}%`}
-          tooltip={store.derived.canEditDensity()
-            ? store.derived.analysisMode() === RecutAnalysisMode.AUTO
-              ? "Controls how strict Recut is about which transients count as interesting."
-              : "Controls chop density."
-            : "Disabled in Custom mode."}
-        />
-        <Show when={store.derived.analysisMode() === RecutAnalysisMode.BPM}>
-          <div class={styles["bpm-controls"]}>
-            <PadPilot.TextField
-              label="BPM"
-              type="number"
-              min="20"
-              max="320"
-              value={String(Math.round(store.derived.bpmValue() || store.derived.projectBpm()))}
-              description={`${bpmSourceLabel(store.derived.bpmSource())} · ${Math.round(store.derived.bpmConfidence() * 100)}% confidence`}
-              onInput={(event) => {
-                const nextValue = Number(event.currentTarget.value);
-                if (Number.isFinite(nextValue)) {
-                  store.actions.setBpmValue(nextValue);
-                }
-              }}
-            />
-            <div class={styles["bpm-hint"]}>{bpmHint()}</div>
-          </div>
-        </Show>
-        <PadPilot.Button
-          variant="ghost"
-          tooltip="Regenerate chops"
-          onClick={store.actions.reanalyze}
-        >
-          Reanalyze
-        </PadPilot.Button>
-      </div>
+      <WaveformControls />
 
       <Show when={selectedMarker()}>
         {(marker) => (

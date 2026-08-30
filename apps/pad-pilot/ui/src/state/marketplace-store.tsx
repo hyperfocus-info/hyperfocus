@@ -1,5 +1,5 @@
 import { ParentProps, createContext, onCleanup, onMount, useContext } from "solid-js";
-import { createStore } from "solid-js/store";
+import { createStore, type SetStoreFunction } from "solid-js/store";
 import { getPadPilotRuntimeInfo, restartAndApplyPluginUpdate, stagePluginUpdate, type PadPilotRuntimeInfo } from "../bridge";
 import { openMarketplaceSignIn, ensureMarketplaceServerSession, signOutMarketplace } from "../marketplace/clerk";
 import {
@@ -141,6 +141,133 @@ const saveUpdateChannel = (channel: PluginUpdateChannel) => {
   }
 };
 
+function createMarketplaceUpdater(options: {
+  pushToast: (message: string) => void;
+  setState: SetStoreFunction<MarketplaceState>;
+  state: MarketplaceState;
+}) {
+  const { pushToast, setState, state } = options;
+  let checkRequestId = 0;
+  let restartRequestId = 0;
+  let stageRequestId = 0;
+  let disposed = false;
+
+  const setError = (message: string, context: string, error?: unknown) => {
+    console.error(context, error ?? message);
+    setState("updater", "checkStatus", "error");
+    setState("updater", "lastError", message);
+    setState("updater", "downloadProgress", null);
+    pushToast(message);
+  };
+
+  const checkForUpdates = async (options?: { openModalOnAvailable?: boolean }) => {
+    const requestId = ++checkRequestId;
+    ++stageRequestId;
+    const channel = state.updater.channel;
+    setState("updater", "checkStatus", "checking");
+    setState("updater", "lastError", null);
+    setState("updater", "downloadProgress", null);
+    try {
+      const runtime = await getPadPilotRuntimeInfo();
+      if (disposed || requestId !== checkRequestId) return;
+      setState("updater", "currentVersion", runtime.currentVersion);
+      setState("updater", "hostMode", runtime.hostMode);
+      setState("updater", "installPath", runtime.installPath ?? runtime.defaultInstallPath);
+      setState("updater", "platform", runtime.platform);
+      const latest = await fetchLatestPluginUpdate({
+        arch: runtime.arch,
+        channel,
+        platform: runtime.platform,
+        version: runtime.currentVersion,
+      });
+      if (disposed || requestId !== checkRequestId) return;
+      setState("updater", "availableRelease", latest.updateAvailable ? latest : null);
+      setState("updater", "modalOpen", Boolean(options?.openModalOnAvailable && latest.updateAvailable));
+      setState("updater", "checkStatus", latest.updateAvailable ? "update-available" : "up-to-date");
+    } catch (error) {
+      if (disposed || requestId !== checkRequestId) return;
+      setError(
+        error instanceof Error ? error.message : "Failed to check for PadPilot updates.",
+        "PadPilot update check failed.",
+        error
+      );
+    }
+  };
+
+  const restartAndApplyUpdate = async () => {
+    if (disposed) return;
+    const requestId = ++restartRequestId;
+    try {
+      await restartAndApplyPluginUpdate();
+    } catch (error) {
+      if (disposed || requestId !== restartRequestId) return;
+      setError(
+        error instanceof Error ? error.message : "Unable to restart PadPilot and apply the staged update.",
+        "PadPilot restart-and-apply failed.",
+        error
+      );
+    }
+  };
+
+  const stageAvailableUpdate = async () => {
+    const release = state.updater.availableRelease;
+    if (!release?.updateAvailable || !release.downloadUrl || !release.manifestUrl || !release.artifactChecksumSha256 || !release.manifestChecksumSha256 || !release.latestVersion) {
+      setError("No update payload is available to download yet.", "PadPilot update staging was requested without an available release.");
+      return;
+    }
+    const requestId = ++stageRequestId;
+    ++checkRequestId;
+    setState("updater", "checkStatus", "downloading");
+    setState("updater", "downloadProgress", "Downloading and staging update...");
+    setState("updater", "lastError", null);
+    try {
+      const staged = await stagePluginUpdate({
+        artifactChecksumSha256: release.artifactChecksumSha256,
+        artifactUrl: resolveMarketplaceApiUrl(release.downloadUrl),
+        currentVersion: state.updater.currentVersion,
+        manifestChecksumSha256: release.manifestChecksumSha256,
+        manifestSignature: release.signature,
+        manifestUrl: resolveMarketplaceApiUrl(release.manifestUrl),
+        releaseNotes: release.releaseNotes,
+        targetVersion: release.latestVersion,
+      });
+      if (disposed || requestId !== stageRequestId) return;
+      setState("updater", "stagedUpdate", {
+        logPath: staged.logPath,
+        message: staged.message,
+        targetVersion: staged.targetVersion,
+      });
+      setState("updater", "checkStatus", "staged");
+      setState("updater", "downloadProgress", null);
+      setState("updater", "modalOpen", true);
+    } catch (error) {
+      if (disposed || requestId !== stageRequestId) return;
+      setError(
+        error instanceof Error ? error.message : "Unable to stage the PadPilot update.",
+        "PadPilot update staging failed.",
+        error
+      );
+    }
+  };
+
+  return {
+    checkForUpdates,
+    dispose: () => {
+      disposed = true;
+      ++checkRequestId;
+      ++restartRequestId;
+      ++stageRequestId;
+    },
+    restartAndApplyUpdate,
+    setUpdateChannel: async (channel: PluginUpdateChannel) => {
+      setState("updater", "channel", channel);
+      saveUpdateChannel(channel);
+      await checkForUpdates();
+    },
+    stageAvailableUpdate,
+  };
+}
+
 function createMarketplaceStore() {
   const [state, setState] = createStore<MarketplaceState>({
     auth: initialAuthState,
@@ -180,10 +307,7 @@ function createMarketplaceStore() {
   let bootstrapRequestId = 0;
   let checkoutRequestId = 0;
   let detailRequestId = 0;
-  let updateCheckRequestId = 0;
-  let updateStageRequestId = 0;
   let uploadRequestId = 0;
-  let restartRequestId = 0;
   let disposed = false;
   const toastTimeouts = new Map<string, number>();
 
@@ -225,55 +349,7 @@ function createMarketplaceStore() {
     pushToast(message);
   };
 
-  const setUpdaterError = (message: string, context: string, error?: unknown) => {
-    console.error(context, error ?? message);
-    setState("updater", "checkStatus", "error");
-    setState("updater", "lastError", message);
-    setState("updater", "downloadProgress", null);
-    pushToast(message);
-  };
-
-  const syncRuntimeInfo = (runtime: PadPilotRuntimeInfo) => {
-    setState("updater", "currentVersion", runtime.currentVersion);
-    setState("updater", "hostMode", runtime.hostMode);
-    setState("updater", "installPath", runtime.installPath ?? runtime.defaultInstallPath);
-    setState("updater", "platform", runtime.platform);
-  };
-
-  const checkForUpdates = async (options?: { openModalOnAvailable?: boolean }) => {
-    const requestId = ++updateCheckRequestId;
-    ++updateStageRequestId;
-    const channel = state.updater.channel;
-    setState("updater", "checkStatus", "checking");
-    setState("updater", "lastError", null);
-    setState("updater", "downloadProgress", null);
-
-    try {
-      const runtime = await getPadPilotRuntimeInfo();
-      if (disposed || requestId !== updateCheckRequestId) {
-        return;
-      }
-      syncRuntimeInfo(runtime);
-      const latest = await fetchLatestPluginUpdate({
-        arch: runtime.arch,
-        channel,
-        platform: runtime.platform,
-        version: runtime.currentVersion,
-      });
-      if (disposed || requestId !== updateCheckRequestId) {
-        return;
-      }
-
-      setState("updater", "availableRelease", latest.updateAvailable ? latest : null);
-      setState("updater", "modalOpen", Boolean(options?.openModalOnAvailable && latest.updateAvailable));
-      setState("updater", "checkStatus", latest.updateAvailable ? "update-available" : "up-to-date");
-    } catch (error) {
-      if (disposed || requestId !== updateCheckRequestId) {
-        return;
-      }
-      setUpdaterError(error instanceof Error ? error.message : "Failed to check for PadPilot updates.", "PadPilot update check failed.", error);
-    }
-  };
+  const updater = createMarketplaceUpdater({ pushToast, setState, state });
 
   const dispose = () => {
     disposed = true;
@@ -281,9 +357,7 @@ function createMarketplaceStore() {
     ++bootstrapRequestId;
     ++checkoutRequestId;
     ++detailRequestId;
-    ++updateCheckRequestId;
-    ++updateStageRequestId;
-    ++restartRequestId;
+    updater.dispose();
     for (const timeoutId of toastTimeouts.values()) {
       window.clearTimeout(timeoutId);
     }
@@ -316,7 +390,7 @@ function createMarketplaceStore() {
       }
 
       setState("requestStatus", "bootstrap", "success");
-      checkForUpdates({ openModalOnAvailable: true });
+      updater.checkForUpdates({ openModalOnAvailable: true });
     } catch (error) {
       if (disposed || requestId !== bootstrapRequestId) {
         return;
@@ -491,7 +565,7 @@ function createMarketplaceStore() {
   };
 
   const actions = {
-    checkForUpdates,
+    checkForUpdates: updater.checkForUpdates,
     continueAsGuest: () => {
       setState("guestMode", true);
       setState("requestStatus", "message", null);
@@ -519,76 +593,11 @@ function createMarketplaceStore() {
       setState("isMarketplaceOpen", true);
       refreshMarketplace();
     },
-    restartAndApplyUpdate: async () => {
-      if (disposed) {
-        return;
-      }
-      const requestId = ++restartRequestId;
-      try {
-        await restartAndApplyPluginUpdate();
-      } catch (error) {
-        if (disposed || requestId !== restartRequestId) {
-          return;
-        }
-        setUpdaterError(
-          error instanceof Error ? error.message : "Unable to restart PadPilot and apply the staged update.",
-          "PadPilot restart-and-apply failed.",
-          error,
-        );
-      }
-    },
+    restartAndApplyUpdate: updater.restartAndApplyUpdate,
     purchaseModule: (moduleId: string) => startCheckout("module_purchase", moduleId),
     refreshMarketplace,
-    setUpdateChannel: async (channel: PluginUpdateChannel) => {
-      setState("updater", "channel", channel);
-      saveUpdateChannel(channel);
-      await checkForUpdates();
-    },
-    stageAvailableUpdate: async () => {
-      const release = state.updater.availableRelease;
-      if (!release?.updateAvailable || !release.downloadUrl || !release.manifestUrl || !release.artifactChecksumSha256 || !release.manifestChecksumSha256 || !release.latestVersion) {
-        setUpdaterError("No update payload is available to download yet.", "PadPilot update staging was requested without an available release.");
-        return;
-      }
-
-      const requestId = ++updateStageRequestId;
-      ++updateCheckRequestId;
-      setState("updater", "checkStatus", "downloading");
-      setState("updater", "downloadProgress", "Downloading and staging update...");
-      setState("updater", "lastError", null);
-      try {
-        const staged = await stagePluginUpdate({
-          artifactChecksumSha256: release.artifactChecksumSha256,
-          artifactUrl: resolveMarketplaceApiUrl(release.downloadUrl),
-          currentVersion: state.updater.currentVersion,
-          manifestChecksumSha256: release.manifestChecksumSha256,
-          manifestSignature: release.signature,
-          manifestUrl: resolveMarketplaceApiUrl(release.manifestUrl),
-          releaseNotes: release.releaseNotes,
-          targetVersion: release.latestVersion,
-        });
-        if (disposed || requestId !== updateStageRequestId) {
-          return;
-        }
-        setState("updater", "stagedUpdate", {
-          logPath: staged.logPath,
-          message: staged.message,
-          targetVersion: staged.targetVersion,
-        });
-        setState("updater", "checkStatus", "staged");
-        setState("updater", "downloadProgress", null);
-        setState("updater", "modalOpen", true);
-      } catch (error) {
-        if (disposed || requestId !== updateStageRequestId) {
-          return;
-        }
-        setUpdaterError(
-          error instanceof Error ? error.message : "Unable to stage the PadPilot update.",
-          "PadPilot update staging failed.",
-          error,
-        );
-      }
-    },
+    setUpdateChannel: updater.setUpdateChannel,
+    stageAvailableUpdate: updater.stageAvailableUpdate,
     setBrowseView: () => {
       ++detailRequestId;
       setState("view", "browse");

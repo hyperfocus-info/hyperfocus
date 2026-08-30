@@ -3,7 +3,7 @@ import { createEffect, createSignal, Show } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { MAX_COMPACT_FX_PRESET_CODE_CHARS } from "../fx-compact-preset";
 import { useFxModuleActions } from "../fx-module-store";
-import styles from "../fx-module.stylex";
+import styles from "../styles/fx-module.stylex";
 
 export type FxCompactPresetModalProps = {
   /** Whether the controlled compact-Preset dialog is visible. */

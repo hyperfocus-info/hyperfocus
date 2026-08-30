@@ -1,7 +1,7 @@
 import { resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
 import type { AnyNodeConfig } from "./types";
-import styles from "../fx-node-registry.stylex";
+import styles from "../styles/fx-node-registry.stylex";
 import { renderControlGrid, renderMotionLane, renderScalarRows, renderSeries } from "./renderer-primitives";
 
 type PhaserVisualizerShape = {

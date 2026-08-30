@@ -8,7 +8,7 @@ import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { FxNodeType, NODE_LIBRARY } from "../fx-chain-state";
 import { FxNodeCard } from "./fx-node-card";
 import { FxDragPreview } from "./fx-drag-preview";
-import styles from "../fx-module.stylex";
+import styles from "../styles/fx-module.stylex";
 
 export type FxNodeLaneProps = {
   chainId: number;

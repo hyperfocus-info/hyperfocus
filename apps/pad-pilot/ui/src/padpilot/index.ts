@@ -1,5 +1,5 @@
 import { Button } from "../components/elements/button";
-import { ButtonGroup } from "../components/elements/button-group";
+import { ButtonGroup } from "../components/elements/button-group/button-group";
 import { Dropdown } from "../components/elements/dropdown";
 import { DraggableCard } from "../components/elements/draggable-card";
 import { Drawer } from "../components/elements/drawer";

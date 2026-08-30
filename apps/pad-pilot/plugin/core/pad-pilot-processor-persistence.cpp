@@ -142,7 +142,7 @@ std::string PadPilotAudioProcessor::serializePluginStateToProtobuf() const {
     }
     std::string bytes;
     if (padpilot::proto::base64ToBytes(preset.payloadJson, &bytes)) {
-    } else if (moduleId == kFxModuleId) {
+    } else if (padpilot::moduleProvidesCapability(modules_, moduleId, "fx-graph")) {
       const auto migrated = padpilot::proto::migrateLegacyJsonToFxChainState(preset.payloadJson, preset.id);
       bytes = padpilot::proto::serializeFxChainState(migrated);
     } else {
@@ -186,7 +186,7 @@ std::string PadPilotAudioProcessor::serializePluginStateToProtobuf() const {
       continue;
     }
     std::uint64_t acceptedRevision = 0;
-    if (canonicalId == kFxModuleId) {
+    if (padpilot::moduleProvidesCapability(modules_, canonicalId, "fx-graph")) {
       padpilot::fx::FxChainState fxState;
       if (!padpilot::proto::parseFxChainState(payload, &fxState) || !isValidFxState(fxState)) {
         continue;
@@ -209,13 +209,15 @@ std::string PadPilotAudioProcessor::serializePluginStateToProtobuf() const {
   recutEntry->set_payload(recutStateBytes);
   recutEntry->set_accepted_revision(recutSnapshot->revision);
   appendImportedMediaForModuleState(kRecutModuleId, recutStateBase64, state);
-  if (const auto fxState = moduleStatePayloadById_.find(kFxModuleId);
-      fxState != moduleStatePayloadById_.end()) {
-    appendImportedMediaForModuleState(kFxModuleId, fxState->second, state);
+  for (const auto& [moduleId, payload] : moduleStatePayloadById_) {
+    if (padpilot::moduleProvidesCapability(modules_, canonicalizeModuleId(moduleId), "fx-graph")) {
+      appendImportedMediaForModuleState(moduleId, payload, state);
+    }
   }
   for (const auto& preset : presets_) {
-    if (canonicalizeModuleId(preset.moduleId) == kFxModuleId) {
-      appendImportedMediaForModuleState(kFxModuleId, preset.payloadJson, state);
+    const auto moduleId = canonicalizeModuleId(preset.moduleId);
+    if (padpilot::moduleProvidesCapability(modules_, moduleId, "fx-graph")) {
+      appendImportedMediaForModuleState(moduleId, preset.payloadJson, state);
     }
   }
 
@@ -356,7 +358,7 @@ bool PadPilotAudioProcessor::restorePluginStateFromProtobuf(const void* data, in
         encodedPayloadSize > kMaxAggregatePresetStateBytes - restoredPresetPayloadBytes) {
       continue;
     }
-    if (record.moduleId == kFxModuleId) {
+    if (padpilot::moduleProvidesCapability(restoredModules, record.moduleId, "fx-graph")) {
       padpilot::fx::FxChainState fxState;
       if (!padpilot::proto::parseFxChainState(preset.state(), &fxState) || !isValidFxState(fxState)) {
         continue;
@@ -391,7 +393,7 @@ bool PadPilotAudioProcessor::restorePluginStateFromProtobuf(const void* data, in
     }
 
     auto acceptedRevision = moduleState.accepted_revision();
-    if (moduleId == kFxModuleId) {
+    if (padpilot::moduleProvidesCapability(restoredModules, moduleId, "fx-graph")) {
       padpilot::fx::FxChainState fxState;
       if (!padpilot::proto::parseFxChainState(moduleState.payload(), &fxState) ||
           !isValidFxState(fxState) || fxState.revision() != moduleState.accepted_revision()) {
@@ -445,7 +447,8 @@ bool PadPilotAudioProcessor::restorePluginStateFromProtobuf(const void* data, in
   for (const auto& importedMedia : state.imported_media()) {
     const auto moduleId = canonicalizeModuleId(importedMedia.module_id());
     const bool isRecutSample = moduleId == kRecutModuleId && importedMedia.category() == "sample";
-    const bool isFxImpulse = moduleId == kFxModuleId && importedMedia.category() == "impulse-response";
+    const bool isFxImpulse = padpilot::moduleProvidesCapability(restoredModules, moduleId, "fx-graph") &&
+                             importedMedia.category() == "impulse-response";
     if ((!isRecutSample && !isFxImpulse) ||
         !padpilot::ManagedFileStore::isValidContentId(importedMedia.content_id()) ||
         importedMedia.source_name().empty() || importedMedia.source_name().size() > kMaxDisplayNameBytes ||
@@ -463,7 +466,7 @@ bool PadPilotAudioProcessor::restorePluginStateFromProtobuf(const void* data, in
     }
     if (isFxImpulse) {
       for (auto& preset : restoredPresets) {
-        if (canonicalizeModuleId(preset.moduleId) == kFxModuleId) {
+        if (canonicalizeModuleId(preset.moduleId) == moduleId) {
           healed = healManagedMediaForFxState(importedMedia, &preset.payloadJson) || healed;
         }
       }
@@ -575,7 +578,8 @@ void PadPilotAudioProcessor::appendImportedMediaForModuleState(const std::string
                                                                const std::string& payloadBase64,
                                                                padpilot::bridge::PluginState& pluginState) const {
   const auto canonicalId = canonicalizeModuleId(moduleId);
-  if (canonicalId != kRecutModuleId && canonicalId != kFxModuleId) {
+  if (canonicalId != kRecutModuleId &&
+      !moduleProvidesCapabilityLocked(canonicalId, "fx-graph")) {
     return;
   }
 
@@ -593,7 +597,8 @@ void PadPilotAudioProcessor::appendImportedMediaForModuleState(const std::string
       return;
     }
     for (const auto& existing : pluginState.imported_media()) {
-      if (existing.category() == category && existing.content_id() == contentId) {
+      if (canonicalizeModuleId(existing.module_id()) == canonicalId &&
+          existing.category() == category && existing.content_id() == contentId) {
         return;
       }
     }
@@ -616,7 +621,7 @@ void PadPilotAudioProcessor::appendImportedMediaForModuleState(const std::string
       return;
     }
     auto* entry = pluginState.add_imported_media();
-    entry->set_module_id(moduleId);
+    entry->set_module_id(canonicalId);
     entry->set_category(category);
     entry->set_content_id(contentId);
     entry->set_source_name(sourceName);
@@ -690,7 +695,7 @@ bool PadPilotAudioProcessor::healManagedMediaForRecutState(const padpilot::bridg
 bool PadPilotAudioProcessor::healManagedMediaForFxState(
     const padpilot::bridge::ImportedMediaEntry& importedMedia,
     std::string* modulePayloadBase64) const {
-  if (modulePayloadBase64 == nullptr || canonicalizeModuleId(importedMedia.module_id()) != kFxModuleId) {
+  if (modulePayloadBase64 == nullptr) {
     return false;
   }
   std::string payloadBytes;
@@ -856,7 +861,7 @@ bool PadPilotAudioProcessor::restorePluginStateFromJson(const std::string& jsonS
           restoredModuleStates.contains(moduleId)) {
         continue;
       }
-      if (moduleId == kFxModuleId) {
+      if (padpilot::moduleProvidesCapability(restoredModules, moduleId, "fx-graph")) {
         const auto migrated = padpilot::proto::migrateLegacyJsonToFxChainState(payloadJson, selectedPresetId);
         if (!isValidFxState(migrated)) {
           continue;

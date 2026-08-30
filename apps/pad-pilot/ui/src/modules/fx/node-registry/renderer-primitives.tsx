@@ -4,7 +4,7 @@ import { type FxNodeFocusRenderProps } from "./renderer-types";
 import { FX_VISUALIZER_DISPLAY_BIN_COUNT, resampleVisualizerSeries } from "../fx-visualizer-smoothing";
 import { renderFxControlField } from "../components/fx-control-field";
 import { clamp01Or } from "../../../utils/math";
-import styles from "../fx-node-registry.stylex";
+import styles from "../styles/fx-node-registry.stylex";
 
 export function clampSeriesValue(value: number) {
   return clamp01Or(value, 0);

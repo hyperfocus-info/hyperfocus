@@ -1,0 +1,27 @@
+:root {
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+  background: radial-gradient(circle at 25% 8%, #152947 0%, #090f1a 64%, #050811 100%);
+  color: #dce8ff;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+}

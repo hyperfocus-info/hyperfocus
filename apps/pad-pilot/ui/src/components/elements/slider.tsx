@@ -2,7 +2,7 @@ import { Show, createMemo, createSignal, onCleanup, splitProps, type JSX } from 
 import { Tooltip } from "./tooltip";
 import { type ElementSkin, resolveElementSkin, type TooltipPlacement } from "./element-skin";
 import { clamp } from "../../utils/math";
-import styles from "./slider.stylex";
+import styles from "./styles/slider.stylex";
 
 /**
  * Props for Slider.

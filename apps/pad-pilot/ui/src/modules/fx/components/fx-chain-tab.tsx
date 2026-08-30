@@ -3,7 +3,7 @@ import { Show, createMemo } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { createChainAccessor } from "../fx-live-accessors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "./fx-chain-tabs.stylex";
+import styles from "./styles/fx-chain-tabs.stylex";
 
 export type FxChainTabProps = {
   chainId: number;

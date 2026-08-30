@@ -48,11 +48,16 @@ The state protobuf saved automation bindings but omitted the normalized values o
 
 Resolution: schema version 8 stores exactly 19 bounded finite normalized values, restores them without generating automation gestures, accepts older snapshots without the field, and rejects partial, oversized, or non-finite snapshots. Native wire tests cover the legal maximum and overflow.
 
-### Medium — generic `fx-graph` capability state is still factory-ID coupled
+### Resolved — generic `fx-graph` capability state ownership
 
-Capability authorization is generic, but FX state parsing, runtime ownership, visualizer state, automation reconciliation, and imported-IR recovery still contain built-in `fx` ID branches. A user-created Module can declare `fx-graph` yet cannot own the complete runtime/persistence path promised to the factory FX Module.
+Capability authorization and ownership now share one selected, ready `fx-graph`
+Module. State parsing, revisions, Presets, visualizer frames, automation
+reconciliation, save/restore, and managed-IR recovery all use that owner ID.
 
-Resolution: tracked in `docs/pad-pilot/tasks/generic-fx-graph-state-ownership.md`. Do not claim the public capability is complete until its exit tests pass.
+Resolution: the native processor test installs two non-factory FX-capable
+Modules, proves isolated revisions across selection changes, and roundtrips both
+states through a fresh processor instance. A source contract prevents renewed
+factory-ID branches in ownership-sensitive files. See the [resolved task](../tasks/generic-fx-graph-state-ownership.md).
 
 ## Evidence run
 

@@ -19,6 +19,7 @@ Package-local commands:
 - `bun run --cwd packages/ai-core test`
 - `bun run --cwd packages/workspace test`
 - `bun run --cwd packages/desktop-runtime test`
+- `bun run --cwd packages/pad-pilot test`
 - `bun run --cwd packages/ui test`
 
 Engine package commands remain separate because its release gate is broader than
@@ -56,6 +57,7 @@ directly.
 | `@hyperfocus/ai-core` | Zod protocol schemas, command/event unions, capability metadata, client connection lifecycle, reconnect queues, frame bounds, and portable intent contracts. |
 | `@hyperfocus/workspace` | Safe relative paths, revision conflicts, atomic multi-file writes, watch sequencing, invalidation, and deterministic memory adapters. |
 | `@hyperfocus/desktop-runtime` | Protocol target parsing, browser-backed client leases, shutdown timing, injected update sources, and no implicit install side effects. |
+| `@hyperfocus/pad-pilot` | Public subpath resolution, bounded Module manifest validation, QuickJS script contracts, capability identities, browser/Bun entry separation, signing, semver, and consumer Module typecheck/build. |
 | `@hyperfocus/ui` | Shared primitives, overlay/focus mechanics, workbench panels, preferences, transcript/composer rendering, terminal/source-editor surfaces, StyleX extraction, and accessibility states. |
 | `@hyperfocus/engine` | DOM-free core subpaths, browser lifecycle, public export/declaration parity, WASM fallback and parity, project JSON/ZIP validation, server/protocol contracts, example builds, package-consumer smoke tests, and measured benchmark gates. |
 

@@ -1,5 +1,5 @@
 import { JSX, createSignal, splitProps } from "solid-js";
-import styles from "./file-upload-dropzone.stylex";
+import styles from "./styles/file-upload-dropzone.stylex";
 
 type FileWithPath = File & {
   path?: string;

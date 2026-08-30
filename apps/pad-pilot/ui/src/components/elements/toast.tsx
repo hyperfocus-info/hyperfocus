@@ -1,8 +1,8 @@
 import { Show, splitProps, type JSX } from "solid-js";
 import { XIcon } from "lucide-solid";
 import { Button } from "./button";
-import styles from "./toast.stylex";
-import { labelTypographyClass } from "./element-typography.stylex";
+import styles from "./styles/toast.stylex";
+import { labelTypographyClass } from "./styles/element-typography.stylex";
 
 /**
  * Props for Toast.

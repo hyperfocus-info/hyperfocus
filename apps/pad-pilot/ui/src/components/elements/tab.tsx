@@ -1,9 +1,10 @@
 import { splitProps, type JSX } from "solid-js";
 import { Button, type ButtonProps } from "./button";
-import styles from "./tab.stylex";
+import styles from "./styles/tab.stylex";
 
 export type TabListProps = JSX.HTMLAttributes<HTMLDivElement> & {
   ariaLabel?: string;
+  orientation?: "horizontal" | "vertical";
 };
 
 export type TabProps = Omit<ButtonProps, "variant"> & {
@@ -13,7 +14,9 @@ export type TabProps = Omit<ButtonProps, "variant"> & {
 };
 
 function getTabElements(root: HTMLElement) {
-  return [...root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  return [...root.querySelectorAll<HTMLButtonElement>('[role="tab"]')].filter(
+    (tab) => !tab.disabled && tab.getAttribute("aria-disabled") !== "true",
+  );
 }
 
 function moveFocus(current: HTMLElement, delta: number) {
@@ -38,10 +41,16 @@ function moveFocus(current: HTMLElement, delta: number) {
 }
 
 export function TabList(props: TabListProps) {
-  const [local, others] = splitProps(props, ["ariaLabel", "children", "class"]);
+  const [local, others] = splitProps(props, ["ariaLabel", "children", "class", "orientation"]);
 
   return (
-    <div {...others} class={`${styles["tab-list"]} ${local.class ?? ""}`.trim()} role="tablist" aria-label={local.ariaLabel}>
+    <div
+      {...others}
+      class={`${styles["tab-list"]} ${local.class ?? ""}`.trim()}
+      role="tablist"
+      aria-label={local.ariaLabel}
+      aria-orientation={local.orientation ?? "horizontal"}
+    >
       {local.children}
     </div>
   );
@@ -59,10 +68,11 @@ export function Tab(props: TabProps) {
       aria-selected={local.selected}
       tabIndex={local.selected ? 0 : -1}
       onKeyDown={(event) => {
-        if (event.key === "ArrowRight") {
+        const orientation = event.currentTarget.closest('[role="tablist"]')?.getAttribute("aria-orientation") ?? "horizontal";
+        if ((orientation === "horizontal" && event.key === "ArrowRight") || (orientation === "vertical" && event.key === "ArrowDown")) {
           event.preventDefault();
           moveFocus(event.currentTarget, 1);
-        } else if (event.key === "ArrowLeft") {
+        } else if ((orientation === "horizontal" && event.key === "ArrowLeft") || (orientation === "vertical" && event.key === "ArrowUp")) {
           event.preventDefault();
           moveFocus(event.currentTarget, -1);
         } else if (event.key === "Home") {

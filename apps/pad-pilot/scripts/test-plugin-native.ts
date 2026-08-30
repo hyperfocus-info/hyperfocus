@@ -1,7 +1,7 @@
-import { runNativeTestTarget } from "./native-test-runner";
+import { runNativeTestTargets } from "./native-test-runner";
 
 try {
-  runNativeTestTarget("padpilot-native-tests");
+  runNativeTestTargets(["padpilot-native-tests", "padpilot-processor-tests"]);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;

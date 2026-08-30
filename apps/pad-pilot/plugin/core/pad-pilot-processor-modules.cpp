@@ -74,9 +74,9 @@ std::optional<padpilot::ModuleRecord> PadPilotAudioProcessor::installModuleBundl
       nextScriptModule = getScriptModuleLoadRequestLocked(selectedModuleId_);
       selectedModuleUpdated = true;
     } else if (installedCanonicalId == selectedModuleId_) {
+      setSelectedModuleLocked(installedCanonicalId);
       handleAnalyzerModuleSwitchLocked(previousModuleId, selectedModuleId_);
       presets_ = boundPersistedPresets(presetStore_.loadPresetsForModule(selectedModuleId_));
-      scriptHost_.revokeModuleAuthorization();
       nextScriptModule = getScriptModuleLoadRequestLocked(selectedModuleId_);
       selectedModuleUpdated = true;
     }
@@ -105,11 +105,6 @@ bool PadPilotAudioProcessor::selectModule(const std::string& moduleId) {
     handleAnalyzerModuleSwitchLocked(previousModuleId, selectedModuleId_);
     presets_ = boundPersistedPresets(presetStore_.loadPresetsForModule(selectedModuleId_));
     selectedPresetId_.clear();
-    if (selectedModuleId_ == kFxModuleId && !moduleStatePayloadById_.contains(kFxModuleId)) {
-      moduleStatePayloadById_[kFxModuleId] = padpilot::proto::bytesToBase64(
-          padpilot::proto::serializeFxChainState(padpilot::proto::createDefaultFxChainState()));
-      acceptedRevisionByModuleId_[kFxModuleId] = 1;
-    }
     nextScriptModule = getScriptModuleLoadRequestLocked(selectedModuleId_);
     moduleStatePayload = getModuleStatePayloadLocked(selectedModuleId_);
   }
@@ -138,7 +133,8 @@ bool PadPilotAudioProcessor::createAndSavePreset(const std::string& name, const 
   }
   std::lock_guard<std::mutex> guard(stateMutex_);
   if (!hasReadyModule(modules_, selectedModuleId_, selectedModuleId_) ||
-      selectedModuleId_ == kFxModuleId || selectedModuleId_ == kRecutModuleId ||
+      moduleProvidesCapabilityLocked(selectedModuleId_, "fx-graph") ||
+      selectedModuleId_ == kRecutModuleId ||
       selectedModuleId_ == kAnalyzerModuleId) {
     return false;
   }
@@ -173,7 +169,7 @@ bool PadPilotAudioProcessor::createAndSavePresetProto(const padpilot::bridge::Pr
   if (!padpilot::isValidModuleId(moduleId) || !hasReadyModule(modules_, selectedModuleId_, moduleId)) {
     return false;
   }
-  if (moduleId == kFxModuleId) {
+  if (moduleProvidesCapabilityLocked(moduleId, "fx-graph")) {
     padpilot::fx::FxChainState state;
     if (!padpilot::proto::parseFxChainState(request.preset().state(), &state) ||
         !isValidFxState(state) || !isValidManagedFxState(state)) {
@@ -433,7 +429,7 @@ std::string PadPilotAudioProcessor::getSelectedPresetId() const {
 
 bool PadPilotAudioProcessor::setModuleStatePayload(const std::string& moduleId, const std::string& payloadJson) {
   const auto canonicalId = canonicalizeModuleId(moduleId);
-  if (!padpilot::isValidModuleId(canonicalId) || canonicalId == kFxModuleId || canonicalId == kRecutModuleId ||
+  if (!padpilot::isValidModuleId(canonicalId) || canonicalId == kRecutModuleId ||
       canonicalId == kAnalyzerModuleId || payloadJson.empty() || payloadJson.size() > kMaxModuleStateBytes) {
     return false;
   }
@@ -446,6 +442,7 @@ bool PadPilotAudioProcessor::setModuleStatePayload(const std::string& moduleId, 
   std::lock_guard<std::mutex> applyGuard(moduleStateApplyMutex_);
   std::lock_guard<std::mutex> guard(stateMutex_);
   if (!hasReadyModule(modules_, selectedModuleId_, canonicalId) ||
+      moduleProvidesCapabilityLocked(canonicalId, "fx-graph") ||
       (!moduleStatePayloadById_.contains(canonicalId) &&
        moduleStatePayloadById_.size() >= static_cast<std::size_t>(kMaxStoredModuleStates)) ||
       !canReplaceBoundedPayload(moduleStatePayloadById_, canonicalId, payloadJson.size(),
@@ -468,6 +465,7 @@ bool PadPilotAudioProcessor::setModuleStatePayloadBase64(const std::string& modu
   }
 
   std::lock_guard<std::mutex> applyGuard(moduleStateApplyMutex_);
+  bool isFxGraphState = false;
   {
     std::lock_guard<std::mutex> guard(stateMutex_);
     if (!hasReadyModule(modules_, selectedModuleId_, canonicalId) ||
@@ -477,6 +475,7 @@ bool PadPilotAudioProcessor::setModuleStatePayloadBase64(const std::string& modu
                                   kMaxAggregateModuleStateBytes)) {
       return false;
     }
+    isFxGraphState = moduleProvidesCapabilityLocked(canonicalId, "fx-graph");
   }
 
   std::string payloadBytes;
@@ -488,7 +487,7 @@ bool PadPilotAudioProcessor::setModuleStatePayloadBase64(const std::string& modu
   std::optional<padpilot::fx::FxChainState> fxState;
   std::optional<padpilot::recut::RecutModuleState> recutState;
   std::optional<padpilot::analyzer::AnalyzerModuleState> analyzerState;
-  if (canonicalId == kFxModuleId) {
+  if (isFxGraphState) {
     fxState.emplace();
     if (!padpilot::proto::parseFxChainState(payloadBytes, &*fxState) ||
         !isValidFxState(*fxState) || !isValidManagedFxState(*fxState) ||

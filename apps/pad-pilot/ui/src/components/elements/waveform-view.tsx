@@ -1,5 +1,5 @@
 import { Show, createMemo } from "solid-js";
-import styles from "./waveform-view.stylex";
+import styles from "./styles/waveform-view.stylex";
 
 /**
  * Props for WaveformView.

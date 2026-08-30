@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { controlStyles as styles } from "./controls.stylex";
+import { controlStyles as styles } from "./styles/controls.stylex";
 
 /**
  * Select option descriptor for Dropdown.

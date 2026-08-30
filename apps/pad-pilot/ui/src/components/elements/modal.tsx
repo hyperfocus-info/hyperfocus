@@ -1,21 +1,25 @@
 import * as stylex from "@stylexjs/stylex";
 import { Show, createEffect, onCleanup, splitProps, type Accessor, type JSX } from "solid-js";
+import { Portal } from "solid-js/web";
 import { XIcon } from "lucide-solid";
+import { isTopOverlay, registerOverlay } from "@hyperfocus/ui/primitives";
 import { Button } from "./button";
+import { ensureOverlayRoot } from "./overlay-root";
+
+let modalSequence = 0;
 
 const styles = stylex.create({
   backdrop: {
-    background: "rgba(2, 6, 12, 0.72)",
     inset: 0,
     padding: "24px",
     alignItems: "center",
+    backgroundColor: "rgba(2, 6, 12, 0.72)",
     display: "flex",
     justifyContent: "center",
     position: "fixed",
     zIndex: 30,
   },
   panel: {
-    background: "linear-gradient(180deg, rgba(16, 26, 40, 0.96), rgba(8, 15, 26, 0.98))",
     padding: "16px",
     borderColor: "rgba(93, 141, 184, 0.32)",
     borderRadius: "18px",
@@ -23,6 +27,8 @@ const styles = stylex.create({
     borderWidth: "1px",
     gap: "16px",
     overflow: "auto",
+    backgroundColor: "rgba(8, 15, 26, 0.98)",
+    backgroundImage: "linear-gradient(180deg, rgba(16, 26, 40, 0.96), rgba(8, 15, 26, 0.98))",
     boxShadow: "inset 0 0 0 1px rgba(255, 255, 255, 0.03), 0 24px 48px rgba(0, 0, 0, 0.36)",
     display: "flex",
     flexDirection: "column",
@@ -36,9 +42,9 @@ const styles = stylex.create({
   heading: { margin: 0, color: "#eefaff", fontSize: "1rem" },
   description: { margin: 0, color: "rgba(196, 223, 242, 0.74)", fontSize: "0.92rem" },
   closeButton: {
-    background: "rgba(10, 19, 31, 0.88)",
     borderColor: "rgba(104, 156, 194, 0.28)",
     borderRadius: "12px",
+    backgroundColor: "rgba(10, 19, 31, 0.88)",
     color: "#eefaff",
     minHeight: "34px",
     minWidth: "34px",
@@ -119,6 +125,7 @@ export function Modal(props: ModalProps) {
     "size",
     "title",
   ]);
+  const overlayId = `padpilot-modal-${++modalSequence}`;
   let panelRef: HTMLDivElement | undefined;
 
   createEffect(() => {
@@ -127,6 +134,15 @@ export function Modal(props: ModalProps) {
     }
 
     let active = true;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const unregister = registerOverlay({
+      id: overlayId,
+      close: () => {
+        if (local.closeOnEscape !== false) {
+          local.onClose();
+        }
+      },
+    });
     queueMicrotask(() => {
       if (!active || !local.open) {
         return;
@@ -142,17 +158,11 @@ export function Modal(props: ModalProps) {
         return;
       }
 
-      getModalFocusableElements(panel)[0]?.focus();
+      (getModalFocusableElements(panel)[0] ?? panel).focus();
     });
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && local.closeOnEscape !== false) {
-        event.preventDefault();
-        local.onClose();
-        return;
-      }
-
-      if (event.key !== "Tab" || !panelRef) {
+      if (event.key !== "Tab" || !panelRef || !isTopOverlay(overlayId)) {
         return;
       }
 
@@ -168,34 +178,45 @@ export function Modal(props: ModalProps) {
     window.addEventListener("keydown", onKeyDown);
     onCleanup(() => {
       active = false;
+      unregister();
       window.removeEventListener("keydown", onKeyDown);
+      queueMicrotask(() => {
+        if (previousFocus?.isConnected) {
+          previousFocus.focus();
+        }
+      });
     });
   });
 
   return (
     <Show when={local.open}>
-      <div
-        {...stylex.attrs(styles.backdrop)}
-        onClick={(event) => {
-          if (local.closeOnBackdrop === false || event.target !== event.currentTarget) {
-            return;
-          }
-          local.onClose();
-        }}
-      >
+      <Portal mount={ensureOverlayRoot()}>
         <div
-          {...others}
-          ref={panelRef}
-          class={`${stylex.attrs(
-            styles.panel,
-            styles[local.size === "sm" ? "sizeSm" : local.size === "lg" ? "sizeLg" : "sizeMd"],
-          ).class} ${local.class ?? ""}`.trim()}
-          role="dialog"
-          aria-modal="true"
-          aria-label={local.title}
-          onClick={(event) => event.stopPropagation()}
+          {...stylex.attrs(styles.backdrop)}
+          onClick={(event) => {
+            if (
+              local.closeOnBackdrop === false ||
+              event.target !== event.currentTarget ||
+              !isTopOverlay(overlayId)
+            ) {
+              return;
+            }
+            local.onClose();
+          }}
         >
-          <Show when={local.title || local.description}>
+          <div
+            {...others}
+            ref={panelRef}
+            class={`${stylex.attrs(
+              styles.panel,
+              styles[local.size === "sm" ? "sizeSm" : local.size === "lg" ? "sizeLg" : "sizeMd"],
+            ).class} ${local.class ?? ""}`.trim()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={local.title ?? (others["aria-label"] as string | undefined)}
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
             <header {...stylex.attrs(styles.header)}>
               <div {...stylex.attrs(styles.headerCopy)}>
                 <Show when={local.title}>
@@ -207,13 +228,13 @@ export function Modal(props: ModalProps) {
               </div>
               <Button class={stylex.props(styles.closeButton).className} onClick={local.onClose} icon={XIcon} tooltip="Close modal" variant="ghost" />
             </header>
-          </Show>
-          <div {...stylex.attrs(styles.body)}>{local.children}</div>
-          <Show when={local.footer}>
-            <footer {...stylex.attrs(styles.footer)}>{local.footer}</footer>
-          </Show>
+            <div {...stylex.attrs(styles.body)}>{local.children}</div>
+            <Show when={local.footer}>
+              <footer {...stylex.attrs(styles.footer)}>{local.footer}</footer>
+            </Show>
+          </div>
         </div>
-      </div>
+      </Portal>
     </Show>
   );
 }

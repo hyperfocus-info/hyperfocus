@@ -1,6 +1,6 @@
 import { Show, splitProps, type JSX } from "solid-js";
 import { joinElementClasses as joinClasses } from "./element-helpers";
-import styles from "./preference-panel.stylex";
+import styles from "./styles/preference-panel.stylex";
 
 export type PreferencePanelClassNames = {
   body?: string;

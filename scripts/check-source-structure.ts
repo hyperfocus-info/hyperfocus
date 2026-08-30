@@ -73,6 +73,7 @@ export function countPhysicalLines(source: string) {
 export function getSourceLineLimit(filePath: string) {
   const normalized = normalizeSourcePath(filePath);
   if (!SOURCE_FILE_PATTERN.test(normalized)) return undefined;
+  if (/\/proto\/generated\/[^/]+-pb\.ts$/i.test(normalized)) return undefined;
   if (/\.data\.ts$/i.test(normalized)) return DATA_CATALOG_SOURCE_LINE_LIMIT;
   if (TEST_FILE_PATTERN.test(normalized)) return TEST_SOURCE_LINE_LIMIT;
   return PRODUCTION_SOURCE_LINE_LIMIT;

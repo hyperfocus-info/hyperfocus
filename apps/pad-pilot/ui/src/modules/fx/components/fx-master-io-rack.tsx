@@ -3,7 +3,7 @@ import { createMemo } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { getFxMasterMeters, getFxMasterState } from "../fx-module-selectors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "./fx-master-io-rack.stylex";
+import styles from "./styles/fx-master-io-rack.stylex";
 
 /** FxMasterIoRack renders the strict Master I/O right rail with no GR meter. */
 export function FxMasterIoRack() {

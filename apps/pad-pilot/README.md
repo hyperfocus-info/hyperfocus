@@ -61,7 +61,9 @@ PadPilot also exposes analyzer capabilities for Module authors.
 - `PadPilot.analyzer.subscribe({ onFrame })` opens a selected-module-only analyzer feed and returns cached wrapper frames instead of raw protobuf messages.
 - `PadPilot.analyzer.startCapture()`, `stopCapture()`, `setTuningHz()`, `setDetectionSensitivity()`, and `saveMidi()` are explicit analyzer actions, separate from read-only feed subscription.
 - `PadPilot.midi.beginDrag(midiData, filename)` starts a generic native MIDI drag from SMF bytes; `PadPilot.MidiDragBlock` wraps the same API for UI.
-- `PadPilot.askAgent({ prompt, system, model })` posts module prompts through the configured agent bridge so Modules do not own provider fetch plumbing.
+- `PadPilot.askAgent({ prompt, system, agent, provider, model })` posts text-only Module requests through PadPilot's app-embedded runtime so Modules do not own provider fetch or credential plumbing. The configured app-user profile supplies defaults; installed agent adapters and direct-provider models are selectable globally.
+- The global **Suggest AI** button captures bounded processor state, asks for `hyperfocus-app-action-plan-v1`, previews semantic actions, and dispatches them only after explicit Apply. It never mutates WebView DOM or gives Modules access to global mutation authority. Bulk Module-state and capability scripts keep repeated work deterministic.
+- Production VST3 and standalone builds package `padpilot-ai-runtime.exe`; the asynchronous native bridge keeps model and process work off the Audio and UI Threads. Dev uses the same runtime through the PadPilot loopback server. Harness is not required.
 
 PadPilot also exposes a host-managed file import bridge for Module authors.
 

@@ -11,13 +11,14 @@ export type ChatComposerProps = {
   disabled?: boolean;
   options?: {
     agents?: readonly ComposerOption[];
+    providers?: readonly ComposerOption[];
     modes?: readonly ComposerOption[];
     models?: readonly ComposerOption[];
   };
-  selected?: { agent?: string; mode?: string; model?: string };
+  selected?: { agent?: string; provider?: string; mode?: string; model?: string };
   onInput: (value: string) => void;
   onSubmit: () => void;
-  onSelect?: (kind: "agent" | "mode" | "model", id: string) => void;
+  onSelect?: (kind: "agent" | "provider" | "mode" | "model", id: string) => void;
   leftControls?: JSX.Element;
 };
 
@@ -111,6 +112,12 @@ export function ChatComposer(props: ChatComposerProps) {
             onChange={(id) => props.onSelect?.("agent", id)}
           />
           <ComposerSelect
+            label="Provider"
+            value={props.selected?.provider}
+            options={props.options?.providers}
+            onChange={(id) => props.onSelect?.("provider", id)}
+          />
+          <ComposerSelect
             label="Mode"
             value={props.selected?.mode}
             options={props.options?.modes}
@@ -126,7 +133,7 @@ export function ChatComposer(props: ChatComposerProps) {
         <Button
           tooltip={
             props.disabled
-              ? "Connect a harness to send"
+              ? "AI is unavailable"
               : "Send message (Enter)"
           }
           disabled={props.disabled || !props.value.trim()}

@@ -1,6 +1,6 @@
 import { Plus, Save, Settings2, Star, Trash2 } from "lucide-solid";
 import { PadPilot } from "../../../padpilot/index";
-import styles from "../fx-module.stylex";
+import styles from "../styles/fx-module.stylex";
 
 export type FxPresetManageModalProps = {
   canDelete?: boolean;

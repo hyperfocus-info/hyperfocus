@@ -106,12 +106,8 @@ function decodeAnalyzerFrameSafely(payloadBase64: string) {
   }
 }
 
-function getSelectedAnalyzerModuleId() {
-  return resolveSelectedCapabilityModuleId(getLatestHostState(), [
-    "analyzer-feed",
-    "analyzer-session",
-    "midi-export",
-  ]);
+function getSelectedAnalyzerModuleId(capability: "analyzer-feed" | "analyzer-session" | "midi-export") {
+  return resolveSelectedCapabilityModuleId(getLatestHostState(), capability);
 }
 
 function formatPitchClass(rootPitchClass: number) {
@@ -202,7 +198,7 @@ function publishMappedAnalyzerFrame() {
 
 function ensureAnalyzerSnapshotFromHostState() {
   const hostState = getLatestHostState();
-  const analyzerModuleId = getSelectedAnalyzerModuleId();
+  const analyzerModuleId = getSelectedAnalyzerModuleId("analyzer-feed");
   if (!analyzerModuleId) {
     analyzerStateCache.frame = null;
     analyzerStateCache.moduleState = null;
@@ -240,7 +236,7 @@ function ensureAnalyzerSnapshotFromHostState() {
 }
 
 function syncAnalyzerFeedSubscription() {
-  const nextModuleId = getSelectedAnalyzerModuleId();
+  const nextModuleId = getSelectedAnalyzerModuleId("analyzer-feed");
   const nextHandle = createCapabilityHandle("analyzer-feed", nextModuleId);
   if (nextHandle === analyzerFeedHandle) {
     return;
@@ -275,7 +271,7 @@ function ensureAnalyzerWiring() {
       if (hostState.selectedModuleId !== undefined || hostState.modules !== undefined) {
         syncAnalyzerFeedSubscription();
       }
-      const analyzerModuleId = getSelectedAnalyzerModuleId();
+      const analyzerModuleId = getSelectedAnalyzerModuleId("analyzer-feed");
       const activeModuleId = hostState.activeModuleId ?? hostState.selectedModuleId ?? "";
       if (
         analyzerModuleId.length === 0 ||
@@ -342,7 +338,7 @@ export const analyzer = {
   },
   startCapture(options?: { mode?: "overwrite" | "append" }) {
     ensureAnalyzerWiring();
-    const moduleId = getSelectedAnalyzerModuleId();
+    const moduleId = getSelectedAnalyzerModuleId("analyzer-session");
     if (!moduleId) {
       return;
     }
@@ -354,7 +350,7 @@ export const analyzer = {
     );
   },
   stopCapture() {
-    const moduleId = getSelectedAnalyzerModuleId();
+    const moduleId = getSelectedAnalyzerModuleId("analyzer-session");
     if (!moduleId) {
       return;
     }
@@ -367,7 +363,7 @@ export const analyzer = {
   },
   setTuningHz(tuningHz: number) {
     const clampedTuningHz = clampTuningHz(tuningHz);
-    const moduleId = getSelectedAnalyzerModuleId();
+    const moduleId = getSelectedAnalyzerModuleId("analyzer-session");
     if (!moduleId) {
       return;
     }
@@ -380,7 +376,7 @@ export const analyzer = {
   },
   setDetectionSensitivity(detectionSensitivity: number) {
     const clampedDetectionSensitivity = clampDetectionSensitivity(detectionSensitivity);
-    const moduleId = getSelectedAnalyzerModuleId();
+    const moduleId = getSelectedAnalyzerModuleId("analyzer-session");
     if (!moduleId) {
       return;
     }
@@ -398,7 +394,7 @@ export const analyzer = {
         !Number.isInteger(midiNote) || midiNote < 0 || midiNote > 127) {
       return;
     }
-    const moduleId = getSelectedAnalyzerModuleId();
+    const moduleId = getSelectedAnalyzerModuleId("analyzer-session");
     if (!moduleId) {
       return;
     }
@@ -415,7 +411,7 @@ export const analyzer = {
         BigInt(normalizedEventId) > 18_446_744_073_709_551_615n) {
       return;
     }
-    const moduleId = getSelectedAnalyzerModuleId();
+    const moduleId = getSelectedAnalyzerModuleId("analyzer-session");
     if (!moduleId) {
       return;
     }
@@ -432,7 +428,7 @@ export const analyzer = {
       return;
     }
 
-    const moduleId = getSelectedAnalyzerModuleId();
+    const moduleId = getSelectedAnalyzerModuleId("midi-export");
     if (!moduleId) {
       return;
     }
@@ -444,7 +440,7 @@ export const analyzer = {
     );
   },
   saveMidi() {
-    const moduleId = getSelectedAnalyzerModuleId();
+    const moduleId = getSelectedAnalyzerModuleId("midi-export");
     if (!moduleId) {
       return;
     }

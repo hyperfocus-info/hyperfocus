@@ -1,5 +1,6 @@
 import { expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import { createUiTest } from "../../../../utils/tests/test-harness";
 import { Modal, getModalFocusableElements, resolveModalTabTarget } from "./modal";
 
@@ -45,5 +46,50 @@ createUiTest("Modal", () => {
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(closed).toBe(true);
+  });
+
+  it("restores focus to the opener after closing", async () => {
+    const Demo = () => {
+      const [open, setOpen] = createSignal(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>Open settings</button>
+          <Modal open={open()} onClose={() => setOpen(false)} title="Settings">
+            <button type="button">Save</button>
+          </Modal>
+        </>
+      );
+    };
+
+    render(() => <Demo />);
+    const opener = screen.getByRole("button", { name: "Open settings" });
+    opener.focus();
+    fireEvent.click(opener);
+    await Promise.resolve();
+    fireEvent.click(screen.getByRole("button", { name: "Close modal" }));
+    await Promise.resolve();
+    expect(document.activeElement === opener).toBe(true);
+  });
+
+  it("lets Escape dismiss only the topmost modal", () => {
+    const Demo = () => {
+      const [outerOpen, setOuterOpen] = createSignal(true);
+      const [innerOpen, setInnerOpen] = createSignal(true);
+      return (
+        <>
+          <Modal open={outerOpen()} onClose={() => setOuterOpen(false)} title="Outer modal">
+            <span>Outer content</span>
+          </Modal>
+          <Modal open={innerOpen()} onClose={() => setInnerOpen(false)} title="Inner modal">
+            <span>Inner content</span>
+          </Modal>
+        </>
+      );
+    };
+
+    render(() => <Demo />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Inner modal" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Outer modal" })).toBeTruthy();
   });
 });

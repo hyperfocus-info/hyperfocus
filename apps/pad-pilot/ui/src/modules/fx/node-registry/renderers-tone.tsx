@@ -4,7 +4,7 @@ import type { NodeVisualizerFrame } from "../../../proto/generated/fx-chain-pb";
 import { IO } from "../../../padpilot/provider";
 import { renderFxControlField, resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
-import styles from "../fx-node-registry.stylex";
+import styles from "../styles/fx-node-registry.stylex";
 import { clampSeriesValue, renderControlGrid, renderOrb, renderScalarRows, renderSeries } from "./renderer-primitives";
 import { PADPILOT_FILE_IMPORT_MAX_BYTES } from "@hyperfocus/pad-pilot/file-import";
 

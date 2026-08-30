@@ -2,7 +2,7 @@ import { Show, createMemo } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { getActiveFxChain, getFxMasterMeters, getFxMasterState } from "../fx-module-selectors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "../fx-module.stylex";
+import styles from "../styles/fx-module.stylex";
 
 export function FxMasterRack() {
   const state = useFxModuleState();

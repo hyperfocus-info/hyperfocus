@@ -6,7 +6,7 @@ const read = (relativePath: string) => readFileSync(resolve(import.meta.dir, rel
 
 describe("PadPilot dynamic label typography", () => {
   it("defines shared label typography with tabular numerals", () => {
-    const stylex = read("./element-typography.stylex.ts");
+    const stylex = read("./styles/element-typography.stylex.ts");
 
     expect(stylex).toContain('fontVariantNumeric: "tabular-nums"');
     expect(stylex).toContain("fontFeatureSettings: '\"tnum\"'");
@@ -21,8 +21,8 @@ describe("PadPilot dynamic label typography", () => {
   });
 
   it("does not force uppercase in element visuals that render dynamic labels", () => {
-    const waveformCss = read("./waveform-view.stylex.ts");
-    const dropzoneCss = read("./file-upload-dropzone.stylex.ts");
+    const waveformCss = read("./styles/waveform-view.stylex.ts");
+    const dropzoneCss = read("./styles/file-upload-dropzone.stylex.ts");
 
     expect(waveformCss).not.toContain("textTransform: \"uppercase\"");
     expect(dropzoneCss).not.toContain("textTransform: \"uppercase\"");

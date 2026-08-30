@@ -2,8 +2,8 @@ import { For, Show, createMemo, splitProps, type JSX } from "solid-js";
 import { Tooltip } from "./tooltip";
 import { type ElementSkin, resolveElementSkin, type TooltipPlacement } from "./element-skin";
 import { clamp } from "../../utils/math";
-import styles from "./meter.stylex";
-import { labelTypographyClass } from "./element-typography.stylex";
+import styles from "./styles/meter.stylex";
+import { labelTypographyClass } from "./styles/element-typography.stylex";
 
 /**
  * Props for Meter.

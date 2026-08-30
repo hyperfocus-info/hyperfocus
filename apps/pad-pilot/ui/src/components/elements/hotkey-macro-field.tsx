@@ -2,7 +2,7 @@ import { Show, createMemo, splitProps, type JSX } from "solid-js";
 import { Button } from "./button";
 import { Dropdown } from "./dropdown";
 import { TextField } from "./text-field";
-import styles from "./hotkey-macro-field.stylex";
+import styles from "./styles/hotkey-macro-field.stylex";
 import {
   createHotkeyRecorder,
   formatControllerMacro,

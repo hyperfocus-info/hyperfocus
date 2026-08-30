@@ -23,6 +23,273 @@ type PendingAnalysisState = {
   density: number;
 };
 
+type RecutActionOptions = {
+  buildPlaybackState: () => Parameters<typeof sampleCapabilities.applySlicePlaybackState>[1];
+  clearPendingDensityAnalysis: () => void;
+  currentView: () => RecutUiState;
+  handles: () => ReturnType<typeof createSampleCapabilityHandles>;
+  moduleInteraction: { begin: () => void; end: () => void };
+  pressPad: (padIndex: number, owner: PadTriggerOwner) => void;
+  previewSlice: (sliceIndex: number) => void;
+  queueDensityAnalysis: (nextState: RecutModuleState, immediate?: boolean) => void;
+  releaseAllTriggeredPads: () => void;
+  releasePad: (padIndex: number, owner: PadTriggerOwner) => void;
+  requestAnalysis: (nextState?: RecutModuleState) => void;
+  resetLoadedSourcePath: () => void;
+  setHostFrame: (frame: ReturnType<typeof createEmptySampleEditorFrame>) => void;
+  setPendingAnalysisState: (state: PendingAnalysisState | null) => void;
+  setState: ReturnType<typeof PadPilot.hooks.useModuleState<RecutModuleState>>[1];
+  setViewState: ReturnType<typeof PadPilot.hooks.useEditorViewState<RecutUiState>>[1];
+  snapFrameToTransient: (frame: number) => number;
+  state: () => RecutModuleState;
+  syncedPadAssignments: () => RecutModuleState["padAssignments"];
+  syncedSliceMarkers: () => RecutModuleState["sliceMarkers"];
+};
+
+function createRecutActions(options: RecutActionOptions) {
+  const {
+    buildPlaybackState,
+    clearPendingDensityAnalysis,
+    currentView,
+    handles,
+    moduleInteraction,
+    pressPad,
+    previewSlice,
+    queueDensityAnalysis,
+    releaseAllTriggeredPads,
+    releasePad,
+    requestAnalysis,
+    resetLoadedSourcePath,
+    setHostFrame,
+    setPendingAnalysisState,
+    setState,
+    setViewState,
+    snapFrameToTransient,
+    state,
+    syncedPadAssignments,
+    syncedSliceMarkers,
+  } = options;
+
+  const actions = {
+    loadSource(input: { path: string; name?: string; contentId?: string }) {
+      releaseAllTriggeredPads();
+      clearPendingDensityAnalysis();
+      setPendingAnalysisState(null);
+      setHostFrame(createEmptySampleEditorFrame());
+      setState({
+        loaded: false,
+        sourceContentId: input.contentId?.trim() ?? "",
+        sourceName: input.name?.trim() ?? "",
+        sourcePath: input.path,
+      });
+      setViewState({ importError: "" });
+      resetLoadedSourcePath();
+    },
+    replaceSource(input: { path: string; name?: string; contentId?: string }) {
+      actions.loadSource(input);
+    },
+    setImportError(message: string | null) {
+      setViewState({ importError: message?.trim() ?? "" });
+    },
+    reanalyze() {
+      clearPendingDensityAnalysis();
+      requestAnalysis();
+    },
+    setAnalysisMode(analysisMode: RecutAnalysisMode) {
+      const nextState = {
+        ...state(),
+        analysisMode,
+      };
+      setState({
+        analysisMode,
+      });
+      if (analysisMode !== RecutAnalysisMode.CUSTOM) {
+        clearPendingDensityAnalysis();
+        setPendingAnalysisState({
+          analysisMode,
+          bpmSource: nextState.bpmSource,
+          bpmValue: nextState.bpmValue,
+          density: nextState.density,
+        });
+        requestAnalysis(nextState);
+      }
+    },
+    setDensity(density: number, options?: { commit?: boolean }) {
+      const nextDensity = clamp(density, 0, 1);
+      const current = state();
+      setState({ density: nextDensity });
+      if (current.analysisMode !== RecutAnalysisMode.CUSTOM) {
+        const nextState = { ...current, density: nextDensity };
+        setPendingAnalysisState({
+          analysisMode: nextState.analysisMode,
+          bpmSource: nextState.bpmSource,
+          bpmValue: nextState.bpmValue,
+          density: nextDensity,
+        });
+        queueDensityAnalysis(nextState, options?.commit === true);
+      }
+    },
+    setBpmValue(bpmValue: number, source = RecutBpmSource.USER) {
+      const nextBpmValue = clamp(bpmValue, 20, 320);
+      const nextState = {
+        ...state(),
+        analysisMode: RecutAnalysisMode.BPM,
+        bpmSource: source,
+        bpmValue: nextBpmValue,
+      };
+      setState({
+        analysisMode: nextState.analysisMode,
+        bpmSource: nextState.bpmSource,
+        bpmValue: nextState.bpmValue,
+      });
+      clearPendingDensityAnalysis();
+      setPendingAnalysisState({
+        analysisMode: nextState.analysisMode,
+        bpmSource: nextState.bpmSource,
+        bpmValue: nextState.bpmValue,
+        density: nextState.density,
+      });
+      requestAnalysis(nextState);
+    },
+    setGainDb(gainDb: number) {
+      setState({ gainDb: clamp(gainDb, -24, 24) });
+    },
+    setPitchSemitones(pitchSemitones: number) {
+      setState({ pitchSemitones: clamp(pitchSemitones, -24, 24) });
+    },
+    setStretchEnabled(stretchEnabled: boolean) {
+      setState({ stretchEnabled });
+    },
+    setGranularEnabled(granularEnabled: boolean) {
+      setState({ granularEnabled });
+    },
+    setGrainSizeMs(grainSizeMs: number) {
+      setState({ grainSizeMs: clamp(grainSizeMs, 2, 250) });
+    },
+    setGrainDensity(grainDensity: number) {
+      setState({ grainDensity: clamp(grainDensity, 0, 1) });
+    },
+    setSelectedMarkerIndex(selectedMarkerIndex: number) {
+      setViewState({ selectedMarkerIndex: clamp(selectedMarkerIndex, 0, Math.max(0, syncedSliceMarkers().length - 1)) });
+    },
+    setActivePadIndex(activePadIndex: number) {
+      setViewState({ activePadIndex: clamp(activePadIndex, 0, RECUT_MAX_PADS - 1) });
+    },
+    setDraggingMarkerIndex(draggingMarkerIndex: number | null) {
+      setViewState({ draggingMarkerIndex });
+    },
+    setWaveformHoverFrame(waveformHoverFrame: number | null) {
+      setViewState({ waveformHoverFrame });
+    },
+    triggerPad(padIndex: number, pressed = true) {
+      const assignment = syncedPadAssignments()[padIndex] ?? null;
+      if (assignment?.isEmpty) {
+        setViewState({ activePadIndex: padIndex });
+        return;
+      }
+      if (!pressed) {
+        releasePad(padIndex, "ui");
+      } else {
+        pressPad(padIndex, "ui");
+      }
+      setViewState({ activePadIndex: padIndex });
+    },
+    previewSlice,
+    commitMarkers(nextMarkers: readonly RecutModuleState["sliceMarkers"][number][]) {
+      const normalizedMarkers = commitMarkers(nextMarkers, Number(state().lengthFrames || BigInt(nextMarkers.at(-1)?.endFrame ?? 1)));
+      const nextState = {
+        ...state(),
+        analysisMode: RecutAnalysisMode.CUSTOM,
+        manualEditRevision: state().manualEditRevision + 1n,
+        padAssignments: createDefaultPadAssignments(normalizedMarkers.length),
+        sliceMarkers: normalizedMarkers,
+      };
+      clearPendingDensityAnalysis();
+      setPendingAnalysisState(null);
+      moduleInteraction.begin();
+      setState({
+        analysisMode: RecutAnalysisMode.CUSTOM,
+        manualEditRevision: nextState.manualEditRevision,
+        padAssignments: nextState.padAssignments,
+        sliceMarkers: normalizedMarkers,
+      });
+      moduleInteraction.end();
+      setViewState({
+        selectedMarkerIndex: clamp(currentView().selectedMarkerIndex, 0, Math.max(0, normalizedMarkers.length - 1)),
+      });
+      sampleCapabilities.applySlicePlaybackState(handles().slicePlayback, {
+        ...buildPlaybackState(),
+        analysisMode: mapSampleAnalysisMode(RecutAnalysisMode.CUSTOM),
+        manualEditRevision: nextState.manualEditRevision,
+        padAssignments: nextState.padAssignments.map((assignment) => ({
+          bank: assignment.bank,
+          chokeGroupId: assignment.chokeGroupId,
+          faceButton: assignment.faceButton,
+          isEmpty: assignment.isEmpty,
+          padIndex: assignment.padIndex,
+          sliceIndex: assignment.sliceIndex,
+        })),
+        sliceMarkers: normalizedMarkers.map((marker) => ({
+          chokeGroupId: marker.chokeGroupId,
+          confidence: marker.confidence,
+          endFrame: marker.endFrame,
+          fadeMs: marker.fadeMs,
+          padIndex: marker.padIndex,
+          snapExact: marker.snapExact,
+          startFrame: marker.startFrame,
+          transientFrame: marker.transientFrame,
+        })),
+      });
+    },
+    addMarkerAtFrame(frame: number) {
+      const markers = syncedSliceMarkers();
+      actions.commitMarkers([
+        ...markers,
+        create(SliceMarkerSchema, {
+          chokeGroupId: 0,
+          confidence: 1,
+          endFrame: frame + 1,
+          fadeMs: 8,
+          padIndex: markers.length % RECUT_MAX_PADS,
+          snapExact: false,
+          startFrame: frame,
+          transientFrame: frame,
+        }),
+      ]);
+    },
+    moveMarker(sliceIndex: number, startFrame: number, snapToTransient = true) {
+      const nextStartFrame = snapToTransient ? snapFrameToTransient(startFrame) : Math.round(startFrame);
+      const markers = syncedSliceMarkers().map((marker, index) =>
+        index === sliceIndex
+          ? create(SliceMarkerSchema, {
+              ...marker,
+              startFrame: nextStartFrame,
+              transientFrame: nextStartFrame,
+            })
+          : marker,
+      );
+      actions.commitMarkers(markers);
+    },
+    removeMarker(sliceIndex: number) {
+      const markers = syncedSliceMarkers().filter((_, index) => index !== sliceIndex);
+      if (markers.length === 0) {
+        return;
+      }
+      actions.commitMarkers(markers);
+    },
+    nudgeMarker(sliceIndex: number, deltaFrames: number) {
+      const marker = syncedSliceMarkers()[sliceIndex];
+      if (!marker) {
+        return;
+      }
+      actions.moveMarker(sliceIndex, marker.startFrame + deltaFrames);
+    },
+  };
+
+  return actions;
+}
+
+
 function createRecutModuleStore() {
   const [state, setState] = PadPilot.hooks.useModuleState<RecutModuleState>("recut", createDefaultRecutModuleState());
   const [viewState, setViewState] = PadPilot.hooks.useEditorViewState<RecutUiState>("recut-module", {
@@ -350,221 +617,30 @@ function createRecutModuleStore() {
     previousGamepadButtons = buttons;
   });
 
-  const actions = {
-    loadSource(input: { path: string; name?: string; contentId?: string }) {
-      releaseAllTriggeredPads();
-      clearPendingDensityAnalysis();
-      setPendingAnalysisState(null);
-      setHostFrame(createEmptySampleEditorFrame());
-      setState({
-        loaded: false,
-        sourceContentId: input.contentId?.trim() ?? "",
-        sourceName: input.name?.trim() ?? "",
-        sourcePath: input.path,
-      });
-      setViewState({ importError: "" });
+  const actions = createRecutActions({
+    buildPlaybackState,
+    clearPendingDensityAnalysis,
+    currentView,
+    handles,
+    moduleInteraction,
+    pressPad,
+    previewSlice,
+    queueDensityAnalysis,
+    releaseAllTriggeredPads,
+    releasePad,
+    requestAnalysis,
+    resetLoadedSourcePath: () => {
       lastLoadedSourcePath = "";
     },
-    replaceSource(input: { path: string; name?: string; contentId?: string }) {
-      actions.loadSource(input);
-    },
-    setImportError(message: string | null) {
-      setViewState({ importError: message?.trim() ?? "" });
-    },
-    reanalyze() {
-      clearPendingDensityAnalysis();
-      requestAnalysis();
-    },
-    setAnalysisMode(analysisMode: RecutAnalysisMode) {
-      const nextState = {
-        ...state(),
-        analysisMode,
-      };
-      setState({
-        analysisMode,
-      });
-      if (analysisMode !== RecutAnalysisMode.CUSTOM) {
-        clearPendingDensityAnalysis();
-        setPendingAnalysisState({
-          analysisMode,
-          bpmSource: nextState.bpmSource,
-          bpmValue: nextState.bpmValue,
-          density: nextState.density,
-        });
-        requestAnalysis(nextState);
-      }
-    },
-    setDensity(density: number, options?: { commit?: boolean }) {
-      const nextDensity = clamp(density, 0, 1);
-      const current = state();
-      setState({ density: nextDensity });
-      if (current.analysisMode !== RecutAnalysisMode.CUSTOM) {
-        const nextState = { ...current, density: nextDensity };
-        setPendingAnalysisState({
-          analysisMode: nextState.analysisMode,
-          bpmSource: nextState.bpmSource,
-          bpmValue: nextState.bpmValue,
-          density: nextDensity,
-        });
-        queueDensityAnalysis(nextState, options?.commit === true);
-      }
-    },
-    setBpmValue(bpmValue: number, source = RecutBpmSource.USER) {
-      const nextBpmValue = clamp(bpmValue, 20, 320);
-      const nextState = {
-        ...state(),
-        analysisMode: RecutAnalysisMode.BPM,
-        bpmSource: source,
-        bpmValue: nextBpmValue,
-      };
-      setState({
-        analysisMode: nextState.analysisMode,
-        bpmSource: nextState.bpmSource,
-        bpmValue: nextState.bpmValue,
-      });
-      clearPendingDensityAnalysis();
-      setPendingAnalysisState({
-        analysisMode: nextState.analysisMode,
-        bpmSource: nextState.bpmSource,
-        bpmValue: nextState.bpmValue,
-        density: nextState.density,
-      });
-      requestAnalysis(nextState);
-    },
-    setGainDb(gainDb: number) {
-      setState({ gainDb: clamp(gainDb, -24, 24) });
-    },
-    setPitchSemitones(pitchSemitones: number) {
-      setState({ pitchSemitones: clamp(pitchSemitones, -24, 24) });
-    },
-    setStretchEnabled(stretchEnabled: boolean) {
-      setState({ stretchEnabled });
-    },
-    setGranularEnabled(granularEnabled: boolean) {
-      setState({ granularEnabled });
-    },
-    setGrainSizeMs(grainSizeMs: number) {
-      setState({ grainSizeMs: clamp(grainSizeMs, 2, 250) });
-    },
-    setGrainDensity(grainDensity: number) {
-      setState({ grainDensity: clamp(grainDensity, 0, 1) });
-    },
-    setSelectedMarkerIndex(selectedMarkerIndex: number) {
-      setViewState({ selectedMarkerIndex: clamp(selectedMarkerIndex, 0, Math.max(0, syncedSliceMarkers().length - 1)) });
-    },
-    setActivePadIndex(activePadIndex: number) {
-      setViewState({ activePadIndex: clamp(activePadIndex, 0, RECUT_MAX_PADS - 1) });
-    },
-    setDraggingMarkerIndex(draggingMarkerIndex: number | null) {
-      setViewState({ draggingMarkerIndex });
-    },
-    setWaveformHoverFrame(waveformHoverFrame: number | null) {
-      setViewState({ waveformHoverFrame });
-    },
-    triggerPad(padIndex: number, pressed = true) {
-      const assignment = syncedPadAssignments()[padIndex] ?? null;
-      if (assignment?.isEmpty) {
-        setViewState({ activePadIndex: padIndex });
-        return;
-      }
-      if (!pressed) {
-        releasePad(padIndex, "ui");
-      } else {
-        pressPad(padIndex, "ui");
-      }
-      setViewState({ activePadIndex: padIndex });
-    },
-    previewSlice,
-    commitMarkers(nextMarkers: readonly RecutModuleState["sliceMarkers"][number][]) {
-      const normalizedMarkers = commitMarkers(nextMarkers, Number(state().lengthFrames || BigInt(nextMarkers.at(-1)?.endFrame ?? 1)));
-      const nextState = {
-        ...state(),
-        analysisMode: RecutAnalysisMode.CUSTOM,
-        manualEditRevision: state().manualEditRevision + 1n,
-        padAssignments: createDefaultPadAssignments(normalizedMarkers.length),
-        sliceMarkers: normalizedMarkers,
-      };
-      clearPendingDensityAnalysis();
-      setPendingAnalysisState(null);
-      moduleInteraction.begin();
-      setState({
-        analysisMode: RecutAnalysisMode.CUSTOM,
-        manualEditRevision: nextState.manualEditRevision,
-        padAssignments: nextState.padAssignments,
-        sliceMarkers: normalizedMarkers,
-      });
-      moduleInteraction.end();
-      setViewState({
-        selectedMarkerIndex: clamp(currentView().selectedMarkerIndex, 0, Math.max(0, normalizedMarkers.length - 1)),
-      });
-      sampleCapabilities.applySlicePlaybackState(handles().slicePlayback, {
-        ...buildPlaybackState(),
-        analysisMode: mapSampleAnalysisMode(RecutAnalysisMode.CUSTOM),
-        manualEditRevision: nextState.manualEditRevision,
-        padAssignments: nextState.padAssignments.map((assignment) => ({
-          bank: assignment.bank,
-          chokeGroupId: assignment.chokeGroupId,
-          faceButton: assignment.faceButton,
-          isEmpty: assignment.isEmpty,
-          padIndex: assignment.padIndex,
-          sliceIndex: assignment.sliceIndex,
-        })),
-        sliceMarkers: normalizedMarkers.map((marker) => ({
-          chokeGroupId: marker.chokeGroupId,
-          confidence: marker.confidence,
-          endFrame: marker.endFrame,
-          fadeMs: marker.fadeMs,
-          padIndex: marker.padIndex,
-          snapExact: marker.snapExact,
-          startFrame: marker.startFrame,
-          transientFrame: marker.transientFrame,
-        })),
-      });
-    },
-    addMarkerAtFrame(frame: number) {
-      const markers = syncedSliceMarkers();
-      actions.commitMarkers([
-        ...markers,
-        create(SliceMarkerSchema, {
-          chokeGroupId: 0,
-          confidence: 1,
-          endFrame: frame + 1,
-          fadeMs: 8,
-          padIndex: markers.length % RECUT_MAX_PADS,
-          snapExact: false,
-          startFrame: frame,
-          transientFrame: frame,
-        }),
-      ]);
-    },
-    moveMarker(sliceIndex: number, startFrame: number, snapToTransient = true) {
-      const nextStartFrame = snapToTransient ? snapFrameToTransient(startFrame) : Math.round(startFrame);
-      const markers = syncedSliceMarkers().map((marker, index) =>
-        index === sliceIndex
-          ? create(SliceMarkerSchema, {
-              ...marker,
-              startFrame: nextStartFrame,
-              transientFrame: nextStartFrame,
-            })
-          : marker,
-      );
-      actions.commitMarkers(markers);
-    },
-    removeMarker(sliceIndex: number) {
-      const markers = syncedSliceMarkers().filter((_, index) => index !== sliceIndex);
-      if (markers.length === 0) {
-        return;
-      }
-      actions.commitMarkers(markers);
-    },
-    nudgeMarker(sliceIndex: number, deltaFrames: number) {
-      const marker = syncedSliceMarkers()[sliceIndex];
-      if (!marker) {
-        return;
-      }
-      actions.moveMarker(sliceIndex, marker.startFrame + deltaFrames);
-    },
-  };
+    setHostFrame,
+    setPendingAnalysisState,
+    setState,
+    setViewState,
+    snapFrameToTransient,
+    state,
+    syncedPadAssignments,
+    syncedSliceMarkers,
+  });
 
   const derived = {
     frame: currentFrame,
@@ -609,12 +685,7 @@ function createRecutModuleStore() {
     },
   };
 
-  return {
-    actions,
-    derived,
-    state,
-    viewState,
-  };
+  return { actions, derived, state, viewState };
 }
 
 const RecutModuleStoreContext = createContext<ReturnType<typeof createRecutModuleStore>>();

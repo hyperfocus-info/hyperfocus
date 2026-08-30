@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from "solid-js";
+import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount, type JSX } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { Activity, BrainCircuit, CalendarClock, Clock3, Dices, FileText, Gauge, Grid3X3, LockKeyhole, LockKeyholeOpen, Monitor, Moon, Music2, Scale, Send, Settings2, Smile, Sun, Thermometer, Trash2, UserRound, WandSparkles } from "lucide-solid";
 import { FloatingLayer } from "../../../components/elements/floating-layer";
@@ -162,6 +162,254 @@ function percentValue(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
+function DashboardRowActions(props: {
+  disabled: boolean;
+  label: string;
+  locked: boolean;
+  onLock: () => void;
+  onRandomize: () => void;
+  onSuggest: () => void;
+}) {
+  return (
+    <div class={styles["row-actions"]}>
+      <PadPilot.Button
+        class={styles["row-action-button"]}
+        disabled={props.disabled || props.locked}
+        icon={WandSparkles}
+        onClick={props.onSuggest}
+        size="sm"
+        tooltip={`Suggest ${props.label}`}
+        variant="ghost"
+      />
+      <PadPilot.Button
+        class={styles["row-action-button"]}
+        disabled={props.disabled || props.locked}
+        icon={Dices}
+        onClick={props.onRandomize}
+        size="sm"
+        tooltip={`Randomize ${props.label}`}
+        variant="ghost"
+      />
+      <PadPilot.Button
+        aria-pressed={props.locked}
+        class={`${styles["row-action-button"]} ${styles["lock-button"]}`}
+        disabled={props.disabled}
+        icon={props.locked ? LockKeyhole : LockKeyholeOpen}
+        onClick={props.onLock}
+        size="sm"
+        tooltip={props.locked ? `Unlock ${props.label}` : `Lock ${props.label}`}
+        variant="ghost"
+      />
+    </div>
+  );
+}
+
+function DashboardSliderRow(props: {
+  actions: JSX.Element;
+  config: AdvancedSliderConfig;
+  disabled: boolean;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  return (
+    <div class={`${styles["control-row"]} ${styles["slider-row"]}`}>
+      <Tooltip content={props.config.tooltip} placement="bottom" class={styles["label-tooltip"]}>
+        <span class={styles["row-label"]}>
+          <props.config.icon class={styles["row-label-svg"]} size={15} aria-hidden="true" />
+          {props.config.label}
+        </span>
+      </Tooltip>
+      <div class={`${styles["row-control"]} ${styles["slider-control"]}`}>
+        <span class={styles["slider-frame"]}>
+          <PadPilot.Slider
+            aria-label={props.config.label}
+            class={styles.slider}
+            classNames={sliderClasses}
+            label=""
+            disabled={props.disabled}
+            max={1}
+            min={0}
+            onChange={props.onChange}
+            orientation="horizontal"
+            value={props.value}
+            width={520}
+          />
+        </span>
+        <span class={styles["value-readout"]}>{percentValue(props.value)}</span>
+      </div>
+      {props.actions}
+    </div>
+  );
+}
+
+function GeneratorSettings(props: {
+  anchorRef: () => HTMLButtonElement | undefined;
+  chaosRisk: () => number;
+  disabled: boolean;
+  id: string;
+  onChaosChange: (value: number) => void;
+  onThemeCycle: () => void;
+  open: boolean;
+  resolvedTheme: "dark" | "light";
+  themeIcon: () => typeof Sun;
+  themeLabel: () => string;
+}) {
+  return (
+    <FloatingLayer
+      anchorRef={props.anchorRef}
+      class={styles["settings-popover"]}
+      id={props.id}
+      offset={10}
+      open={props.open}
+      placement="bottom"
+      role="dialog"
+    >
+      <div class={styles["settings-content"]} data-theme={props.resolvedTheme} aria-label="Generator settings">
+        <div class={styles["settings-heading"]}>
+          <Settings2 size={15} aria-hidden="true" />
+          <span>Generator Settings</span>
+        </div>
+        <div class={styles["settings-row"]}>
+          <span class={styles["risk-label"]}>
+            {(() => {
+              const ThemeIcon = props.themeIcon();
+              return <ThemeIcon size={15} aria-hidden="true" />;
+            })()}
+            {props.themeLabel()}
+          </span>
+          <PadPilot.Button
+            class={styles["settings-button"]}
+            icon={props.themeIcon()}
+            onClick={props.onThemeCycle}
+            size="sm"
+            tooltip={props.themeLabel()}
+            variant="ghost"
+          />
+        </div>
+        <div class={styles["risk-control"]}>
+          <span class={styles["risk-label"]}>
+            <Gauge size={15} aria-hidden="true" />
+            Chaos / Risk
+          </span>
+          <div class={styles["slider-control"]}>
+            <span class={styles["slider-frame"]}>
+              <PadPilot.Slider
+                aria-label="Chaos/Risk"
+                class={styles.slider}
+                classNames={sliderClasses}
+                label=""
+                disabled={props.disabled}
+                max={1}
+                min={0}
+                onChange={props.onChaosChange}
+                orientation="horizontal"
+                value={props.chaosRisk()}
+                width={260}
+              />
+            </span>
+            <span class={styles["value-readout"]}>{percentValue(props.chaosRisk())}</span>
+          </div>
+        </div>
+      </div>
+    </FloatingLayer>
+  );
+}
+
+function GeneratorHeader(props: {
+  disabled: boolean;
+  onGenerate: () => void;
+  onMagic: () => void;
+  onRandom: () => void;
+  onReset: () => void;
+  onSettingsAnchor: (element: HTMLButtonElement) => void;
+  onToggleSettings: () => void;
+  settingsOpen: boolean;
+}) {
+  return (
+    <div class={styles.header}>
+      <div class={styles["title-group"]}>
+        <h2 class={styles["title-group-h2"]}>Generator<span class={styles["title-group-h2-span"]}>.</span></h2>
+      </div>
+      <div class={styles["top-tools"]}>
+        <div class={styles["action-buttons"]} aria-label="Generator actions">
+          <PadPilot.Button class={styles["home-button"]} disabled={props.disabled} icon={Trash2} onClick={props.onReset} tooltip="Clear / Reset" />
+          <PadPilot.Button class={styles["home-button"]} disabled={props.disabled} icon={WandSparkles} onClick={props.onMagic} tooltip="Suggest" />
+          <PadPilot.Button class={styles["home-button"]} disabled={props.disabled} icon={Dices} onClick={props.onRandom} tooltip="Random" />
+          <PadPilot.Button class={`${styles["home-button"]} ${styles["generate-button"]}`} disabled={props.disabled} icon={Send} onClick={props.onGenerate} tooltip="Generate / Send" />
+        </div>
+        <PadPilot.Button
+          ref={props.onSettingsAnchor}
+          aria-expanded={props.settingsOpen}
+          aria-haspopup="dialog"
+          class={styles["top-tool-button"]}
+          icon={Settings2}
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onToggleSettings();
+          }}
+          size="sm"
+          tooltip="Generator settings"
+          variant="ghost"
+        />
+      </div>
+    </div>
+  );
+}
+
+function installSettingsDismiss(options: {
+  anchor: () => HTMLButtonElement | undefined;
+  id: string;
+  open: () => boolean;
+  setOpen: (open: boolean) => void;
+}) {
+  createEffect(() => {
+    if (!options.open() || typeof document === "undefined") return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        options.setOpen(false);
+        return;
+      }
+      if (options.anchor()?.contains(target) || document.getElementById(options.id)?.contains(target)) return;
+      options.setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") options.setOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    });
+  });
+}
+
+function installDashboardPreferences(
+  chaosRisk: () => number,
+  themeMode: () => (typeof themeModes)[number],
+  setSystemTheme: (theme: "dark" | "light") => void
+) {
+  createEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(GENERATOR_CHAOS_STORAGE_KEY, String(chaosRisk()));
+    }
+  });
+  createEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(GENERATOR_THEME_STORAGE_KEY, themeMode());
+    }
+  });
+  onMount(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncSystemTheme = () => setSystemTheme(query.matches ? "dark" : "light");
+    syncSystemTheme();
+    query.addEventListener("change", syncSystemTheme);
+    onCleanup(() => query.removeEventListener("change", syncSystemTheme));
+  });
+}
+
 /** GeneratorDashboard renders the optional prompt controls and suggestion action. */
 export function GeneratorDashboard(props: GeneratorDashboardProps) {
   const initialFields = () => ({ ...emptyFields(), ...props.initialState?.fields });
@@ -266,63 +514,17 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
     emitStateChange();
   });
 
-  createEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(GENERATOR_CHAOS_STORAGE_KEY, String(chaosRisk()));
-  });
-
-  createEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(GENERATOR_THEME_STORAGE_KEY, themeMode());
-  });
-
-  onMount(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-    const syncSystemTheme = () => setSystemTheme(query.matches ? "dark" : "light");
-    syncSystemTheme();
-    query.addEventListener("change", syncSystemTheme);
-    onCleanup(() => query.removeEventListener("change", syncSystemTheme));
-  });
+  installDashboardPreferences(chaosRisk, themeMode, setSystemTheme);
 
   createEffect(() => {
     props.onThemeChange?.(resolvedTheme());
   });
 
-  createEffect(() => {
-    if (!settingsOpen() || typeof document === "undefined") {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        setSettingsOpen(false);
-        return;
-      }
-      if (settingsAnchor?.contains(target) || document.getElementById(settingsPopoverId)?.contains(target)) {
-        return;
-      }
-      setSettingsOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSettingsOpen(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown, true);
-    document.addEventListener("keydown", handleKeyDown);
-    onCleanup(() => {
-      document.removeEventListener("pointerdown", handlePointerDown, true);
-      document.removeEventListener("keydown", handleKeyDown);
-    });
+  installSettingsDismiss({
+    anchor: () => settingsAnchor,
+    id: settingsPopoverId,
+    open: settingsOpen,
+    setOpen: setSettingsOpen,
   });
 
   const syncField = (key: GeneratorFieldKey, value: string, suggested = false, manual = !suggested && value.trim().length > 0) => {
@@ -434,192 +636,39 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
     setThemeMode(themeModes[(currentIndex + 1) % themeModes.length] ?? "system");
   };
 
-  const lockButton = (key: GeneratorLockKey, label: string) => (
-    <PadPilot.Button
-      aria-pressed={locked[key]}
-      class={`${styles["row-action-button"]} ${styles["lock-button"]}`}
-      disabled={props.disabled}
-      icon={locked[key] ? LockKeyhole : LockKeyholeOpen}
-      onClick={() => toggleLock(key)}
-      size="sm"
-      tooltip={locked[key] ? `Unlock ${label}` : `Lock ${label}`}
-      variant="ghost"
-    />
-  );
-
-  const rowActions = (key: GeneratorLockKey, label: string) => (
-    <div class={styles["row-actions"]}>
-      <PadPilot.Button
-        class={styles["row-action-button"]}
-        disabled={props.disabled || locked[key]}
-        icon={WandSparkles}
-        onClick={() => suggestKey(key)}
-        size="sm"
-        tooltip={`Suggest ${label}`}
-        variant="ghost"
-      />
-      <PadPilot.Button
-        class={styles["row-action-button"]}
-        disabled={props.disabled || locked[key]}
-        icon={Dices}
-        onClick={() => randomizeKey(key)}
-        size="sm"
-        tooltip={`Randomize ${label}`}
-        variant="ghost"
-      />
-      {lockButton(key, label)}
-    </div>
-  );
-
-  const sliderRow = (config: AdvancedSliderConfig) => (
-    <div class={`${styles["control-row"]} ${styles["slider-row"]}`}>
-      <Tooltip content={config.tooltip} placement="bottom" class={styles["label-tooltip"]}>
-        <span class={styles["row-label"]}>
-          <config.icon class={styles["row-label-svg"]} size={15} aria-hidden="true" />
-          {config.label}
-        </span>
-      </Tooltip>
-      <div class={`${styles["row-control"]} ${styles["slider-control"]}`}>
-        <span class={styles["slider-frame"]}>
-          <PadPilot.Slider
-            aria-label={config.label}
-            class={styles.slider}
-            classNames={sliderClasses}
-            label=""
-            disabled={props.disabled}
-            max={1}
-            min={0}
-            onChange={(value) => setFields(config.key, clamp01(value))}
-            orientation="horizontal"
-            value={fields[config.key]}
-            width={520}
-          />
-        </span>
-        <span class={styles["value-readout"]}>{percentValue(fields[config.key])}</span>
-      </div>
-      {rowActions(config.key, config.label)}
-    </div>
-  );
-
   return (
     <section class={styles.dashboard} data-theme={resolvedTheme()} data-theme-mode={themeMode()} aria-label="Generator dashboard">
-      <div class={styles.header}>
-        <div class={styles["title-group"]}>
-          <h2 class={styles["title-group-h2"]}>Generator<span class={styles["title-group-h2-span"]}>.</span></h2>
-        </div>
-        <div class={styles["top-tools"]}>
-          <div class={styles["action-buttons"]} aria-label="Generator actions">
-            <PadPilot.Button
-              class={styles["home-button"]}
-              disabled={props.disabled}
-              icon={Trash2}
-              onClick={resetDropdowns}
-              tooltip="Clear / Reset"
-            />
-            <PadPilot.Button
-              class={styles["home-button"]}
-              disabled={props.disabled}
-              icon={WandSparkles}
-              onClick={applyMagic}
-              tooltip="Suggest"
-            />
-            <PadPilot.Button
-              class={styles["home-button"]}
-              disabled={props.disabled}
-              icon={Dices}
-              onClick={applyRandom}
-              tooltip="Random"
-            />
-            <PadPilot.Button
-              class={`${styles["home-button"]} ${styles["generate-button"]}`}
-              disabled={props.disabled}
-              icon={Send}
-              onClick={() => props.onGenerate({
-                ...fields,
-                magicProvenance: {
-                  chaos: chaosRisk(),
-                  reroll: rerollSeed(),
-                  suggestedFields: { ...suggestedFields },
-                },
-              })}
-              tooltip="Generate / Send"
-            />
-          </div>
-          <PadPilot.Button
-            ref={(element) => {
-              settingsAnchor = element;
-            }}
-            aria-expanded={settingsOpen()}
-            aria-haspopup="dialog"
-            class={styles["top-tool-button"]}
-            icon={Settings2}
-            onClick={(event) => {
-              event.stopPropagation();
-              setSettingsOpen((value) => !value);
-            }}
-            size="sm"
-            tooltip="Generator settings"
-            variant="ghost"
-          />
-        </div>
-      </div>
-      <FloatingLayer
+      <GeneratorHeader
+        disabled={props.disabled ?? false}
+        onGenerate={() => props.onGenerate({
+          ...fields,
+          magicProvenance: {
+            chaos: chaosRisk(),
+            reroll: rerollSeed(),
+            suggestedFields: { ...suggestedFields },
+          },
+        })}
+        onMagic={applyMagic}
+        onRandom={applyRandom}
+        onReset={resetDropdowns}
+        onSettingsAnchor={(element) => {
+          settingsAnchor = element;
+        }}
+        onToggleSettings={() => setSettingsOpen((value) => !value)}
+        settingsOpen={settingsOpen()}
+      />
+      <GeneratorSettings
         anchorRef={() => settingsAnchor}
-        class={styles["settings-popover"]}
+        chaosRisk={chaosRisk}
+        disabled={props.disabled ?? false}
         id={settingsPopoverId}
-        offset={10}
+        onChaosChange={(value) => setChaosRisk(clamp01(value))}
+        onThemeCycle={cycleTheme}
         open={settingsOpen()}
-        placement="bottom"
-        role="dialog"
-      >
-        <div class={styles["settings-content"]} data-theme={resolvedTheme()} aria-label="Generator settings">
-          <div class={styles["settings-heading"]}>
-            <Settings2 size={15} aria-hidden="true" />
-            <span>Generator Settings</span>
-          </div>
-          <div class={styles["settings-row"]}>
-            <span class={styles["risk-label"]}>
-              {(() => {
-                const ThemeIcon = themeIcon();
-                return <ThemeIcon size={15} aria-hidden="true" />;
-              })()}
-              {themeLabel()}
-            </span>
-            <PadPilot.Button
-              class={styles["settings-button"]}
-              icon={themeIcon()}
-              onClick={cycleTheme}
-              size="sm"
-              tooltip={themeLabel()}
-              variant="ghost"
-            />
-          </div>
-          <div class={styles["risk-control"]}>
-            <span class={styles["risk-label"]}>
-              <Gauge size={15} aria-hidden="true" />
-              Chaos / Risk
-            </span>
-            <div class={styles["slider-control"]}>
-              <span class={styles["slider-frame"]}>
-                <PadPilot.Slider
-                  aria-label="Chaos/Risk"
-                  class={styles.slider}
-                  classNames={sliderClasses}
-                  label=""
-                  disabled={props.disabled}
-                  max={1}
-                  min={0}
-                  onChange={(value) => setChaosRisk(clamp01(value))}
-                  orientation="horizontal"
-                  value={chaosRisk()}
-                  width={260}
-                />
-              </span>
-              <span class={styles["value-readout"]}>{percentValue(chaosRisk())}</span>
-            </div>
-          </div>
-        </div>
-      </FloatingLayer>
+        resolvedTheme={resolvedTheme()}
+        themeIcon={themeIcon}
+        themeLabel={themeLabel}
+      />
       <div class={styles["control-stack"]}>
         {selectors.map((selector) => (
           <div class={styles["control-row"]}>
@@ -653,12 +702,34 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
                 toggleLabel={`Browse ${selector.label} options`}
               />
             </div>
-            {rowActions(selector.key, selector.label)}
+            <DashboardRowActions
+              disabled={props.disabled ?? false}
+              label={selector.label}
+              locked={locked[selector.key]}
+              onLock={() => toggleLock(selector.key)}
+              onRandomize={() => randomizeKey(selector.key)}
+              onSuggest={() => suggestKey(selector.key)}
+            />
           </div>
         ))}
       </div>
       <div class={styles["control-stack"]}>
-        {advancedSliders.slice(0, 2).map(sliderRow)}
+        {advancedSliders.slice(0, 2).map((config) => (
+          <DashboardSliderRow
+            actions={<DashboardRowActions
+              disabled={props.disabled ?? false}
+              label={config.label}
+              locked={locked[config.key]}
+              onLock={() => toggleLock(config.key)}
+              onRandomize={() => randomizeKey(config.key)}
+              onSuggest={() => suggestKey(config.key)}
+            />}
+            config={config}
+            disabled={props.disabled ?? false}
+            onChange={(value) => setFields(config.key, clamp01(value))}
+            value={fields[config.key]}
+          />
+        ))}
         <div class={`${styles["control-row"]} ${styles["slider-row"]}`}>
           <Tooltip content={lengthTooltip} placement="bottom" class={styles["label-tooltip"]}>
             <span class={`${styles["row-label"]} ${styles["length-label"]}`}>
@@ -690,9 +761,31 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
             </span>
             <span class={styles["value-readout"]}>{`${fields.lengthBars} BARS`}</span>
           </div>
-          {rowActions("lengthBars", "Bar Length")}
+          <DashboardRowActions
+            disabled={props.disabled ?? false}
+            label="Bar Length"
+            locked={locked.lengthBars}
+            onLock={() => toggleLock("lengthBars")}
+            onRandomize={() => randomizeKey("lengthBars")}
+            onSuggest={() => suggestKey("lengthBars")}
+          />
         </div>
-        {advancedSliders.slice(2).map(sliderRow)}
+        {advancedSliders.slice(2).map((config) => (
+          <DashboardSliderRow
+            actions={<DashboardRowActions
+              disabled={props.disabled ?? false}
+              label={config.label}
+              locked={locked[config.key]}
+              onLock={() => toggleLock(config.key)}
+              onRandomize={() => randomizeKey(config.key)}
+              onSuggest={() => suggestKey(config.key)}
+            />}
+            config={config}
+            disabled={props.disabled ?? false}
+            onChange={(value) => setFields(config.key, clamp01(value))}
+            value={fields[config.key]}
+          />
+        ))}
       </div>
       <div class={styles["notes-row"]}>
         <PadPilot.TextAreaField

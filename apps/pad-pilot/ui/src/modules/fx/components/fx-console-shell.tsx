@@ -7,8 +7,8 @@ import { FxMasterIoRack } from "./fx-master-io-rack";
 import { FxPresetRail } from "./fx-preset-rail";
 import { FxCreativeTools } from "./fx-creative-tools";
 import { For } from "solid-js";
-import styles from "../fx-console-shell.stylex";
-import tabStyles from "./fx-chain-tabs.stylex";
+import styles from "../styles/fx-console-shell.stylex";
+import tabStyles from "./styles/fx-chain-tabs.stylex";
 
 /** FxConsoleShell owns the three-column FX console layout. */
 export function FxConsoleShell() {

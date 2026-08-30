@@ -1,7 +1,8 @@
 # PadPilot zipper-merge audit plan
 
-Status: first migration slice executed on 2026-08-29. This document remains the
-canonical audit ledger and proof plan for remaining zipper slices.
+Status: complete on 2026-08-29. Migration, StyleX conversion, public Module
+contract extraction, user-story coverage, shared interaction hardening, native
+verification, and fresh-seed user audit are proven.
 
 ## Outcome
 
@@ -305,3 +306,36 @@ recoverable archive; no compatibility facade silently owns divergent behavior.
    StyleX; no CSS Modules remain under PadPilot UI source.
 5. PadPilot's 1.0 license remains attached to both apps and the public package;
    Hyperfocus root licensing and release checks explicitly route that boundary.
+6. `@hyperfocus/pad-pilot` now owns bounded manifest validation, Module identity,
+   QuickJS script contracts, public subpath exports, and an external consumer
+   typecheck/build fixture. App runtime consumes those contracts instead of
+   maintaining a private manifest dialect.
+7. PadPilot and Marketplace have stable user-story IDs with an executable
+   story-to-proof coverage matrix enforced by repository documentation policy.
+8. `@hyperfocus/ui` owns overlay ordering, popover clamping, Escape dismissal,
+   and focus return. PadPilot wrappers retain their skin and Module-facing API.
+9. App-local PadPilot skills retain product expertise; duplicate Caveman tooling
+   was retired, Generator inventory was regenerated, stale paths were repaired,
+   and skill scripts/links are now checked automatically.
+
+## Final evidence
+
+- Public package: 25 tests, typecheck, 15-output build, and a consumer fixture
+  using only manifest exports.
+- PadPilot UI: 524 tests across 95 isolated files, app typecheck, development
+  build, and production embedded build.
+- Shared UI: 37 tests, typecheck, and build. Package-local testing now loads the
+  repository Solid/DOM harness instead of silently selecting React JSX.
+- Marketplace: 76 tests, typecheck, and lint after auth, billing, and HTTP route
+  extraction; no Marketplace source-structure exceptions remain.
+- Scripts and native contracts: 140 script tests and 39 source contracts.
+- Native: clean temporary configure/build/run for both native and processor test
+  executables. Release VST3 builds with static Release runtime and no PadPilot
+  compiler warnings.
+- Host validation: pluginval strictness 10 succeeds; Steinberg extensive reports
+  537 passed and 0 failed.
+- Styling: zero CSS Modules remain; `ui/src/styles/global.css` is the only raw CSS
+  file and all component styling is StyleX.
+- Release deployment: the audit reproduced and repaired a Windows 260-character
+  transaction path failure. Short transaction names retain recovery support for
+  legacy journals and have boundary regression coverage.

@@ -18,6 +18,12 @@ void PadPilotAudioProcessor::setSelectedModuleLocked(const std::string& moduleId
   scriptHost_.revokeModuleAuthorization();
   selectedModuleId_ = nextModuleId;
   syncSelectedRuntimeModule(selectedModuleId_);
+  const auto fxGraphOwner = getSelectedFxGraphOwnerLocked();
+  if (!fxGraphOwner.empty() && !moduleStatePayloadById_.contains(fxGraphOwner)) {
+    moduleStatePayloadById_[fxGraphOwner] = padpilot::proto::bytesToBase64(
+        padpilot::proto::serializeFxChainState(padpilot::proto::createDefaultFxChainState()));
+    acceptedRevisionByModuleId_[fxGraphOwner] = 1;
+  }
 }
 
 void PadPilotAudioProcessor::requestMidiOutputPanic() noexcept {
@@ -30,6 +36,13 @@ void PadPilotAudioProcessor::syncSelectedRuntimeModule(const std::string& module
   const auto fxGraphProcessingActive = module != nullptr && module->loadStatus == "ready" &&
       std::find(module->capabilities.begin(), module->capabilities.end(), "fx-graph") !=
           module->capabilities.end();
+  const auto nextFxGraphOwner = fxGraphProcessingActive ? canonicalModuleId : std::string {};
+  if (fxGraphOwnerModuleId_ != nextFxGraphOwner) {
+    fxGraphOwnerModuleId_ = nextFxGraphOwner;
+    lastAppliedFxState_.reset();
+    fxRuntimeStateDirty_.store(false, std::memory_order_release);
+    fxRuntimeResyncRequested_.store(false, std::memory_order_release);
+  }
   fxGraphProcessingActive_.store(fxGraphProcessingActive, std::memory_order_release);
   convolverGraph_.requestStructuralBypass(!fxGraphProcessingActive);
   activeRuntimeModuleKey_.store(runtimeModuleKeyForId(canonicalModuleId), std::memory_order_release);
@@ -268,6 +281,22 @@ const padpilot::ModuleRecord* PadPilotAudioProcessor::findModuleRecordLocked(con
   return it == modules_.end() ? nullptr : &*it;
 }
 
+bool PadPilotAudioProcessor::moduleProvidesCapabilityLocked(
+    const std::string& moduleId,
+    const std::string_view capability) const {
+  const auto* module = findModuleRecordLocked(moduleId);
+  return module != nullptr && module->loadStatus == "ready" &&
+         std::find(module->capabilities.begin(), module->capabilities.end(), capability) !=
+             module->capabilities.end();
+}
+
+std::string PadPilotAudioProcessor::getSelectedFxGraphOwnerLocked() const {
+  return fxGraphOwnerModuleId_ == selectedModuleId_ &&
+                 moduleProvidesCapabilityLocked(fxGraphOwnerModuleId_, "fx-graph")
+             ? fxGraphOwnerModuleId_
+             : std::string {};
+}
+
 padpilot::ScriptModuleLoadRequest PadPilotAudioProcessor::getScriptModuleLoadRequestLocked(
     const std::string& moduleId) const {
   padpilot::ScriptModuleLoadRequest request;
@@ -451,7 +480,7 @@ std::string PadPilotAudioProcessor::getModuleStatePayloadBase64Locked(const std:
     return payload;
   }
 
-  if (canonicalizeModuleId(moduleId) == kFxModuleId) {
+  if (moduleProvidesCapabilityLocked(canonicalizeModuleId(moduleId), "fx-graph")) {
     const auto migrated = padpilot::proto::migrateLegacyJsonToFxChainState(payload, selectedPresetId_);
     return padpilot::proto::bytesToBase64(padpilot::proto::serializeFxChainState(migrated));
   }
@@ -470,7 +499,7 @@ std::string PadPilotAudioProcessor::getModuleStateBytesLocked(const std::string&
     return bytes;
   }
 
-  if (canonicalizeModuleId(moduleId) == kFxModuleId) {
+  if (moduleProvidesCapabilityLocked(canonicalizeModuleId(moduleId), "fx-graph")) {
     const auto migrated = padpilot::proto::migrateLegacyJsonToFxChainState(payload, selectedPresetId_);
     return padpilot::proto::serializeFxChainState(migrated);
   }
@@ -495,12 +524,14 @@ void PadPilotAudioProcessor::applyPresetPayloadWhileStateTransitionLocked(
   }
 
   const auto canonicalId = canonicalizeModuleId(moduleId);
+  bool isFxGraphState = false;
   {
     std::lock_guard<std::mutex> guard(stateMutex_);
     const auto current = moduleStatePayloadById_.find(canonicalId);
     if (current != moduleStatePayloadById_.end() && current->second != payload) {
       return;
     }
+    isFxGraphState = canonicalId == getSelectedFxGraphOwnerLocked();
   }
   endAllAutomationTouches();
   if (canonicalId == kAnalyzerModuleId) {
@@ -521,7 +552,7 @@ void PadPilotAudioProcessor::applyPresetPayloadWhileStateTransitionLocked(
     setRecutPlaybackOwner(canonicalId, applied);
     return;
   }
-  if (canonicalId != kFxModuleId) {
+  if (!isFxGraphState) {
     return;
   }
 
@@ -555,12 +586,14 @@ void PadPilotAudioProcessor::applyRestoredStateWhileStateTransitionLocked(
   }
 
   const auto canonicalId = canonicalizeModuleId(moduleId);
+  bool isFxGraphState = false;
   {
     std::lock_guard<std::mutex> guard(stateMutex_);
     const auto current = moduleStatePayloadById_.find(canonicalId);
     if (current != moduleStatePayloadById_.end() && current->second != payload) {
       return;
     }
+    isFxGraphState = canonicalId == getSelectedFxGraphOwnerLocked();
   }
   endAllAutomationTouches();
   if (canonicalId == kAnalyzerModuleId) {
@@ -581,7 +614,7 @@ void PadPilotAudioProcessor::applyRestoredStateWhileStateTransitionLocked(
     setRecutPlaybackOwner(canonicalId, applied);
     return;
   }
-  if (canonicalId != kFxModuleId) {
+  if (!isFxGraphState) {
     return;
   }
 

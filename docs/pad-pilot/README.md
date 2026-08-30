@@ -10,7 +10,11 @@ portable Module contracts live in `packages/pad-pilot`.
 - [Marketplace guide](../../apps/pad-pilot-marketplace/README.md): service boundary, storage, endpoints, and environment.
 - [Zipper merge](zipper-merge.md): source audit, ownership decisions, execution slices, and proof gates.
 - [Factory Modules](factory-modules.md): shipped Module catalog and capability contract.
+- [User stories](user-stories.md): shipped PadPilot and Module-author outcomes.
+- [Marketplace user stories](marketplace-user-stories.md): buyer, publisher, account, and release outcomes.
+- [Coverage matrix](coverage-matrix.md): automated and host-level proof for every shipped story.
 - [Module bridge compatibility](module-bridge-compatibility.md): public bridge compatibility expectations.
+- [Module author guide](module-author-guide.md): validated manifest, QuickJS behavior, bundle layout, install, and verification.
 - [VST quality gates](vst-quality-gates.md): DSP, realtime, persistence, validator, and host acceptance.
 - [FL Studio setup](fl-studio-mvp-setup.md): primary host setup and validation.
 - [Testing](testing/README.md): test and validation routes.

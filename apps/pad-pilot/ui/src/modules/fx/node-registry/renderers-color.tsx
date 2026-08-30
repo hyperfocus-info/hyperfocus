@@ -2,7 +2,7 @@ import type { NodeVisualizerFrame } from "../../../proto/generated/fx-chain-pb";
 import { resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
 import type { AnyNodeConfig } from "./types";
-import styles from "../fx-node-registry.stylex";
+import styles from "../styles/fx-node-registry.stylex";
 import { clampSeriesValue, renderControlGrid, renderOrb, renderScalarRows, renderSeries } from "./renderer-primitives";
 
 type TapeSaturationConfigShape = {

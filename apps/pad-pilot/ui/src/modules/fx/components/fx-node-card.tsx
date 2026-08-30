@@ -10,7 +10,7 @@ import { createMeterVisual, meterDbFromMix } from "../fx-visuals";
 import { FxInlineNodeEditor } from "./fx-inline-node-editor";
 import { FxNodeHeader } from "./fx-node-header";
 import { FxNodeRack } from "./fx-node-rack";
-import shellStyles from "../fx-console-shell.stylex";
+import shellStyles from "../styles/fx-console-shell.stylex";
 
 export type FxNodeCardProps = {
   chainId: number;

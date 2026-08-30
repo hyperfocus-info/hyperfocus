@@ -16,7 +16,6 @@
 namespace {
 using padpilot::processor_detail::encodeNodeTargetId;
 
-constexpr const char* kFxModuleId = "fx";
 
 thread_local const PadPilotAudioProcessor* callbackSuppressionOwner = nullptr;
 
@@ -604,10 +603,15 @@ bool PadPilotAudioProcessor::isValidAutomationBinding(const AutomationBinding& b
   }
 }
 
-void PadPilotAudioProcessor::markFxRuntimeStateDirty() { fxRuntimeStateDirty_.store(true, std::memory_order_release); }
+void PadPilotAudioProcessor::markFxRuntimeStateDirty() {
+  if (fxGraphProcessingActive_.load(std::memory_order_acquire)) {
+    fxRuntimeStateDirty_.store(true, std::memory_order_release);
+  }
+}
 
 void PadPilotAudioProcessor::parameterChanged(const juce::String& parameterID, float newValue) {
-  if (callbackSuppressionOwner == this || !std::isfinite(newValue)) {
+  if (callbackSuppressionOwner == this || !std::isfinite(newValue) ||
+      !fxGraphProcessingActive_.load(std::memory_order_acquire)) {
     return;
   }
 
@@ -794,12 +798,13 @@ bool PadPilotAudioProcessor::focusAutomationTarget(const AutomationBinding& bind
   endAllAutomationTouches();
   {
     std::lock_guard<std::mutex> guard(stateMutex_);
+    if (sanitized.moduleId != getSelectedFxGraphOwnerLocked()) {
+      return false;
+    }
     automationBindings_[static_cast<std::size_t>(sanitized.slotIndex - 1)] = sanitized;
   }
   syncRealtimeAutomationBinding(sanitized.slotIndex, sanitized);
-  if (sanitized.moduleId == kFxModuleId) {
-    markFxRuntimeStateDirty();
-  }
+  markFxRuntimeStateDirty();
   return true;
 }
 
@@ -958,9 +963,13 @@ void PadPilotAudioProcessor::syncDirectParametersFromFxState(const padpilot::fx:
 
 void PadPilotAudioProcessor::updateLastAppliedFxState(const padpilot::fx::FxChainState& state) {
   std::lock_guard<std::mutex> guard(stateMutex_);
+  const auto fxGraphOwner = getSelectedFxGraphOwnerLocked();
+  if (fxGraphOwner.empty()) {
+    return;
+  }
   lastAppliedFxState_ = state;
-  moduleStatePayloadById_[kFxModuleId] = padpilot::proto::bytesToBase64(padpilot::proto::serializeFxChainState(state));
-  acceptedRevisionByModuleId_[kFxModuleId] = state.revision();
+  moduleStatePayloadById_[fxGraphOwner] = padpilot::proto::bytesToBase64(padpilot::proto::serializeFxChainState(state));
+  acceptedRevisionByModuleId_[fxGraphOwner] = state.revision();
   if (!state.selected_preset_id().empty()) {
     selectedPresetId_ = state.selected_preset_id();
   }
@@ -1142,7 +1151,8 @@ void PadPilotAudioProcessor::reconcileFxStateFromParameters() {
   std::optional<padpilot::fx::FxChainState> resyncState;
   {
     std::lock_guard<std::mutex> guard(stateMutex_);
-    if (!lastAppliedFxState_.has_value()) {
+    const auto fxGraphOwner = getSelectedFxGraphOwnerLocked();
+    if (fxGraphOwner.empty() || !lastAppliedFxState_.has_value()) {
       return;
     }
 
@@ -1153,7 +1163,7 @@ void PadPilotAudioProcessor::reconcileFxStateFromParameters() {
 
     for (int slotIndex = 1; slotIndex <= kMacroSlotCount; ++slotIndex) {
       const auto& binding = automationBindings_[static_cast<std::size_t>(slotIndex - 1)];
-      if (!binding.isActive() || canonicalizeModuleId(binding.moduleId) != kFxModuleId) {
+      if (!binding.isActive() || canonicalizeModuleId(binding.moduleId) != fxGraphOwner) {
         continue;
       }
 
@@ -1192,7 +1202,7 @@ void PadPilotAudioProcessor::reconcileFxStateFromParameters() {
     }
 
     if (stateDirty) {
-      const auto accepted = acceptedRevisionByModuleId_.find(kFxModuleId);
+      const auto accepted = acceptedRevisionByModuleId_.find(fxGraphOwner);
       const auto currentRevision = accepted == acceptedRevisionByModuleId_.end()
                                        ? state.revision()
                                        : std::max(state.revision(), accepted->second);
@@ -1202,9 +1212,9 @@ void PadPilotAudioProcessor::reconcileFxStateFromParameters() {
     }
 
     lastAppliedFxState_ = state;
-    moduleStatePayloadById_[kFxModuleId] =
+    moduleStatePayloadById_[fxGraphOwner] =
         padpilot::proto::bytesToBase64(padpilot::proto::serializeFxChainState(state));
-    acceptedRevisionByModuleId_[kFxModuleId] = state.revision();
+    acceptedRevisionByModuleId_[fxGraphOwner] = state.revision();
     if (resyncRequested) {
       resyncState = std::move(state);
     }

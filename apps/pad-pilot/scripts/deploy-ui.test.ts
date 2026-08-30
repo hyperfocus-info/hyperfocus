@@ -67,6 +67,38 @@ describe("deployUiAssets", () => {
     expect(readFileSync(path.join(contents, "Resources", "ui", "main.css"), "utf8")).toBe("embedded styles");
   });
 
+  it("keeps transaction staging below the Windows path boundary", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "padpilot-deploy-ui-long-"));
+    tempRoots.push(root);
+    const relativePreset = path.join(
+      "fx",
+      "chains",
+      "presets",
+      "utility-recorded-audio-noise-gate-clean-medium.preset",
+    );
+    const legacyStageName = `.ui.padpilot-stage-${process.pid}-${"0".repeat(36)}`;
+    const contentsSuffix = path.join("PadPilot.vst3", "Contents");
+    let padding = "p";
+    while (path.join(root, padding, contentsSuffix, "Resources", legacyStageName, relativePreset).length < 260) {
+      padding += "p";
+    }
+
+    const project = path.join(root, "project");
+    const dist = path.join(project, "ui", "dist");
+    mkdirSync(path.join(dist, path.dirname(relativePreset)), { recursive: true });
+    writeFileSync(path.join(dist, "index.html"), "<link rel='stylesheet' href='./main.css'><script src='./main.js'></script>");
+    writeFileSync(path.join(dist, "main.js"), "new ui");
+    writeFileSync(path.join(dist, "main.css"), "new styles");
+    writeFileSync(path.join(dist, relativePreset), "preset");
+    const contents = path.join(root, padding, contentsSuffix);
+    mkdirSync(path.join(contents, "x86_64-win"), { recursive: true });
+    writeFileSync(path.join(contents, "x86_64-win", "PadPilot.vst3"), "plugin");
+
+    await deployUiAssets(project, contents);
+
+    expect(readFileSync(path.join(contents, "Resources", "ui", relativePreset), "utf8")).toBe("preset");
+  });
+
   it("rejects incomplete or out-of-project UI sources", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "padpilot-deploy-ui-source-"));
     tempRoots.push(root);

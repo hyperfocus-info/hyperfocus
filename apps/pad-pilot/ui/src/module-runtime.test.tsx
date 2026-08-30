@@ -17,7 +17,7 @@ mock.module("@tests/padpilot-external-module", () => ({
       stateSchemaVersion: 3,
       capabilities: ["module-state"],
       minHostVersion: "0.2.0",
-      assets: { icon: "/icon.svg" },
+      assets: { icon: "assets/icon.svg" },
       migrations: ["migrate-v2"],
     },
     register(context: unknown) {
@@ -140,7 +140,7 @@ createUiTest("ModuleRuntime", () => {
       name: "Starter Runtime",
       version: "0.9.0",
       moduleApiVersion: "0.1.0",
-      uiEntry: "builtin://starter/runtime",
+      uiEntry: "ui/ui-entry.js",
       capabilities: ["module-state", "script-runtime"],
       minHostVersion: "0.1.0",
     });
@@ -170,7 +170,7 @@ createUiTest("ModuleRuntime", () => {
       stateSchemaVersion: 3,
       capabilities: ["module-state"],
       minHostVersion: "0.2.0",
-      assets: { icon: "/icon.svg" },
+      assets: { icon: "assets/icon.svg" },
       migrations: ["migrate-v2"],
     });
     expect(second.manifest).toEqual(first.manifest);
@@ -184,15 +184,24 @@ createUiTest("ModuleRuntime", () => {
     });
   });
 
-  it("fails closed for external UI bundles without an explicit unsafe development opt-in", async () => {
+  it("falls back to the trusted starter surface without executing external UI", async () => {
     process.env.PADPILOT_ALLOW_UNSAFE_EXTERNAL_MODULE_UI = "false";
     try {
-      await expect(loadPadPilotModule({
+      const loaded = await loadPadPilotModule({
         id: "external-module",
         name: "External Module",
-        uiEntryPath: "@tests/padpilot-external-module",
-        capabilities: ["module-state"],
-      })).rejects.toThrow("disabled until it can run in a sandboxed Module realm");
+        version: "2.0.0",
+        uiEntryPath: "/__padpilot/modules/external-module/2.0.0/ui/ui-entry.js",
+        scriptEntryPath: "C:/PadPilot/modules/external-module/2.0.0/script/module.js",
+        capabilities: ["module-state", "script-runtime"],
+      });
+      expect(loaded.manifest).toMatchObject({
+        id: "external-module",
+        uiEntry: "ui/ui-entry.js",
+        capabilities: ["module-state", "script-runtime"],
+      });
+      expect(typeof loaded.Component).toBe("function");
+      expect(externalRegisterCalls).toHaveLength(0);
     } finally {
       process.env.PADPILOT_ALLOW_UNSAFE_EXTERNAL_MODULE_UI = "true";
     }

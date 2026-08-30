@@ -3,7 +3,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { buildFxPresetItems } from "../fx-module-selectors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import styles from "../fx-module.stylex";
+import styles from "../styles/fx-module.stylex";
 
 type SidebarActionProps = {
   disabled?: boolean;

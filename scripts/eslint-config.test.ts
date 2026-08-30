@@ -8,6 +8,14 @@ const eslint = new ESLint({
 });
 
 describe("repository ESLint config", () => {
+  test("ignores deterministic generated protobuf output", async () => {
+    const [result] = await eslint.lintText(
+      "/* eslint-disable */\nexport const generated = true;\n",
+      { filePath: "apps/tool/src/proto/generated/state-pb.ts", warnIgnored: false }
+    );
+    expect(result).toBeUndefined();
+  });
+
   test("removes unused TypeScript imports from enforced source", async () => {
     const [result] = await eslint.lintText(
       'import { unused, used } from "./dependency";\nconsole.log(used);\n',

@@ -34,7 +34,10 @@ function installNativeBridgeRecorder() {
   return intents;
 }
 
-function publishAnalyzerHostState(moduleId = "custom-module") {
+function publishAnalyzerHostState(
+  moduleId = "custom-module",
+  capabilities = ["analyzer-feed", "analyzer-session", "midi-export"],
+) {
   const moduleState = createDefaultAnalyzerModuleState();
   moduleState.noteEvents = [
     createAnalyzerNoteEvent({ midiNote: 60, startFrame: 0, endFrame: 16, intensity: 0.8, velocity: 96, meanFrequencyHz: 261.63 }),
@@ -64,7 +67,7 @@ function publishAnalyzerHostState(moduleId = "custom-module") {
     activeModuleId: moduleId,
     activeModuleStateBase64: encodeAnalyzerModuleStateBase64(moduleState),
     modules: [{
-      capabilities: ["analyzer-feed", "analyzer-session", "midi-export"],
+      capabilities,
       id: moduleId,
       loadStatus: "ready",
       name: "Analyzer",
@@ -247,6 +250,23 @@ createUiTest("PadPilot analyzer capability", () => {
         && intent.capability === "analyzer-session"
         && intent.action === "set-detection-sensitivity")).toBe(true);
     });
+  });
+
+  it("requires the exact analyzer capability for each operation", async () => {
+    const intents = installNativeBridgeRecorder();
+    publishAnalyzerHostState("analyzer", ["analyzer-feed"]);
+
+    PadPilot.analyzer.setDetectionSensitivity(0.75);
+    PadPilot.analyzer.saveMidi();
+    const subscription = PadPilot.analyzer.subscribe({ onFrame() {} });
+
+    await waitFor(() => {
+      expect(intents.some((intent) =>
+        intent.type === "openCapabilityStream" && intent.capability === "analyzer-feed"
+      )).toBe(true);
+    });
+    expect(intents.some((intent) => intent.type === "sendCapabilityIntent")).toBe(false);
+    subscription.close();
   });
 
   it("sends a bounded stable-event pitch correction through the public capability", async () => {

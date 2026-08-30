@@ -3,7 +3,7 @@ import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { createChainAccessor, createNodeAccessor } from "../fx-live-accessors";
 import { type SearchableComboboxItem } from "../../../padpilot/types";
 import { PadPilot } from "../../../padpilot/index";
-import styles from "../fx-node-registry.stylex";
+import styles from "../styles/fx-node-registry.stylex";
 
 export type FxNodePresetDropdownProps = {
   chainId: number;

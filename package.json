@@ -30,7 +30,7 @@
     "dev:pad-pilot": "bun run --cwd apps/pad-pilot dev",
     "dev:pad-pilot-marketplace": "bun run --cwd apps/pad-pilot-marketplace dev",
     "build": "bun run build:packages && bun run build:harness && bun run build:editor && bun run build:engine && bun run build:pad-pilot",
-    "build:packages": "bun run --cwd packages/workspace build && bun run --cwd packages/desktop-runtime build && bun run --cwd packages/ai-core build && bun run --cwd packages/ui build",
+    "build:packages": "bun run --cwd packages/workspace build && bun run --cwd packages/desktop-runtime build && bun run --cwd packages/ai-core build && bun run --cwd packages/pad-pilot build && bun run --cwd packages/ui build",
     "build:harness": "bun apps/harness/scripts/build-ui.ts --minify",
     "build:editor": "bun apps/engine-editor/build.ts",
     "build:engine": "bun run --cwd packages/engine build",

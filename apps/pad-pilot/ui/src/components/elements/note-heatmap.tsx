@@ -4,7 +4,7 @@ import {
   midiNoteLabel,
 } from "../../modules/analyzer/analyzer-state";
 import { clamp } from "../../utils/math";
-import styles from "./note-heatmap.stylex";
+import styles from "./styles/note-heatmap.stylex";
 
 type NoteHeatmapClassNames = {
   event: string;

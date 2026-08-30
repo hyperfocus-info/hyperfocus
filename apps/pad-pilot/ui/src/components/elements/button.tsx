@@ -6,7 +6,7 @@ import {
   resolveElementSkin,
   type TooltipPlacement,
 } from "./element-skin";
-import { controlStyles as styles } from "./controls.stylex";
+import { controlStyles as styles } from "./styles/controls.stylex";
 import { LucideIcon } from "lucide-solid";
 import { Dynamic } from "solid-js/web";
 

@@ -9,7 +9,7 @@ import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { FxNodeType, NODE_LIBRARY } from "../fx-chain-state";
 import { FxNodeCard } from "./fx-node-card";
 import { FxDragPreview } from "./fx-drag-preview";
-import shellStyles from "../fx-console-shell.stylex";
+import shellStyles from "../styles/fx-console-shell.stylex";
 
 function getNodeIdFromRenderKey(value: string) {
   return Number.parseInt(value.split(":")[1] ?? "-1", 10);

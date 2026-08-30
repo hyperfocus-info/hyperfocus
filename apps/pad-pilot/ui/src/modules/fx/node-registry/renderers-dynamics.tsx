@@ -1,6 +1,6 @@
 import { resolveFxControls } from "../components/fx-control-field";
 import { type FxNodeFocusRenderProps } from "./renderer-types";
-import styles from "../fx-node-registry.stylex";
+import styles from "../styles/fx-node-registry.stylex";
 import { renderControlGrid, renderMeterFill, renderSeries, renderSignedSeries } from "./renderer-primitives";
 
 type CompressorConfigShape = {

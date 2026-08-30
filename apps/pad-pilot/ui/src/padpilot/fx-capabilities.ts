@@ -28,15 +28,21 @@ type FxVisualizerSubscription = {
 
 type FxVisualizerFrameListener = (frame: VisualizerFrame) => void;
 
-function getSelectedFxModuleId() {
-  return resolveSelectedCapabilityModuleId(getLatestHostState(), "fx-graph");
+type FxCapability = "automation" | "fx-graph" | "fx-visualizer";
+
+function getSelectedFxModuleId(capability: FxCapability) {
+  return resolveSelectedCapabilityModuleId(getLatestHostState(), capability);
 }
 
-function getFxCapabilityHandle(capability: "automation" | "fx-graph" | "fx-visualizer", moduleId = getSelectedFxModuleId()) {
-  return createCapabilityHandle(capability, moduleId);
+function getFxCapabilityHandle(capability: FxCapability, requestedModuleId?: string) {
+  const grantedModuleId = getSelectedFxModuleId(capability);
+  if (!grantedModuleId || (requestedModuleId && canonicalModuleId(requestedModuleId) !== grantedModuleId)) {
+    return "";
+  }
+  return createCapabilityHandle(capability, grantedModuleId);
 }
 
-function getActiveFxState(moduleId = getSelectedFxModuleId()) {
+function getActiveFxState(moduleId = getSelectedFxModuleId("fx-graph")) {
   const hostState = getLatestHostState();
   if (!moduleId || canonicalModuleId(hostState.selectedModuleId ?? hostState.activeModuleId ?? "") !== moduleId) {
     return null;
@@ -49,7 +55,7 @@ function encodeJsonPayload(value: unknown) {
   return jsonToBase64(value);
 }
 
-function sendFxGraphIntent(action: string, payloadBase64: string, moduleId = getSelectedFxModuleId()) {
+function sendFxGraphIntent(action: string, payloadBase64: string, moduleId?: string) {
   const handle = getFxCapabilityHandle("fx-graph", moduleId);
   if (!handle) {
     return;
@@ -63,7 +69,7 @@ function sendFxGraphIntent(action: string, payloadBase64: string, moduleId = get
   });
 }
 
-function sendAutomationIntent(action: string, payloadBase64: string, moduleId = getSelectedFxModuleId()) {
+function sendAutomationIntent(action: string, payloadBase64: string, moduleId?: string) {
   const handle = getFxCapabilityHandle("automation", moduleId);
   if (!handle) {
     return;
@@ -78,17 +84,17 @@ function sendAutomationIntent(action: string, payloadBase64: string, moduleId = 
 }
 
 export const fxGraph = {
-  applyState(state: FxChainState, moduleId = getSelectedFxModuleId()) {
+  applyState(state: FxChainState, moduleId?: string) {
     const normalized = normalizeFxChainState(state);
     sendFxGraphIntent("apply-state", bytesToBase64(encodeFxChainState(normalized)), moduleId);
   },
-  beginAutomationTouch(parameterId: string, moduleId = getSelectedFxModuleId()) {
+  beginAutomationTouch(parameterId: string, moduleId?: string) {
     sendAutomationIntent("begin-touch", textToBase64(parameterId), moduleId);
   },
-  createPreset(name: string, state: FxChainState, presetId = "", moduleId = getSelectedFxModuleId()) {
+  createPreset(name: string, state: FxChainState, presetId = "", moduleId?: string) {
     sendFxGraphIntent("create-preset", encodePresetSaveMessage(name, state, presetId), moduleId);
   },
-  endAutomationTouch(parameterId: string, moduleId = getSelectedFxModuleId()) {
+  endAutomationTouch(parameterId: string, moduleId?: string) {
     sendAutomationIntent("end-touch", textToBase64(parameterId), moduleId);
   },
   focusAutomationTarget(binding: {
@@ -103,25 +109,25 @@ export const fxGraph = {
     slotIndex: number;
     targetKind: "masterInputGain" | "masterOutputGain" | "masterWetDry" | "fxChainMix" | "fxNodeMix" | "fxNodeParamFloat";
     valueKind: "float" | "boolean";
-  }, moduleId = getSelectedFxModuleId()) {
+  }, moduleId?: string) {
     sendAutomationIntent("focus-target", encodeJsonPayload(binding), moduleId);
   },
-  getActiveState(moduleId = getSelectedFxModuleId()) {
+  getActiveState(moduleId = getSelectedFxModuleId("fx-graph")) {
     return getActiveFxState(moduleId);
   },
-  savePreset(name: string, state: FxChainState, presetId = "", moduleId = getSelectedFxModuleId()) {
+  savePreset(name: string, state: FxChainState, presetId = "", moduleId?: string) {
     sendFxGraphIntent("save-preset", encodePresetSaveMessage(name, state, presetId), moduleId);
   },
-  setMasterWetDry(value: number, moduleId = getSelectedFxModuleId()) {
+  setMasterWetDry(value: number, moduleId?: string) {
     if (!Number.isFinite(value)) {
       return;
     }
     sendFxGraphIntent("set-master-wet-dry", textToBase64(String(clamp01(value))), moduleId);
   },
-  setPreviewBypass(bypassed: boolean, moduleId = getSelectedFxModuleId()) {
+  setPreviewBypass(bypassed: boolean, moduleId?: string) {
     sendFxGraphIntent("set-preview-bypass", textToBase64(bypassed ? "1" : "0"), moduleId);
   },
-  updateAutomationTouch(parameterId: string, normalizedValue: number, moduleId = getSelectedFxModuleId()) {
+  updateAutomationTouch(parameterId: string, normalizedValue: number, moduleId?: string) {
     sendAutomationIntent("update-touch", encodeJsonPayload({
       normalizedValue,
       parameterId,

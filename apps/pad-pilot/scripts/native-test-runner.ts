@@ -8,11 +8,17 @@ import {
   runCheckedProcess,
 } from "./process-runner";
 
-export function runNativeTestTarget(target: "padpilot-native-tests" | "padpilot-updater-tests") {
-  const prefix = target === "padpilot-native-tests" ? "padpilot-native-tests-" : "padpilot-updater-tests-";
+export type NativeTestTarget =
+  | "padpilot-native-tests"
+  | "padpilot-processor-tests"
+  | "padpilot-updater-tests";
+
+export function runNativeTestTargets(targets: readonly NativeTestTarget[]) {
+  if (targets.length === 0) return;
+
+  const suiteName = targets.join("-");
   const projectRoot = path.resolve(import.meta.dir, "..");
-  const buildDirectory = mkdtempSync(path.join(tmpdir(), prefix));
-  const testBinary = path.join(buildDirectory, "Debug", `${target}.exe`);
+  const buildDirectory = mkdtempSync(path.join(tmpdir(), `${suiteName}-`));
   try {
     runCheckedProcess([
       resolveCmakePath(),
@@ -24,30 +30,36 @@ export function runNativeTestTarget(target: "padpilot-native-tests" | "padpilot-
     ], {
       cwd: projectRoot,
       env: cmakeEnvironment(),
-      label: `${target} CMake configure`,
+      label: `${suiteName} CMake configure`,
       timeoutMs: processDeadlines.cmakeConfigure,
     });
-    runCheckedProcess([
-      resolveCmakePath(),
-      "--build", buildDirectory,
-      "--config", "Debug",
-      "--target", target,
-    ], {
-      cwd: projectRoot,
-      env: cmakeEnvironment(),
-      label: `${target} build`,
-      timeoutMs: processDeadlines.cmakeBuild,
-    });
-    runCheckedProcess([testBinary], {
-      cwd: projectRoot,
-      label: `${target} execution`,
-      timeoutMs: processDeadlines.nativeTest,
-    });
+    for (const target of targets) {
+      runCheckedProcess([
+        resolveCmakePath(),
+        "--build", buildDirectory,
+        "--config", "Debug",
+        "--target", target,
+      ], {
+        cwd: projectRoot,
+        env: cmakeEnvironment(),
+        label: `${target} build`,
+        timeoutMs: processDeadlines.cmakeBuild,
+      });
+      runCheckedProcess([path.join(buildDirectory, "Debug", `${target}.exe`)], {
+        cwd: projectRoot,
+        label: `${target} execution`,
+        timeoutMs: processDeadlines.nativeTest,
+      });
+    }
   } finally {
     try {
       rmSync(buildDirectory, { force: true, recursive: true });
     } catch (error) {
-      console.warn(`[${target}] Temporary build remains at ${buildDirectory}: ${error instanceof Error ? error.message : error}`);
+      console.warn(`[${suiteName}] Temporary build remains at ${buildDirectory}: ${error instanceof Error ? error.message : error}`);
     }
   }
+}
+
+export function runNativeTestTarget(target: NativeTestTarget) {
+  runNativeTestTargets([target]);
 }

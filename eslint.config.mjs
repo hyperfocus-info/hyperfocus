@@ -81,7 +81,7 @@ const unusedSymbolsOptions = {
 
 export default [
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "packages/engine/browser/**"]
+    ignores: ["**/dist/**", "**/node_modules/**", "**/proto/generated/**", "packages/engine/browser/**"]
   },
   {
     files: repositorySourceFiles,

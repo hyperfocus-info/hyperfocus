@@ -4,8 +4,8 @@ import { PadPilot } from "../../../padpilot/index";
 import { createChainAccessor, createNodeAccessor } from "../fx-live-accessors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { FxNodePresetDropdown } from "./fx-node-preset-dropdown";
-import styles from "../fx-node-registry.stylex";
-import moduleStyles from "../fx-module.stylex";
+import styles from "../styles/fx-node-registry.stylex";
+import moduleStyles from "../styles/fx-module.stylex";
 import { getNodeName } from "../node-registry/registry";
 
 export type FxNodeHeaderProps = {

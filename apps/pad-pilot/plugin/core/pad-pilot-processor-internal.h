@@ -25,6 +25,7 @@
 #include "runtime/capability-handle.h"
 #include "runtime/fx-chain-proto.h"
 #include "runtime/module-identity.h"
+#include "runtime/module-capability.h"
 #include "runtime/module-manifest-limits.h"
 #include "runtime/plugin-state-wire.h"
 #include "runtime/preset-identity.h"
@@ -168,8 +169,8 @@ bool isKnownControllerLayoutKind(padpilot::bridge::ControllerLayoutKind value);
 bool isKnownControllerBindingKind(padpilot::bridge::ControllerBindingKind value);
 bool isValidControllerConfigProto(const padpilot::bridge::ControllerConfigState& config);
 bool hasReadyModule(const std::vector<padpilot::ModuleRecord>& modules,
-                    const std::string& selectedModuleId,
-                    const std::string& moduleId);
+                     const std::string& selectedModuleId,
+                     const std::string& moduleId);
 bool isGlobalEditorViewScope(std::string_view scopeId);
 bool canReplaceBoundedPayload(const std::unordered_map<std::string, std::string>& payloads,
                               const std::string& key,

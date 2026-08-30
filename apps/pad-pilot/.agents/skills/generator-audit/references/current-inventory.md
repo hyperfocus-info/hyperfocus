@@ -1,6 +1,6 @@
 # Generator Audit Static Report
 
-Generated: 2026-06-16T18:47:57.305Z
+Generated: 2026-08-29T22:08:19.828Z
 
 ## Selector Inventory
 
@@ -16,40 +16,40 @@ Total selector labels: 500
 
 ## Rule Counts
 
-- Selector tag regex rules: 18
-- Intent tag regex rules: 21
-- Magic profile presets: 12
-- Genre profile mappings: 100
-- Magic interaction factors: 7
-- Style DNA keyword rules: 21
-- Fallback instrument palettes: 12
-- Fallback bucketed tags: 472 unique tags
-- Fallback palette tag coverage: retro-synth-electro (54 tags: synthwave, retro-future, 80s, analog, darkwave, ...); 808-drill-trap-rap (74 tags: drill, uk-drill, brooklyn-drill, trap, modern-trap, ...); dusty-hip-hop-lofi (45 tags: lofi, lo-fi, boom-bap, jazz-hop, trip-hop, ...); soul-jazz-gospel-funk (54 tags: blues, gospel, soul, rnb, r-and-b, ...); cinematic-ambient-orchestral (40 tags: cinematic, orchestral, trailer, trailer-hybrid, hollywood, ...); breaks-dnb-garage (38 tags: liquid, liquid-drum-and-bass, drum-and-bass, dnb, jungle, ...); house-techno-club (50 tags: house, deep-house, techno, minimal, minimal-tech, ...); experimental-glitch-industrial (28 tags: glitch, glitch-hop, idm, industrial, hyperpop, ...); global-latin-afro-dancehall (41 tags: afro, afrobeat, amapiano, reggaeton, dancehall, ...); bass-festival-wave (24 tags: jersey-club, future-bass, hardwave, wave, dubstep, ...); guitar-rock-shoegaze (28 tags: post-rock, garage-rock, indie-dance, shoegaze, math-rock, ...); neutral-balanced (20 tags: general, neutral, balanced, any, dense, ...)
+- Selector tag regex rules: 34
+- Intent tag regex rules: 35
+- Magic profile presets: 31
+- Genre profile mappings: 129
+- Magic interaction factors: 9
+- Style DNA keyword rules: 25
+- Fallback instrument palettes: 19
+- Fallback bucketed tags: 486 unique tags
+- Fallback palette tag coverage: retro-synth-electro (54 tags: synthwave, retro-future, 80s, analog, darkwave, ...); 808-drill-trap-rap (74 tags: drill, uk-drill, brooklyn-drill, trap, modern-trap, ...); amapiano-log-drum (12 tags: amapiano, log-drum, durban, durban-2020, amapiano-2021, ...); dembow-dancehall-reggaeton (10 tags: reggaeton, dembow, moombahton, syncopated, offbeat-stabs, ...); dancehall-one-drop (7 tags: dancehall, one-drop, one-drop-skank-space, island-skank, offbeat-skank, ...); baile-funk-tamborzao (12 tags: baile, baile-funk, funk-carioca, tamborzao, tamborzão, ...); latin-acoustic-clave (11 tags: latin, bossa, bossa-nova, salsa, samba, ...); afrobeat-afro-house (10 tags: afro, afrobeat, afro-house, afro-tech, lagos-2022, ...); dusty-hip-hop-lofi (45 tags: lofi, lo-fi, boom-bap, jazz-hop, trip-hop, ...); bright-pop-neutral (12 tags: happy, joyful, uplifting, bright, optimistic, ...); soul-jazz-gospel-funk (50 tags: blues, gospel, soul, rnb, r-and-b, ...); cinematic-ambient-orchestral (40 tags: cinematic, orchestral, trailer, trailer-hybrid, hollywood, ...); breaks-dnb-garage (38 tags: liquid, liquid-drum-and-bass, drum-and-bass, dnb, jungle, ...); house-techno-club (50 tags: house, deep-house, techno, minimal, minimal-tech, ...); experimental-glitch-industrial (28 tags: glitch, glitch-hop, idm, industrial, hyperpop, ...); global-latin-afro-dancehall (13 tags: afro, latin, clave, global, three-three-two, ...); bass-festival-wave (24 tags: jersey-club, future-bass, hardwave, wave, dubstep, ...); guitar-rock-shoegaze (31 tags: post-rock, garage-rock, indie-dance, dance-punk, folk, ...); neutral-balanced (20 tags: general, neutral, balanced, any, dense, ...)
 
 ## Prompt Budget
 
-- System directive chars: 2986
-- System directive non-empty lines: 35
-- System directive bullet rules: 29
-- buildPrompt string/template entries: 20
-- Duplicate/overlap hints present: Do not cap the number of tracks, No fixed track cap, Every track must contain, Every track must have notes, Use Theme/Groove tags
+- System directive chars: 3519
+- System directive non-empty lines: 39
+- System directive bullet rules: 28
+- buildPrompt string/template entries: 24
+- Duplicate/overlap hints present: Intent Tags:
 
 ## Handoff Map
 
 | Symbol | Source | Line |
 | --- | --- | ---: |
-| buildGeneratorSelectorPromptLines | apps/pad-pilot/ui/src/modules/generator/utils/generator-options.ts | 423 |
-| buildGeneratorIntentPromptLines | apps/pad-pilot/ui/src/modules/generator/utils/generator-options.ts | 411 |
-| buildMagicSuggestion | apps/pad-pilot/ui/src/modules/generator/utils/generator-options.ts | 1168 |
-| SYSTEM_DIRECTIVE | apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts | 242 |
-| buildMusicianPlan | apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts | 1034 |
-| buildPrompt | apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts | 1213 |
-| requestLocalTracker | apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts | 4249 |
-| parseDeltaTickTracker | apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts | 1285 |
-| applyStyleDnaFilter | apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts | 2666 |
-| scoreGeneratorComposition | apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts | 1523 |
-| buildFallbackTracker | apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts | 4041 |
-| generateMidiTemplate | apps/pad-pilot/ui/src/modules/generator/utils/generator-client.ts | 4322 |
+| buildGeneratorSelectorPromptLines | ui/src/modules/generator/utils/generator-selector-options.ts | 322 |
+| buildGeneratorIntentPromptLines | ui/src/modules/generator/utils/generator-selector-options.ts | 310 |
+| buildMagicSuggestion | ui/src/modules/generator/utils/generator-magic-options.ts | 340 |
+| SYSTEM_DIRECTIVE | ui/src/modules/generator/utils/generator-prompt.ts | 8 |
+| buildMusicianPlan | ui/src/modules/generator/utils/generator-style-dna.ts | 676 |
+| buildPrompt | ui/src/modules/generator/utils/generator-prompt.ts | 189 |
+| requestLocalTracker | ui/src/modules/generator/utils/generator-client.ts | 16 |
+| parseDeltaTickTracker | ui/src/modules/generator/utils/generator-tracker.ts | 65 |
+| applyStyleDnaFilter | ui/src/modules/generator/utils/generator-massage-orchestrator.ts | 12 |
+| scoreGeneratorComposition | ui/src/modules/generator/utils/generator-tracker.ts | 670 |
+| buildFallbackTracker | ui/src/modules/generator/utils/generator-fallback.ts | 514 |
+| generateMidiTemplate | ui/src/modules/generator/utils/generator-client.ts | 174 |
 
 ## First Audit Questions
 

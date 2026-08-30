@@ -12,15 +12,20 @@
     "./bounded-stream": "./src/bounded-stream.ts",
     "./factory-modules": "./src/factory-modules.ts",
     "./file-import": "./src/file-import.ts",
+    "./host-surface": "./src/host-surface.ts",
     "./marketplace-schema": "./src/marketplace-schema.ts",
+    "./module-manifest": "./src/module-manifest.ts",
+    "./module-ui-contract": "./src/module-ui-contract.ts",
     "./module-identity": "./src/module-identity.ts",
+    "./script-contract": "./src/script-contract.ts",
     "./semver": "./src/semver.ts",
     "./subprocess": "./src/subprocess.ts",
     "./update-signing": "./src/update-signing.ts"
   },
   "files": ["src", "LICENSE", "README.md"],
   "scripts": {
-    "test": "bun test ./src",
+    "build": "bun build.ts",
+    "test": "bun test",
     "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json"
   },
   "dependencies": {

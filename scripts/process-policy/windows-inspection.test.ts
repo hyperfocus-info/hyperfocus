@@ -8,7 +8,7 @@ test.skipIf(process.platform !== "win32")("inspection preserves Unicode quotes w
   const result = spawnBackgroundProcessSync({ cmd: [process.execPath, resolve(import.meta.dir, "fixtures/inspection-unicode.ts"), "“impact”"], stdout: "pipe", stderr: "pipe", timeout: 20000 });
   expect(result.error).toBeFalsy();
   expect(JSON.parse(result.stdout?.toString() ?? "")).toEqual({ retained: true, visibleWindows: 0 });
-});
+}, 30_000);
 
 test("a recycled parent's older unrelated child is excluded from the owned tree", () => {
   const root = processEntry(10, 0, "05");

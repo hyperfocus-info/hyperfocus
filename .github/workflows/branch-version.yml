@@ -19,6 +19,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
       - run: bun scripts/bump-patch-version.ts
       - run: bun install --lockfile-only
       - name: Commit patch version

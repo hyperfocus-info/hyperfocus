@@ -1,3 +1,4 @@
+import { connectHeadlessBrowser } from "@hyperfocus/desktop-runtime/automation";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
@@ -6,12 +7,12 @@ const baseUrl = process.env.BASE_URL ?? "http://localhost:8787";
 const outDir = path.join(process.cwd(), ".local", "screenshots", `adhoc-${Date.now()}`);
 await mkdir(outDir, { recursive: true });
 
-console.log("[adhoc] launching chromium (headed-binary)...");
-const browser = await chromium.launch({
-  headless: true,
-  channel: "chromium",
-  args: ["--no-sandbox"]
+console.log("[adhoc] launching isolated headless chromium...");
+const ownedBrowser = await connectHeadlessBrowser({
+  executable: chromium.executablePath(),
+  connect: (endpoint) => chromium.connectOverCDP(endpoint, { timeout: 10_000 }),
 });
+const browser = ownedBrowser.browser;
 console.log("[adhoc] launched");
 
 const viewports = [
@@ -48,7 +49,7 @@ try {
     }
   }
 } finally {
-  await browser.close();
+  try { await browser.close(); } finally { await ownedBrowser.close(); }
 }
 
 console.log("--- SCREENSHOT_RESULT_JSON ---");

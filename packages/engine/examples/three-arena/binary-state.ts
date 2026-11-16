@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import {
   createSnapshotFrameCodec,
   defineSchema,
@@ -257,9 +258,7 @@ function recordFrom(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function stringFrom(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;

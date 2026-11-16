@@ -1,13 +1,11 @@
+import { escapeRegExp } from "@hyperfocus/utilities/text";
+import { usePreferencesPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
-import { createMemo, For, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import type { PreferencesPanelModel, PreferencesSearchResult } from "../preferences-modal";
+import { createMemo,For,Show } from "solid-js";
 import { PreferenceSection } from "./preferences-controls";
 import { preferenceStyles } from "./preferences.styles";
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function Highlight(props: { value: string; query: string }) {
   const normalizedQuery = () => props.query.trim();
@@ -20,11 +18,9 @@ function Highlight(props: { value: string; query: string }) {
   return <><For each={parts()}>{(part) => part.toLowerCase() === normalizedQuery().toLowerCase() ? <mark class={stylex.attrs(preferenceStyles.rounded, preferenceStyles.backgroundAmber100, preferenceStyles.paddingInline05, preferenceStyles.colorForeground).class}>{part}</mark> : part}</For></>;
 }
 
-export function PreferencesSearchResults(props: {
-  model: PreferencesPanelModel;
-  onOpen: (result: PreferencesSearchResult) => void;
-}) {
-  const { searchQuery, searchResults, groupedSearchResults } = props.model;
+export function PreferencesSearchResults() {
+  const panel = usePreferencesPanel();
+  const { searchQuery, searchResults, groupedSearchResults } = panel.model;
   return (
     <PreferenceSection title="Search results" description={`${searchResults().length} matching settings`}>
       <Show when={searchResults().length > 0} fallback={<div class={stylex.attrs(preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDashed, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite45, preferenceStyles.padding4, preferenceStyles.textXs, preferenceStyles.colorMuted).class}>No matching settings.</div>}>
@@ -36,7 +32,7 @@ export function PreferencesSearchResults(props: {
                 <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class}>
                   <For each={group.results}>
                     {(setting) => (
-                      <button type="button" class={stylex.attrs(preferenceStyles.cursorPointer, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite60, preferenceStyles.padding3, preferenceStyles.textLeft, preferenceStyles.transition, preferenceStyles.hoverBackgroundWhite80).class} onClick={() => props.onOpen(setting)}>
+                      <button type="button" class={stylex.attrs(preferenceStyles.cursorPointer, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite60, preferenceStyles.padding3, preferenceStyles.textLeft, preferenceStyles.transition, preferenceStyles.hoverBackgroundWhite80).class} onClick={() => panel.onOpen(setting)}>
                         <div class={stylex.attrs(preferenceStyles.textSm, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}><Highlight value={setting.title} query={searchQuery()} /></div>
                         <div class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.textXs, preferenceStyles.leading5, preferenceStyles.colorMuted).class}><Highlight value={setting.description} query={searchQuery()} /></div>
                       </button>

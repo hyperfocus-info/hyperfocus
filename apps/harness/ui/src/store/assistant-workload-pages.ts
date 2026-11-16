@@ -16,6 +16,7 @@ export type AssistantWorkloadState = {
   jobs: BackgroundJob[];
   runs: BackgroundJobRun[];
   workloadPagesByAssistantId: Record<string, AssistantWorkloadPageState>;
+  workloadScopeOrder?: string[];
 };
 
 type WorkloadPagePayload = Extract<ServerEvent, { type: "assistant.workloads.listed" }>["payload"];
@@ -25,7 +26,7 @@ export const ASSISTANT_JOB_CACHE_LIMIT = BACKGROUND_JOB_CACHE_LIMIT;
 export const ASSISTANT_RUN_CACHE_LIMIT = BACKGROUND_RUN_CACHE_LIMIT;
 
 export function createEmptyAssistantWorkloadState(): AssistantWorkloadState {
-  return { jobs: [], runs: [], workloadPagesByAssistantId: {} };
+  return { jobs: [], runs: [], workloadPagesByAssistantId: {}, workloadScopeOrder: [] };
 }
 
 export function isAssistantJobBootstrapAvailable(page: AssistantWorkloadPageState | undefined, scopedJobCount: number, hasSearch: boolean) {
@@ -126,11 +127,14 @@ export function pruneAssistantWorkloads(existing: AssistantWorkloadState, active
 }
 
 function retainAssistantWorkloadScopes<T extends AssistantWorkloadState>(existing: T, retainedAssistantId: string): T {
-  const existingIds = Object.keys(existing.workloadPagesByAssistantId);
+  // Store reconciliation preserves object insertion order, so recency needs its own sequence.
+  const existingIds = [...new Set([...(existing.workloadScopeOrder ?? []), ...Object.keys(existing.workloadPagesByAssistantId)])]
+    .filter((id) => existing.workloadPagesByAssistantId[id]);
   const orderedIds = [...existingIds.filter((id) => id !== retainedAssistantId), retainedAssistantId];
   const keepIds = new Set(orderedIds.slice(-ASSISTANT_WORKLOAD_SCOPE_LIMIT));
   if (existingIds.every((id) => keepIds.has(id)) && existingIds.at(-1) === retainedAssistantId) return existing;
-  return { ...existing, jobs: existing.jobs.filter((entry) => entry.assistantId && keepIds.has(entry.assistantId)),
+  return { ...existing, workloadScopeOrder: orderedIds.slice(-ASSISTANT_WORKLOAD_SCOPE_LIMIT),
+    jobs: existing.jobs.filter((entry) => entry.assistantId && keepIds.has(entry.assistantId)),
     runs: existing.runs.filter((entry) => entry.assistantId && keepIds.has(entry.assistantId)),
     workloadPagesByAssistantId: Object.fromEntries(orderedIds.filter((id) => keepIds.has(id) && existing.workloadPagesByAssistantId[id])
       .map((id) => [id, existing.workloadPagesByAssistantId[id]])) };

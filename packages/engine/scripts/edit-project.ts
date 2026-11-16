@@ -3,7 +3,7 @@ import { createHyperfocusProjectFiles, type HyperfocusAssetInput } from "../src/
 import { readHyperfocusProjectPair, writeHyperfocusProjectPair } from "../src/project/filesystem.ts";
 import { migrateProject, validateProject } from "../src/project/editor.ts";
 
-const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
+const MAX_ARCHIVE_BYTES = 536870912;
 
 export type PlayerSpeedEditOptions = {
   entityId?: string;

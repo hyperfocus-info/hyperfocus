@@ -2,9 +2,13 @@
 
 `packages/engine` is the shared package for catalog games that already run directly in the browser. The preferred browser path is `createBrowserApp`: an explicit fixed-step lifecycle with scoped input, deterministic cleanup, inspectable resolved configuration, and opt-in bounded metrics. Game entries keep their own input meaning, state, assets, audio, and authored rendering decisions.
 
-Engine priority is simplicity (ie: the inverse of complex) > concise > performance > DX. It should give users the easiest launchpad into development and let them render powerful configurable games quickly, without limiting how they build or scale later.
+Engine priorities are simplicity, performance, then developer experience. It should give users the easiest launchpad into development and let them render powerful configurable games quickly, without limiting how they build or scale later.
 
 ## Intent
+
+[Touch of Death](examples/touch-of-death/README.md) is a manifest-backed example
+consumer containing its game rules, assets, protocols and host. Editor setup and
+exports consume that package; reusable mechanics stay in engine entries.
 
 The engine is a reusable boundary, not a game-content bucket. Put shared mechanics here only when they remove repeated game boilerplate and stay free of item ids, NPC kinds, quest text, art choices, balance constants, and demo-specific UI copy.
 
@@ -17,9 +21,48 @@ Pixel buffers are a valid exception to normal Canvas draw submission when the ef
 Audio and timing are orchestration surfaces. JS should own Web Audio unlock, graph setup, routing, pause, volume, RAF, timers, and input snapshots. WASM may run deterministic DSP, sample generation, spatial math, or fixed-step numeric kernels after the JS boundary is already narrow.
 
 See [./docs/vision-drift.md](./docs/vision-drift.md) for current feature-boundary drift to watch while pruning or promoting helpers.
+
+`createSimulationBatch` from `@hyperfocus/engine/core` runs independent seeded
+fixed-step trials for headless validation and browser worker hosts. Supply a
+`createTrial({ seed, index })` factory with `step()` and `dispose()` methods;
+`step()` returns `undefined` while running and a result when finished. The runner
+owns seed strides, bounded `advance({ ticks })` calls, per-trial tick limits,
+completion callbacks and cleanup. `onTrial` receives completed results or a
+separate `capped` outcome before trial disposal; it should retain only the evidence
+the application needs. Hosts own worker pools, scheduling, pause and CPU effort.
+The runner does not select numeric backends or change simulation rules. Browser
+bulk fights and the editor's reproducible headless combat tests use this boundary.
 Use [the engine documentation map](./docs/README.md) to select other focused guides without loading the entire docs folder.
+For calculation-only hosts, `runtime.advance({ actions })` and
+`gameplay.advance({ actions, fighterInputs, localDirection })` advance the same
+fixed-tick logic without constructing an exported world/save snapshot. Read
+`gameplay.combatMatch()` for detached match metadata, or call `snapshot()` when a
+full save/rollback view is needed. Existing `step()` still advances and returns a
+snapshot. Custom script contexts, physical rules, AI evidence and audio are unchanged.
+
+`@hyperfocus/engine/project/runtime-3d` exposes complete, context-free structural
+readers: `readGameplayProject3D` for the narrow gameplay host project,
+`readGameplaySnapshot3D` for current saves, `readHyperfocus3DTimeline` for the frame
+timeline, and `readCombatAiOutcomeReport3D` for observational reports. They return
+detached values, preserve optional absence and extension fields, and apply no
+defaults. Physical `ArrayLike` values become ordinary arrays. Project-specific
+entity, combat configuration, content and recipe compatibility remain checked by
+the existing restore/preflight operations; legacy restore defaults remain there.
+
+Touch of Death adapts during ordinary play, with strong seeded personality
+preferences and confidence-weighted contextual evidence. Advanced hosts can use
+`combatAiTuning` for baseline, frozen and compression comparisons, inject/read
+portable `combatAiLearning`, and profile decisions with `combatAiProfile`.
+Hosts own durable storage and logical opponent identity. See
+[combat AI](src/project/3d/combat-ai/README.md) for persistence and evaluation;
+passing deterministic tests does not prove stronger general fighting.
+Routing changes are compared exactly with the original implementation in
+`src/project/3d/combat-environment/obstacle-parity.test.ts`, covering live geometry,
+hazards and moving traffic. [Optimization history](docs/engine-performance-optimizations.md)
+records measured route candidates and their acceptance or rejection.
 See [./docs/developer-performance.md](./docs/developer-performance.md) for the golden path, portable work budgets, controlled timing policy, and pooling rules.
 See [./docs/project-portability.md](./docs/project-portability.md) for the two-file project contract, open archive layout, and engine-independent export guarantee. New users can follow [the verified first-game tutorial](./docs/tutorial-first-game.md).
+Installed-package authors can create, build custom TypeScript and preview through the Bun APIs in [project starters](./docs/project-starters.md) and [project development](./docs/project-development.md); those paths include the runtime and need no editor checkout.
 See [./docs/readiness-roadmap.md](./docs/readiness-roadmap.md) for the evidence required to raise every assessed engine category to at least 8/10 and [the 25-game genre audit](./docs/genre-readiness-audit.md) for beginner, intermediate, and professional friction across the proposed remix set.
 
 ## Catalog Findings
@@ -87,7 +130,7 @@ packages/engine/
 
 ## Engine Editor
 
-`../../apps/engine-editor` is the repo-local browser editor. It adds a versioned project model, local recovery, project undo/redo, an asset catalog, scenes/entities/components, contextual Stage/Tilemap/Atlas/Post FX/Motion/Network tools, and Edit/Play/Profile/Build workspaces. Play and Build share the first-party fixed-step 2D simulation for built-in/data-driven projects, and browser acceptance proves identical input movement plus authored-state restoration after Play. Custom behavior can also run in editor Play after the user grants session-only live-source permission; Save recompiles the supplied project files on the loopback server, whose resolver cannot escape that source set. Build emits one offline HTML artifact containing the exact verified portable pair. The browser build button still hard-blocks arbitrary TypeScript paths; `bun run build:game -- --project <directory>` resolves ordinary filesystem and package modules and bundles them in memory into the same one-file output. `bun run dev:game -- --project <directory>` watches only that pair and its authored source graph, serves the last good snapshot on errors, and live-reloads clean rebuilds.
+`../../apps/engine-editor` is the repo-local browser editor. It adds a versioned project model, local recovery, project undo/redo, an asset catalog, scenes/entities/components, contextual Stage/Tilemap/Atlas/Post FX/Motion/Network tools, and Edit/Play/Profile/Build workspaces. Play and Build share the first-party runtime target for built-in/data-driven projects: 2D uses the fixed-step portable world and 3D uses the canonical scene cook. Browser acceptance proves identical input movement plus authored-state restoration after Play. Custom behavior can also run in editor Play after the user grants session-only live-source permission; Save recompiles the supplied project files on the loopback server, whose resolver cannot escape that source set. Build defaults to a streaming web directory (ZIP in the editor) with indexed assets and Bun ESM chunks. A separate offline HTML retains the full pair and the same gameplay. The browser compiler bundles only explicitly supplied project source; `bun run build:game -- --project <directory>` also resolves ordinary filesystem and package modules. See [web asset delivery](./docs/project-delivery.md) for selection, lazy imports and independent hosting. Both routes reject enabled 2D post effects outside the standalone capability set instead of silently dropping them. `bun run dev:game -- --project <directory>` watches only that pair and its authored source graph, serves the last good snapshot on errors, and live-reloads clean rebuilds.
 
 See the [engine editor README](../../apps/engine-editor/README.md) for the workflow, shortcuts, storage boundaries, accessibility behavior, and verification commands.
 
@@ -113,7 +156,7 @@ The long-term runtime policy is first-party high-performance primitives rather t
 
 Run engine commands from `./packages/engine`:
 
-- `bun run build`: stages the browser bundle, every published subpath bundle, declarations, and WASM outputs, validates the complete artifact set, then swaps `browser`, `dist`, and `wasm` into place with rollback. Compilation/validation failures never touch live artifacts, and handled swap failures restore the prior set.
+- `bun run build`: stages the browser bundle, every published subpath bundle, declarations, and WASM outputs under `.local/package-build-staging-*`, validates the complete artifact set, then swaps `browser`, `dist`, and `wasm` into place with rollback. Compilation/validation failures never touch live artifacts, and handled swap failures restore the prior set. Rollback backups live under `.local/package-build-backup-*`; retain any surviving backup until recovery is complete.
 - `bun run build:types`: atomically refreshes declaration artifacts under `./dist` while preserving its existing runtime bundles.
 - `bun run typecheck`: runs the source TypeScript gate.
 - `bun run typecheck:tooling`: typechecks the release, package, declaration, and WASM smoke tooling.
@@ -121,7 +164,7 @@ Run engine commands from `./packages/engine`:
 - `bun run typecheck:editor`: strictly typechecks the editor shell, project model, live authoring tools, server, and verifiers.
 - `bun run editor`: builds and serves the editor at `http://127.0.0.1:8796`.
 - `bun run build:editor`: creates the editor browser bundle under `./editor/dist`.
-- `bun run build:game -- --project ./my-game`: validates the two portable files, statically bundles referenced ordinary TypeScript behaviors without generated wrappers, and writes one offline HTML artifact under the project's `dist/` directory. Pass `--out <file>` to choose the destination.
+- `bun run build:game -- --project ./my-game`: validates the canonical pair and builds streaming output at `dist/web/`. Pass `--out <directory>` to choose the destination, or `--offline --out <file.html>` for a complete offline download. [Delivery options](./docs/project-delivery.md) cover external asset hosts.
 - `bun run verify:beginner`: creates, edits, live-reloads, diagnoses, recovers, builds, and browser-checks the minimal two-file beginner journey.
 - `bun run verify:3d-action`: creates and builds the two-file 3D starter, then proves visible WebGL2 rendering, movement, IndexedDB save/reload, and zero external requests in clean Chromium.
 - `bun run verify:editor`: runs the editor project and authoring acceptance suite.
@@ -160,6 +203,11 @@ Authoritative multiplayer consumers can import `@hyperfocus/engine/server` for B
 
 Portable project consumers can import `@hyperfocus/engine/project`. This stable, DOM-free subpath owns canonical JSON encoding, SHA-256 content addressing, deterministic standard-ZIP packing and validation, two-file create/open helpers, bounded archive limits, and neutral exchange-file export. It does not own the editor's game-specific model or generate runtime source code.
 
+Use `@hyperfocus/engine/project/metadata` for dimension detection and timeline
+effect placement validation without loading either runtime. Existing runtime
+entries retain these exports for compatibility. CLI builds select the authored
+dimension's runtime; custom behavior imports can add explicit dependencies.
+
 Experimental launchpad APIs live in focused subpaths:
 
 - `@hyperfocus/engine/mmo`: normalized entity state, AOI filtering, room glue, client helpers, and configurable gameplay modules.
@@ -168,10 +216,11 @@ Experimental launchpad APIs live in focused subpaths:
 - `@hyperfocus/engine/render/3d`: focused Three.js-backed scene facade for browser 3D render setup, cameras, lights, registered meshes, instanced batches, and content-free third-person camera rigs. Camera rigs cover orbit/free-look, target following, smoothing, chained transitions, shoulder/framing offsets, distance limits, and obstacle/deocclusion hooks while keeping game rules, input mapping, HUD, tuning, and asset choice in the game.
 - `@hyperfocus/engine/render/3d-core`: dependency-free first-party matrix/camera math, fixed-capacity typed transform hierarchies, normalized frustum tests, and bounded stable-order instance visibility.
 - `@hyperfocus/engine/render/3d-scene`: bounded first-party mesh/texture/material/light/instance registries and deterministic GPU-ready instanced command buffers, including unlit/PBR materials and distance-band mesh LOD rebinding.
+- `@hyperfocus/engine/render/3d-material-presets`: named material looks, preset search/application, and deterministic look transitions; the external package smoke exercises the installed subpath.
 - `@hyperfocus/engine/render/3d-webgl2`: engine-owned depth-tested WebGL2 submission with indexed/non-indexed instancing, RGBA8 textures, direct-light metallic-roughness/emissive PBR, alpha masking, optional directional shadow mapping, up to four position morph targets, hardware-bounded four-weight matrix skinning, bounded uploads/caches, shader diagnostics, resize telemetry, and context-loss restoration. Environment/texture PBR channels and blended transparency remain later layers.
 - `@hyperfocus/engine/physics/2d`: fixed-capacity struct-of-arrays bodies, deterministic sweep-and-prune, oriented box/circle contacts, angular impulse/friction response, rotated-static CCD, distance/revolute joints, sleep/wake control, layers, triggers, raycasts, caller-owned queries, and renderer-neutral debug segments.
 - `@hyperfocus/engine/physics/3d`: generic 3D collider, vertical overlap, submersion, height-field placement, timed interpolation, and opt-in kinematic character helpers. Genre presets and asset-specific collider inference stay game-owned.
-- `@hyperfocus/engine/physics/rigid-3d`: bounded first-party sphere/box rigid bodies with quaternion/angular integration, bounded distance constraints, deterministic broadphase, impulse/friction response, triggers/filters, dynamic-vs-static CCD, caller-owned queries/debug output, replay proof, and a 1,000-body performance gate. Rotated boxes currently collide through conservative world AABBs; angular collision impulses and general joints remain future solver breadth.
+- `@hyperfocus/engine/physics/rigid-3d`: bounded first-party sphere/box rigid bodies with quaternion/angular integration, distance/point constraints, angular motors, symmetric and anatomical swing/twist limits, deterministic broadphase, impulse/friction response, triggers/filters, 15-axis oriented box contact, relative linear and bounded rotational CCD against static, dynamic, and kinematic bodies, caller-owned queries/debug output, replay proof, and a 1,000-body performance gate. Iterative time-of-impact islands and general convex collision remain future solver breadth.
 - `@hyperfocus/engine/motion`: DOM-free semantic rigs, memory-backed pose buffers, deterministic motion graphs, four-pose procedural locomotion, aiming, recoil, IK, terrain planting, and joint limits.
 - `@hyperfocus/engine/motion/three`: the optional Three.js adapter and zero-clip humanoid controller. It auto-maps a GLB skeleton without renaming source bones and uploads the evaluated pose.
 - `@hyperfocus/engine/migrations`: shared, in-memory schema migrations for editor and build tooling, beginning with `.t3rig` sidecars.
@@ -189,8 +238,8 @@ Experimental launchpad APIs live in focused subpaths:
 - `@hyperfocus/engine/project/filesystem`: Node/Bun crash-safe staged directory-swap writes, validated reads, and explicit interrupted-transaction recovery for the canonical pair.
 - `@hyperfocus/engine/project/neutral-export`: browser-safe deterministic ordinary-file export builder and exact portability diagnostics shared by the CLI and editor.
 - `@hyperfocus/engine/schema/editor-project-v2.json`: published JSON Schema for the Editor v2 document shape; semantic graph invariants listed in the portability contract remain additional checks.
-- `@hyperfocus/engine/audio`: first-party Web Audio orchestration with explicit unlock, named buses, scheduled fades, bounded voice pooling/stealing, decoded-buffer LRU limits, spatial math, and buffering/streaming policy.
-- `@hyperfocus/engine/effects`: deterministic bounded timeline sampling/events and fixed-capacity seeded 2D particles with caller-owned render buffers.
+- `@hyperfocus/engine/audio`: first-party Web Audio orchestration with explicit unlock, named buses, scheduled fades, bounded voice pooling/stealing, decoded-buffer LRU limits, spatial math, buffering/streaming policy, and deterministic dependency-free SFX presets across retro arcade, realistic, modern cartoon, early-3D 2000s, and 90s fantasy families. SoundFont parsing remains project-local; see [programmatic SFX presets](docs/sfx-presets.md).
+- `@hyperfocus/engine/effects`: deterministic bounded timeline sampling/events, fixed-capacity seeded 2D particles with caller-owned render buffers, plus named 12-particle and 10-transition authoring vocabularies shared by games and motion projects.
 - `@hyperfocus/engine/save`: deterministic checksummed save profiles, named slots, sequential migrations, explicit import/export, bounded JSON, and an atomic storage boundary.
 - `@hyperfocus/engine/save/browser`: IndexedDB compare-and-swap storage for standalone browser profiles with bounded bytes and conflict retries.
 - `@hyperfocus/engine/content`: bounded scene/prefab data, inheritance and variants, explicit reference validation, deterministic instantiation, rollback-safe async scene transitions, fallback localization, branching dialogue, and versioned event-driven quest state.
@@ -256,7 +305,7 @@ Use experimental MMO launchpad subpaths when a demo wants normalized runtime bui
 Repo-local browser games can keep direct imports from the checked-in browser artifact so each game remains playable from its folder without a build step:
 
 ```js
-import { init } from "../../packages/engine/browser/engine.js";
+import { init } from "@hyperfocus/engine";
 ```
 
 Bundlers that rewrite static assets should import the explicit WASM URL subpath and pass that URL into the kernel loader:
@@ -270,13 +319,43 @@ const kernel = await createCollisionKernel(wasmUrl);
 
 Use `createCollisionKernel()` without arguments only when the emitted package layout is hosted as-is and `../wasm/collision-kernel.wasm` is reachable from the browser build. Serve the asset as `application/wasm` for streaming instantiation. If hosting, MIME, CSP, or runtime constraints block WASM, the TypeScript fallback remains authoritative and quiet by default; pass `onFallback` when setup needs diagnostics.
 
+Authoritative clients request `arraybuffer` delivery from sockets exposing
+`binaryType`, keeping ordered replication independent of browser Blob reads.
+Custom adapters without that property retain support for byte arrays, ArrayBuffers
+and Blobs. The delayed-Blob regression lives in `src/net/authoritative-client.test.ts`.
+
 ## Verification Lanes
 
-Run `bun run check` before normal engine handoff. It typechecks source, tests, and release tooling; atomically rebuilds the browser, all focused runtime subpaths, WASM, and declarations; builds all examples; runs fast package smoke; and runs all repository tests.
+Run engine tests from this package directory so the application DOM preload is
+not installed. DOM-dependent engine tests use `src/test-support/register-dom.ts`,
+which preserves the native WebSocket for real socket recovery tests. Direct
+global DOM registration replaces that transport and makes deliberate disconnects
+fail with unrelated wrapper errors. The registration regression and
+`src/net/authoritative-recovery.test.ts` cover this shared-process boundary.
+
+For ordinary changes, select verification from the affected contract: focused
+regressions for local behavior, parity and measured benchmark evidence for a
+changed hot kernel, and consumer/build checks for public exports or artifacts.
+`bun run check` is the broad integration gate for changes spanning those boundaries;
+it typechecks source, tests, and release tooling, rebuilds runtime/WASM/declarations,
+builds examples, and runs package smoke and repository tests. It is not a mandatory
+precondition for every local edit. The [scoped guidance](AGENTS.md) owns performance
+and portability constraints.
 
 Run `bun run release:verify` before a public package release. It keeps repository confidence as one command while still preserving the separate proof lanes for diagnosis. Publishing additionally fails closed unless `RELEASE_EVIDENCE_FILE` points to a release-specific document accepted by `bun run certify:package`; see [production readiness evidence](./docs/production-readiness.md).
 
+`bun run verify:browsers` requires all three installed Playwright engines and writes
+the fixture matrix under `.local/engine-release/` at the repository root. See
+[browser support](./docs/browser-support.md) for installation, profile coverage,
+and the distinction between an emulated fixture and certified device/package evidence.
+
 Run `bun run release:package-consumer` for public package release candidates. It packs the exact allowlisted files into a temporary external consumer and verifies installed root, browser, core, net, protocol, server, MMO, render, 3D physics/render, UI, asset, prototype post-processing, Bundler, NodeNext, peer-externalization, and WASM subpath behavior outside the fast automation lane.
+
+The gate logs a unique `.local/package-consumer/` evidence directory inside this
+package. It retains the exact installed narrow reader bundle, bundler metadata
+and input/output hash receipt before deleting the temporary consumer. Inspect
+that artifact when attributing delivered retention; full-runtime metadata alone
+does not prove what the narrow consumer retains.
 
 Run `bun run release:wasm-asset` when validating the Vite 8.0.14 WASM asset URL recipe. Keep it separate from `check` because it creates a temporary Vite consumer and may depend on package-manager cache or network state.
 
@@ -286,115 +365,20 @@ Run `bun run smoke:vite-wasm-asset:current` only as an explicit drift check agai
 
 ## Public API
 
-The root package is intentionally browser-facing. Its preferred surface is the scoped browser app lifecycle plus common canvas, input, camera, map, animation, collision, and diagnostic primitives. Three-specific indicators and richer staged rendering stay in `@hyperfocus/engine/render`.
-
-`@hyperfocus/engine/core` is the deterministic, DOM-free surface for tooling, tests, and non-browser consumers. Math, grid, object-pool, and stage primitives that do not depend on canvas, input globals, RAF, or WASM asset loading belong there as well as on root when browser games need them.
-
-Do not promote new helpers to root only because a single game needs them. Prefer game-local code until at least two migrated entries prove the same abstraction. Experimental subpaths are allowed for distinct launchpad jobs with package proof; do not expose source-layout folders as API.
-
-- Keep on root: `createBrowserApp`, `createFrameMetrics`, `createFixedStepLoop`, `init`, scoped keyboard/pointer/canvas-object input helpers, hardware gamepad helpers, camera, map/minimap overlays, drawing/text helpers, sprite atlas and frame-animation helpers, deterministic collision/grid helpers, passive collision broadphase helpers, tagged tile-map helpers, WASM collision loading, and stable costed post-processing helpers.
-- Keep on `@hyperfocus/engine/core`: object-pool, stage, collision, broadphase, vector, ray, and grid helpers that stay DOM-free.
-- Keep on published focused subpaths: portable project JSON/ZIP, audio, effects, saves, content, navigation, first-party rendering and physics, motion, migrations, UI, and asset cooking/loading. Their exact stability and limitation boundaries are documented beside each subpath above.
-- Keep on focused experimental subpaths: MMO launchpad helpers, richer top-down render staging, optional MMO UI shell, asset loader helpers, and internal template assets.
-- Build future public contracts for on-screen touch controls and a Node-native WASM loader, plus the remaining breadth tracked in the readiness roadmap. The current `src/onScreenGamepad.ts` helper is a tested repo-local prototype, not a package export. The repo-local editor owns its current project/tooling model under `./editor`; portable project schemas and migration contracts stay published independently of the editor shell.
-- Keep game-local: game action semantics, HUD, audio choices, asset paths, fallback policy, level data, economy/progression systems, enemy AI, and one-off visual effects.
-
-- `createBrowserApp(options)`: preferred browser lifecycle with explicit start, fixed-step updates, scoped keyboard actions, cleanup, resolved configuration, and optional bounded frame metrics. It never installs legacy global input or exposes timing globals.
-- `createFixedStepLoop(options)`: low-level RAF timing, delta clamping, pause, resume, running-state readback, update/render ordering, and explicit `beforeUpdate`/`afterUpdate` hooks.
-- `createFrameMetrics(options)`: bounded rolling numeric series, p50/p95/p99 summaries, long-frame records, timers, counters, reset, and JSON-friendly snapshots.
-- `createAuthoritativeServer(options)`: Bun WebSocket authoritative server with serialized fixed ticks, rooms, optional managed MMO shard admission, explicit opt-in dev auth (`devMode: true`), pluggable auth and persistence, health/stats endpoints, and connection-bound input handling. Await `server.stop()` when final player and room persistence must complete.
-- `createRoomType(options)` and `createZoneType(options)`: room or zone definitions for authoritative state, join policy, player lifecycle, input handling, simulation update, interest target, and per-player snapshots.
-- `defineSchema`, `encodeSnapshot`, `decodeSnapshot`, `encodeDelta`, and `decodeDelta`: DOM-free binary replication schema helpers for server/client state transfer.
-- `decodeReplicationFrame` and `decodeMultipartReplicationEnvelope`: decode frame and segment payloads as zero-copy `Uint8Array` views. Decoded segment kinds are strings unless `decodeMultipartReplicationEnvelope` receives a caller-owned `parseKind`; treat decoded payloads as read-only unless the caller owns the source buffer.
-- `createInterestGrid(options)` and `createMmoInterestGrid(options)`: area-of-interest entity indexing with visibility enter/leave, hysteresis, and visible entity caps.
-- `createMmo1000Preset(options)`: opt-in 1000-total-CCU preset for 10 managed public room shards at 100 players each; explicit room IDs still route to their named rooms. Implicit admission defaults to least-loaded balancing; set `admissionSelection: "fill-first"` when a public lobby should keep early players together before spilling to the next shard.
-- `createEntityReplicator(options)`: sequence-numbered snapshots and deltas with ack tracking and per-client byte budget enforcement.
-- `init(options)`: low-level canvas setup with device-pixel-ratio resolution and `letterbox`, `fit`, or `stretch` sizing. It does not start or publish timing globals unless `autoStart: true` or `globals: true` is explicitly requested.
-- `createObjectPool(options)`: fixed-capacity reuse for hot-path POJO entities and effects. Snapshot restoration requires a caller-owned `deserializeItem(snapshot)` parser; the pool never treats unvalidated snapshot data as an item.
-- `createRetainedCursor(options)` on `@hyperfocus/engine/core`: fixed-capacity stable-record reuse for callers that fully overwrite every borrowed item. Overflow throws by default; bounded growth is explicit.
-- `createRenderFramePool(options)`, `renderArray(pool)`, and `renderRecord(pool, kind)`: opt-in `@hyperfocus/engine/render` allocation-control helpers. `recordStrategy` is `clear` (safe reuse), `fresh`, or `overwrite` (caller must assign every field). Choose from full-loop p95/p99 and memory evidence, not allocation count alone.
-- `createStage(options)`: POJO entity spawn, update, removal, and render ordering by numeric `layer`; higher layers draw later. Restoring serialized entities requires an explicit `deserializeEntity(snapshot)` parser.
-- `createKeyboardActions(bindings, target?, options?)`: maps keyboard codes to stable action state and explicit pressed, held, and released transitions. Held and one-frame state reset on target blur by default; pass `resetOnBlur: false` only when the consumer owns focus recovery.
-- `createPointerInput(canvas)`: normalizes mouse and touch input into canvas-space pointer snapshots.
-- `createCanvasObjectEvents(canvas, objects)`: delegates pointer clicks and hover events to hit-tested canvas objects.
-- `createCamera(options)`: viewport camera state for panning, anchored zooming, following targets with optional deadzones and smoothing, world/screen coordinate conversion, and scoped canvas transforms.
-- `createGameMap(options)`: factory-first canvas map/minimap overlay for target-following HUD radar or free-pan regional maps, with world-space markers, edge-clamped indicators, dashed routes, zoom-aware labels, terrain hooks, compass rose, and legend drawing. `new GameMap(options)` remains a compatibility shim over the same factory.
-- `registerSprite(id, image)`, `drawSprite(id, x, y, options)`, `drawSpriteSlice(id, x, y, frameIndex, options)`, `createSpriteBatchFrames(options)`, and `drawSpriteBatch(id, entries, options)`: stateless sprite drawing, data-driven sheet slicing, and fast atlas batches for high-count sprites without per-sprite canvas state saves.
-- `createTextureAtlas`, `createTexturePackerAtlas`, `parseTexturePackerAtlas`, `createAnimationClip`, `createAnimationPlayer`, `createAtlasClip`, and `createAtlasAnimation`: data-only atlas parsing and frame playback primitives for browser games that own asset loading, sprite drawing, state transitions, and animation meaning.
-- `animationApiProfiles` and `atlasApiProfiles`: stability, proof, and exposure classification for root-exposed atlas and frame-animation helpers so those exports stay an intentional browser-game contract instead of source-layout drift.
-- `drawRect`, `drawCircle`, `drawLine`, and `drawPolygon`: primitive drawing for prototypes, debug overlays, and minimalist geometry games.
-- `pushTransform(options)` and `popTransform(options)`: stack-based canvas transforms for grouped movement, rotation, scale, and alpha.
-- `loadFont`, `registerFont`, `textReady`, `measureText`, and `drawText`: custom font registration plus text drawing and measurement.
-- `clamp`, `rectsOverlap`, `circleRectOverlap`, `testCircleRectOverlap`: deterministic collision helpers.
-- `createCollisionBroadphase(options)`: opt-in R-tree-style AABB index for passive collision candidate management. Consumers own entity state and pass ids plus bounds through `upsert`, `remove`, or `rebuild`; games query candidates or unique pairs before running narrowphase checks.
-- `gridKey`, `inBounds`, `sameCell`, `opposite`: deterministic grid helpers.
-- `createTileset`, `createTileMap`, `generateTileMap`, `renderTileLayer`, `getTileAt`, `worldToTile`, `tileToWorld`, `extractCollisionRects`, and `seededRandom`: tagged tile-sheet definitions, compact tile layers, deterministic generated maps, visible canvas tile rendering, spawn marker placement, and collision extraction for browser games that keep their art and rules local.
-- `resolveCollisionKernelWasmUrl(options)`: resolves the compatibility, scalar, or SIMD packaged collision WASM asset from the current engine module URL or an explicit base URL.
-- `createCollisionKernel({ batchPolicy })`: normalizes `auto`, forced TypeScript, or forced WASM dispatch once outside numeric hot loops. `auto` defaults to WASM at batch 256; hosts may set one fallback threshold plus named per-operation thresholds without allocating options in leaf loops.
-- `createCollisionKernel(options)`: loads the SIMD production artifact first when `variant: "auto"` detects support, otherwise loads scalar, and falls back to the TypeScript helper. `variant: "scalar"` and `variant: "simd"` are forced evidence/debug paths; a custom `url` is labeled `custom`. Fixed scratch reserves 64 KiB once by default, while `scratchStrategy: "grow"` is the explicit variable-capacity path. `batchPolicy` keeps copied batches below the measured threshold in TypeScript. The kernel exposes batched movement integration, point rotation, range filtering, rect collision, and circle/rect collision helpers.
-- `kernel.createResidentCircleRectBatch(batch)`: optional WASM-only fixed-count path that copies input columns once, runs repeatedly with zero timed host-boundary bytes, copies the result mask only when requested, and releases its exclusive module arena explicitly. Keep the copied batch helper as the baseline for changing inputs.
-- `createPostProcessStack(effects)`: ordered canvas post-processing pass for pixel effects and overlay effects.
-- `canonicalHyperfocusJson`, `encodeHyperfocusProject`, and `decodeHyperfocusProject` on `@hyperfocus/engine/project`: deterministic, finite, cycle-free project JSON encoding and parsing. Decoding without a parser returns `unknown`; pass a caller-owned `(value: unknown) => TProject` parser to receive validated typed data.
-- `packHyperfocusAssets` and `unpackHyperfocusAssets` on `@hyperfocus/engine/project`: bounded deterministic ZIP storage for sorted SHA-256 objects, with per-object store/deflate choice, CRC-32 checks, content-hash verification, and unsafe-entry rejection.
-- `createHyperfocusProjectFiles` and `openHyperfocusProjectFiles` on `@hyperfocus/engine/project`: create or validate the canonical `project.json` and `assets.hfp` pair while resolving asset catalog records to verified bytes. Typed opens require `options.parseProject`; archive-only opens leave `project` as `unknown`.
-- `exportHyperfocusExchange` on `@hyperfocus/engine/project`: returns canonical project JSON and deterministic ordinary asset files programmatically. `@hyperfocus/engine/project/neutral-export`, `bun run export:project`, and the editor action share safe filenames, a deterministic hash manifest, and exact unsupported-component diagnostics; directory exports are transactional/no-overwrite and the browser fallback is one standard ZIP.
-- `createPlayableWorld` and `auditPlayableProject` on `@hyperfocus/engine/project/runtime-2d`: deterministic DOM-free 2D project execution and explicit diagnostics for behavior/collider semantics the portable runtime cannot execute.
-- `createAudioEngine`, `computeSpatialAudio`, and `chooseAudioLoadPolicy` on `@hyperfocus/engine/audio`: bounded first-party playback orchestration plus pure spatial/policy decisions.
-- `SaveProfileStore`, `SaveMigrationRegistry`, `exportSaveProfile`, and `importSaveProfile` on `@hyperfocus/engine/save`: atomic profile operations and portable integrity-checked envelopes.
-- `createSignedSessionAuthority`, compatibility constructor `SignedSessionAuthority`, `createServerOperations`, and `createPortableMemoryPersistenceAdapter` on `@hyperfocus/engine/server`: rotating one-use session admission, structured health/metrics, graceful drain, and provider-neutral backup/restore primitives.
-- `createScenePrefabCatalog` and `createSceneLifecycle` on `@hyperfocus/engine/content`: deterministic prefab/variant expansion and serialized transactional scene lifecycle.
-- `createGridNavigator` on `@hyperfocus/engine/navigation`: allocation-stable A* queries into caller-provided `Int32Array` paths.
-- `getPostProcessEffectCost`, `summarizePostProcessCost`, and `checkPostProcessBudget`: explicit post-processing cost readback for overlay, pixel, and distortion tiers before games commit full-canvas work to the render loop.
-- `postProcessApiProfiles`: stability, cost-tier, proof, promotion, and exposure classification for post-processing helpers, so games can keep stable root API separate from prototype spectacle helpers and avoid treating one migrated proof as family-wide promotion.
-- Root post helpers cover grayscale, invert, brightness, contrast, sepia, threshold, vignette, tint, posterize, gamma, CRT scanlines, screen shake, color grading, film grain, retro dithering, color LUT mapping, and digital noise. Prototype helpers such as bloom, chromatic aberration, glitch, motion blur, pixelate, radial blur, shockwave distortion, scanline flicker, color fringe, neon glow, heat haze, lens flare, star streak, flashbang, and barrel distortion now import from `@hyperfocus/engine/post-processing/prototype`.
-
-Experimental subpaths stay off root:
-
-- `@hyperfocus/engine/mmo` owns normalized entity registry, public/private/owner-only visibility rules, AOI snapshots, room lifecycle glue, profile persistence hooks, content-free state shapes, selectors, validation, cooldown/resource ticking, client input mapping, and interpolation builders. Games still own item IDs, rewards, quest copy, NPC roles, formulas, tuning, economy, and art.
-- `@hyperfocus/engine/render` owns Canvas context creation, top-down layer staging, camera transforms, y-axis sorting, culling/sort helpers, render-frame pooling, tile cache rendering, actor sprites, HUD helpers, text wrapping/truncation, bars, labels, outlines, structured primitives, and effect queues. It must stay content-free: no item IDs, NPC kinds, quest copy, art lookup, or demo tuning.
-- `@hyperfocus/engine/render/3d` owns reusable Three.js setup, draw-call submission, animation/ragdoll helpers, and opt-in toroidal world math for wrapped coordinates and edge-view duplicate offsets. It should stay a thin renderer contract, not a game framework: no enemy AI, level data, weapon logic, lobby rules, or asset-pack-specific loading policy.
-- `@hyperfocus/engine/physics/3d` owns content-free 3D collider shapes, overlap/submersion checks, `heightAt`-style ground placement, timed interpolation helpers, rubber-band callbacks, and an opt-in kinematic character primitive with forces. Games still own genre movement presets, authored terrain generation, traversal rules, combat clearance, and asset-name-to-collider policy.
-- `@hyperfocus/engine/ui/core` owns the DOM-free MMO UI controller and generic renderer connection contract. Its stable snapshots and subscriptions plug directly into React `useSyncExternalStore`, Vue refs, Svelte stores, or a custom renderer.
-- `@hyperfocus/engine/ui` owns the optional zero-dependency DOM renderer, MMO shell widgets, one-open panels, roving focus, dialogs/tooltips, and small theme/control token helpers. Pass a shared controller into `createMmoUiShell` to use the default renderer. Game screens still own markup, copy, layout, and brand palette. See [framework UI integration](./docs/framework-ui.md).
-- `@hyperfocus/engine/assets/loader` owns lazy task start, weighted progress snapshots, smoothed visible progress, RAF-driven loader rendering, and optional Canvas or DOM loader shells. Games still own asset IDs, paths, labels, fallbacks, and which bundles load before play versus in the background.
-- `@hyperfocus/engine/assets/templates` owns internal template bitmap lookup only. Its embedded images are the package-owned, mechanically generated one-pixel swatches described above; no third-party artwork is present. General licensing and publishing prerequisites are tracked in the licensing model and release TODO.
-
-Post-processing tiers are deliberately blunt. `overlay` effects draw with normal canvas commands or compositing and do not require pixel readback. `pixel` effects share one stack-level `getImageData` and `putImageData` pass but still touch every pixel. `distortion` effects perform dedicated source-to-output canvas passes and should stay rare, opt-in, and guarded by a game-local budget. WASM is valid for post-processing only when the work is a deterministic buffer kernel over typed arrays and JS still owns Canvas readback/submission.
-
-Stable post-processing API is the stack, cost/budget readback, deterministic pixel filters, `screenShake`, and `crtScanlines`. Prototype helpers moved off root into `@hyperfocus/engine/post-processing/prototype`; old root imports for `bloom`, `pixelate`, `glitch`, and related prototype effects should switch to that subpath. `flashbang` has migrated-game proof in `bubble-cluster` and `breakout` but remains prototype; blur, glow, flare, flicker, chromatic, motion, radial, distortion, and haze effects remain candidate-only until migrated-game proof shows smaller call sites with timing, intensity, readability, HUD, audio, art, and rules still owned by the game. A failed fit audit is not promotion evidence: if a candidate only matches a shader/composer pipeline, positional game art, CSS presentation, one-off timing behavior, or local impact-ring presentation, keep that effect prototype or game-local instead of widening the engine surface. `bloom`, `lensFlare`, `starStreak`, `pixelate`, `shockwaveDistortion`, and `glitch` are currently marked as failed fits because the inspected candidates were placeholder Three.js composer/shader passes, game-local positional glows or impact rings, CSS pixel presentation, or absent from real browser-game call sites, not smaller reusable 2D canvas call sites.
+The root entry provides browser lifecycle, canvas, input, camera, and common game
+primitives. `@hyperfocus/engine/core` provides deterministic DOM-free helpers;
+focused subpaths own rendering, projects, audio, motion, physics, and server work.
+See the [public API reference](docs/public-api.md) for helper contracts and ownership.
 
 ## WASM Boundary
 
-WASM is for deterministic, CPU-heavy, batchable hot paths that operate on numeric buffers and minimize JS/WASM boundary crossings. `collision-kernel.scalar.wasm` is generated from the scalar AssemblyScript source without SIMD; `collision-kernel.simd.wasm` is generated from the SIMD source with SIMD enabled. `collision-kernel.wasm` is a scalar compatibility artifact for consumers that pass one explicit legacy URL.
-
-AssemblyScript is the current kernel source. Both shipped production variants own equivalent batched collision, movement integration, rotation, range filtering, and overlap-mask APIs, while TypeScript owns memory views, fallback behavior, support detection, dispatch, and parity checks. The browser spike instantiates the distinct artifacts into equivalent resident arenas so SIMD attribution does not accidentally compare two exports from one binary. Future kernels may cover culling, transform prep, y-sort keys, AOI masks, projectile simulation, status ticking, server tick math, DSP, or pixel buffers when typed inputs are isolated and benchmarks prove the win. The module should write batch masks or transformed values into caller-owned arrays and should not own DOM, Canvas API submission, Web Audio graph orchestration, assets, timers, browser scheduling, sockets, async loading, random game state, authored content, or one-off scripts.
-
-The editor collision diagnostic measures TypeScript, copied WASM, and resident
-WASM separately. Its portable evidence is the resident arena size, equal output
-mask/hit counts, and zero host bytes inside the resident timed loop; its p95 values
-remain machine-specific calibration.
-
-`createWasmMemoryArena(options)` owns one exclusive module-memory lease at a time,
-grows geometrically unless fixed, refreshes cached views when `memory.buffer`
-changes, and exposes an epoch plus explicit `release()`. It never publishes a raw
-view across growth, and reuses one lease handle instead of allocating a handle and
-method closures per batch. Set `maximumCapacityBytes` when batches can contain
-untrusted or variable counts so oversized leases fail before calling the module
-allocator. Use the arena when a host and a numeric module can share resident storage;
-ordinary JS-owned batches still pay their explicit copy boundary.
-
-`createBinaryProtocolParser(options)` resolves safe copied or advanced borrowed
-input ownership once. Borrowed payload views exist only for the synchronous
-`codec.decode` call and must not be retained; codecs with `decodeRange` can consume
-the source offset/length without constructing a payload view at all. Reusable
-numeric readers keep one `DataView` per backing buffer. Authoritative servers expose
-the same choice as `binaryInputPayloadOwnership`; `copy` is the baseline.
-
-Package consumers can use the default `createCollisionKernel()` path when the package layout is hosted as emitted, because the engine resolves the sibling `.simd.wasm` and `.scalar.wasm` artifacts from the browser ESM build. Bundlers that rewrite asset URLs can import both explicit variant URL subpaths and pass `simdUrl` plus `scalarUrl`; passing one `url` intentionally selects that custom artifact. Native static hosts should serve WASM with `application/wasm` for streaming instantiation; when MIME type, CSP, hosting, or non-browser runtime constraints block the assets, the kernel uses the deterministic TypeScript fallback. Fallback remains quiet by default for games; pass `onFallback` when package setup needs fetch, instantiation, variant, or export-shape diagnostics.
+JavaScript owns browser orchestration; WASM handles measured, deterministic numeric
+batches with a TypeScript fallback. See [WASM boundary](docs/public-api.md#wasm-boundary)
+for memory ownership, asset resolution, dispatch, and diagnostics.
 
 ## Migration Pattern
 
-Games import the browser build:
+Package consumers import the public entry:
 
 ```js
 import {
@@ -404,7 +388,10 @@ import {
 } from "../../packages/engine/browser/engine.js";
 ```
 
-Keep game-specific logic inside `./games/<slug>/`. Move only repeated, deterministic, browser-agnostic primitives into `packages/engine`.
+Keep game-specific logic in the consuming project; repository proof games live under
+`packages/engine/examples/`. Direct browser examples resolve the checked-in
+`packages/engine/browser/engine.js` relative to their own HTML or module location.
+Move only repeated, deterministic, browser-agnostic primitives into the shared engine.
 
 ## MMO Skill Demo Migration
 

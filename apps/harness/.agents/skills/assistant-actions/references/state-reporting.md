@@ -1,42 +1,24 @@
-# State Reporting
+# State reporting
 
-Use for deterministic answers about what an assistant has queued, open, learned, logged, or scheduled.
+Read current saved state before answering what is queued, open, learned, or failed:
 
-## Script First
-
-Run:
-
-```powershell
-bun.cmd .agents/skills/assistant-actions/scripts/assistant-state.ts --assistant "<name-or-id>" --project "<project-name-or-id>" --limit 10
+```text
+bun "<skill>/scripts/assistant-state.ts" --assistant "<assistant>" --project "<project>" --limit 10
 ```
 
-Use `--json` for automation:
+`<skill>` is the installed skill directory. Use `--json` for structured output.
+Answer the requested question with persisted facts; no saved rows does not mean
+the assistant has hidden work.
 
-```powershell
-bun.cmd .agents/skills/assistant-actions/scripts/assistant-state.ts --assistant "<name-or-id>" --json
-```
+After a mutation, verify its affected records:
 
-## Summaries
+| Action | Evidence |
+| --- | --- |
+| Create, edit, clone, pause, resume, recover | Assistant row and relevant recent logs |
+| Chat | Assistant messages and completion event if visible |
+| Question answer | Question status and linked todo/log changes |
+| Todo update | Todo state and reprioritization result |
+| Job create, run, pause, resume | Job definition, run rows, and next run time as applicable |
 
-Prioritize:
-
-1. Assistant run state, bootstrap state, and circuit breaker.
-2. Pending or blocked todos.
-3. Pending questions.
-4. Queued/running/recent failed jobs.
-5. Recent learnings.
-6. Recent error or critical logs.
-
-## Handoff Checks
-
-After a mutation, verify the matching rows:
-
-- Assistant create/update/clone/pause/resume/recover: assistant row plus latest logs.
-- Chat: assistant messages and `assistant.chat.complete` event if visible.
-- Question answer: question status and linked todo/log changes.
-- Todo update: todo state and reprioritize log.
-- Job create/run/pause/resume: `backgroundJobs`, `backgroundJobRuns`, and next run time.
-
-## Answer Style
-
-State what is known from persistence. If no rows exist, say no saved rows were found. Do not infer hidden work from prompts alone.
+Distinguish a requested/queued operation from finished work. Include pending
+questions, breaker state, or failures when they explain the user's result.

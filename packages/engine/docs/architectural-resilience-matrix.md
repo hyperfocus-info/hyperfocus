@@ -4,6 +4,13 @@ This matrix records the implementation state of the 50 resilience and experiment
 
 ## Standard omissions
 
+The [2026-09-09 adversarial audit](editor-engine-adversarial-audit.md) qualifies
+these primitive-level statuses with open integration and boundary failures.
+In particular, browser transaction concurrency/quota and actual process-kill
+recovery remain unverified; interrupted direct-driver accumulation can exceed the
+ordinary fixed-step work ceiling; renderer recovery does not yet propagate to
+video delivery. A shipped primitive is not proof of every caller's failure path.
+
 | # | Status | Engine coverage |
 |---:|---|---|
 | 1 | Shipped | Canvas bootstrap listens for context loss/restoration, exposes recovery callbacks, and provides `recoverContext()` so games can rehydrate atlases, images, and fonts. |

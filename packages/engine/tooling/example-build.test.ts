@@ -49,3 +49,17 @@ test("successful example builds replace stale output as one directory", async ()
   expect(existsSync(join(outdir, "stale.js"))).toBe(false);
   expect(readdirSync(root).filter((name) => name.includes(".staging-") || name.includes(".backup-"))).toEqual([]);
 });
+
+test('dependent app builds remain available until every staged output succeeds', async () => {
+  const root=mkdtempSync(join(tmpdir(),'engine-compound-build-'));temporaryRoots.push(root);
+  const outdir=join(root,'dist'),entry=join(root,'main.ts');
+  await Bun.write(entry,'export const ready=true');await Bun.write(join(outdir,'examples/main.js'),'previous');
+  const bundles=[{entrypoints:[entry],target:'browser' as const,expectedOutputs:['main.js']}];
+  await expect(buildExampleBundles('Compound',outdir,bundles,async staging=>{
+    expect(await Bun.file(join(outdir,'examples/main.js')).text()).toBe('previous');
+    await Bun.write(join(staging,'examples/main.js'),'incomplete');throw new Error('Dependent build failed');
+  })).rejects.toThrow('Dependent build failed');
+  expect(await Bun.file(join(outdir,'examples/main.js')).text()).toBe('previous');
+  await buildExampleBundles('Compound',outdir,bundles,async staging=>{await Bun.write(join(staging,'examples/main.js'),'complete');});
+  expect(await Bun.file(join(outdir,'examples/main.js')).text()).toBe('complete');
+});

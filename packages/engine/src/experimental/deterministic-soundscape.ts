@@ -1,3 +1,4 @@
+import { clampLowerFirst } from "@hyperfocus/utilities/math";
 export interface DeterministicSoundscapeOptions {
   seed: number | string;
   sampleRate?: number;
@@ -95,4 +96,4 @@ function positiveFinite(value: number, label: string): number {
   return value;
 }
 
-function clamp(value: number): number { return Math.max(-1, Math.min(1, value)); }
+function clamp(value: number): number { return clampLowerFirst(value, -1, 1); }

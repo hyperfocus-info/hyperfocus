@@ -1,3 +1,4 @@
+import { isPlainRecord as isRecord } from "@hyperfocus/utilities/records";
 import {
   isFiniteQuaternion,
   isFiniteVector3,
@@ -240,11 +241,7 @@ const jointLimitKeys: readonly (keyof T3RigJointLimitOverride)[] = ["maxSwingRad
 
 const unsafeRecordKeys = new Set(["__proto__", "constructor", "prototype"]);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
   if (!isRecord(value)) throw new TypeError(`${label} must be a plain object`);

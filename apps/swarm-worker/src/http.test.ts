@@ -1,0 +1,36 @@
+import { afterEach, expect, test } from "bun:test";
+import { createServer } from "node:http";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { createRailwayExecutionProvider } from "@hyperfocus/ai-runtime/swarm";
+import { createWorkspaceRegistry } from "./registry";
+import { createRailwayWorkerService } from "./service";
+import { createWorkerHttpHandler } from "./http";
+import { fakeRailway } from "./test-support";
+
+const cleanup: Array<() => Promise<void>> = [];
+afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
+test("real HTTP boundary authenticates, streams, reconnects ownership and propagates client cancellation", async () => {
+  const root = resolve(import.meta.dir, "../../../.local"); await mkdir(root, { recursive: true });
+  const directory = await mkdtemp(join(root, "swarm-http-test-")); cleanup.push(() => rm(directory, { recursive: true, force: true }));
+  const registry = await createWorkspaceRegistry({ file: join(directory, "registry.json") }), fake = fakeRailway();
+  const service = createRailwayWorkerService({ registry, sdk: fake.sdk, token: "hidden-token", environmentId: "environment", allowedRepositories: ["https://example.com/repo.git"] });
+  const token = "test-only-bridge-token-32-characters";
+  const server = createServer(createWorkerHttpHandler({ service, token }));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  cleanup.push(() => new Promise<void>((resolve, reject) => { server.closeAllConnections(); server.close(error => error ? reject(error) : resolve()); }));
+  const address = server.address(); if (!address || typeof address === "string") throw new Error("Expected a TCP listener.");
+  const url = `http://127.0.0.1:${address.port}`;
+  expect((await fetch(url + "/health")).status).toBe(200);
+  expect((await fetch(url + "/v1/list", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(401);
+  const provider = createRailwayExecutionProvider({ url, token });
+  const workspace = await provider.createWorkspace({ swarmId: "swarm", taskId: "baseline", source: { revision: "a".repeat(40), repositoryUrl: "https://example.com/repo.git" }, resources: { cpu: 2, memoryGB: 2 }, lane: "investigation" });
+  const output: string[] = [], sessions: string[] = [];
+  const result = await provider.execute({ workspace, task: { id: "test", command: "success", timeoutMs: 1000 }, onOutput: event => output.push(event.text), onSession: session => sessions.push(session) });
+  expect(result.exitCode).toBe(0); expect(output).toEqual(["remote output\n"]); expect(sessions).toEqual(["durable-session"]);
+  expect(await provider.listWorkspaces()).toHaveLength(1);
+  const controller = new AbortController();
+  const execution = provider.execute({ workspace, task: { id: "cancel", command: "wait", timeoutMs: 1000 }, signal: controller.signal, onSession: () => controller.abort(new Error("cancelled")) });
+  await expect(execution).rejects.toThrow();
+  await provider.destroyWorkspace({ workspaceId: workspace.id }); expect(await provider.listWorkspaces()).toHaveLength(0);
+});

@@ -507,3 +507,7 @@ function relocationTargetsFor(chunk: ChunkScore, allChunks: ChunkScore[]) {
     .slice(0, 3)
     .map((entry) => `${entry.candidate.index} (${entry.candidate.id})`);
 }
+
+export function escapeCell(value: string) {
+  return value.replace(/\|/g, "/");
+}

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHyperfocusProjectFiles } from "../src/project/index.ts";
-import { createStarterProject } from "../tooling/create-project.ts";
+import { createStarterProject } from "../tooling/create-project-runtime.ts";
 import { auditNeutralExport, exportNeutralProject, neutralExportCliHelp, parseNeutralExportManifest } from "./export-project.ts";
 import { parseNeutralExportProject } from "../src/project/neutral-export.ts";
 

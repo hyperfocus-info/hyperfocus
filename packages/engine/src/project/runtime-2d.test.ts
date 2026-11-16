@@ -4,10 +4,12 @@ import {
   auditPlayableProject,
   createPlayableBehaviorComponentValues2D,
   definePlayableBehavior2D,
+  isBuiltinPlayableBehavior2D,
+  isPlayablePostEffect2D,
   playableBehaviorDefinition2D
-} from "./runtime-2d-support.ts";
-import type { PlayableProject2D, PlayableWorldSnapshot } from "./runtime-2d-contracts.ts";
-import { createPlayableWorld } from "./runtime-world-2d.ts";
+} from "./runtime2d/runtime-2d-support.ts";
+import type { PlayableProject2D, PlayableWorldSnapshot } from "./runtime2d/runtime-2d-contracts.ts";
+import { createPlayableWorld } from "./runtime2d/runtime-world-2d.ts";
 
 function emptyMapProject() {
   const project = createDefaultProject("Runtime Test");
@@ -21,7 +23,7 @@ describe("portable playable runtime", () => {
     const fromBinding = createPlayableWorld(emptyMapProject());
     fromAction.step({ actions: ["move-right"] });
     fromBinding.step({ bindings: ["KeyD"] });
-    expect(fromAction.getEntity("player-01")?.x).toBeCloseTo(320 + 220 / 60, 10);
+    expect(fromAction.getEntity("player-01")?.x).toBeCloseTo(323.6666666666667, 10);
     expect(fromBinding.snapshot()).toEqual(fromAction.snapshot());
   });
 
@@ -80,7 +82,7 @@ describe("portable playable runtime", () => {
     player.components.find((component) => component.type === "input")!.values.speed = 10_000;
     const world = createPlayableWorld(project);
     const result = world.step({ actions: ["move-right"] });
-    expect(world.getEntity(player.id)?.x).toBe(3 * 48 - player.width / 2);
+    expect(world.getEntity(player.id)?.x).toBe(144 - player.width / 2);
     expect(result.collisions).toEqual([{ entityId: player.id, axis: "x", kind: "tile", tileColumn: 3, tileRow: 2 }]);
   });
 
@@ -115,6 +117,13 @@ describe("portable playable runtime", () => {
     expect(world.getEntity(sentinel.id)?.x).toBe(origin + 1);
     world.step();
     expect(world.getEntity(sentinel.id)?.x).toBe(origin);
+  });
+
+  test("publishes the exact built-in behavior and post-effect capabilities used by release lanes", () => {
+    expect(isBuiltinPlayableBehavior2D("builtin:ambient-motion")).toBe(true);
+    expect(isBuiltinPlayableBehavior2D("builtin:future")).toBe(false);
+    expect(isPlayablePostEffect2D("crt")).toBe(true);
+    expect(isPlayablePostEffect2D("bloom")).toBe(false);
   });
 
   test("switches scenes and round-trips deterministic snapshots", () => {

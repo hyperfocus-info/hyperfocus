@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import {
   MOTION_GRAPH_SCHEMA_VERSION,
   motionPassOrder,
@@ -14,9 +15,7 @@ function compareCodeUnits(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function isStringArray(values: unknown[]): values is string[] {
   return values.every((entry) => typeof entry === "string");

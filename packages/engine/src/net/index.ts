@@ -11,6 +11,8 @@ export {
   type PeerSendResult
 } from "./peer-group.ts";
 export { createMemoryPeerGroup, type MemoryPeerGroupOptions } from "./memory-peer-group.ts";
+export { createRollbackParticipant, hashRollbackState, type RollbackParticipant } from '../runtime/combat-rollback/checkpoint.ts';
+export { createCombatRollbackSession, type CombatRollbackOptions } from '../runtime/combat-rollback/session.ts';
 export { createMultiplayer, type MultiplayerOptions, type MultiplayerSession } from "./multiplayer.ts";
 export {
   connectAuthoritative,

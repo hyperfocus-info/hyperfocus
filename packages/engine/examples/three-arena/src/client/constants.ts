@@ -19,7 +19,7 @@ export const MINIMAP_MAX_ENEMIES = 180;
 export const HUD_UPDATE_INTERVAL = 0.12;
 export const TELEMETRY_UPDATE_INTERVAL = 0.5;
 export const TELEMETRY_SAMPLE_COUNT = 360;
-export const TELEMETRY_FRAME_BUDGET_MS = 1000 / 60;
+export const TELEMETRY_FRAME_BUDGET_MS = 16.666666666666668;
 export const TELEMETRY_PHASE_NAMES = [
   "pollGamepad",
   "wave",

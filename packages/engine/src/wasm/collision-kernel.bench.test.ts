@@ -8,7 +8,7 @@ import {
 } from "./collision-kernel.ts";
 
 type CircleRectFixture = readonly [cx: number, cy: number, radius: number, rx: number, ry: number, rw: number, rh: number];
-const BENCHMARK_SCRATCH_BYTES = 256 * 1024;
+const BENCHMARK_SCRATCH_BYTES = 262144;
 
 function mockFetch(handler: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>) {
   return Object.assign(handler, { preconnect: globalThis.fetch.preconnect });

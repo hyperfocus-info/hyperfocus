@@ -1,4 +1,5 @@
 import type { ChatMessage, MemorySummary, ModeDefinition, ProjectId, ProjectThreadSummary, ThreadId, WorkspaceProjectState, WorkspaceRuleSource } from "@hyperfocus/ai-core/protocol";
+import { readThreadLineage } from "../../thread-collaboration";
 import type { MessageRow, ProjectModeRow, ProjectRow, ThreadRow, WorkspaceModeRow, WorkspaceRepositoryContext } from "../contracts";
 import type { WorkspaceMigrationSupportOperationsSet } from "./migration-support";
 import type { WorkspaceProjectPageRow, WorkspaceThreadPageRow } from "../../workspace-pagination";
@@ -167,7 +168,8 @@ export function createWorkspaceProjectReadsOperations3(context: WorkspaceReposit
             lastMessagePreview: preview ? summarizeMessagePreview(preview) : undefined, createdAt: normalizeOptionalString(thread.created_at, 256),
             lastUserMessageAt: normalizeOptionalString(lastUserMessageAt, 256),
             archivedAt: normalizeOptionalString(thread.archived_at, 256), updatedAt: normalizeRequiredString(thread.updated_at, 256, new Date().toISOString()),
-            forkedFromThreadId: thread.forked_from_thread_id ?? undefined
+            forkedFromThreadId: thread.forked_from_thread_id ?? undefined,
+            lineage: readThreadLineage(db, thread.id, thread.forked_from_thread_id)
           });
         } catch (error) {
           throw createThreadLoadError(projectId, thread.id, error);

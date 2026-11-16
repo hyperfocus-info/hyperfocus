@@ -1,21 +1,24 @@
 # Operation Handoffs
 
-Use this as the canonical bridge from project chat intent to harness action. If a branch doc conflicts with this table, this table wins.
+Use this mapping for exact project-chat shapes and live Harness actions. Action
+names are contracts, not automatically available tools: use an exposed Harness
+action, the corresponding UI, or a bundled helper. If none is available, report
+that limitation rather than constructing an unverified database mutation.
 
 ## State Lookup
 
 Always verify state before answering status or after a mutation:
 
 ```powershell
-bun.cmd .agents/skills/assistant-actions/scripts/assistant-state.ts --assistant "<name-or-id>" --project "<project-name-or-id>" --limit 10
+bun "<skill>/scripts/assistant-state.ts" --assistant "<name-or-id>" --project "<project-name-or-id>" --limit 10
 ```
 
-Use `--json` when another script or automation needs the result.
+`<skill>` is the installed skill directory. Use `--json` for structured results.
 
 For destructive assistant maintenance, dry-run before `--execute`:
 
 ```powershell
-bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action remove-jobs --assistant "<name-or-id>" --project "<project-name-or-id>"
+bun "<skill>/scripts/assistant-maintenance.ts" --action remove-jobs --assistant "<name-or-id>" --project "<project-name-or-id>"
 ```
 
 ## Project-Chat Handoffs
@@ -53,12 +56,6 @@ When creating an assistant-owned job from project chat, use this exact shape:
 
 ```text
 schedule <assistant name> to <one clear job prompt> every <interval, datetime, or cron text>
-```
-
-Example:
-
-```text
-schedule Kojima to research one arcade-game design topic and save durable learnings every 15m
 ```
 
 Expected result:

@@ -1,3 +1,4 @@
+import { clamp01Or as clampUnit } from "@hyperfocus/utilities/math";
 import { type MmoSkillDemoState, type NpcEntity, type ZoneId } from "../shared-contracts.ts";
 
 export type GatheringMaterialTier = 1 | 2 | 3 | 4 | 5;
@@ -224,10 +225,7 @@ export const gatheringHazardProfiles = {
   }
 } as const;
 
-function clampUnit(value: number) {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, value));
-}
+
 
 function sampleUnit(rng: GatheringHazardRng) {
   const value = Number(rng());

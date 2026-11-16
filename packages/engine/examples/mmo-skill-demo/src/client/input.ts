@@ -186,3 +186,15 @@ export function createHeldNpcInteractionGate() {
     }
   };
 }
+
+export function actionForKeyCode(code: string): MmoSkillDemoInput["action"] | "" {
+  if (code === "Mouse0") return "lmb";
+  if (code === "Mouse2") return "rmb";
+  if (code === "Digit1") return "lmb";
+  if (code === "Digit2") return "rmb";
+  if (code === "Space") return "space";
+  if (code === "KeyQ") return "q";
+  if (code === "KeyE") return "e";
+  if (code === "KeyR") return "r";
+  return "";
+}

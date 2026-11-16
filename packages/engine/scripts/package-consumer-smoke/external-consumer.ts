@@ -1,8 +1,9 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { requiredConsumerFiles } from "./required-files.ts";
+import { resolveConsumerPeers, runConsumerCommand } from "./peers.ts";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { $ } from "bun";
+import { verifyAuthoringConsumer } from "./authoring-consumer.ts";
 import { readPackedFilePaths, readTarballFilename } from "../smoke/json-boundaries.ts";
 import { rootBrowserSubpathOnlyValueExports } from "../declaration-hygiene.ts";
 import {
@@ -10,114 +11,20 @@ import {
   bunCommand,
   expectedBrowserPackageFiles,
   expectedPackageFiles,
-  findAncestorTool,
   npmCommand,
   rootDir,
 } from "./core.ts";
 
 const packDir = mkdtempSync(join(tmpdir(), "catalog-engine-pack-"));
 try {
-  const packOutput = await $`${npmCommand} pack --dry-run --json --pack-destination ${packDir}`.cwd(rootDir).text();
+  const packOutput = await runConsumerCommand([npmCommand, "pack", "--dry-run", "--json", "--pack-destination", packDir], rootDir);
   const packedFiles = new Set(readPackedFilePaths(packOutput));
 
   for (const path of expectedBrowserPackageFiles) {
     assert(packedFiles.has(path), `package tarball would omit reachable browser artifact ${path}`);
   }
 
-  for (const path of [
-    "package.json",
-    "browser/engine.js",
-    "dist/src/index.d.ts",
-    "dist/core.js",
-    "dist/src/core.d.ts",
-    "dist/wasm-runtime.js",
-    "dist/src/wasm/index.d.ts",
-    "dist/experimental.js",
-    "dist/src/experimental/index.d.ts",
-    "dist/net.js",
-    "dist/src/net/index.d.ts",
-    "dist/protocol.js",
-    "dist/src/protocol/index.d.ts",
-    "dist/server.js",
-    "dist/src/server/index.d.ts",
-    "dist/mmo.js",
-    "dist/src/mmo/index.d.ts",
-    "dist/render.js",
-    "dist/src/render/index.d.ts",
-    "dist/render-3d.js",
-    "dist/src/render/3d.d.ts",
-    "dist/render-3d-core.js",
-    "dist/src/render/3d-core.d.ts",
-    "dist/render-3d-scene.js",
-    "dist/src/render/3d-scene.d.ts",
-    "dist/render-3d-webgl2.js",
-    "dist/src/render/3d-webgl2.d.ts",
-    "dist/physics-3d.js",
-    "dist/src/physics/3d.d.ts",
-    "dist/physics-2d.js",
-    "dist/src/physics/2d.d.ts",
-    "dist/physics-rigid-3d.js",
-    "dist/src/physics/rigid-3d.d.ts",
-    "dist/motion.js",
-    "dist/src/motion/index.d.ts",
-    "dist/motion-three.js",
-    "dist/src/motion/three.d.ts",
-    "dist/migrations.js",
-    "dist/src/migrations/index.d.ts",
-    "dist/project.js",
-    "dist/src/project/index.d.ts",
-    "dist/project-runtime-2d.js",
-    "dist/src/project/runtime-2d.d.ts",
-    "dist/project-runtime-timeline-2d.js",
-    "dist/src/project/runtime-timeline-2d.d.ts",
-    "dist/project-runtime-navigation-2d.js",
-    "dist/src/project/runtime-navigation-2d.d.ts",
-    "dist/project-runtime-save-2d.js",
-    "dist/src/project/runtime-save-2d.d.ts",
-    "dist/project-runtime-story-2d.js",
-    "dist/src/project/runtime-story-2d.d.ts",
-    "dist/project-runtime-3d.js",
-    "dist/src/project/runtime-3d.d.ts",
-    "dist/project-filesystem.js",
-    "dist/src/project/filesystem.d.ts",
-    "dist/project-neutral-export.js",
-    "dist/src/project/neutral-export.d.ts",
-    "dist/navigation.js",
-    "dist/src/navigation/index.d.ts",
-    "dist/content.js",
-    "dist/src/content/index.d.ts",
-    "dist/save.js",
-    "dist/src/save/index.d.ts",
-    "dist/save-browser.js",
-    "dist/src/save/browser.d.ts",
-    "dist/audio.js",
-    "dist/src/audio/index.d.ts",
-    "dist/effects.js",
-    "dist/src/effects/index.d.ts",
-    "dist/ui.js",
-    "dist/src/ui/index.d.ts",
-    "dist/ui-core.js",
-    "dist/src/ui/core.d.ts",
-    "dist/assets/loader.js",
-    "dist/src/assets/loader.d.ts",
-    "dist/assets/gltf-static.js",
-    "dist/src/assets/gltf-static.d.ts",
-    "dist/assets/gltf-skin-animation.js",
-    "dist/src/assets/gltf-skin-animation.d.ts",
-    "dist/assets/templates.js",
-    "dist/src/assets/templates/index.d.ts",
-    "dist/post-processing-prototype.js",
-    "dist/src/canvas/post-processing-prototype.d.ts",
-    "docs/architectural-resilience-matrix.md",
-    "docs/schema/editor-project-v2.schema.json",
-    "docs/licensing-model.md",
-    "wasm/collision-kernel.wasm",
-    "wasm/collision-kernel.wasm.d.ts",
-    "wasm/collision-kernel.scalar.wasm",
-    "wasm/collision-kernel.simd.wasm",
-    "readme.md",
-    "third-party-notices.md",
-  ]) {
+  for (const path of requiredConsumerFiles) {
     assert(packedFiles.has(path), `package tarball would omit ${path}`);
   }
 
@@ -129,7 +36,8 @@ try {
   const unexpectedPackedFiles = [...packedFiles].filter(
     (path) =>
       !allowedPackedFiles.has(path) &&
-      !(path.startsWith("dist/src/") && (path.endsWith(".d.ts") || path.endsWith(".d.ts.map"))),
+      !(path.startsWith("dist/src/") && (path.endsWith(".d.ts") || path.endsWith(".d.ts.map"))) &&
+      !path.startsWith("dist/tooling/") && !path.startsWith("dist/scripts/"),
   );
   assert(
     unexpectedPackedFiles.length === 0,
@@ -141,28 +49,11 @@ try {
 
   const consumerDir = mkdtempSync(join(tmpdir(), "catalog-engine-consumer-"));
   try {
-    const tarballOutput = await $`${npmCommand} pack --json --pack-destination ${packDir}`.cwd(rootDir).text();
+    const tarballOutput = await runConsumerCommand([npmCommand, "pack", "--json", "--pack-destination", packDir], rootDir);
     const tarballPath = join(packDir, readTarballFilename(tarballOutput));
-    const tscPath = findAncestorTool(rootDir, join("node_modules", ".bin", process.platform === "win32" ? "tsc.exe" : "tsc"));
-    const threePath = join(rootDir, "node_modules", "three");
-    const threeTypesPath = join(rootDir, "node_modules", "@types", "three");
-    const threeTypesRequire = createRequire(join(realpathSync(threeTypesPath), "package.json"));
-    const localPeerPackages = {
-      three: threePath,
-      "@types/three": threeTypesPath,
-      "@tweenjs/tween.js": dirname(threeTypesRequire.resolve("@tweenjs/tween.js/package.json")),
-      "@types/stats.js": dirname(threeTypesRequire.resolve("@types/stats.js/package.json")),
-      "@types/webxr": dirname(threeTypesRequire.resolve("@types/webxr/package.json")),
-      fflate: dirname(threeTypesRequire.resolve("fflate/package.json")),
-      meshoptimizer: dirname(threeTypesRequire.resolve("meshoptimizer/package.json")),
-    };
-
-    assert(tscPath, "local TypeScript install is required for offline consumer typecheck");
-    assert(existsSync(threePath), "local Three.js install is required for the offline render/3d consumer");
-    assert(existsSync(threeTypesPath), "local Three.js type install is required for the offline render/3d consumer");
-    for (const [packageName, packagePath] of Object.entries(localPeerPackages)) {
-      assert(existsSync(packagePath), `local ${packageName} install is required for the offline render/3d type consumer`);
-    }
+    const utilitiesOutput = await runConsumerCommand([npmCommand, "pack", "--json", "--pack-destination", packDir], join(rootDir, "..", "utilities"));
+    const utilitiesTarball = join(packDir, readTarballFilename(utilitiesOutput));
+    const { tscPath, localPeerPackages } = resolveConsumerPeers({ rootDir });
 
     writeFileSync(
       join(consumerDir, "package.json"),
@@ -171,6 +62,7 @@ try {
           type: "module",
           dependencies: {
             "@hyperfocus/engine": tarballPath,
+            "@hyperfocus/utilities": utilitiesTarball,
           },
         },
         null,
@@ -206,6 +98,8 @@ try {
             "physics-3d-consumer.ts",
             "physics-2d-consumer.ts",
             "physics-rigid-3d-consumer.ts",
+            "physics-ragdoll-3d-consumer.ts",
+            "physics-physical-performance-3d-consumer.ts",
             "motion-consumer.ts",
             "motion-three-consumer.ts",
             "migrations-consumer.ts",
@@ -267,6 +161,8 @@ try {
             "physics-3d-consumer.ts",
             "physics-2d-consumer.ts",
             "physics-rigid-3d-consumer.ts",
+            "physics-ragdoll-3d-consumer.ts",
+            "physics-physical-performance-3d-consumer.ts",
             "motion-consumer.ts",
             "motion-three-consumer.ts",
             "migrations-consumer.ts",
@@ -303,6 +199,13 @@ try {
       join(consumerDir, "core-consumer.ts"),
       [
         'import { circleRectOverlap, createAabb, createCollisionBroadphase, createObjectPool, createStage, gridKey } from "@hyperfocus/engine/core";',
+        'import { createSimulationMailbox } from "@hyperfocus/engine/experimental/simulation-mailbox";',
+        'import { createTargetRayQuery3D } from "@hyperfocus/engine/experimental/target-rays";',
+        'const rays = createTargetRayQuery3D({ strategy: "axis-aligned", diagnostics: true });',
+        'if (!rays.test([3, 0, 0], [[0, 0, 0]], 1, { position: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }, 0) || rays.work.quaternionTransforms !== 0) throw Error("unexpected target-ray result");',
+        'let observed = ""; const mailbox = createSimulationMailbox<number, string>({ input: 0, nowMs: 0, stepMs: 10, maxCatchUpMs: 30, maxEvents: 2, advance: (input, events) => { observed += input + events.join(""); } });',
+        'mailbox.offer({ sequence: 1, sampledAtMs: 1, input: 7, events: ["tap"] }); const applied = mailbox.advance(10);',
+        'if (observed !== "7tap" || applied.appliedSequence !== 1 || mailbox.snapshot().pendingEvents !== 0) throw Error("unexpected simulation mailbox result"); mailbox.dispose();',
         "",
         "const key: string = gridKey({ x: 2, y: 3 });",
         "const hit: boolean = circleRectOverlap({ x: 0, y: 0, r: 4 }, { x: 2, y: 2, w: 8, h: 8 });",
@@ -608,9 +511,36 @@ try {
       ].join("\n"),
     );
     writeFileSync(
+      join(consumerDir, "physics-ragdoll-3d-consumer.ts"),
+      [
+        'import { createRagdollSystem3D } from "@hyperfocus/engine/physics/ragdoll-3d";',
+        'import { createRigidWorld3D } from "@hyperfocus/engine/physics/rigid-3d";',
+        "const world = createRigidWorld3D({ capacity: 2, gravityY: 0, maxConstraints: 2 });",
+        "const ragdolls = createRagdollSystem3D({ world });",
+        "ragdolls.add({ id: 'fighter', rootBoneId: 'hips', bodies: [{ boneId: 'hips', body: { shape: { kind: 'box', halfX: 0.3, halfY: 0.3, halfZ: 0.2 } } }, { boneId: 'torso', body: { shape: { kind: 'box', halfX: 0.3, halfY: 0.5, halfZ: 0.2 }, y: 0.8 } }], joints: [{ id: 'spine', parentBoneId: 'hips', childBoneId: 'torso', poseJointIndex: 0, localAnchorParent: [0, 0.3, 0], localAnchorChild: [0, -0.5, 0] }], initialPose: { rotations: [0, 0, 0, 1] } });",
+        "ragdolls.setMode('fighter', { mode: 'passive' });",
+        "ragdolls.step(1 / 60);",
+        "if (!ragdolls.body('fighter', 'hips')) throw new Error('unexpected ragdoll 3D result');",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(consumerDir, "physics-physical-performance-3d-consumer.ts"),
+      [
+        'import { compilePhysicalPerformance3D, preflightPhysicalPerformance3D } from "@hyperfocus/engine/physics/physical-performance-3d";',
+        "const compiled = compilePhysicalPerformance3D({ performance: { frameRate: 30, durationFrames: 2, ragdolls: [{ id: 'fighter', rootBoneId: 'hips', bodies: [{ boneId: 'hips', body: { shape: { kind: 'sphere', radius: 0.25 } } }], joints: [], initialPose: { rotations: [] } }], cues: [] } });",
+        "const output = new Float32Array(compiled.frameStride);",
+        "if (compiled.writeFrame(1, output) !== compiled.frameStride) throw new Error('unexpected physical performance result');",
+        "const performance = { frameRate: 30, durationFrames: 2, ragdolls: [{ id: 'body', rootBoneId: 'root', bodies: [{ boneId: 'root', body: { shape: { kind: 'sphere' as const, radius: .25 } } }], joints: [], initialPose: { rotations: [] } }], cues: [] };",
+        "if (JSON.stringify(preflightPhysicalPerformance3D({ performance }).bodyReferences) !== JSON.stringify([{ ragdollId: 'body', boneId: 'root' }])) throw new Error('installed preflight references failed');",
+        "let diagnosed = false; try { preflightPhysicalPerformance3D({ performance: { ...performance, outputs: [{ bodyId: 'missing' }] } }); } catch (error) { diagnosed = error instanceof Error && error.message === 'Physical body missing does not exist.'; } if (!diagnosed) throw new Error('installed preflight diagnostics failed');",
+      ].join("\n"),
+    );
+    writeFileSync(
       join(consumerDir, "render-3d-scene-consumer.ts"),
       [
         'import { createBoundedScene3D, createRenderCommandBuffer3D } from "@hyperfocus/engine/render/3d-scene";',
+        'import { MATERIAL_PRESETS_3D, materialPreset3D } from "@hyperfocus/engine/render/3d-material-presets";',
+        "if (!MATERIAL_PRESETS_3D.length || materialPreset3D(MATERIAL_PRESETS_3D[0]!.id).id !== MATERIAL_PRESETS_3D[0]!.id) throw new Error('material preset subpath failed');",
         "const scene = createBoundedScene3D({ transforms: 1, meshes: 1, materials: 1, lights: 0, instances: 1 });",
         "const transform = scene.transforms.create();",
         "const mesh = scene.registerMesh({ positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]) });",
@@ -618,13 +548,6 @@ try {
         "scene.createInstance({ mesh, material, transform });",
         "const commands = scene.compile(createRenderCommandBuffer3D({ commands: 1, instances: 1, lights: 0 }));",
         "if (commands.commandCount !== 1 || commands.instanceCount !== 1) throw new Error('unexpected first-party 3D scene result');",
-      ].join("\n"),
-    );
-    writeFileSync(
-      join(consumerDir, "render-3d-webgl2-consumer.ts"),
-      [
-        'import { createWebGl2Renderer3D, supportsWebGl2Renderer3D } from "@hyperfocus/engine/render/3d-webgl2";',
-        "if (typeof createWebGl2Renderer3D !== 'function' || supportsWebGl2Renderer3D() !== false) throw new Error('unexpected first-party WebGL2 surface');",
       ].join("\n"),
     );
     writeFileSync(
@@ -710,6 +633,11 @@ try {
       join(consumerDir, "gltf-static-consumer.ts"),
       [
         'import { cookGltfStaticMeshes, resolveGltfStaticBuffers } from "@hyperfocus/engine/assets/gltf-static";',
+        'import { cookStaticModel, cookPrimitiveModel, primitiveModelGeometry } from "@hyperfocus/engine/assets/model-cooking";',
+        'const generated = cookStaticModel({ label: "consumer triangle", positions: [0,0,0,1,0,0,0,1,0], normals: [0,0,1,0,0,1,0,0,1], indices: [0,1,2] });',
+        'if (new DataView(generated.buffer).getUint32(0, true) !== 0x46546c67 || typeof cookPrimitiveModel !== "function") throw new Error("model cooking export failed");',
+        'const measured = primitiveModelGeometry({ label: "calibrated box", parts: [["box",0,0,0,2,3,4,0,0,0]] });',
+        'const z = measured.positions.filter((_, i) => i % 3 === 2); if (Math.max(...z) - Math.min(...z) !== 8 || !measured.indices.length || measured.normals.length !== measured.positions.length) throw new Error("primitive geometry export failed");',
         "if (typeof cookGltfStaticMeshes !== 'function' || typeof resolveGltfStaticBuffers !== 'function') throw new Error('unexpected glTF cooker surface');",
       ].join("\n"),
     );
@@ -734,7 +662,7 @@ try {
       join(consumerDir, "project-consumer.ts"),
       [
         'import { HYPERFOCUS_ASSETS_PATH, HYPERFOCUS_PROJECT_PATH, createHyperfocusProjectFiles, openHyperfocusProjectFiles } from "@hyperfocus/engine/project";',
-        "",
+        'import { createStarterProject, type ProjectStarter } from "@hyperfocus/engine/tooling/create-project"; const starter: ProjectStarter = "top-down"; if (!createStarterProject(starter, "Public facade").scenes.length) throw new Error("Invalid starter facade");',
         "const source = new Uint8Array([1, 2, 3]);",
         "const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', source))).map((value) => value.toString(16).padStart(2, '0')).join('');",
         "const files = await createHyperfocusProjectFiles({ assets: [{ id: 'data', name: 'data.bin', mimeType: 'application/octet-stream', size: 3, sha256: digest }] }, [{ id: 'data', name: 'data.bin', bytes: source }]);",
@@ -789,9 +717,36 @@ try {
     writeFileSync(
       join(consumerDir, "project-runtime-3d-consumer.ts"),
       [
-        'import { auditHyperfocus3DProject, createHyperfocus3DRuntime, hasHyperfocus3DProject } from "@hyperfocus/engine/project/runtime-3d";',
+        'import { auditHyperfocus3DProject, createEntityInputLease3D, type EntityInputLease3D, createFrameRecordSelection, createHyperfocus3DRuntime, hasHyperfocus3DProject, presentCombatCamera3D, presentCombatObstructions3D, prepareEulerPointRotation3D, prepareEulerQuaternion3D } from "@hyperfocus/engine/project/runtime-3d";',
+        "const issued: EntityInputLease3D = createEntityInputLease3D([]);issued.revoke();",
+        "// @ts-expect-error A revoke method cannot forge the private lease brand.",
+        "const forged: EntityInputLease3D = { revoke() {} };void forged;",
+        "if (typeof presentCombatCamera3D !== 'function' || typeof presentCombatObstructions3D !== 'function') throw new Error('missing combat presentation hooks');",
         "const empty = { extensions: {} };",
-        "if (hasHyperfocus3DProject(empty) || auditHyperfocus3DProject(empty, []).length === 0 || typeof createHyperfocus3DRuntime !== 'function') throw new Error('unexpected portable 3D surface');",
+        "if (hasHyperfocus3DProject(empty) || auditHyperfocus3DProject(empty, []).length === 0 || typeof createHyperfocus3DRuntime !== 'function' || createFrameRecordSelection({ ids: ['actor'] })([{ id: 'actor' }])[0]?.id !== 'actor') throw new Error('unexpected portable 3D surface');",
+        "const rotate = prepareEulerPointRotation3D(0), point: [number, number, number] = rotate([1, 2, 3]);",
+        "const quaternion = prepareEulerQuaternion3D(0), rotation: [number, number, number, number] = quaternion(0);",
+        "point[0] = 9;rotation[3] = 0;if (rotate([1, 2, 3])[0] !== 1 || quaternion(0)[3] !== 1) throw new Error('prepared Euler output aliases a previous tuple');",
+        "if (false) {",
+        "// @ts-expect-error Prepared point rotations require exactly three components.",
+        "rotate([1, 2]);",
+        "// @ts-expect-error Prepared point rotations reject extra components.",
+        "rotate([1, 2, 3, 4]);",
+        "// @ts-expect-error Quaternion outputs retain their four-component contract.",
+        "const malformed: [number, number, number] = quaternion(0);",
+        "type Runtime = Awaited<ReturnType<typeof createHyperfocus3DRuntime>>;const runtime = null as unknown as Runtime;",
+        "runtime.acquireEndpointProducer({writableEntityIds:['actor']});",
+        "const entities: number = runtime.withSampledFrame({sample:{viewport:{width:800,height:600}},operation:frame=>frame.entities.length,contract:'declared-entity-writes'});",
+        "const reused: number|undefined = runtime.readEntityTrsJournalWork()?.numericReuses;void entities;void reused;",
+        "const shared = runtime.withSampledFrame({sample:{viewport:{width:800,height:600}},operation:frame=>frame,contract:'declared-entity-writes',entitySampling:'immutable-trs'});",
+        "const copies: number|undefined=runtime.readEntitySamplingWork()?.scalarCopies;void shared;void copies;",
+        "// @ts-expect-error Sharing requires a recognized explicit sampling strategy.",
+        "runtime.withSampledFrame({sample:{viewport:{width:800,height:600}},operation:frame=>frame,entitySampling:'mutable-pool'});",
+        "// @ts-expect-error Capture read-onlyness grants no TRS writer authority.",
+        "runtime.withSampledFrame({sample:{viewport:{width:800,height:600}},operation:frame=>frame,contract:'read-only'});",
+        "// @ts-expect-error Runtime sampler hooks are private to the owning journal.",
+        "runtime.sampleFrame({viewport:{width:800,height:600},onEntitySample:()=>{}});",
+        "}",
       ].join("\n"),
     );
     writeFileSync(
@@ -811,7 +766,13 @@ try {
     writeFileSync(
       join(consumerDir, "navigation-consumer.ts"),
       [
-        'import { createGridNavigator } from "@hyperfocus/engine/navigation";',
+        'import { createGridNavigator, createActorAutonomy } from "@hyperfocus/engine/navigation";',
+        "const escort = createActorAutonomy({ columns: 8, rows: 1, seed: 1, actors: [{ id: 'helper', cell: 0, helping: 1, preservation: .01 }, { id: 'hurt', cell: 1, endangered: true }] });",
+        "for (let i = 0; i < 600; i++) escort.step({ threats: [{ id: 'danger', cell: 0, strength: 1 }], resources: [], exits: [{ id: 'exit', cell: 7, safeCells: [6, 7] }], supports: i ? [{ helper: 'helper', recipient: 'hurt' }] : [] });",
+        "if (!escort.snapshot().actors.every(a => a.arrived) || escort.snapshot().searches > 40) throw new Error('installed escort failed');",
+        "escort.step({ threats: [], resources: [], exits: [{ id: 'exit', cell: 7, safeCells: [6, 7] }] });",
+        "escort.clearArrival('helper'); escort.clearArrival('hurt');",
+        "if (!escort.snapshot().actors.every(a => a.cleared)) throw new Error('installed exit clearance failed');",
         "const output = new Int32Array(4);",
         "const result = createGridNavigator({ columns: 2, rows: 2 }).findPath(0, 3, output);",
         "if (result.status !== 'found' || output[0] !== 0 || output[result.length - 1] !== 3) throw new Error('unexpected navigation result');",
@@ -853,13 +814,15 @@ try {
     writeFileSync(
       join(consumerDir, "effects-consumer.ts"),
       [
-        'import { PARTICLE_INSTANCE_STRIDE, createParticleEmitter2D, createTimeline } from "@hyperfocus/engine/effects";',
+        'import { PARTICLE_INSTANCE_STRIDE, createParticleEmitter2D, createTimeline, createParticleSystem3D } from "@hyperfocus/engine/effects";',
         "const values = new Float64Array(1);",
         "createTimeline({ duration: 1, tracks: [{ id: 'x', keyframes: [{ time: 0, value: 0 }, { time: 1, value: 2 }] }] }).sample(0.5, values);",
         "const emitter = createParticleEmitter2D({ capacity: 1, seed: 1 });",
         "emitter.emit(1);",
         "const instances = new Float32Array(PARTICLE_INSTANCE_STRIDE);",
         "if (values[0] !== 1 || emitter.writeInstances(instances) !== 1) throw new Error('unexpected effects result');",
+        "const spatial = createParticleSystem3D({ capacity: 8, seed: 1, space: 'world', lifetime: [1,1], speed: [1,1], size: [.1,.1], shape: {kind:'point'}, direction:[0,1,0], spreadRadians:0, gravity:[0,-9.81,0], drag:0, sizeOverLife:[[0,1],[1,0]], colorOverLife:[[0,[1,1,1,1]],[1,[1,1,1,0]]], rotation:[0,0], angularVelocity:[0,0] });",
+        "spatial.emit(3); spatial.step(1/60); const saved = spatial.snapshot(); spatial.reset(); spatial.restore(saved); if (spatial.count !== 3 || spatial.snapshot().seed !== saved.seed) throw new Error('particle package restore mismatch');",
       ].join("\n"),
     );
     writeFileSync(
@@ -872,60 +835,65 @@ try {
       ].join("\n"),
     );
 
-    await $`${npmCommand} install --offline --ignore-scripts --no-audit --no-fund --package-lock=false`.cwd(consumerDir).quiet();
+    await runConsumerCommand([npmCommand, "install", "--offline", "--ignore-scripts", "--no-audit", "--no-fund", "--package-lock=false"], consumerDir);
     // npm treats directory dependencies as source checkouts and may run their prepare scripts.
     // Stage the already-installed peer artifacts directly so this smoke stays offline and side-effect free.
     for (const [packageName, packagePath] of Object.entries(localPeerPackages)) {
       const target = join(consumerDir, "node_modules", ...packageName.split("/"));
       mkdirSync(dirname(target), { recursive: true });
-      cpSync(packagePath, target, { recursive: true });
+      cpSync(realpathSync(packagePath), target, { recursive: true, dereference: true });
     }
-    await $`${bunCommand} ./consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./core-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./browser-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./net-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./protocol-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./server-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./mmo-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./render-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./render-3d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./render-3d-core-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./render-3d-scene-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./render-3d-webgl2-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./physics-3d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./physics-2d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./physics-rigid-3d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./motion-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./motion-three-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./migrations-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./project-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./project-runtime-2d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./project-runtime-timeline-2d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./project-runtime-navigation-2d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./project-runtime-save-2d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./project-runtime-story-2d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./project-runtime-3d-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./project-filesystem-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./project-neutral-export-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./navigation-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./content-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./save-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./save-browser-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./audio-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./effects-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./subpath-negative-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./ui-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./ui-core-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./asset-loader-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./gltf-static-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./gltf-skin-animation-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./template-assets-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${bunCommand} ./prototype-post-processing-consumer.ts`.cwd(consumerDir).quiet();
-    await $`${tscPath} --noEmit`.cwd(consumerDir).quiet();
-    await $`${tscPath} --noEmit -p ./tsconfig.nodenext.json`.cwd(consumerDir).quiet();
+    await verifyAuthoringConsumer({ consumerDir, run: runConsumerCommand, bunCommand,
+      evidenceDirectory: join(rootDir, '.local/package-consumer', new Date().toISOString().replaceAll(':', '-') + '-' + crypto.randomUUID()) });
+    await runConsumerCommand([bunCommand, "./consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./core-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./browser-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./net-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./protocol-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./server-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./mmo-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./render-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./render-3d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./render-3d-core-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./render-3d-scene-consumer.ts"], consumerDir);
+    await verifyWebGlConsumer(consumerDir);
+    await runConsumerCommand([bunCommand, "./physics-3d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./physics-2d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./physics-rigid-3d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./physics-ragdoll-3d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./physics-physical-performance-3d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./motion-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./motion-three-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./migrations-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./project-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./project-runtime-2d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./project-runtime-timeline-2d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./project-runtime-navigation-2d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./project-runtime-save-2d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./project-runtime-story-2d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./project-runtime-3d-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./project-filesystem-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./project-neutral-export-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./navigation-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./content-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./save-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./save-browser-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./audio-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./effects-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./subpath-negative-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./ui-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./ui-core-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./asset-loader-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./gltf-static-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./gltf-skin-animation-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./template-assets-consumer.ts"], consumerDir);
+    await runConsumerCommand([bunCommand, "./prototype-post-processing-consumer.ts"], consumerDir);
+    await runConsumerCommand([tscPath, "--noEmit"], consumerDir);
+    await runConsumerCommand([tscPath, "--noEmit", "-p", "./tsconfig.nodenext.json"], consumerDir);
   } finally {
     rmSync(consumerDir, { force: true, recursive: true });
   }
 } finally {
   rmSync(packDir, { force: true, recursive: true });
 }
+import { verifyWebGlConsumer } from "./webgl-consumer.ts";

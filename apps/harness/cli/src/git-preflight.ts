@@ -1,5 +1,7 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import type { RunPreflight } from "@hyperfocus/ai-core/protocol";
 import { probeInsideWorktree } from "./git-project";
+import path from "node:path";
 
 const MAX_DIRTY_FILE_COUNT = 20;
 
@@ -59,13 +61,19 @@ export async function runGitPreflight(
     };
   }
 
+  const repoResult = await runGitCommand(["rev-parse", "--show-toplevel"], rootPath);
+  const repoRoot = repoResult.exitCode === 0 ? repoResult.stdout.trim() : "";
+  const nestedGuidance = repoRoot && path.resolve(repoRoot).toLowerCase() !== path.resolve(rootPath).toLowerCase()
+    ? ` This folder shares the parent repository ${repoRoot}. For an independent product, choose a folder outside that repository or initialize a separate Git repository in this project folder.`
+    : "";
+
   const preflight: RunPreflight = {
     severity: "warning",
     kind: "git-dirty",
     message:
       changedFileCount > maxDirtyFileCount
-        ? `Git dirty. ${changedFileCount} files changed. Refuse run.`
-        : `Git dirty. ${changedFileCount} files changed. Run anyway.`,
+        ? `Git dirty: ${changedFileCount} changed files. Refusing run above ${maxDirtyFileCount} files.${nestedGuidance}`
+        : `Git dirty. ${changedFileCount} files changed. Run anyway.${nestedGuidance}`,
     changedFileCount
   };
 
@@ -77,7 +85,7 @@ export async function runGitPreflight(
 }
 
 async function runGit(args: string[], cwd: string) {
-  const command = Bun.spawn({
+  const command = spawnBackgroundProcess({
     cmd: ["git", ...args],
     cwd,
     stdout: "pipe",

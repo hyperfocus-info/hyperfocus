@@ -12,7 +12,7 @@ export async function extractPdfText(
   options: DocumentExtractionOptions = {}
 ): Promise<DocumentExtractionResult> {
   const data = toPdfUint8Array(input);
-  const maxInputBytes = options.maxInputBytes ?? 16 * 1024 * 1024;
+  const maxInputBytes = options.maxInputBytes ?? 16777216;
   const maxOutputChars = options.maxOutputChars ?? defaultMaxPdfOutputChars;
   validateLimit(maxInputBytes, "maxInputBytes");
   validateLimit(maxOutputChars, "maxOutputChars");

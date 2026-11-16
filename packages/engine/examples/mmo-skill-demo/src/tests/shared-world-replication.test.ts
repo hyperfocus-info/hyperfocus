@@ -1,3 +1,4 @@
+import { isObject as isUnknownRecord } from "@hyperfocus/utilities/records";
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -46,9 +47,7 @@ function typedMmoSegments(segments: readonly ReplicationEnvelopeSegment[]): read
   return segments.map((segment) => ({ ...segment, kind: parseMmoSegmentKind(segment.kind) }));
 }
 
-function isUnknownRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
-}
+
 
 test("MMO Skill Demo client tiles match the authoritative map", () => {
   const clientTiles = buildTiles();
@@ -120,7 +119,7 @@ test("MMO Skill Demo gatherable nodes cover materials with tiered density", () =
     const sorted = [...nodes].sort((a, b) => a.x - b.x);
     return sorted.slice(1).reduce((maxGap, node, index) => Math.max(maxGap, node.x - sorted[index]!.x), 0);
   };
-  const threeScreens = 960 * 3;
+  const threeScreens = 2880;
   expect(maxTravelGap(extractMmoSkillDemoResources())).toBeLessThanOrEqual(threeScreens);
   expect(maxTravelGap(worldGatherableNodeSpecs.filter((spec) => spec.tier <= 2))).toBeLessThanOrEqual(threeScreens);
 });
@@ -241,7 +240,7 @@ test("MMO Skill Demo world-building docs and local agent note cover expanded lor
 
 test("MMO Skill Demo room replication uses lower full-snapshot rates", () => {
   expect(mmoSkillDemoZone.replication).toMatchObject({ snapshotRate: 1, deltaRate: 10 });
-  expect(mmoSkillDemoDungeon.replication).toMatchObject({ snapshotRate: 1, deltaRate: 6, maxBytesPerClientPerSecond: 32 * 1024 });
+  expect(mmoSkillDemoDungeon.replication).toMatchObject({ snapshotRate: 1, deltaRate: 6, maxBytesPerClientPerSecond: 32768 });
   expect(mmoSkillDemoCottage.replication).toMatchObject({ snapshotRate: 1, deltaRate: 10 });
 });
 
@@ -505,7 +504,7 @@ test("MMO Skill Demo dirty shared slabs preserve previous hot fields for clean r
   wolf.y = 654;
   wolf.hp = 77;
 
-  const headerBytes = 8 + 16;
+  const headerBytes = 24;
   const bytes = new Uint8Array(headerBytes);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   bytes[0] = 2;
@@ -752,7 +751,7 @@ test("MMO Skill Demo normalized snapshots keep owner-only loot private", async (
 test("MMO Skill Demo boss sprite sheets resolve within one stable front row", () => {
   const firstMeta = spriteSheetMetaForSize(3360, 2880);
   const first = firstMeta ? resolveSpriteSheetFrame({ width: 3360, height: 2880, timeMs: 0, ...firstMeta }) : undefined;
-  const later = firstMeta ? resolveSpriteSheetFrame({ width: 3360, height: 2880, timeMs: 150 * 12, ...firstMeta }) : undefined;
+  const later = firstMeta ? resolveSpriteSheetFrame({ width: 3360, height: 2880, timeMs: 1800, ...firstMeta }) : undefined;
   const singleMeta = spriteSheetMetaForSize(700, 700);
   const single = singleMeta ? resolveSpriteSheetFrame({ width: 700, height: 700, timeMs: 0, ...singleMeta }) : undefined;
 

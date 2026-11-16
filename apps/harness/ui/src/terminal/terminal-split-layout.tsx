@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { For, Show, type Accessor } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { createRequestId, type TerminalPaneLayout, type TerminalSession } from "@hyperfocus/ai-core/protocol";
 import { harnessStore } from "../harness-store";
@@ -95,11 +95,11 @@ export function TerminalSplitLayout(props: { sessions: TerminalSession[] }) {
     });
   };
 
-  const renderLeaf = (session: TerminalSession) => (
+  const renderLeaf = (session: Accessor<TerminalSession>) => (
     <TerminalPane
-      session={session}
-      output={terminalStore.state.outputBySessionId[session.id] ?? ""}
-      connected={terminalStore.state.connectedBySessionId[session.id] === true}
+      session={session()}
+      output={terminalStore.state.outputBySessionId[session().id] ?? ""}
+      connected={terminalStore.state.connectedBySessionId[session().id] === true}
       onSplitHorizontal={() => split("horizontal")}
       onSplitVertical={() => split("vertical")}
     />
@@ -127,12 +127,12 @@ export function TerminalSplitLayout(props: { sessions: TerminalSession[] }) {
   return (
     <Show when={activeSession()} fallback={<div class={stylex.attrs(utilities.flex, utilities.hFull, utilities.itemsCenter, utilities.justifyCenter, utilities.textXs, styles.muted).class}>No terminal session.</div>}>
       {(session) => (
-        <Show when={splitSessions().length > 1} fallback={renderLeaf(session())}>
+        <Show when={splitSessions().length > 1} fallback={renderLeaf(session)}>
           <div class={layoutDirection() === "horizontal" ? stylex.attrs(utilities.flex, utilities.hFull, utilities.minH0, utilities.flexCol).class : stylex.attrs(utilities.flex, utilities.hFull, utilities.minW0).class}>
             <For each={splitSessions()}>
               {(entry, index) => (
                 <>
-                  <div class={stylex.attrs(utilities.minH0, utilities.minW0).class} style={{ flex: `0 0 ${splitSize(index())}` }}>{renderLeaf(entry)}</div>
+                  <div class={stylex.attrs(utilities.minH0, utilities.minW0).class} style={{ flex: `0 0 ${splitSize(index())}` }}>{renderLeaf(() => props.sessions.find((session) => session.projectId === entry.projectId && session.id === entry.id) ?? entry)}</div>
                   <Show when={index() === 0}>
                     <button
                       type="button"

@@ -1,10 +1,11 @@
+import { isRecord } from "@hyperfocus/utilities/records";
+import { XMLParser } from "fast-xml-parser";
 import { Buffer } from "node:buffer";
 import { posix as pathPosix } from "node:path";
 import { Readable } from "node:stream";
-import { XMLParser } from "fast-xml-parser";
-import { Entry, fromBuffer, ZipFile } from "yauzl";
-import { createResourceBudget, type ResourceBudget } from "./types";
+import { Entry,fromBuffer,ZipFile } from "yauzl";
 import type { DocumentExtractionOptions } from "./types";
+import { createResourceBudget,type ResourceBudget } from "./types";
 
 type XmlValue = string | number | boolean | null | XmlValue[] | XmlNode;
 export type XmlNode = {
@@ -21,8 +22,8 @@ const xmlParser = new XMLParser({
 });
 
 const defaultMaxArchiveEntries = 2048;
-const defaultMaxExpandedBytes = 32 * 1024 * 1024;
-const defaultMaxEntryBytes = 16 * 1024 * 1024;
+const defaultMaxExpandedBytes = 33554432;
+const defaultMaxEntryBytes = 16777216;
 const defaultMaxCompressionRatio = 200;
 const defaultMaxDurationMs = 10_000;
 const defaultMaxOutputChars = 1_000_000;
@@ -36,7 +37,7 @@ export async function readOfficeZipEntries(
   options: OfficeZipReadOptions = {}
 ) {
   const inputBuffer = toBuffer(input);
-  const maxInputBytes = options.maxInputBytes ?? 16 * 1024 * 1024;
+  const maxInputBytes = options.maxInputBytes ?? 16777216;
   if (inputBuffer.byteLength > maxInputBytes) {
     throw new RangeError(`Office archive exceeded the ${maxInputBytes.toLocaleString("en-US")} byte input budget`);
   }
@@ -207,9 +208,6 @@ export function getNodeText(node: unknown): string {
   return textParts.join("");
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isXmlNode(value: unknown): value is XmlNode {
   return isRecord(value) && Object.values(value).every(isXmlValue);

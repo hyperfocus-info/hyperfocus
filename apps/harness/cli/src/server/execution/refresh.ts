@@ -1,6 +1,5 @@
 import type { ManagedExecutionState, ManagedRefreshAction } from "../../execution-runtime";
 import { debugLog } from "../../logging";
-import type { HarnessConnection } from "../core/contracts";
 import { appendSystemStatus } from "./transcript-state";
 import { isExecutionBusy } from "./preflight";
 import { emitProjectTrace, getThreadSessionState } from "../workspace/project-events";
@@ -9,7 +8,7 @@ import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
 import type { ProjectId } from "@hyperfocus/ai-core/protocol";
 
 export async function requestExecutionRefresh(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,

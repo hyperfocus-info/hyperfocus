@@ -5,8 +5,8 @@ import { debugLog } from "./logging";
 import { classifyRunFailure, isBackoffEligibleFailureCategory } from "./run-failure-classification";
 import { type WorkspaceRepository } from "./workspace-repository";
 
-export const DEFAULT_BACKGROUND_RUN_MAX_MS = 30 * 60 * 1000;
-export const DEFAULT_BACKGROUND_RUN_NO_PROGRESS_MS = 10 * 60 * 1000;
+export const DEFAULT_BACKGROUND_RUN_MAX_MS = 1800000;
+export const DEFAULT_BACKGROUND_RUN_NO_PROGRESS_MS = 600000;
 
 type BackgroundJobSchedulerOptions = {
   repository: WorkspaceRepository;
@@ -15,7 +15,7 @@ type BackgroundJobSchedulerOptions = {
   isRunLive?: (run: BackgroundJobRun) => boolean;
   onRunsTimingOut?: (runs: BackgroundJobRun[]) => Promise<void> | void;
   onRunsRepaired?: (runs: BackgroundJobRun[]) => Promise<void> | void;
-  repairActiveRuns?: (now: Date) => Promise<BackgroundJobRun[]> | BackgroundJobRun[];
+  repairActiveRuns?: (now: Date, interruptedQueuedRunIds: ReadonlySet<string>) => Promise<BackgroundJobRun[]> | BackgroundJobRun[];
   onRunQueued?: (run: BackgroundJobRun, job: BackgroundJob) => Promise<void> | void;
   onTickFailed?: (error: unknown) => void;
 };
@@ -32,6 +32,9 @@ type AssistantCongestion = {
 
 export function createBackgroundJobScheduler(options: BackgroundJobSchedulerOptions) {
   const intervalMs = options.intervalMs ?? 15_000;
+  // Only inherited queued rows are interruption candidates; newly deferred work
+  // may legitimately wait without a controller in this server lifetime.
+  const interruptedQueuedRunIds = new Set(options.repository.getQueuedBackgroundJobRuns().map((run) => run.id));
   let running = false;
   const { start, retry, stop } = createBackgroundJobSchedulerLoop(intervalMs, tick, options.onTickFailed);
   const {
@@ -52,11 +55,6 @@ export function createBackgroundJobScheduler(options: BackgroundJobSchedulerOpti
 
     running = true;
     try {
-      if (options.repository.getGlobalExecutionPaused()) {
-        options.repository.setBackgroundSchedulerHeartbeat();
-        return;
-      }
-
       const now = new Date();
       const nowIso = now.toISOString();
       options.repository.setBackgroundSchedulerHeartbeat(now);
@@ -67,9 +65,10 @@ export function createBackgroundJobScheduler(options: BackgroundJobSchedulerOpti
       }
 
       const repairedRuns = options.repairActiveRuns
-        ? await options.repairActiveRuns(now)
+        ? await options.repairActiveRuns(now, interruptedQueuedRunIds)
         : options.repository.repairInterruptedBackgroundJobRuns({
             isRunLive: options.isRunLive,
+            interruptedQueuedRunIds,
             now,
             maxRunMs: DEFAULT_BACKGROUND_RUN_MAX_MS,
             noProgressMs: DEFAULT_BACKGROUND_RUN_NO_PROGRESS_MS
@@ -77,6 +76,8 @@ export function createBackgroundJobScheduler(options: BackgroundJobSchedulerOpti
       if (repairedRuns.length > 0) {
         await options.onRunsRepaired?.(repairedRuns);
       }
+
+      if (options.repository.getGlobalExecutionPaused()) return;
 
       const jobs = readEnabledSchedulerJobs(options.repository);
       const congestionControlEnabled = options.repository.getAssistantCongestionControlEnabledDefault();
@@ -234,7 +235,7 @@ function createBackgroundJobSchedulerLoop(
 }
 
 function createBackgroundJobQueuer(options: BackgroundJobSchedulerOptions) {
-  function queueDueJob(entry: DueJob, isStartup: boolean, nowIso: string, congested: boolean, congestionRatio?: number) {
+  function persistDueJob(entry: DueJob, isStartup: boolean, nowIso: string, congested: boolean, congestionRatio?: number) {
     const { job, advance } = entry;
     options.repository.updateBackgroundJobSchedulerState(job.id, {
       schedulerStatus: "due",
@@ -300,6 +301,14 @@ function createBackgroundJobQueuer(options: BackgroundJobSchedulerOptions) {
       schedulerCongestionRatio: congestionRatio,
       lastSchedulerCheckAt: nowIso
     });
+    return queuedRun;
+  }
+
+  function queueDueJob(entry: DueJob, isStartup: boolean, nowIso: string, congested: boolean, congestionRatio?: number) {
+    const queuedRun = options.repository.commitBackgroundJobQueue(() =>
+      persistDueJob(entry, isStartup, nowIso, congested, congestionRatio));
+    if (!queuedRun) return undefined;
+    const { job } = entry;
     const handleLaunchFailure = (error: unknown) => {
       const failureMessage = error instanceof Error ? error.message : "Unknown background job launch failure";
       const currentRun = options.repository.getBackgroundJobRun(queuedRun.id);

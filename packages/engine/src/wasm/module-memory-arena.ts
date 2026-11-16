@@ -11,11 +11,13 @@ export type WasmMemoryLease = {
   writeFloat32(relativeByteOffset: number, source: ArrayLike<number>, count: number): void;
   readFloat32(relativeByteOffset: number, target: MutableNumericArray, count: number): void;
   readUint8(relativeByteOffset: number, target: MutableNumericArray, count: number): void;
+  /** Ends this lease; repeated or stale release cannot end a later lease. */
   release(): void;
 };
 
 export type WasmMemoryArena = WasmMemoryLease & {
   readonly leased: boolean;
+  /** Reuses backing storage, but returns a distinct checked lifetime. */
   lease(byteLength: number): WasmMemoryLease;
 };
 
@@ -56,6 +58,7 @@ export function createWasmMemoryArena(options: WasmMemoryArenaOptions): WasmMemo
   let capacityBytes = 0;
   let epoch = 0;
   let leased = false;
+  let currentLease: WasmMemoryLease | undefined;
   let buffer: ArrayBuffer | undefined;
   let float32 = new Float32Array(0);
   let uint8 = new Uint8Array(0);
@@ -104,8 +107,11 @@ export function createWasmMemoryArena(options: WasmMemoryArenaOptions): WasmMemo
   allocate(initialCapacityBytes);
   refreshViews();
 
+  const assertCurrent = (lease?: WasmMemoryLease) => {
+    if (!leased || (lease !== undefined && currentLease !== lease)) throw new Error("WASM lease released");
+  };
   const assertActiveRange = (relativeByteOffset: number, count: number, elementBytes: number) => {
-    if (!leased) throw new Error("WASM memory lease has been released");
+    assertCurrent();
     validateByteLength(relativeByteOffset, "relativeByteOffset");
     validateByteLength(count, "count");
     const bytes = count * elementBytes;
@@ -113,6 +119,8 @@ export function createWasmMemoryArena(options: WasmMemoryArenaOptions): WasmMemo
       || relativeByteOffset + bytes > leasedByteLength) {
       throw new RangeError("WASM memory lease access is outside the leased range");
     }
+    // Another arena or a module call can grow the same memory during this lease.
+    refreshViews();
   };
 
   const arena: WasmMemoryArena = {
@@ -126,6 +134,7 @@ export function createWasmMemoryArena(options: WasmMemoryArenaOptions): WasmMemo
       return capacityBytes;
     },
     get epoch() {
+      refreshViews();
       return epoch;
     },
     get leased() {
@@ -137,11 +146,22 @@ export function createWasmMemoryArena(options: WasmMemoryArenaOptions): WasmMemo
       ensureCapacity(byteLength);
       leased = true;
       leasedByteLength = byteLength;
-      return arena;
+      const lease: WasmMemoryLease = {
+        byteOffset,
+        byteLength,
+        capacityBytes,
+        get epoch() { assertCurrent(lease); return arena.epoch; },
+        writeFloat32(offset, source, count) { assertCurrent(lease); arena.writeFloat32(offset, source, count); },
+        readFloat32(offset, target, count) { assertCurrent(lease); arena.readFloat32(offset, target, count); },
+        readUint8(offset, target, count) { assertCurrent(lease); arena.readUint8(offset, target, count); },
+        release() { if (currentLease === lease) arena.release(); }
+      };
+      currentLease = lease;
+      return lease;
     },
     writeFloat32(relativeByteOffset, source, count) {
       assertActiveRange(relativeByteOffset, count, Float32Array.BYTES_PER_ELEMENT);
-      if (source.length < count) throw new RangeError("WASM memory lease source is shorter than count");
+      if (source.length < count) throw new RangeError("WASM lease source too short");
       const targetOffset = (byteOffset + relativeByteOffset) >> 2;
       if (source instanceof Float32Array) {
         float32.set(source.subarray(0, count), targetOffset);
@@ -151,7 +171,7 @@ export function createWasmMemoryArena(options: WasmMemoryArenaOptions): WasmMemo
     },
     readFloat32(relativeByteOffset, target, count) {
       assertActiveRange(relativeByteOffset, count, Float32Array.BYTES_PER_ELEMENT);
-      if (target.length < count) throw new RangeError("WASM memory lease target is shorter than count");
+      if (target.length < count) throw new RangeError("WASM lease target too short");
       const sourceOffset = (byteOffset + relativeByteOffset) >> 2;
       if (target instanceof Float32Array) {
         target.set(float32.subarray(sourceOffset, sourceOffset + count));
@@ -161,7 +181,7 @@ export function createWasmMemoryArena(options: WasmMemoryArenaOptions): WasmMemo
     },
     readUint8(relativeByteOffset, target, count) {
       assertActiveRange(relativeByteOffset, count, Uint8Array.BYTES_PER_ELEMENT);
-      if (target.length < count) throw new RangeError("WASM memory lease target is shorter than count");
+      if (target.length < count) throw new RangeError("WASM lease target too short");
       const sourceOffset = byteOffset + relativeByteOffset;
       if (target instanceof Uint8Array) {
         target.set(uint8.subarray(sourceOffset, sourceOffset + count));
@@ -171,6 +191,7 @@ export function createWasmMemoryArena(options: WasmMemoryArenaOptions): WasmMemo
     },
     release() {
       leased = false;
+      currentLease = undefined;
     }
   };
   return arena;

@@ -1,0 +1,361 @@
+diff --git a/node_modules/playwright-core/.bun-tag-895f2f5c9cf94d46 b/.bun-tag-895f2f5c9cf94d46
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/lib/coreBundle.js b/lib/coreBundle.js
+index d9041dd0f009072511a7d808dec83121ff29e127..ccca77529e04aed2885a0e6675e428ba70d8ab37 100644
+--- a/lib/coreBundle.js
++++ b/lib/coreBundle.js
+@@ -8908,7 +8908,7 @@ async function launchProcess(options) {
+     shell: options.shell,
+     stdio
+   };
+-  const spawnedProcess = childProcess.spawn(options.command, options.args || [], spawnOptions);
++  const spawnedProcess = childProcess.spawn(options.command, options.args || [], { ...spawnOptions, windowsHide: true });
+   const cleanup = async () => {
+     options.log(`[pid=${spawnedProcess.pid || "N/A"}] starting temporary directories cleanup`);
+     const errors = await removeFolders(options.tempDirectories);
+@@ -8985,7 +8985,7 @@ async function launchProcess(options) {
+       options.log(`[pid=${spawnedProcess.pid}] <will force kill>`);
+       try {
+         if (process.platform === "win32") {
+-          const taskkillProcess = childProcess.spawnSync(`taskkill /pid ${spawnedProcess.pid} /T /F`, { shell: true });
++          const taskkillProcess = childProcess.spawnSync(`taskkill /pid ${spawnedProcess.pid} /T /F`, { ...{ shell: true }, windowsHide: true });
+           const [stdout2, stderr2] = [taskkillProcess.stdout.toString(), taskkillProcess.stderr.toString()];
+           if (stdout2)
+             options.log(`[pid=${spawnedProcess.pid}] taskkill stdout: ${stdout2}`);
+@@ -9654,7 +9654,7 @@ var init_socksProxy = __esm({
+
+ // packages/utils/spawnAsync.ts
+ function spawnAsync(cmd, args, options = {}) {
+-  const process2 = (0, import_child_process.spawn)(cmd, args, Object.assign({ windowsHide: true }, options));
++  const process2 = (0, import_child_process.spawn)(cmd, args, { ...Object.assign({ windowsHide: true }, options), windowsHide: true });
+   return new Promise((resolve) => {
+     let stdout = "";
+     let stderr = "";
+@@ -11747,7 +11747,7 @@ function determineUserAgent() {
+     osIdentifier = "windows";
+     osVersion = `${version3[0]}.${version3[1]}`;
+   } else if (process.platform === "darwin") {
+-    const version3 = (0, import_child_process2.execSync)("sw_vers -productVersion", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim().split(".");
++    const version3 = (0, import_child_process2.execSync)("sw_vers -productVersion", { stdio: ["ignore", "pipe", "ignore"], windowsHide: true }).toString().trim().split(".");
+     osIdentifier = "macOS";
+     osVersion = `${version3[0]}.${version3[1]}`;
+   } else if (process.platform === "linux") {
+@@ -31685,7 +31685,7 @@ async function installDependenciesLinux(targets, dryRun) {
+   const { command, args, elevatedPermissions } = await transformCommandsForRoot(commands2);
+   if (elevatedPermissions)
+     console.log("Switching to root user to install dependencies...");
+-  const child = childProcess2.spawn(command, args, { stdio: "inherit" });
++  const child = childProcess2.spawn(command, args, { ...{ stdio: "inherit" }, windowsHide: true });
+   await new Promise((resolve, reject) => {
+     child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`Installation process exited with code: ${code}`)));
+     child.on("error", reject);
+@@ -32001,7 +32001,7 @@ async function downloadBrowserWithProgressBar(title, browserDirectory, executabl
+   logPolitely(`${title} downloaded to ${browserDirectory}`);
+ }
+ function downloadBrowserWithProgressBarOutOfProcess(title, browserDirectory, url3, zipPath, executablePath, socketTimeout) {
+-  const cp = childProcess3.fork(libPath("entry", "oopBrowserDownload.js"));
++  const cp = childProcess3.fork(libPath("entry", "oopBrowserDownload.js"), { windowsHide: true });
+   const promise = new ManualPromise();
+   const progress2 = getDownloadProgress();
+   cp.on("message", (message) => {
+@@ -65733,11 +65733,11 @@ var init_devtools = __esm({
+         const pageId4 = tab2.page._guid;
+         const daemonScript = libPath("entry", "dashboardApp.js");
+         const daemonArgs = [daemonScript, `--pageId=${pageId4}`];
+-        const daemon = (0, import_child_process3.spawn)(process.execPath, daemonArgs, { detached: true, stdio: "ignore" });
++        const daemon = (0, import_child_process3.spawn)(process.execPath, daemonArgs, { ...{ detached: true, stdio: "ignore" }, windowsHide: true });
+         daemon.unref();
+-        const client = (0, import_child_process3.spawn)(process.execPath, [...daemonArgs, "--annotate"], {
++        const client = (0, import_child_process3.spawn)(process.execPath, [...daemonArgs, "--annotate"], { ...{
+           stdio: ["pipe", "pipe", "inherit"]
+-        });
++        }, windowsHide: true });
+         const onAbort = () => client.kill();
+         signal?.addEventListener("abort", onAbort);
+         const stdoutChunks = [];
+@@ -70553,12 +70553,12 @@ to start the browser session.`);
+           args.push(`--cdp=${cliArgs.cdp}`);
+         else if (cliArgs.endpoint)
+           args.push(`--endpoint=${cliArgs.endpoint}`);
+-        const child = (0, import_child_process4.spawn)(process.execPath, args, {
++        const child = (0, import_child_process4.spawn)(process.execPath, args, { ...{
+           detached: true,
+           stdio: ["ignore", "pipe", err],
+           cwd: process.cwd()
+           // Will be used as root.
+-        });
++        }, windowsHide: true });
+         let signalled = false;
+         const sigintHandler2 = () => {
+           signalled = true;
+@@ -70796,7 +70796,7 @@ async function program2(options) {
+         daemonArgs.push(`--host=${args.host}`);
+       if (args.kill) {
+         daemonArgs.push(`--kill`);
+-        const child2 = (0, import_child_process5.spawn)(process.execPath, daemonArgs, { stdio: "ignore" });
++        const child2 = (0, import_child_process5.spawn)(process.execPath, daemonArgs, { ...{ stdio: "ignore" }, windowsHide: true });
+         await new Promise((resolve) => child2.on("exit", () => resolve()));
+         return;
+       }
+@@ -70810,10 +70810,10 @@ async function program2(options) {
+         return;
+       }
+       const foreground = args.port !== void 0;
+-      const child = (0, import_child_process5.spawn)(process.execPath, daemonArgs, {
++      const child = (0, import_child_process5.spawn)(process.execPath, daemonArgs, { ...{
+         detached: !foreground,
+         stdio: foreground ? "inherit" : ["pipe", "pipe", "ignore"]
+-      });
++      }, windowsHide: true });
+       if (foreground) {
+         await new Promise((resolve) => child.on("exit", () => resolve()));
+         return;
+@@ -70881,10 +70881,10 @@ async function runInitWorkspace(args, output) {
+   const cliPath = libPath("entry", "cliDaemon.js");
+   const daemonArgs = [cliPath, "--init-workspace", ...args.skills ? ["--init-skills", String(args.skills)] : []];
+   await new Promise((resolve, reject) => {
+-    const child = (0, import_child_process5.spawn)(process.execPath, daemonArgs, {
++    const child = (0, import_child_process5.spawn)(process.execPath, daemonArgs, { ...{
+       stdio: output.installStdio(),
+       cwd: process.cwd()
+-    });
++    }, windowsHide: true });
+     child.on("close", (code) => {
+       if (code === 0)
+         resolve();
+@@ -70912,15 +70912,12 @@ async function killAllDaemons() {
+       if (pidFilter)
+         clauses.push(`(${[...pidFilter].map((p) => `$_.ProcessId -eq ${p}`).join(" -or ")})`);
+       const whereClause = clauses.join(" -and ");
+-      const result2 = (0, import_child_process5.execSync)(
+-        `powershell -NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Where-Object { ${whereClause} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $_.ProcessId }"`,
+-        { encoding: "utf-8" }
+-      );
++      const result2 = (0, import_child_process5.execSync)(`powershell -NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Where-Object { ${whereClause} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $_.ProcessId }"`, { ...{ encoding: "utf-8" }, windowsHide: true });
+       const pids = result2.split("\n").map((line) => line.trim()).filter((line) => /^\d+$/.test(line));
+       for (const pid of pids)
+         killed.push(parseInt(pid, 10));
+     } else {
+-      const result2 = (0, import_child_process5.execSync)("ps auxww", { encoding: "utf-8" });
++      const result2 = (0, import_child_process5.execSync)("ps auxww", { ...{ encoding: "utf-8" }, windowsHide: true });
+       const lines = result2.split("\n");
+       for (const line of lines) {
+         if (daemonProcessPatterns.some((p) => line.includes(p))) {
+@@ -73183,14 +73180,14 @@ var init_outofprocess = __esm({
+     PlaywrightClient = class {
+       constructor(env) {
+         this._closePromise = new ManualPromise();
+-        this._driverProcess = childProcess4.fork(import_path61.default.join(packageRoot, "cli.js"), ["run-driver"], {
++        this._driverProcess = childProcess4.fork(import_path61.default.join(packageRoot, "cli.js"), ["run-driver"], { ...{
+           stdio: "pipe",
+           detached: true,
+           env: {
+             ...process.env,
+             ...env
+           }
+-        });
++        }, windowsHide: true });
+         this._driverProcess.unref();
+         this._driverProcess.stderr.on("data", (data) => process.stderr.write(data));
+         setCoreDir(packageRoot);
+@@ -73808,13 +73805,13 @@ var init_dashboardController = __esm({
+       async reveal(params2) {
+         switch (import_os28.default.platform()) {
+           case "darwin":
+-            (0, import_child_process7.execFile)("open", ["-R", params2.path]);
++            (0, import_child_process7.execFile)("open", ["-R", params2.path], { windowsHide: true });
+             break;
+           case "win32":
+-            (0, import_child_process7.execFile)("explorer", ["/select,", params2.path]);
++            (0, import_child_process7.execFile)("explorer", ["/select,", params2.path], { windowsHide: true });
+             break;
+           case "linux":
+-            (0, import_child_process7.execFile)("xdg-open", [import_path64.default.dirname(params2.path)]);
++            (0, import_child_process7.execFile)("xdg-open", [import_path64.default.dirname(params2.path)], { windowsHide: true });
+             break;
+         }
+       }
+diff --git a/lib/tools/cli-client/program.js b/lib/tools/cli-client/program.js
+index 633b1d70965590dcd83495bf312283399dc3b68f..6f9ef66bc0e4758a560e25f54ae9044e57765481 100644
+--- a/lib/tools/cli-client/program.js
++++ b/lib/tools/cli-client/program.js
+@@ -190,7 +190,7 @@ async function program(options) {
+         daemonArgs.push(`--host=${args.host}`);
+       if (args.kill) {
+         daemonArgs.push(`--kill`);
+-        const child2 = (0, import_child_process.spawn)(process.execPath, daemonArgs, { stdio: "ignore" });
++        const child2 = (0, import_child_process.spawn)(process.execPath, daemonArgs, { ...{ stdio: "ignore" }, windowsHide: true });
+         await new Promise((resolve) => child2.on("exit", () => resolve()));
+         return;
+       }
+@@ -204,10 +204,10 @@ async function program(options) {
+         return;
+       }
+       const foreground = args.port !== void 0;
+-      const child = (0, import_child_process.spawn)(process.execPath, daemonArgs, {
++      const child = (0, import_child_process.spawn)(process.execPath, daemonArgs, { ...{
+         detached: !foreground,
+         stdio: foreground ? "inherit" : ["pipe", "pipe", "ignore"]
+-      });
++      }, windowsHide: true });
+       if (foreground) {
+         await new Promise((resolve) => child.on("exit", () => resolve()));
+         return;
+@@ -275,10 +275,10 @@ async function runInitWorkspace(args, output) {
+   const cliPath = (0, import_package.libPath)("entry", "cliDaemon.js");
+   const daemonArgs = [cliPath, "--init-workspace", ...args.skills ? ["--init-skills", String(args.skills)] : []];
+   await new Promise((resolve, reject) => {
+-    const child = (0, import_child_process.spawn)(process.execPath, daemonArgs, {
++    const child = (0, import_child_process.spawn)(process.execPath, daemonArgs, { ...{
+       stdio: output.installStdio(),
+       cwd: process.cwd()
+-    });
++    }, windowsHide: true });
+     child.on("close", (code) => {
+       if (code === 0)
+         resolve();
+@@ -307,15 +307,12 @@ async function killAllDaemons() {
+       if (pidFilter)
+         clauses.push(`(${[...pidFilter].map((p) => `$_.ProcessId -eq ${p}`).join(" -or ")})`);
+       const whereClause = clauses.join(" -and ");
+-      const result = (0, import_child_process.execSync)(
+-        `powershell -NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Where-Object { ${whereClause} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $_.ProcessId }"`,
+-        { encoding: "utf-8" }
+-      );
++      const result = (0, import_child_process.execSync)(`powershell -NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Where-Object { ${whereClause} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $_.ProcessId }"`, { ...{ encoding: "utf-8" }, windowsHide: true });
+       const pids = result.split("\n").map((line) => line.trim()).filter((line) => /^\d+$/.test(line));
+       for (const pid of pids)
+         killed.push(parseInt(pid, 10));
+     } else {
+-      const result = (0, import_child_process.execSync)("ps auxww", { encoding: "utf-8" });
++      const result = (0, import_child_process.execSync)("ps auxww", { ...{ encoding: "utf-8" }, windowsHide: true });
+       const lines = result.split("\n");
+       for (const line of lines) {
+         if (daemonProcessPatterns.some((p) => line.includes(p))) {
+diff --git a/lib/tools/cli-client/session.js b/lib/tools/cli-client/session.js
+index 5d796c86ab8a0fda2a42c6e912a06707cba36cd8..3fda21680373945a0bdb2ea2965a24d3051c6f57 100644
+--- a/lib/tools/cli-client/session.js
++++ b/lib/tools/cli-client/session.js
+@@ -148,12 +148,12 @@ to start the browser session.`);
+       args.push(`--cdp=${cliArgs.cdp}`);
+     else if (cliArgs.endpoint)
+       args.push(`--endpoint=${cliArgs.endpoint}`);
+-    const child = (0, import_child_process.spawn)(process.execPath, args, {
++    const child = (0, import_child_process.spawn)(process.execPath, args, { ...{
+       detached: true,
+       stdio: ["ignore", "pipe", err],
+       cwd: process.cwd()
+       // Will be used as root.
+-    });
++    }, windowsHide: true });
+     let signalled = false;
+     const sigintHandler = () => {
+       signalled = true;
+diff --git a/lib/utilsBundle.js b/lib/utilsBundle.js
+index 55a9cfc0a762c06ec088a53b3e5047db0e024243..1d4e8e831cd4c2eed71d7d79cce7cd7f158f3fe8 100644
+--- a/lib/utilsBundle.js
++++ b/lib/utilsBundle.js
+@@ -52992,13 +52992,13 @@ var require_cross_spawn = __commonJS({
+     var enoent = require_enoent();
+     function spawn2(command, args, options2) {
+       const parsed = parse3(command, args, options2);
+-      const spawned = cp.spawn(parsed.command, parsed.args, parsed.options);
++      const spawned = cp.spawn(parsed.command, parsed.args, { ...parsed.options, windowsHide: true });
+       enoent.hookChildProcess(spawned, parsed);
+       return spawned;
+     }
+     function spawnSync(command, args, options2) {
+       const parsed = parse3(command, args, options2);
+-      const result = cp.spawnSync(parsed.command, parsed.args, parsed.options);
++      const result = cp.spawnSync(parsed.command, parsed.args, { ...parsed.options, windowsHide: true });
+       result.error = result.error || enoent.verifyENOENTSync(result.status, parsed);
+       return result;
+     }
+@@ -58294,17 +58294,13 @@ var executePowerShell = async (command, options2 = {}) => {
+     ...execFileOptions
+   } = options2;
+   const encodedCommand = executePowerShell.encodeCommand(command);
+-  return execFile(
+-    psPath ?? powerShellPath(),
+-    [
++  return execFile(psPath ?? powerShellPath(), [
+       ...executePowerShell.argumentsPrefix,
+       encodedCommand
+-    ],
+-    {
++    ], { ...{
+       encoding: "utf8",
+       ...execFileOptions
+-    }
+-  );
++    }, windowsHide: true });
+ };
+ executePowerShell.argumentsPrefix = [
+   "-NoProfile",
+@@ -58388,7 +58384,7 @@ var convertWslPathToWindows = async (path4) => {
+     return path4;
+   }
+   try {
+-    const { stdout } = await execFile2("wslpath", ["-aw", path4], { encoding: "utf8" });
++    const { stdout } = await execFile2("wslpath", ["-aw", path4], { ...{ encoding: "utf8" }, windowsHide: true });
+     return stdout.trim();
+   } catch {
+     return path4;
+@@ -58427,7 +58423,7 @@ async function defaultBrowserId() {
+   if (import_node_process3.default.platform !== "darwin") {
+     throw new Error("macOS only");
+   }
+-  const { stdout } = await execFileAsync("defaults", ["read", "com.apple.LaunchServices/com.apple.launchservices.secure", "LSHandlers"]);
++  const { stdout } = await execFileAsync("defaults", ["read", "com.apple.LaunchServices/com.apple.launchservices.secure", "LSHandlers"], { windowsHide: true });
+   const match2 = /LSHandlerRoleAll = "(?!-)(?<id>[^"]+?)";\s+?LSHandlerURLScheme = (?:http|https);/.exec(stdout);
+   const browserId = match2?.groups.id ?? "com.apple.Safari";
+   if (browserId === "com.apple.safari") {
+@@ -58450,7 +58446,7 @@ async function runAppleScript(script, { humanReadableOutput = true, signal } = {
+   if (signal) {
+     execOptions.signal = signal;
+   }
+-  const { stdout } = await execFileAsync2("osascript", ["-e", script, outputArguments], execOptions);
++  const { stdout } = await execFileAsync2("osascript", ["-e", script, outputArguments], { ...execOptions, windowsHide: true });
+   return stdout.trim();
+ }
+
+@@ -58515,7 +58511,7 @@ async function defaultBrowser2() {
+     return { name, id };
+   }
+   if (import_node_process5.default.platform === "linux") {
+-    const { stdout } = await execFileAsync4("xdg-mime", ["query", "default", "x-scheme-handler/http"]);
++    const { stdout } = await execFileAsync4("xdg-mime", ["query", "default", "x-scheme-handler/http"], { windowsHide: true });
+     const id = stdout.trim();
+     const name = titleize(id.replace(/.desktop$/, "").replace("-", " "));
+     return { name, id };
+@@ -58704,7 +58700,7 @@ var baseOpen = async (options2) => {
+   if (options2.target) {
+     cliArguments.push(options2.target);
+   }
+-  const subprocess = import_node_child_process7.default.spawn(command, cliArguments, childProcessOptions);
++  const subprocess = import_node_child_process7.default.spawn(command, cliArguments, { ...childProcessOptions, windowsHide: true });
+   if (options2.wait) {
+     return new Promise((resolve, reject) => {
+       subprocess.once("error", reject);
+@@ -61003,9 +60999,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
+       if (launchWithNode) {
+         args.unshift(executableFile);
+         args = incrementNodeInspectorPort(import_node_process8.default.execArgv).concat(args);
+-        proc = import_node_child_process8.default.spawn(import_node_process8.default.argv[0], args, { stdio: "inherit" });
++        proc = import_node_child_process8.default.spawn(import_node_process8.default.argv[0], args, { ...{ stdio: "inherit" }, windowsHide: true });
+       } else {
+-        proc = import_node_child_process8.default.spawn(executableFile, args, { stdio: "inherit" });
++        proc = import_node_child_process8.default.spawn(executableFile, args, { ...{ stdio: "inherit" }, windowsHide: true });
+       }
+     } else {
+       this._checkForMissingExecutable(
+@@ -61015,7 +61011,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
+       );
+       args.unshift(executableFile);
+       args = incrementNodeInspectorPort(import_node_process8.default.execArgv).concat(args);
+-      proc = import_node_child_process8.default.spawn(import_node_process8.default.execPath, args, { stdio: "inherit" });
++      proc = import_node_child_process8.default.spawn(import_node_process8.default.execPath, args, { ...{ stdio: "inherit" }, windowsHide: true });
+     }
+     if (!proc.killed) {
+       const signals2 = ["SIGUSR1", "SIGUSR2", "SIGTERM", "SIGINT", "SIGHUP"];

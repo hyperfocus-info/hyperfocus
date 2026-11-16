@@ -1,4 +1,5 @@
 import { debugLog } from "../../logging";
+import { qualityCompletionBlock } from "@hyperfocus/ai-core/quality";
 import { extractRunMemories, shouldExtractRunMemories } from "../../memory-bank";
 import { classifyRunFailure } from "../../run-failure-classification";
 import { syncBackgroundJobFailureTracking } from "../automation/background-runs";
@@ -13,9 +14,10 @@ import { scheduleBranchfsRetentionPrune } from "../workspace/branchfs-guards";
 import type { WorkspaceRepository } from "../../workspace-repository";
 import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
 import type { AgentRunState, ProjectId, ThreadId } from "@hyperfocus/ai-core/protocol";
+import { claimBrowserApprovalWaitersForRun } from "./browser-approval-waiters";
 
 export function repairStaleRefreshRun(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -42,7 +44,7 @@ export function repairStaleRefreshRun(
 }
 
 export async function handleRunFailure(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -131,7 +133,7 @@ export async function handleRunFailure(
 }
 
 export async function completeRunWithAssistantMessage(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -142,6 +144,7 @@ export async function completeRunWithAssistantMessage(
     threadId: ThreadId;
     runId: string;
     assistantMessageContent: string;
+    abortSignal: AbortSignal;
     partialReason?: string;
   }
 ) {
@@ -152,6 +155,9 @@ export async function completeRunWithAssistantMessage(
   if (isTerminalRunStatus(run.status)) {
     throw new Error(`Run ${input.runId} is already terminal`);
   }
+  if (input.abortSignal.aborted || runtime.getAbortController(input.projectId, input.runId)?.signal !== input.abortSignal) {
+    throw new Error("Run completion requires the current active execution owner");
+  }
 
   const shouldAppendFinalMessage = !hasPersistedFinalAssistantContent(
     repository,
@@ -159,13 +165,15 @@ export async function completeRunWithAssistantMessage(
     input.threadId,
     input.assistantMessageContent
   );
-  const messageProject = shouldAppendFinalMessage
-    ? repository.appendMessage(input.projectId, "assistant", input.assistantMessageContent, input.threadId)
-    : runtime.getProject(input.projectId);
-  runtime.upsertPersistedProject(messageProject);
-  const finalStatus = input.partialReason ? "partial-complete" : "completed";
-  const statusProject = rejectPendingBrowserApprovalsForRun(pendingBrowserApprovals, repository, input.projectId,
-    input.runId, input.partialReason ?? "Run completed", finalStatus);
+  const qualityBlock = qualityCompletionBlock({ intent: run.latestUserPrompt, runId: run.id, paths: run.plan?.contracts.flatMap(contract => contract.ownedPaths), trace: run.plan?.quality });
+  const finalStatus = input.partialReason || qualityBlock ? "partial-complete" : "completed";
+  const reason = input.partialReason ?? qualityBlock ?? "Run completed";
+  const statusProject = repository.completeAgentRun({ projectId: input.projectId, threadId: input.threadId,
+    runId: input.runId, status: finalStatus, reason,
+    assistantMessageContent: shouldAppendFinalMessage ? input.assistantMessageContent : undefined });
+  for (const approval of claimBrowserApprovalWaitersForRun(pendingBrowserApprovals, input.projectId, input.runId)) {
+    approval.reject(new Error(reason));
+  }
   runtime.upsertPersistedProject(statusProject);
   emitRunUpdatedById(ws, requestId, repository, input.projectId, input.runId, connections);
   if (connections) emitNotificationsUpdatedToAll(connections, requestId, repository.loadNotificationInboxState());

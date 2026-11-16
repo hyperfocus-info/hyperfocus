@@ -49,6 +49,7 @@ function validateServerOptions(options: AuthoritativeServerOptions) {
     throw new Error("binaryInputPayloadOwnership must be copy or borrow");
   }
   assertPositiveFinite("tickRate", options.tickRate);
+  if (options.reconnectGraceMs !== undefined && (!Number.isSafeInteger(options.reconnectGraceMs) || options.reconnectGraceMs < 0 || options.reconnectGraceMs > 30000)) throw new RangeError('reconnectGraceMs must be an integer from 0 through 30000.');
   assertNonNegativeSafeInteger("maxPlayersPerRoom", options.maxPlayersPerRoom);
   assertNonNegativeSafeInteger("maxCatchUpTicks", options.maxCatchUpTicks);
   assertPositiveSafeInteger("durableEvents.maxPending", options.durableEvents?.maxPending);
@@ -78,7 +79,7 @@ function resolveReplicationOptions(options: AuthoritativeServerOptions, effectiv
   return {
     snapshotRate: options.replication?.snapshotRate ?? scale?.replication.snapshotRate ?? 2,
     deltaRate: options.replication?.deltaRate ?? scale?.replication.deltaRate ?? effectiveTickRate,
-    maxBytesPerClientPerSecond: options.replication?.maxBytesPerClientPerSecond ?? scale?.replication.maxBytesPerClientPerSecond ?? 32 * 1024,
+    maxBytesPerClientPerSecond: options.replication?.maxBytesPerClientPerSecond ?? scale?.replication.maxBytesPerClientPerSecond ?? 32768,
     binary: options.replication?.binary ?? scale?.replication.binary ?? true,
     maxClientsPerTick: options.replication?.maxClientsPerTick ?? scale?.replication.maxClientsPerTick,
     spread: options.replication?.spread ?? scale?.replication.spread ?? "none",
@@ -175,6 +176,7 @@ export function createAuthoritativeServer(options: AuthoritativeServerOptions): 
   }
 
   const replication = createServerReplication({
+    ...((options.reconnectGraceMs ?? 0) > 0 ? { onTransportFailure: (socket: Parameters<ServerAdmission['closeConnection']>[0]) => admission.closeConnection(socket, 1011) } : {}),
     defaults: replicationOptions,
     rooms,
     metrics,
@@ -205,6 +207,7 @@ export function createAuthoritativeServer(options: AuthoritativeServerOptions): 
     }
   });
   admission = createServerAdmission({
+    reconnectGraceMs: options.reconnectGraceMs,
     auth: options.auth ?? (options.devMode === true ? createDevAuthAdapter() : undefined),
     persistence: options.persistence,
     roomTypes: options.rooms,
@@ -276,10 +279,12 @@ export function createAuthoritativeServer(options: AuthoritativeServerOptions): 
       if (!bunServer) {
         bunServer = createAuthoritativeWebSocketServer({
           port: options.port,
+          hostname: options.hostname,
           tickRate: effectiveTickRate,
           inputCodec: options.inputCodec,
           binaryInputPayloadOwnership: options.binaryInputPayloadOwnership,
           httpHandler: options.httpHandler,
+          requestGuard: options.requestGuard,
           now,
           getStats,
           joinRoom: admission.joinRoom,

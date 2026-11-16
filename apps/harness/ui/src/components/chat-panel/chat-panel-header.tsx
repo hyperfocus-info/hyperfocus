@@ -1,48 +1,75 @@
-import { Show, type JSX } from "solid-js";
+import { ActionMenu,Input,MenuItem } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
-import { Copy, Edit3, MessageSquareMore, MoreHorizontal, Play, Plus, RefreshCcw, Split, Square, Terminal } from "lucide-solid";
+import { Copy,Edit3,MessageSquareMore,MoreHorizontal,Play,Plus,RefreshCcw,Split,Square,Terminal } from "lucide-solid";
+import { createSignal,Show } from "solid-js";
 import { harnessStore } from "../../harness-store";
 import { normalizeAppHotkeyPreferences } from "../../lib/app-hotkeys";
 import { tooltipWithPrimaryHotkey } from "../../lib/hotkey-hints";
 import { pushToast } from "../../toast-store";
 import { ActionButton } from "../action-button";
-import { Button } from "../primitives/button";
-import { Input } from "../primitives/input";
-import { Tooltip } from "../primitives/tooltip";
 import { chatPanelStyles as styles } from "../chat-panel.styles";
-import type { ChatPanelController } from "../chat-panel";
+import { Button } from "../primitives/button";
+import { Dialog } from "../primitives/dialog";
+import { HarnessSwarmLauncher } from "../swarm/swarm-launcher";
+import { useChatPanel } from "./state/panel-context";
+import { ThreadCollaboration } from "./thread-collaboration";
 
-export function ChatPanelHeader(props: { controller: ChatPanelController }) {
+export function ChatPanelHeader() {
+  const controller = useChatPanel();
   const {
     activeThread, activeThreadIsStreaming, currentRun, currentTab, editingThreadTitle,
     handleCommitRenameThread, handleForkThread, handleOpenThreadTerminalHistory, handleReset,
     handleRetry, handleSelectPaneTab, handleStartRenameThread, handleStop, project, retryableRun,
     selectedAgentLabel, setEditingThreadTitle, setThreadTitleDraft, state, threadTitleDraft,
-  } = props.controller;
+  } = controller;
   const simple = () => state.experienceMode === "simple";
+  const [contextOpen, setContextOpen] = createSignal(false);
+  const [collaborationOpen, setCollaborationOpen] = createSignal(false);
   const newThreadHotkey = () => normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences).createProjectChat[0];
   const newThreadLabel = () => tooltipWithPrimaryHotkey("Create a new thread in this project", newThreadHotkey());
-  const statusLabel = () => activeThreadIsStreaming() ? "Working" : "Ready";
+  const statusLabel = () => {
+    if (activeThread()?.lineage?.status === "running") return "Working";
+    const run = project().activeRun ?? project().lastRun;
+    if (!run) return activeThreadIsStreaming() ? "Working" : "Ready";
+    switch (run.status) {
+      case "planning": return "Planning";
+      case "awaiting-user-input": return "Needs your input";
+      case "ready": return "Plan ready";
+      case "running-main": case "running-subagents": case "aggregating": return "Working";
+      case "partial-complete": return "Partially complete";
+      case "completed": return "Completed";
+      case "stopped": return "Stopped";
+      case "failed": return "Failed";
+    }
+  };
   const agentInitial = () => selectedAgentLabel().trim().slice(0, 1).toUpperCase() || "A";
 
   return (
-    <header {...stylex.attrs(styles.chatHeader, simple() ? styles.chatHeaderSimple : undefined)}>
+    <><header {...stylex.attrs(styles.chatHeader, simple() ? styles.chatHeaderSimple : undefined)}>
       <div {...stylex.attrs(styles.chatIdentity)}>
         <div {...stylex.attrs(styles.agentAvatar)} aria-hidden="true">{agentInitial()}</div>
         <div {...stylex.attrs(styles.chatIdentityCopy)}>
           <div {...stylex.attrs(styles.agentPresence)}>
             <span {...stylex.attrs(styles.agentName)}>{selectedAgentLabel()}</span>
-            <span {...stylex.attrs(styles.presenceDot, activeThreadIsStreaming() ? styles.presenceDotWorking : styles.presenceDotReady)} />
-            <span {...stylex.attrs(styles.presenceLabel)}>{statusLabel()}</span>
+            <span {...stylex.attrs(styles.presenceDot, statusLabel() === "Working" || statusLabel() === "Planning" ? styles.presenceDotWorking
+              : statusLabel() === "Failed" ? styles.presenceDotFailed
+              : ["Ready", "Plan ready", "Completed"].includes(statusLabel()) ? styles.presenceDotReady : undefined)} />
+            <span data-test-thread-run-status {...stylex.attrs(styles.presenceLabel)}>{statusLabel()}</span>
             <span {...stylex.attrs(styles.projectName)}>in {project().name}</span>
           </div>
+          <Show when={activeThread()?.lineage || project().threads.some(thread => thread.lineage?.parentThreadId === project().activeThreadId)}>
+            <Button tooltip="View thread lineage" variant="ghost" size="sm" onClick={() => setCollaborationOpen(true)}>
+              {activeThread()?.lineage?.relationship === "subagent" ? "Subagent" : activeThread()?.lineage ? "Fork" : "Subagents and forks"}
+              <Show when={activeThread()?.lineage}> of {project().threads.find(thread => thread.id === activeThread()?.lineage?.parentThreadId)?.title ?? "parent thread"}</Show>
+            </Button>
+          </Show>
           <div {...stylex.attrs(styles.threadTitleRow)}>
             <Show
               when={editingThreadTitle()}
               fallback={
-                <Tooltip content={activeThread()?.title ?? "Thread"} triggerClass={stylex.attrs(styles.tooltipThreadTitle).class}>
-                  <h2 {...stylex.attrs(styles.chatThreadTitle)}>{activeThread()?.title ?? "Thread"}</h2>
-                </Tooltip>
+                <button type="button" aria-label="View current project and thread" {...stylex.attrs(styles.contextTrigger)} onClick={() => setContextOpen(true)}>
+                  <span {...stylex.attrs(styles.chatThreadTitle)}>{activeThread()?.title ?? "Thread"}</span>
+                </button>
               }
             >
               <Input
@@ -75,6 +102,7 @@ export function ChatPanelHeader(props: { controller: ChatPanelController }) {
       </div>
 
       <div {...stylex.attrs(styles.chatHeaderActions)}>
+        <Show when={project().id} keyed>{projectId => <HarnessSwarmLauncher projectId={projectId} projectName={project().name} goal={project().draft} agentRecipientId={project().activeThreadId} />}</Show>
         <Show when={simple() && currentRun()}>
           <Button
             tooltip={currentTab() === "run" ? "Return to conversation" : "Review the current run"}
@@ -87,7 +115,7 @@ export function ChatPanelHeader(props: { controller: ChatPanelController }) {
             <span {...stylex.attrs(styles.headerActionLabel)}>{currentTab() === "run" ? "Chat" : "Run"}</span>
           </Button>
         </Show>
-        <Show when={activeThreadIsStreaming()}>
+        <Show when={activeThreadIsStreaming() && project().activeRun}>
           <ActionButton
             tooltip="Stop active run"
             icon={<Square {...stylex.attrs(styles.headerIcon)} />}
@@ -98,46 +126,29 @@ export function ChatPanelHeader(props: { controller: ChatPanelController }) {
             onClick={handleStop}
           />
         </Show>
-        <details {...stylex.attrs(styles.headerMenuDetails)}>
-          <summary role="button" aria-label="More thread actions" title="More thread actions" {...stylex.attrs(styles.headerMenuSummary)}>
-            <MoreHorizontal {...stylex.attrs(styles.headerIcon)} />
-          </summary>
-          <div role="menu" aria-label="Thread actions" {...stylex.attrs(styles.headerMenu, styles.headerMenuItems)}>
-              <HeaderMenuItem ariaLabel={newThreadLabel()} icon={<Plus {...stylex.attrs(styles.headerIcon)} />} shortcut={newThreadHotkey()} onSelect={handleReset}>New thread</HeaderMenuItem>
-              <HeaderMenuItem icon={<Edit3 {...stylex.attrs(styles.headerIcon)} />} onSelect={handleStartRenameThread}>Rename thread</HeaderMenuItem>
-              <HeaderMenuItem icon={<Split {...stylex.attrs(styles.headerIcon)} />} onSelect={handleForkThread}>Fork thread</HeaderMenuItem>
-              <HeaderMenuItem icon={<Terminal {...stylex.attrs(styles.headerIcon)} />} onSelect={handleOpenThreadTerminalHistory}>Terminal history</HeaderMenuItem>
+        <ActionMenu ariaLabel="Thread actions" trigger={menu => <ActionButton tooltip="More thread actions" ariaLabel="More thread actions" icon={<MoreHorizontal {...stylex.attrs(styles.headerIcon)} />} size="icon" variant="ghost" aria-expanded={menu.open()} aria-haspopup="menu" onClick={menu.toggle} />}>
+              <MenuItem aria-label={newThreadLabel()} icon={<Plus {...stylex.attrs(styles.headerIcon)} />} shortcut={newThreadHotkey()} onSelect={handleReset}>New thread</MenuItem>
+              <MenuItem icon={<Edit3 {...stylex.attrs(styles.headerIcon)} />} onSelect={handleStartRenameThread}>Rename thread</MenuItem>
+              <MenuItem icon={<Split {...stylex.attrs(styles.headerIcon)} />} onSelect={handleForkThread}>Fork thread</MenuItem>
+              <MenuItem icon={<MessageSquareMore {...stylex.attrs(styles.headerIcon)} />} onSelect={() => setCollaborationOpen(true)}>Threads and subagents</MenuItem>
+              <MenuItem icon={<Terminal {...stylex.attrs(styles.headerIcon)} />} onSelect={handleOpenThreadTerminalHistory}>Terminal history</MenuItem>
               <Show when={retryableRun()}>
-                <HeaderMenuItem disabled={activeThreadIsStreaming()} icon={<RefreshCcw {...stylex.attrs(styles.headerIcon)} />} onSelect={handleRetry}>Retry last run</HeaderMenuItem>
+                <MenuItem disabled={activeThreadIsStreaming()} icon={<RefreshCcw {...stylex.attrs(styles.headerIcon)} />} onSelect={handleRetry}>Retry last run</MenuItem>
               </Show>
-              <HeaderMenuItem
+              <MenuItem
                 icon={<Copy {...stylex.attrs(styles.headerIcon)} />}
                 onSelect={() => {
                   const threadId = activeThread()?.id ?? "";
                   void navigator.clipboard.writeText(threadId).then(() => pushToast("Thread id copied", threadId));
                 }}
-              >Copy thread ID</HeaderMenuItem>
-          </div>
-        </details>
+              >Copy thread ID</MenuItem>
+        </ActionMenu>
       </div>
     </header>
-  );
-}
-
-function HeaderMenuItem(props: { children: JSX.Element; icon: JSX.Element; ariaLabel?: string; shortcut?: string; disabled?: boolean; onSelect: () => void }) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      aria-label={props.ariaLabel}
-      disabled={props.disabled}
-      {...stylex.attrs(styles.headerMenuItem)}
-      onClick={(event) => {
-        event.currentTarget.closest("details")?.removeAttribute("open");
-        if (!props.disabled) props.onSelect();
-      }}
-    >
-      {props.icon}<span>{props.children}</span><Show when={props.shortcut}>{(shortcut) => <kbd {...stylex.attrs(styles.headerMenuShortcut)}>{shortcut()}</kbd>}</Show>
-    </button>
+    <Dialog open={contextOpen()} onClose={() => setContextOpen(false)} title="Current conversation" description="This thread and its work belong to the project below.">
+      <dl {...stylex.attrs(styles.contextDetails)}><dt>Project</dt><dd>{project().name}</dd><dt>Folder</dt><dd>{project().rootPath}</dd><dt>Thread</dt><dd>{activeThread()?.title ?? "Thread"}</dd></dl>
+    </Dialog>
+    <ThreadCollaboration open={collaborationOpen()} onClose={() => setCollaborationOpen(false)} />
+    </>
   );
 }

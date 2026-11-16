@@ -1,0 +1,34 @@
+import { afterEach, expect, test } from "bun:test";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { createLocalExecutionProvider } from "./local-provider";
+import { createSwarmSourceSnapshot, swarmGit } from "./source";
+
+const directories: string[] = [];
+afterEach(async () => { for (const directory of directories.splice(0)) await rm(directory, { recursive: true, force: true }); });
+test("explicit local backend executes only in disposable copies, captures independent untracked patches and cleans up", async () => {
+  const root = resolve(import.meta.dir, "../../../../.local"); await mkdir(root, { recursive: true });
+  const directory = await mkdtemp(join(root, "swarm-local-test-")); directories.push(directory);
+  const sourceRoot = join(directory, "source"); await mkdir(sourceRoot);
+  await swarmGit({ root: sourceRoot, args: ["init"] });
+  await writeFile(join(sourceRoot, ".gitignore"), ".local/\n");
+  await writeFile(join(sourceRoot, "original.txt"), "baseline\n");
+  await swarmGit({ root: sourceRoot, args: ["add", "."] });
+  await swarmGit({ root: sourceRoot, args: ["-c", "user.name=Fixture", "-c", "user.email=fixture@localhost", "commit", "-m", "fixture"] });
+  const snapshot = await createSwarmSourceSnapshot({ root: sourceRoot });
+  const provider = createLocalExecutionProvider({ directory: join(directory, "workspaces") });
+  const workspace = await provider.createWorkspace({ swarmId: "swarm", taskId: "baseline", source: { revision: snapshot.revision, bundle: { sha256: snapshot.sha256, bytesBase64: Buffer.from(snapshot.bytes).toString("base64") } }, resources: { cpu: 2, memoryGB: 2 }, lane: "investigation" });
+  const fork = await provider.forkWorkspace({ workspace, taskId: "candidate" });
+  await writeFile(join(fork.root, "original.txt"), "candidate\n"); await writeFile(join(fork.root, "added.txt"), "new file\n");
+  const result = await provider.execute({ workspace: fork, task: { id: "git", command: "git rev-parse HEAD", timeoutMs: 5000 } });
+  expect(result.stdout.trim()).toBe(snapshot.revision);
+  const artifacts = await provider.captureArtifacts({ workspace: fork });
+  const patch = new TextDecoder().decode(artifacts[0]!.bytes);
+  expect(patch).toContain("added.txt"); expect(patch).toContain("+candidate");
+  expect(await readFile(join(workspace.root, "original.txt"), "utf8")).toBe("baseline\n");
+  expect(await readFile(join(sourceRoot, "original.txt"), "utf8")).toBe("baseline\n");
+  expect(await createLocalExecutionProvider({ directory: join(directory, "workspaces") }).listWorkspaces()).toHaveLength(2);
+  await expect(provider.execute({ workspace, task: { id: "escape", command: "echo nope", cwd: "../../", timeoutMs: 1000 } })).rejects.toThrow("escapes");
+  await provider.destroyWorkspace({ workspaceId: fork.id }); await provider.destroyWorkspace({ workspaceId: workspace.id });
+  expect(await provider.listWorkspaces()).toHaveLength(0);
+}, 20_000);

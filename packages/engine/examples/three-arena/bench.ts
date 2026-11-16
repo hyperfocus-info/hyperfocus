@@ -1,9 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
-import net from "node:net";
+import { launchHeadlessBrowser } from "@hyperfocus/desktop-runtime/automation";
 import { connectCdpSession, createCdpMessageRouter, type CdpSession } from "@hyperfocus/engine/tooling/cdp-client";
 import {
   assertEngineMotionRequestProbe,
@@ -243,15 +241,14 @@ function isBenchRunResult(result: BenchRunResult | ProbeResult): result is Bench
 }
 
 async function runBench(opts: BenchOptions): Promise<BenchRunResult | ProbeResult> {
-  const port = await findOpenPort();
-  const userDataDir = await mkdtemp(path.join(tmpdir(), "three-arena-bench-"));
-  let chrome: ChildProcess | undefined;
+  let chrome: Awaited<ReturnType<typeof launchHeadlessBrowser>> | undefined;
   let client: CdpSession | undefined;
   const consoleMessages: string[] = [];
   const pageErrors: string[] = [];
 
   try {
-    chrome = await launchChrome(port, userDataDir, opts);
+    chrome = await launchChrome(opts);
+    const port = chrome.port;
     const target = await createCdpTarget(port);
     client = await connectCdpSession(target.webSocketDebuggerUrl, "benchmark complete");
     const { Emulation, Input, Page, Runtime } = createCdpDomains(client);
@@ -343,9 +340,7 @@ async function runBench(opts: BenchOptions): Promise<BenchRunResult | ProbeResul
     return result;
   } finally {
     if (client) await client.close().catch(() => undefined);
-    await killProcessTree(chrome);
-    await killChromeProfileProcesses(userDataDir);
-    await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
+    await chrome?.close();
   }
 }
 
@@ -685,67 +680,17 @@ function withTelemetry(rawUrl: string, opts: BenchOptions) {
   return url.toString();
 }
 
-async function launchChrome(port: number, userDataDir: string, opts: BenchOptions) {
-  const args = [
-    "--headless=new",
-    "--disable-dev-shm-usage",
-    "--no-first-run",
-    "--no-default-browser-check",
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${userDataDir}`,
-    "about:blank"
-  ];
-  if (opts.disableGpu) args.splice(1, 0, "--disable-gpu");
-
+async function launchChrome(opts: BenchOptions) {
   const failures: string[] = [];
   for (const executable of chromeCandidates()) {
     if (path.isAbsolute(executable) && !existsSync(executable)) continue;
-    const proc = spawn(executable, args, { stdio: ["ignore", "ignore", "pipe"] });
-    const stderr: string[] = [];
-    proc.stderr?.on("data", (chunk) => stderr.push(String(chunk)));
-    const spawnFailure = new Promise<never>((_resolve, reject) => {
-      proc.once("error", reject);
-    });
     try {
-      await Promise.race([waitForCdp(port), spawnFailure]);
-      return proc;
+      return await launchHeadlessBrowser({ executable, args: opts.disableGpu ? ["--disable-gpu"] : [] });
     } catch (error) {
-      failures.push(`${executable}: ${error instanceof Error ? error.message : String(error)}${stderr.length ? ` (${stderr.join("").trim()})` : ""}`);
-      await killProcessTree(proc);
-      await killChromeProfileProcesses(userDataDir);
+      failures.push(`${executable}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   throw new Error(`No Chrome executable found. Set CHROME_PATH to benchmark.${failures.length ? ` Attempts: ${failures.join(" | ")}` : ""}`);
-}
-
-async function killProcessTree(proc?: ChildProcess) {
-  if (!proc?.pid) return;
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const killer = spawn("taskkill", ["/PID", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
-      killer.once("exit", () => resolve());
-      killer.once("error", () => resolve());
-    });
-    return;
-  }
-  if (proc.exitCode !== null || proc.signalCode !== null) return;
-  const exited = new Promise<void>((resolve) => {
-    proc.once("exit", () => resolve());
-    proc.once("error", () => resolve());
-  });
-  if (!proc.kill()) return;
-  await exited;
-}
-
-async function killChromeProfileProcesses(userDataDir: string) {
-  if (process.platform !== "win32") return;
-  const marker = path.basename(userDataDir).replace(/'/g, "''");
-  await new Promise<void>((resolve) => {
-    const script = `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'chrome.exe' -or $_.Name -eq 'msedge.exe') -and $_.CommandLine -like '*${marker}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
-    const killer = spawn("powershell.exe", ["-NoProfile", "-Command", script], { stdio: "ignore" });
-    killer.once("exit", () => resolve());
-    killer.once("error", () => resolve());
-  });
 }
 
 function chromeCandidates() {
@@ -757,33 +702,6 @@ function chromeCandidates() {
     path.join(process.env.PROGRAMFILES ?? "", "Microsoft/Edge/Application/msedge.exe"),
     path.join(process.env["PROGRAMFILES(X86)"] ?? "", "Microsoft/Edge/Application/msedge.exe")
   ].filter((candidate): candidate is string => typeof candidate === "string" && candidate.length > 0);
-}
-
-async function waitForCdp(port: number) {
-  const start = Date.now();
-  while (Date.now() - start < 10_000) {
-    try {
-      await cdpFetch(port, "/json/version");
-      return;
-    } catch {
-      await delay(80);
-    }
-  }
-  throw new Error("CDP endpoint did not start");
-}
-
-async function findOpenPort() {
-  return await new Promise<number>((resolve, reject) => {
-    const server = net.createServer();
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(() => {
-        if (typeof address === "object" && address?.port) resolve(address.port);
-        else reject(new Error("Could not allocate port"));
-      });
-    });
-  });
 }
 
 function delay(ms: number) {

@@ -1,3 +1,5 @@
+import { compareText } from "@hyperfocus/utilities/text";
+import { isRecord } from "@hyperfocus/utilities/records";
 import {
   createStoryCatalog,
   type DialogueSnapshot,
@@ -8,7 +10,7 @@ import {
   type StorySource,
 } from "../content/story.ts";
 import { normalizeSaveJson, type SaveJsonValue } from "../save/index.ts";
-import type { PlayableProject2D } from "./runtime-2d-contracts.ts";
+import type { PlayableProject2D } from "./runtime2d/runtime-2d-contracts.ts";
 import type { PlayableSaveStateProvider2D } from "./runtime-save-2d.ts";
 
 const MAX_STORY_ACTION_MAPPINGS = 512;
@@ -344,5 +346,3 @@ function parseStorySnapshot(value: unknown): PlayableStorySnapshot2D {
 }
 
 function jsonClone(value: unknown): SaveJsonValue { return normalizeSaveJson(value); }
-function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === "object" && !Array.isArray(value)); }
-function compareText(a: string, b: string) { return a < b ? -1 : a > b ? 1 : 0; }

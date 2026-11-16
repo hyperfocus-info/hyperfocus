@@ -1,4 +1,4 @@
-import { createMemo } from "solid-js";
+import { createMemo, onCleanup } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { VirtualList } from "../../components/primitives/virtual-list";
 import { resolveTerminalKeyboardAction } from "../terminal-keybindings";
@@ -12,9 +12,11 @@ export function SolidTerminalRendererPrototype(props: {
   backspaceInput?: string;
   onInput?: (input: string | Uint8Array) => void;
 }) {
+  let disposed = false;
+  onCleanup(() => { disposed = true; });
   const rows = createMemo(() => props.output.split(/\r?\n/).map((line, index) => ({ id: `${index}`, line })));
   const sendInput = (input: string) => {
-    if (props.readOnly) {
+    if (disposed || props.readOnly) {
       return;
     }
     props.onInput?.(input);
@@ -40,9 +42,7 @@ export function SolidTerminalRendererPrototype(props: {
       consumeTerminalShortcut(event);
       if (!props.readOnly) {
         void navigator.clipboard?.readText?.().then((text) => {
-          if (text) {
-            props.onInput?.(text);
-          }
+          if (text) sendInput(text);
         }).catch(() => undefined);
       }
       return;

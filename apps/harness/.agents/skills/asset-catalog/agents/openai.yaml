@@ -1,0 +1,4 @@
+interface:
+  display_name: "Game Asset Catalog"
+  short_description: "Find licensed packs and deep genre asset routes."
+  default_prompt: "Use $asset-catalog to build a genre-aware game asset plan with coherent starter packs, expansion sources, and clear license and import notes."

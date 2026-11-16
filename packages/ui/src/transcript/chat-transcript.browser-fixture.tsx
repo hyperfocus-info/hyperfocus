@@ -1,5 +1,7 @@
+import { markdownFor } from "./transcript-markdown-fixture.ts";
 /** @jsxImportSource solid-js */
 import { createSignal, onMount } from "solid-js";
+import { nonNegativeSafeIntegerOr, positiveSafeIntegerOr } from "@hyperfocus/utilities/math";
 import { render } from "solid-js/web";
 import { ChatTranscript, type TranscriptMessage } from "./chat-transcript";
 
@@ -31,17 +33,32 @@ type TranscriptBrowserSnapshot = {
 declare global {
   interface Window {
     __transcriptBrowserSnapshot?: TranscriptBrowserSnapshot;
+    __transcriptBrowserControls?: {
+      append: () => void;
+      stream: () => void;
+      showWideMarkdown: () => void;
+    };
   }
 }
 
 const startedAt = performance.now();
-const requestedMessages = positiveCount(new URLSearchParams(location.search).get("count"), 10_000);
-const streamRenderIntervalMs = nonNegativeCount(new URLSearchParams(location.search).get("streamInterval"), 32);
+const requestedMessages = positiveSafeIntegerOr(Number(new URLSearchParams(location.search).get("count")), 10_000);
+const streamRenderIntervalMs = nonNegativeSafeIntegerOr(Number(new URLSearchParams(location.search).get("streamInterval")), 32);
 const runStreamBurst = new URLSearchParams(location.search).get("streamBurst") === "1";
 let streamingContentApplications = 0;
 
 function FixtureApp() {
   const [messages, setMessages] = createSignal(createMessages(0, requestedMessages));
+
+  window.__transcriptBrowserControls = {
+    append: () => setMessages((current) => [...current, ...createMessages(current.length, 3)]),
+    stream: () => setMessages((current) => current.map((message) => message.id === "streaming-message"
+      ? { ...message, content: `${message.content}\n\n${"Streaming continuation. ".repeat(20)}` } : message)),
+    showWideMarkdown: () => setMessages([{
+      id: "wide-markdown", role: "assistant",
+      content: `## Readable content\n\n[Keyboard link](https://example.com)\n\n\`\`\`ts\nconst longValue = "${"unbroken".repeat(100)}";\n\`\`\`\n\n| ${"Long column ".repeat(12)} | Second column | Third column |\n| --- | --- | --- |\n| ${"value".repeat(80)} | More information | Further information |\n\n${"Paragraph for text scaling. ".repeat(25)}`
+    }])
+  };
 
   onMount(() => {
     void runWorkload(messages, setMessages);
@@ -135,28 +152,7 @@ function createMessages(start: number, count: number): TranscriptMessage[] {
   });
 }
 
-function markdownFor(index: number) {
-  switch (index % 4) {
-    case 0:
-      return `## Update ${index}\n\nA paragraph with **strong text** and \`inline-${index}\`.`;
-    case 1:
-      return `> Evidence ${index}\n> remains visible in the bounded window.`;
-    case 2:
-      return `| Metric | Value |\n| --- | ---: |\n| Rows | ${index} |\n| Stable | yes |`;
-    default:
-      return `\`\`\`ts\nconst sample${index} = ${index};\n\`\`\``;
-  }
-}
 
-function positiveCount(raw: string | null, fallback: number) {
-  const parsed = Number(raw);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function nonNegativeCount(raw: string | null, fallback: number) {
-  const parsed = Number(raw);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
-}
 
 function readUsedJsHeapBytes(value: unknown) {
   if (typeof value !== "object" || value === null) return undefined;

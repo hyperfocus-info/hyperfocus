@@ -1,12 +1,13 @@
-import { createStore, reconcile } from "solid-js/store";
 import type {
-  ServerEvent,
-  TerminalHistoryScope,
-  TerminalPaneLayout,
-  TerminalPreferences,
-  TerminalSession,
-  TerminalShell
+ServerEvent,
+TerminalHistoryScope,
+TerminalPaneLayout,
+TerminalPreferences,
+TerminalSession,
+TerminalShell
 } from "@hyperfocus/ai-core/protocol";
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
+import { createStore,reconcile } from "solid-js/store";
 import { normalizeTerminalGlyphSpacing } from "./terminal-output-format";
 
 export const TERMINAL_DRAWER_STORAGE_KEY = "pi-harness:terminal-drawer:v1";
@@ -182,9 +183,6 @@ function readDrawerState() {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function persistDrawerState(height: number, open: boolean) {
   if (typeof window === "undefined") {

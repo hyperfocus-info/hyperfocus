@@ -4,6 +4,38 @@ import type { PiAgentAdapter, PiAgentExecutionController, PiAgentPromptRequest }
 import { DEFAULT_CODING_STACK_GUIDANCE } from "./prompts/coding-stack-defaults";
 
 describe("pi planner payload parsing", () => {
+  test("includes attached requirements and conversation once without losing current task or repair context", async () => {
+    const calls: PiAgentPromptRequest[] = [];
+    const ready = { type: "ready", difficultyScore: 20, summary: "Plan", executionModelId: "openai/gpt-5.6-luna", usesSubagents: false, subtasks: [], finalExecutionBrief: "Implement all requirements" };
+    const adapter: PiAgentAdapter = {
+      async runPrompt(request) {
+        calls.push(request);
+        return { text: JSON.stringify(calls.length === 1 ? { ...ready, difficultyScore: -1 } : ready) };
+      },
+      async startExecution() { throw new Error("not used"); },
+      setApiKey() {},
+      hasApiKey() { return false; }
+    };
+    const now = "2026-09-05T00:00:00.000Z";
+    const specification = "Preserve decimal budgets, export quoted CSV, and recover edited intake records.";
+    await planTask(adapter, {
+      cwd: process.cwd(), providerBrand: "gpt", latestUserPrompt: "Create the intake product", planningModelId: "openai/gpt-5.6-luna",
+      messages: [{ id: "brief", kind: "plain", role: "user", content: "Create the intake product", createdAt: now,
+        attachments: [{ id: "spec", key: "planner-dedup-spec", kind: "text", name: "requirements.md", mimeType: "text/markdown", sizeBytes: specification.length,
+          url: `data:text/plain,${encodeURIComponent(specification)}`, uploadedAt: now }] }]
+    });
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(call.prompt.split(specification)).toHaveLength(2);
+      expect(call.prompt.split("Create the intake product")).toHaveLength(2);
+      expect(call.prompt).toContain("Attachment text");
+      expect(call.prompt).toContain("Prior planning Q/A:");
+      expect(call.readOnly).toBe(true);
+      expect(call.modelId).toBe("openai/gpt-5.6-luna");
+    }
+    expect(calls[1]!.prompt).toContain("Repair the planner JSON payload");
+  });
+
   const buildReadyPayload = (overrides: Record<string, unknown> = {}) => ({
     type: "ready",
     difficultyScore: 72,
@@ -211,10 +243,12 @@ describe("pi planner payload parsing", () => {
     });
 
     expect(prompt).toContain(DEFAULT_CODING_STACK_GUIDANCE);
+    expect(prompt).toContain("a self-contained single-file product normally needs prerequisites: []");
     expect(prompt).toContain("SolidJS + StyleX");
     expect(prompt).not.toContain("SolidJS + Tailwind");
-    expect(prompt).toContain("documentation comments for new functions and variables");
-    expect(prompt).toContain("createUiTest-style setup from harness/ui/src/utils/tests/test-harness.ts");
+    expect(prompt).not.toContain("documentation comments for new functions and variables");
+    expect(prompt).not.toContain("harness/ui/src/utils/tests/test-harness.ts");
+    expect(prompt).toContain("active project's test tools and helpers");
     expect(prompt).toContain("Git repository state:");
     expect(prompt).not.toContain("Prior decision");
     expect(prompt).not.toContain("Memory summaries:");
@@ -436,9 +470,8 @@ describe("pi planner payload parsing", () => {
     });
 
     expect(calls[0]?.prompt).toContain("emit contracts with concrete ownedPaths");
-    expect(calls[0]?.prompt).toContain("Subagents receive implementation packets");
-    expect(calls[0]?.prompt).toContain("expected public functions/classes/components/signatures");
-    expect(calls[0]?.prompt).toContain("verificationCommands are for the main harness verification pass");
+    expect(calls[0]?.prompt).toContain("leave local implementation choices to the responsible worker");
+    expect(calls[0]?.prompt).toContain("cross-worker interfaces that must remain compatible");
     expect(calls[0]?.prompt).toContain("verificationScope must be exactly");
     expect(calls[0]?.prompt).toContain("Same-worktree parallel work requires contracts with non-overlapping ownedPaths");
     expect(result.plannerResult.type).toBe("ready");

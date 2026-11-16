@@ -20,8 +20,8 @@ case "planning.refine": {
       assertGlobalExecutionNotPaused(repository);
       const projectId = command.payload.projectId;
       const project = runtime.getProject(projectId);
-      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project);
       const activeRun = requireActiveRun(project, command.payload.runId);
+      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project, activeRun);
       if (activeRun.status !== "ready") {
         throw new Error("Only ready runs can be refined");
       }
@@ -31,7 +31,7 @@ case "planning.refine": {
       const attachments = validatePromptAttachments(repository, projectId, command.payload.threadId, command.payload.attachments);
       const capturedCliContext = runtime.consumeThreadCapturedCliContext(projectId, command.payload.threadId);
       const promptContent = appendCapturedCliContext(command.payload.content, capturedCliContext);
-      const providerBrand = repository.getProviderBrand();
+      const providerBrand = activeRun.launchProfile?.providerBrand ?? repository.getProviderBrand();
       const executionModelId = resolveExecutionModelIdForRuntime({
         runtime: agentRuntime,
         capability: agentRuntime.getCapability(),
@@ -55,9 +55,10 @@ case "planning.refine": {
       const runProject = repository.createAgentRun(
         projectId,
         promptContent,
-        agentRuntime.getDefaultPlanningModelId(providerBrand),
+        activeRun.planningModelId ?? agentRuntime.getDefaultPlanningModelId(providerBrand),
         command.payload.threadId,
-        command.payload.runtimeBudget?.maxTurns
+        command.payload.runtimeBudget?.maxTurns,
+        { agentId: agentRuntime.id, providerBrand, reasoningStrength: command.payload.reasoningStrength ?? activeRun.launchProfile?.reasoningStrength, fastMode: command.payload.fastMode ?? activeRun.launchProfile?.fastMode }
       );
       const createdRun = runProject.activeRun ?? repository.getLatestThreadRun(projectId, command.payload.threadId);
       if (!createdRun) {
@@ -83,8 +84,8 @@ case "planning.refine": {
           providerBrand,
           debugEnabled,
           executionModelId,
-          reasoningStrength: command.payload.reasoningStrength,
-          fastMode: command.payload.fastMode,
+          reasoningStrength: command.payload.reasoningStrength ?? activeRun.launchProfile?.reasoningStrength,
+          fastMode: command.payload.fastMode ?? activeRun.launchProfile?.fastMode,
           abortSignal: abortController.signal,
           derivedProgressHeartbeatMs,
           tokenUsageSession

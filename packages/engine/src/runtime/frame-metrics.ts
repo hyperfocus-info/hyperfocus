@@ -10,6 +10,8 @@ export type MetricSummary = {
 };
 
 export type LongFrameRecord = {
+  /** These signals overlap; do not sum them as separate frame costs. */
+  metric: "frame.ms" | "frame.gap.ms";
   durationMs: number;
   at: number;
 };
@@ -93,9 +95,9 @@ export function createFrameMetrics(options: FrameMetricsOptions = {}): FrameMetr
     metric.cursor = (metric.cursor + 1) % capacity;
     metric.count = Math.min(capacity, metric.count + 1);
     metric.latest = value;
-    if (name === "frame.ms" && value > longFrameMs) {
+    if ((name === "frame.ms" || name === "frame.gap.ms") && value > longFrameMs) {
       if (longFrames.length >= maxLongFrames) longFrames.shift();
-      longFrames.push({ durationMs: value, at: now() });
+      longFrames.push({ metric: name, durationMs: value, at: now() });
     }
     return true;
   }

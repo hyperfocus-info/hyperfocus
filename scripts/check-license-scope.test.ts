@@ -1,13 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { normalizeWhitespace } from '@hyperfocus/utilities/text';
 
 const repositoryRoot = new URL("../", import.meta.url);
 
 async function readRepositoryFile(path: string) {
   return Bun.file(new URL(path, repositoryRoot)).text();
-}
-
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
 }
 
 describe("repository license scope", () => {
@@ -46,15 +43,21 @@ describe("repository license scope", () => {
     expect(license).toContain("or governed by separate license terms");
   });
 
-  test("keeps distributed package licenses synchronized with the repository license", async () => {
-    const [repositoryLicense, enginePackageLicense, editorPackageLicense] = await Promise.all([
-      readRepositoryFile("LICENSE"),
-      readRepositoryFile("packages/engine/LICENSE"),
-      readRepositoryFile("apps/engine-editor/LICENSE"),
-    ]);
-
-    expect(enginePackageLicense).toBe(repositoryLicense);
-    expect(editorPackageLicense).toBe(repositoryLicense);
+  test("keeps root-licensed package copies synchronized and all public licenses included", async () => {
+    const repositoryLicense = await readRepositoryFile("LICENSE");
+    for await (const manifestPath of new Bun.Glob("{apps,packages}/*/package.json").scan(new URL(repositoryRoot))) {
+      const manifest = await Bun.file(new URL(manifestPath.replaceAll("\\", "/"), repositoryRoot)).json();
+      if (manifest.private) continue;
+      expect(manifest.license).toBe("SEE LICENSE IN LICENSE");
+      expect(manifest.files).toContain("LICENSE");
+      const licensePath = manifestPath.replaceAll("\\", "/").replace("package.json", "LICENSE");
+      const license = await readRepositoryFile(licensePath);
+      expect(license.length).toBeGreaterThan(0);
+      expect(license).toBe(repositoryLicense);
+    }
+    for (const path of ["apps/pad-pilot/LICENSE", "apps/pad-pilot-marketplace/LICENSE"]) {
+      expect(await readRepositoryFile(path)).toBe(repositoryLicense);
+    }
   });
 
   test("keeps public license summaries aligned with the operative text", async () => {

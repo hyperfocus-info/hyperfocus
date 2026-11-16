@@ -1,3 +1,4 @@
+import { encodeValue, readValueFrame } from "@hyperfocus/serialization";
 import { describe, expect, test } from "bun:test";
 import { request as httpRequest } from "node:http";
 import path from "node:path";
@@ -10,10 +11,10 @@ import { HARNESS_SESSION_TOKEN_QUERY, TEST_HARNESS_SESSION_TOKEN } from "../../s
 
 function createFakeSocket() {
   const target = new EventTarget();
-  const sentPayloads: string[] = [];
+  const sentPayloads: Array<string | Uint8Array> = [];
   return Object.assign(target, {
     sentPayloads,
-    send(payload: string) {
+    send(payload: string | Uint8Array) {
       sentPayloads.push(payload);
     },
     emit(payload: unknown) {
@@ -75,7 +76,7 @@ describe("server test harness support", () => {
       250
     );
 
-    expect(JSON.parse(socket.sentPayloads[0] ?? "{}").type).toBe("run.execute");
+    expect(Reflect.get(Object(readValueFrame(socket.sentPayloads[0])), "type")).toBe("run.execute");
     expect(outcome.type).toBe("synthetic-ready");
   });
 
@@ -100,11 +101,8 @@ describe("server test harness support", () => {
       const readyEvent = await new Promise<{ type: string }>((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error("Timed out waiting for connection.ready")), 5000);
         socket.addEventListener("message", (event) => {
-          if (typeof event.data !== "string") {
-            return;
-          }
-          const payload = JSON.parse(event.data);
-          if (payload.type === "connection.ready") {
+          const payload = parseServerEventFrame(readValueFrame(event.data))[0];
+          if (payload?.type === "connection.ready") {
             clearTimeout(timeout);
             resolve(payload);
           }
@@ -141,7 +139,7 @@ describe("server test harness support", () => {
 
       for (let index = 0; index < 5; index += 1) {
         socket.send(
-          JSON.stringify({
+          encodeValue({
             type: "agent.list",
             requestId: `req-agent-list-${index}`
           })
@@ -259,10 +257,7 @@ function waitForRawServerEvent(
       reject(new Error("Timed out waiting for websocket event"));
     }, 3000);
     const onMessage = (event: MessageEvent) => {
-      if (typeof event.data !== "string") {
-        return;
-      }
-      const raw = JSON.parse(event.data);
+      const raw = readValueFrame(event.data);
       const rawType = typeof raw === "object" && raw !== null && "type" in raw && typeof raw.type === "string" ? raw.type : undefined;
       const events = parseServerEventFrame(raw);
       if (!predicate(events, rawType)) {

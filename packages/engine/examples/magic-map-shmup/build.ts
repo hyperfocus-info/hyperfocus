@@ -1,3 +1,4 @@
+import { buildConfiguredBrand } from '@hyperfocus/branding/config';
 import { resolve } from "node:path";
 import { buildExampleBundles } from "@hyperfocus/engine/tooling/example-build";
 
@@ -14,3 +15,5 @@ await buildExampleBundles("Magic Map Shmup", resolve(here, "dist"), [
 ]);
 
 console.info("Built Magic Map Shmup bundle.");
+
+await buildConfiguredBrand({configPath:import.meta.dir+'/brand.json',directory:import.meta.dir+'/brand',htmlPath:import.meta.dir+'/index.html'});

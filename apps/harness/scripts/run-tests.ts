@@ -1,11 +1,13 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
+import { errorMessage } from "@hyperfocus/utilities/text";
 import path from "node:path";
 import {
-  buildBunTestPlan,
-  createHarnessTestRunRoot,
-  removeHarnessTestRunRoot,
-  stripFlag
-} from "./test-runner";
-import { buildDefaultTestSegments, shouldUseDefaultTestSegments, type TestSegment } from "./test-segments";
+buildBunTestPlan,
+createHarnessTestRunRoot,
+removeHarnessTestRunRoot,
+stripFlag
+} from "./testing/test-runner";
+import { buildDefaultTestSegments,shouldUseDefaultTestSegments,type TestSegment } from "./testing/test-segments";
 
 const repoRoot = path.resolve(import.meta.dir, "../../..");
 const forwardedArgs = process.argv.slice(2);
@@ -22,7 +24,7 @@ try {
       const targetGroups = segment.isolateTargets ? segment.targets.map((target) => [target]) : [segment.targets];
       let segmentExitCode = 0;
       for (const targets of targetGroups) {
-        const testProcess = Bun.spawn({
+        const testProcess = spawnBackgroundProcess({
           cmd: [process.execPath, ...buildSegmentBunArgs(plan.bunArgs, segment), ...targets],
           cwd: repoRoot,
           env: { ...process.env, HARNESS_TEST_TMP_ROOT: testRunRoot, ...segment.env },
@@ -41,7 +43,7 @@ try {
       }
     }
   } else {
-    const testProcess = Bun.spawn({
+    const testProcess = spawnBackgroundProcess({
       cmd: [process.execPath, ...plan.bunArgs],
       cwd: repoRoot,
       env: { ...process.env, HARNESS_TEST_TMP_ROOT: testRunRoot },
@@ -55,7 +57,7 @@ try {
   try {
     await removeHarnessTestRunRoot(testRunRoot);
   } catch (error) {
-    console.error(`[test] failed to remove run-owned temp root ${testRunRoot}: ${describeError(error)}`);
+    console.error(`[test] failed to remove run-owned temp root ${testRunRoot}: ${errorMessage(error, { stringify: true })}`);
     exitCode = exitCode || 1;
   }
 }
@@ -63,12 +65,9 @@ try {
 process.exitCode = exitCode;
 
 function buildSegmentBunArgs(bunArgs: string[], segment: TestSegment) {
+  const args = segment.browser ? [...bunArgs, "--conditions", "browser"] : bunArgs;
   if (!segment.serial) {
-    return bunArgs;
+    return args;
   }
-  return stripFlag(stripFlag(bunArgs, "--parallel"), "--parallel-delay");
-}
-
-function describeError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return stripFlag(stripFlag(args, "--parallel"), "--parallel-delay");
 }

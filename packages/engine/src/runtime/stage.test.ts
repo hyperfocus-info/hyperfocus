@@ -67,7 +67,7 @@ test("stage updates only active entities", () => {
 
   stage.spawn({ id: "active" });
   stage.spawn({ id: "inactive", active: false });
-  stage.update(1 / 60);
+  stage.update(0.016666666666666666);
 
   expect(updated).toEqual(["active"]);
 });
@@ -87,10 +87,10 @@ test("stage mutation does not skip the next entity or update new spawns early", 
 
   first = stage.spawn({ id: "first" });
   stage.spawn({ id: "second" });
-  stage.update(1 / 60);
+  stage.update(0.016666666666666666);
   expect(updated).toEqual(["first", "second"]);
 
-  stage.update(1 / 60);
+  stage.update(0.016666666666666666);
   expect(updated).toEqual(["first", "second", "second", "late"]);
 });
 
@@ -111,7 +111,7 @@ test("stage mutation still visits later entities when a callback removes itself 
   second = stage.spawn({ id: "second" });
   stage.spawn({ id: "third" });
 
-  stage.update(1 / 60);
+  stage.update(0.016666666666666666);
   expect(updated).toEqual(["first", "second", "third"]);
 });
 
@@ -153,9 +153,9 @@ test("stage does not process an entity removed and re-spawned during the same pa
   first = stage.spawn({ id: "first" });
   second = stage.spawn({ id: "second" });
 
-  stage.update(1 / 60);
+  stage.update(0.016666666666666666);
   expect(updated).toEqual(["first"]);
-  stage.update(1 / 60);
+  stage.update(0.016666666666666666);
   expect(updated).toEqual(["first", "first"]);
 });
 

@@ -1,3 +1,4 @@
+import { finiteOr as finiteNumberOr } from "@hyperfocus/utilities/math";
 import type { KinematicForce3DHandle, KinematicForce3DOptions, Vec3 } from "./3d.ts";
 
 export type MutableForce = {
@@ -36,7 +37,4 @@ export function inactiveForceHandle(id: string): KinematicForce3DHandle {
   };
 }
 
-function finiteOr(value: unknown, fallback: number) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
+function finiteOr(value: unknown, fallback: number) { return finiteNumberOr(Number(value), fallback); }

@@ -1,6 +1,6 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
-import { fireEvent, render, screen } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createUiTest, requireInput } from "../utils/tests/test-harness";
 import { clearBrowserStateForTests } from "../utils/tests/store-test-utils";
 import { toastStore } from "../toast-store";
@@ -119,9 +119,9 @@ Footnote here.[^1]
     expect(
       document.querySelector("[data-test-markdown-code-block]"),
     ).not.toBeNull();
-    expect(document.querySelector(".hljs-keyword")?.className).toContain(
+    await waitFor(() => expect(document.querySelector(".hljs-keyword")?.className).toContain(
       "syntaxKeyword",
-    );
+    ));
 
     fireEvent.click(screen.getByRole("button", { name: "Copy code block" }));
     await new Promise((resolve) => setTimeout(resolve, 0));

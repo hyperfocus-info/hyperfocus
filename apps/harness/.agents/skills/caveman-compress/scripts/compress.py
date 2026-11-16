@@ -9,6 +9,7 @@ Usage:
 import os
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import List
 
@@ -39,7 +40,7 @@ def call_claude(prompt: str) -> str:
         try:
             import anthropic
 
-            client = anthropic.Anthropic(api_key=api_key)
+            client = anthropic.Anthropic(api_key=api_key, timeout=120.0, max_retries=0)
             msg = client.messages.create(
                 model=os.environ.get("CAVEMAN_MODEL", "claude-sonnet-4-5"),
                 max_tokens=8192,
@@ -56,6 +57,9 @@ def call_claude(prompt: str) -> str:
             text=True,
             capture_output=True,
             check=True,
+            encoding="utf-8",
+            timeout=120,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
         return strip_llm_wrapper(result.stdout.strip())
     except subprocess.CalledProcessError as e:
@@ -67,11 +71,13 @@ def build_compress_prompt(original: str) -> str:
 Compress this markdown into caveman format.
 
 STRICT RULES:
+- Preserve meaning, requirements, negation, conditions, uncertainty, ordering, technical names, and numbers.
 - Do NOT modify anything inside ``` code blocks
 - Do NOT modify anything inside inline backticks
 - Preserve ALL URLs exactly
 - Preserve ALL headings exactly
 - Preserve file paths and commands
+- Preserve YAML frontmatter exactly
 - Return ONLY the compressed markdown body — do NOT wrap the entire output in a ```markdown fence or any other fence. Inner code blocks from the original stay as-is; do not add a new outer fence around the whole file.
 
 Only compress natural language.
@@ -128,7 +134,8 @@ def compress_file(filepath: Path) -> bool:
         print("Skipping (not natural language)")
         return False
 
-    original_text = filepath.read_text(errors="ignore")
+    original_bytes = filepath.read_bytes()
+    original_text = original_bytes.decode("utf-8")
     backup_path = filepath.with_name(filepath.stem + ".original.md")
 
     # Check if backup already exists to prevent accidental overwriting
@@ -142,35 +149,25 @@ def compress_file(filepath: Path) -> bool:
     print("Compressing with Claude...")
     compressed = call_claude(build_compress_prompt(original_text))
 
-    # Save original as backup, write compressed to original path
-    backup_path.write_text(original_text)
-    filepath.write_text(compressed)
-
-    # Step 2: Validate + Retry
-    for attempt in range(MAX_RETRIES):
-        print(f"\nValidation attempt {attempt + 1}")
-
-        result = validate(backup_path, filepath)
-
-        if result.is_valid:
-            print("Validation passed")
-            break
-
-        print("❌ Validation failed:")
-        for err in result.errors:
-            print(f"   - {err}")
-
-        if attempt == MAX_RETRIES - 1:
-            # Restore original on failure
-            filepath.write_text(original_text)
-            backup_path.unlink(missing_ok=True)
-            print("❌ Failed after retries — original restored")
-            return False
-
-        print("Fixing with Claude...")
-        compressed = call_claude(
-            build_fix_prompt(original_text, compressed, result.errors)
-        )
-        filepath.write_text(compressed)
-
-    return True
+    # Validate candidates off-path; errors, interrupts and failed repairs leave the source intact.
+    with tempfile.TemporaryDirectory(prefix="caveman-", dir=filepath.parent) as directory:
+        snapshot = Path(directory) / "original.md"
+        candidate = Path(directory) / "candidate.md"
+        snapshot.write_bytes(original_bytes)
+        for attempt in range(MAX_RETRIES):
+            candidate.write_bytes(compressed.encode("utf-8"))
+            result = validate(snapshot, candidate)
+            if result.is_valid:
+                if filepath.read_bytes() != original_bytes:
+                    raise RuntimeError("Source changed during compression; refusing to overwrite it.")
+                # Exclusive creation also protects backups created while inference was running.
+                with backup_path.open("xb") as backup:
+                    backup.write(original_bytes)
+                candidate.chmod(filepath.stat().st_mode)
+                os.replace(candidate, filepath)
+                print("Validation passed")
+                return True
+            if attempt + 1 < MAX_RETRIES:
+                compressed = call_claude(build_fix_prompt(original_text, compressed, result.errors))
+        print("Validation failed; source unchanged")
+        return False

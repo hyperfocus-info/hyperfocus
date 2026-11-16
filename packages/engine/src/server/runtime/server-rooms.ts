@@ -1,7 +1,7 @@
 import { createProtocolMessage, encodeProtocolMessage } from "../../protocol/messages.ts";
 import type { PresenceIndex } from "../core/presence-index.ts";
 import { createAuthoritativeRoom, type AuthoritativeRoom } from "../core/room.ts";
-import type { PersistenceAdapter, RoomType } from "../core/types.ts";
+import type { PersistenceAdapter, RoomBroadcast, RoomType } from "../core/types.ts";
 import type { ServerMetrics } from "../operations/metrics.ts";
 import type { MmoAdmissionOptions } from "../replication/scaling.ts";
 import { createWorkerRoomHost, type WorkerRoomHost } from "../routing/worker-room.ts";
@@ -68,7 +68,7 @@ export function createServerRoomManager(options: ServerRoomManagerOptions) {
   }
 
   async function flushBroadcasts(room: AuthoritativeRoom) {
-    let broadcasts: Array<{ event: unknown; durability: "transient" | "durable" }>;
+    let broadcasts: RoomBroadcast[];
     let recipients: Array<{ playerId: string; socket: EngineServerWebSocket<unknown> }>;
     try {
       ({ broadcasts, recipients } = await room.runExclusive(() => ({
@@ -102,6 +102,8 @@ export function createServerRoomManager(options: ServerRoomManagerOptions) {
         }
       }
       for (const recipient of recipients) {
+        if (broadcast.recipients && !broadcast.recipients.includes(recipient.playerId)) continue;
+        if (broadcast.recipientConnections && broadcast.recipientConnections.get(recipient.playerId) !== recipient.socket) continue;
         try {
           const status = recipient.socket.send(encoded);
           if (status === 0) {

@@ -54,11 +54,11 @@ Read [table-map.md](table-map.md) if you need the wider schema around a result.
 Prefer the helper before hand-writing SQL:
 
 ```powershell
-bun.cmd .agents/skills/db-data-harnessing/scripts/lookup-thread.ts <thread-id>
-bun.cmd .agents/skills/db-data-harnessing/scripts/lookup-thread.ts <thread-id> --db C:\path\to\harness.db --json
+bun "<skill>/scripts/lookup-thread.ts" <thread-id>
+bun "<skill>/scripts/lookup-thread.ts" <thread-id> --db "<database-path>" --json
 ```
 
-## Notable Discoveries From Current Context
+## Interpretation notes
 
 - The harness default DB lives at `~/.ai-harness-template/harness.db`.
 - BranchFS mounts should point back to that DB unless a fresh isolated database is intended.

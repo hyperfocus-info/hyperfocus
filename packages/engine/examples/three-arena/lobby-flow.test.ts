@@ -1,3 +1,5 @@
+import { isRecord } from "@hyperfocus/utilities/records";
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { expect, test } from "bun:test";
 import net from "node:net";
 import { connectAuthoritative, type AuthoritativeClient } from "@hyperfocus/engine/net";
@@ -112,9 +114,7 @@ function recordFrom(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function isRoomSummary(value: unknown): value is { id: string; players: number; status: string; hostId: string } {
   const room = recordFrom(value);
@@ -125,7 +125,7 @@ function isRoomSummary(value: unknown): value is { id: string; players: number; 
 test("three arena authoritative lobby waits for host start and shares two-player state", async () => {
   const staticPort = await findOpenPort();
   const wsPort = await findOpenPort();
-  const proc = Bun.spawn([process.execPath, "run", "./examples/three-arena/server.ts"], {
+  const proc = spawnBackgroundProcess({ cmd: [process.execPath, "run", "./examples/three-arena/server.ts"], ...{
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -136,7 +136,7 @@ test("three arena authoritative lobby waits for host start and shares two-player
     },
     stdout: "ignore",
     stderr: "pipe",
-  });
+  } });
 
   try {
     await waitForServer(staticPort);

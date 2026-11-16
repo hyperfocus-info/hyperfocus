@@ -1,3 +1,4 @@
+import { modulo as slotFor } from "@hyperfocus/utilities/math";
 import { createFixedStepLoop } from "./loop.ts";
 
 export type BufferedInput<TInput> = {
@@ -56,9 +57,7 @@ function assertFrame(frame: number) {
   if (!Number.isSafeInteger(frame) || frame < 0) throw new RangeError(`rollback frame must be a non-negative safe integer: ${String(frame)}`);
 }
 
-function slotFor(frame: number, capacity: number) {
-  return ((frame % capacity) + capacity) % capacity;
-}
+
 
 function sameInput(a: unknown, b: unknown) {
   try {
@@ -135,7 +134,7 @@ export function createInputBuffer<TInput>(capacity = 120): InputBuffer<TInput> {
 }
 
 export function createRollbackLoop<TInput, TState>(options: RollbackLoopOptions<TInput, TState>): RollbackLoop<TInput> {
-  const step = options.step ?? 1 / 60;
+  const step = options.step ?? 0.016666666666666666;
   const maxRollbackFrames = options.maxRollbackFrames ?? 120;
   const maxFutureInputFrames = options.maxFutureInputFrames ?? 8;
   if (!Number.isFinite(step) || step <= 0) throw new RangeError("rollback step must be a positive finite number");
@@ -171,7 +170,7 @@ export function createRollbackLoop<TInput, TState>(options: RollbackLoopOptions<
 
   function peersForFrame(frame: number) {
     const existing = framePeers.get(frame);
-    if (existing) return existing;
+    if (existing !== undefined) return existing;
     const configured = typeof options.peerIds === "function" ? options.peerIds() : options.peerIds;
     const peers = [...new Set(configured)];
     if (!peers.includes(options.localPeerId)) peers.unshift(options.localPeerId);
@@ -197,8 +196,9 @@ export function createRollbackLoop<TInput, TState>(options: RollbackLoopOptions<
   }
 
   function rollbackTo(frame: number) {
-    const snapshot = snapshots.get(frame);
-    if (!snapshot) return;
+    if (!snapshots.has(frame)) return;
+    // Presence is independent of TState: even undefined can be a saved state.
+    const snapshot = snapshots.get(frame)!;
     const targetFrame = currentFrame;
     options.setState(cloneState(snapshot));
     currentFrame = frame;

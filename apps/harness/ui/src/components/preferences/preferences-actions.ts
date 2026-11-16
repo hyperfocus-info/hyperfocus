@@ -1,4 +1,6 @@
 import { createRequestId } from "@hyperfocus/ai-core/protocol";
+import { createSignal } from "solid-js";
+import type { SharedAiPreferences } from "@hyperfocus/ai-core/runtime";
 import { persistMergedLocalPreferences, type ProviderConnectionProvider } from "../../harness-store";
 import { normalizeAppHotkeyPreferences } from "../../lib/app-hotkeys";
 import { normalizeThemePreference } from "../../theme/theme-model";
@@ -8,11 +10,12 @@ import { parsePreferencesImport } from "./preferences-import";
 import { createExportablePreferencesSnapshot, createLocalPreferencesSnapshot } from "./preferences-snapshot";
 
 export function createPreferencesPersistenceActions(model: PreferencesPanelModel) {
-  const { store, state, sendCommand, setHotkeyDrafts } = model;
-  function handleSave() {
-    const openAiApiKey = state.openAiApiKeyDraft.trim() || undefined;
-    const googleApiKey = state.googleApiKeyDraft.trim() || undefined;
-    const anthropicApiKey = state.anthropicApiKeyDraft.trim() || undefined;
+  const { store, state, sendCommand } = model;
+  const [importFeedback, setImportFeedback] = createSignal<{ failed: boolean; message: string }>();
+  function handleSave(options: { provider?: ProviderConnectionProvider; sharedAiPreferences?: SharedAiPreferences } = {}) {
+    const openAiApiKey = options.provider === "openai" ? state.openAiApiKeyDraft.trim() || undefined : undefined;
+    const googleApiKey = options.provider === "google" ? state.googleApiKeyDraft.trim() || undefined : undefined;
+    const anthropicApiKey = options.provider === "anthropic" ? state.anthropicApiKeyDraft.trim() || undefined : undefined;
     const localPreferences = createLocalPreferencesSnapshot(state);
 
     persistMergedLocalPreferences(localPreferences);
@@ -22,6 +25,7 @@ export function createPreferencesPersistenceActions(model: PreferencesPanelModel
       type: "preferences.save",
       requestId: createRequestId(),
       payload: {
+        sharedAiPreferences: options.sharedAiPreferences,
         openAiApiKey,
         googleApiKey,
         anthropicApiKey,
@@ -56,6 +60,20 @@ export function createPreferencesPersistenceActions(model: PreferencesPanelModel
     handleSave();
   }
 
+  function saveProviderKey(provider: ProviderConnectionProvider) {
+    handleSave({ provider });
+  }
+
+  function updateAiDefaults(update: () => void) {
+    update();
+    const providerIds = { gpt: "openai", gemini: "google", claude: "anthropic" } as const;
+    handleSave({ sharedAiPreferences: {
+      version: 1,
+      providerId: providerIds[state.providerBrand],
+      reasoning: state.selectedReasoningStrength === "extra-high" ? "xhigh" : state.selectedReasoningStrength,
+    } });
+  }
+
   function handleClearApiKey() {
     const clearedPreferences = createLocalPreferencesSnapshot(state, {
       openAiApiKey: undefined,
@@ -87,6 +105,7 @@ export function createPreferencesPersistenceActions(model: PreferencesPanelModel
     }
 
     try {
+      setImportFeedback(undefined);
       const parsed = parsePreferencesImport(await file.text());
       const importedThemePreference = parsed.themePreference === undefined
         ? state.themePreference
@@ -117,15 +136,12 @@ export function createPreferencesPersistenceActions(model: PreferencesPanelModel
         checkCliUpdatesDefault: parsed.checkCliUpdatesDefault,
         selectedReasoningStrength: parsed.selectedReasoningStrength,
         selectedFastMode: parsed.selectedFastMode,
-        appHotkeyPreferences: normalizeAppHotkeyPreferences(parsed.appHotkeyPreferences),
+        appHotkeyPreferences: normalizeAppHotkeyPreferences(parsed.appHotkeyPreferences ?? state.appHotkeyPreferences),
         themePreference: importedThemePreference,
         numericRightAlignmentEnabled: parsed.numericRightAlignmentEnabled,
         experienceMode: parsed.experienceMode
       });
       persistMergedLocalPreferences({
-        openAiApiKey: state.openAiApiKeyDraft.trim() || undefined,
-        googleApiKey: state.googleApiKeyDraft.trim() || undefined,
-        anthropicApiKey: state.anthropicApiKeyDraft.trim() || undefined,
         providerBrand: parsed.providerBrand ?? state.providerBrand,
         debugEnabled: parsed.debugEnabled ?? state.debugEnabled,
         tracePanelDefaultOpen: parsed.tracePanelDefaultOpen ?? state.tracePanelDefaultOpen,
@@ -165,16 +181,18 @@ export function createPreferencesPersistenceActions(model: PreferencesPanelModel
         experienceMode: parsed.experienceMode ?? state.experienceMode
       });
       pushToast("Preferences imported", "Local defaults updated.");
+      setImportFeedback({ failed: false, message: "Preferences imported. Local defaults updated; provider keys were not imported." });
     } catch (error) {
       pushToast("Import failed", error instanceof Error ? error.message : "Invalid JSON file.", "error");
+      setImportFeedback({ failed: true, message: `Preferences were not imported. ${error instanceof Error && error.message.startsWith("No recognized") ? error.message : "Choose a valid preferences JSON file and try again."}` });
     } finally {
       input.value = "";
     }
   }
 
   return {
-    handleSave, updateSavedPreference, handleClearApiKey,
-    handleExportPreferences, handleImportPreferences,
+    handleSave, updateSavedPreference, updateAiDefaults, saveProviderKey, handleClearApiKey,
+    handleExportPreferences, handleImportPreferences, importFeedback,
   };
 }
 

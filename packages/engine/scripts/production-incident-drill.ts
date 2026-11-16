@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import {
   SignedSessionAuthority,
   createEncryptedPortablePersistenceBackup,
@@ -96,9 +97,7 @@ export async function runProductionIncidentDrill(): Promise<ProductionIncidentDr
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 if (import.meta.main) {
   try { console.log(JSON.stringify(await runProductionIncidentDrill(), null, 2)); }

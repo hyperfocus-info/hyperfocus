@@ -1,12 +1,12 @@
 import { createGridNavigator, type GridNavigator } from "../navigation/grid.ts";
-import { definePlayableBehavior2D } from "./runtime-2d-support.ts";
+import { definePlayableBehavior2D } from "./runtime2d/runtime-2d-support.ts";
 import type {
   PlayableBehavior2D,
   PlayableBehaviorRegistry2D,
   PlayableComponent2D,
   PlayableEntity2D,
   PlayableProject2D,
-} from "./runtime-2d-contracts.ts";
+} from "./runtime2d/runtime-2d-contracts.ts";
 
 const NAVIGATION_BEHAVIOR_KEY = "builtin:navigate#update";
 

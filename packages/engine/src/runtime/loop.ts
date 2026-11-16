@@ -22,6 +22,8 @@ export type FixedStepFrame = {
 
 export type FixedStepAdvanceResult = FixedStepFrame & {
   interrupted: boolean;
+  /** Retained simulation time, including full steps when an advance is interrupted. */
+  pendingSeconds: number;
 };
 
 export type FixedStepDriverOptions = Omit<FixedStepLoopOptions, "now">;
@@ -49,7 +51,7 @@ function validateFixedStepOptions(step: number, maxFrame: number) {
  * `createFixedStepLoop` is composed from the same driver.
  */
 export function createFixedStepDriver({
-  step = 1 / 60,
+  step = 0.016666666666666666,
   maxFrame = 0.05,
   beforeUpdate,
   afterUpdate,
@@ -71,28 +73,32 @@ export function createFixedStepDriver({
   function advanceBy(rawDelta: number, options: FixedStepAdvanceOptions = {}): FixedStepAdvanceResult {
     if (!Number.isFinite(rawDelta)) throw new RangeError("fixed step delta must be finite");
     const delta = Math.min(maxFrame, Math.max(0, rawDelta));
-    accumulator += delta;
-    if (!Number.isFinite(accumulator)) throw new RangeError("fixed step accumulator must be finite");
+    const pending = accumulator + delta;
+    if (!Number.isFinite(pending)) throw new RangeError("fixed step accumulator must be finite");
+    accumulator = pending;
     let updates = 0;
     let interrupted = false;
     const shouldContinue = options.shouldContinue ?? (() => true);
 
     while (accumulator >= step) {
+      if (updates >= MAX_FIXED_UPDATES_PER_FRAME) { interrupted = true; break; }
       if (!shouldContinue()) { interrupted = true; break; }
       beforeUpdate?.(step);
       if (!shouldContinue()) { interrupted = true; break; }
+      // Consume the step at the update boundary. A callback may interrupt or reset
+      // the driver; neither should replay this step or subtract from a reset clock.
+      accumulator -= step;
       update(step);
+      updates += 1;
       if (!shouldContinue()) { interrupted = true; break; }
       afterUpdate?.(step);
       if (!shouldContinue()) { interrupted = true; break; }
-      accumulator -= step;
-      updates += 1;
     }
 
     const alpha = accumulator / step;
     if (!interrupted && shouldContinue()) render(alpha, { rawDelta, delta, updates, alpha });
     else interrupted = true;
-    return { rawDelta, delta, updates, alpha, interrupted };
+    return { rawDelta, delta, updates, alpha, interrupted, pendingSeconds: accumulator };
   }
 
   function advance(timestamp: number, options: FixedStepAdvanceOptions = {}) {
@@ -117,7 +123,7 @@ export function createFixedStepDriver({
 }
 
 export function createFixedStepLoop({
-  step = 1 / 60,
+  step = 0.016666666666666666,
   maxFrame = 0.05,
   beforeUpdate,
   afterUpdate,

@@ -1,19 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-
-export const VERSIONED_MANIFESTS = [
-  "package.json",
-  "apps/engine-editor/package.json",
-  "apps/harness/package.json",
-  "apps/pad-pilot/package.json",
-  "apps/pad-pilot-marketplace/package.json",
-  "packages/ai-core/package.json",
-  "packages/desktop-runtime/package.json",
-  "packages/engine/package.json",
-  "packages/pad-pilot/package.json",
-  "packages/ui/package.json",
-  "packages/workspace/package.json",
-] as const;
 
 export interface PackageManifestVersion {
   path: string;
@@ -78,15 +65,50 @@ export function findRepositoryReleaseViolations(paths: readonly string[], submod
   return violations;
 }
 
+export async function discoverVersionedManifests({ root = process.cwd() } = {}) {
+  const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+  if (!isRecord(manifest) || !Array.isArray(manifest.workspaces) || manifest.workspaces.length === 0) {
+    throw new Error("package.json needs a non-empty workspaces array");
+  }
+  const manifests = new Set(["package.json"]);
+  for (const workspace of manifest.workspaces) {
+    if (typeof workspace === 'string' && /^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)+$/.test(workspace)) {
+      const parts = workspace.split('/');
+      for (let index = 1; index <= parts.length; index++) {
+        const directory = parts.slice(0, index).join('/');
+        const info = await lstat(path.join(root, directory));
+        if (info.isSymbolicLink() || !info.isDirectory()) throw new Error(`Workspace ${directory} must be a directory, not a symbolic link`);
+      }
+      manifests.add(`${workspace}/package.json`);
+      continue;
+    }
+    // Fail closed if workspace syntax changes instead of silently skipping versioned packages.
+    if (typeof workspace !== "string" || !/^[a-zA-Z0-9_-]+\/\*$/.test(workspace)) {
+      throw new Error(`Unsupported workspace pattern ${JSON.stringify(workspace)}; version discovery supports directory/* and explicit nested directories`);
+    }
+    const directory = workspace.slice(0, -2);
+    const entries = await readdir(path.join(root, directory), { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) throw new Error(`Workspace ${directory}/${entry.name} must not be a symbolic link`);
+      // directory/* excludes dot entries; local caches are not workspace packages.
+      // Check links first so hidden links cannot bypass the existing policy.
+      if (entry.name.startsWith(".")) continue;
+      if (entry.isDirectory()) manifests.add(`${directory}/${entry.name}/package.json`);
+    }
+  }
+  return [...manifests].sort();
+}
+
 export async function readVersionedManifestVersions(root = process.cwd()) {
-  return Promise.all(VERSIONED_MANIFESTS.map(async (manifestPath) => {
+  const manifests = await discoverVersionedManifests({ root });
+  return Promise.all(manifests.map(async (manifestPath) => {
     const manifest = JSON.parse(await readFile(path.join(root, manifestPath), "utf8"));
     return parsePackageManifestVersion(manifestPath, manifest);
   }));
 }
 
 async function gitCandidates() {
-  const result = Bun.spawnSync({
+  const result = spawnBackgroundProcessSync({
     cmd: ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
     stdout: "pipe",
     stderr: "pipe",
@@ -96,7 +118,7 @@ async function gitCandidates() {
 }
 
 async function gitSubmodules() {
-  const result = Bun.spawnSync({ cmd: ["git", "ls-files", "-s"], stdout: "pipe", stderr: "pipe" });
+  const result = spawnBackgroundProcessSync({ cmd: ["git", "ls-files", "-s"], stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== 0) throw new Error(`Could not enumerate Git index: ${result.stderr.toString()}`);
   return result.stdout.toString()
     .split(/\r?\n/)
@@ -119,8 +141,6 @@ async function main() {
   console.log(`Release readiness policy passed for ${manifests.length} versioned manifests and ${paths.length} Git candidates.`);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import { isRecord } from '@hyperfocus/utilities/records';
 
 if (import.meta.main) await main();

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import puppeteer from "puppeteer-core";
-import { createProjectStarter } from "../tooling/create-project.ts";
+import { createProjectStarter } from "../tooling/create-project-runtime.ts";
 import { buildPortableProject } from "./build-project.ts";
 import "./smoke/playable-test-hook.ts";
 

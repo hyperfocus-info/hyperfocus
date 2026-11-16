@@ -1,9 +1,9 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
+import { launchHeadlessBrowser } from "@hyperfocus/desktop-runtime/automation";
 
 type AnimationId = "player-run" | "boss-run";
 
@@ -90,10 +90,13 @@ export async function createKeyframeContactSheet(options: Options): Promise<{ pn
     },
   });
 
-  const profile = await mkdtemp(path.join(tmpdir(), "three-arena-keyframes-"));
-  let chrome: ChildProcess | undefined;
+  let chrome: Awaited<ReturnType<typeof launchHeadlessBrowser>> | undefined;
   try {
-    chrome = launchChrome(server.url.href, profile, options.chromePath);
+    chrome = await launchChrome(options.chromePath);
+    const response = await fetch(`http://127.0.0.1:${chrome.port}/json/new?${encodeURIComponent(server.url.href)}`, {
+      method: "PUT", signal: AbortSignal.timeout(5_000)
+    });
+    if (!response.ok) throw new Error(`Could not open keyframe capture target: HTTP ${response.status}`);
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<never>((_resolve, reject) => {
       timeout = setTimeout(() => reject(new Error("Keyframe renderer timed out after 90 seconds")), 90_000);
@@ -112,6 +115,8 @@ export async function createKeyframeContactSheet(options: Options): Promise<{ pn
         file: path.basename(pngPath),
         bytes: png.byteLength,
         sha256: createHash("sha256").update(png).digest("hex"),
+        browserPid: chrome.pid,
+        browserProfileDir: chrome.profileDir,
       },
     };
     await Promise.all([
@@ -120,10 +125,8 @@ export async function createKeyframeContactSheet(options: Options): Promise<{ pn
     ]);
     return { png: pngPath, report: reportPath };
   } finally {
-    await killProcessTree(chrome);
-    await killChromeProfileProcesses(profile);
-    server.stop(true);
-    await removeTemporaryProfile(profile);
+    try { await chrome?.close(); }
+    finally { server.stop(true); }
   }
 }
 
@@ -132,17 +135,11 @@ function viewerHtml(options: Options): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Three Arena keyframes</title><style>html,body{margin:0;background:#080c0d;color:#fff}canvas{display:block;max-width:100%;height:auto}</style></head><body><script>globalThis.__KEYFRAME_OPTIONS__=${viewerOptions}</script><script type="module" src="/keyframe-viewer.js"></script></body></html>`;
 }
 
-function launchChrome(url: string, userDataDir: string, explicitPath?: string): ChildProcess {
+function launchChrome(explicitPath?: string) {
   const executable = chromeCandidates(explicitPath).find((candidate) => !path.isAbsolute(candidate) || existsSync(candidate));
   if (!executable) throw new Error("No Chrome executable found. Set CHROME_PATH or pass --chrome.");
-  const args = [
-    "--headless=new", "--disable-dev-shm-usage", "--no-first-run", "--no-default-browser-check",
-    "--enable-webgl", "--ignore-gpu-blocklist", "--hide-scrollbars", `--user-data-dir=${userDataDir}`,
-    "--window-size=1280,900", url,
-  ];
-  const child = spawn(executable, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
-  child.once("error", (error) => { throw error; });
-  return child;
+  return launchHeadlessBrowser({ executable,
+    args: ["--enable-webgl", "--ignore-gpu-blocklist", "--hide-scrollbars", "--window-size=1280,900"] });
 }
 
 function chromeCandidates(explicitPath?: string): string[] {
@@ -158,48 +155,6 @@ function chromeCandidates(explicitPath?: string): string[] {
     "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     "google-chrome", "chromium", "chromium-browser",
   ].filter((candidate): candidate is string => Boolean(candidate)))];
-}
-
-async function killProcessTree(child?: ChildProcess): Promise<void> {
-  if (!child?.pid) return;
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-      killer.once("exit", () => resolve());
-      killer.once("error", () => resolve());
-    });
-    return;
-  }
-  child.kill("SIGTERM");
-}
-
-async function killChromeProfileProcesses(userDataDir: string): Promise<void> {
-  if (process.platform !== "win32") return;
-  const marker = path.basename(userDataDir).replace(/'/g, "''");
-  await new Promise<void>((resolve) => {
-    const script = `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'chrome.exe' -or $_.Name -eq 'msedge.exe') -and $_.CommandLine -like '*${marker}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
-    const killer = spawn("powershell.exe", ["-NoProfile", "-Command", script], { stdio: "ignore", windowsHide: true });
-    killer.once("exit", () => resolve());
-    killer.once("error", () => resolve());
-  });
-}
-
-async function removeTemporaryProfile(directory: string): Promise<void> {
-  const root = path.resolve(tmpdir());
-  const resolved = path.resolve(directory);
-  const relative = path.relative(root, resolved);
-  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`)) throw new Error(`Refusing to remove non-temporary profile: ${resolved}`);
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    try {
-      await rm(resolved, { force: true, recursive: true });
-      return;
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 125 * (attempt + 1)));
-    }
-  }
-  throw lastError;
 }
 
 function parseAnimations(value: string): AnimationId[] {
@@ -224,9 +179,7 @@ function parseCompletion(value: unknown): Completion {
   return { error: value.error, pngDataUrl: value.pngDataUrl, report: value.report };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function positiveInteger(value: string | undefined, label: string): number {
   const parsed = Number(value);

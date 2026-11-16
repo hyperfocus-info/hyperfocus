@@ -25,11 +25,13 @@ function createBackgroundJobNavigationActions(model: BackgroundJobsPanelModel) {
   function openJobDetails(job: BackgroundJob) {
     harnessStore.closeBackgroundJobDetailsDialog();
     harnessStore.setJobsPanePreferences({ segment: "jobs", selectedJobId: job.id, selectedRunId: undefined, selectedNotificationId: undefined });
+    model.onNavigate?.();
   }
 
   function openRunDetails(run: typeof state.backgroundJobs.runs[number]) {
     harnessStore.closeBackgroundJobDetailsDialog();
     harnessStore.setJobsPanePreferences({ segment: "inbox", selectedRunId: run.id, selectedJobId: run.jobId, selectedNotificationId: undefined });
+    model.onNavigate?.();
   }
 
   function openAssistantDetails(assistantId: string) {
@@ -44,6 +46,7 @@ function createBackgroundJobNavigationActions(model: BackgroundJobsPanelModel) {
   function openProjectChatRun(runId: string) {
     harnessStore.closeBackgroundJobDetailsDialog();
     harnessStore.setJobsPanePreferences({ segment: "inbox", selectedRunId: runId, selectedJobId: undefined, selectedNotificationId: undefined });
+    model.onNavigate?.();
   }
 
   function openRunSource(item: RunListItem) {
@@ -128,6 +131,7 @@ function createBackgroundJobEditorActions(model: BackgroundJobsPanelModel) {
         : undefined,
       shellExecutable: job.definition.kind === "shell" ? job.definition.executable : "",
       shellArgsText: job.definition.kind === "shell" ? job.definition.args.join("\n") : "",
+      shellArgs: job.definition.kind === "shell" ? job.definition.args : undefined,
       shellCwd: job.definition.kind === "shell" ? job.definition.cwd ?? "" : "",
       shellEnvRefsText: job.definition.kind === "shell" ? (job.definition.envRefs ?? []).join("\n") : "",
       shellTimeoutSeconds: job.definition.kind === "shell" ? job.definition.timeoutSeconds : 600,
@@ -140,7 +144,7 @@ function createBackgroundJobEditorActions(model: BackgroundJobsPanelModel) {
 }
 
 function createBackgroundJobDiagnosticsActions(model: BackgroundJobsPanelModel) {
-  const { runtime, state, sendCommand, healthWindowDays, healthRefreshThrottleMs } = model;
+  const { runtime, sendCommand, healthWindowDays, healthRefreshThrottleMs } = model;
 
   function scrollRunDetailToBottom() {
     if (runtime.runDetailViewport) {
@@ -313,6 +317,7 @@ function registerSelectedRunEffect(model: BackgroundJobsPanelModel) {
   const { activeSegment, selectedRun, selectedRunId, selectedRunItem } = model;
   createEffect(() => {
     const currentRun = selectedRun();
+    if (model.state.jobsPanePreferences.segment === "jobs" || model.state.jobsPanePreferences.segment === "health") return;
     if (activeSegment() === "jobs" || activeSegment() === "health") return;
     if (!currentRun) {
       harnessStore.setJobsPanePreferences({ selectedRunId: undefined, selectedNotificationId: undefined });
@@ -328,6 +333,17 @@ function registerSelectedRunEffect(model: BackgroundJobsPanelModel) {
   });
 }
 
+function registerSelectedJobEffect(model: BackgroundJobsPanelModel) {
+  createEffect(() => {
+    const state = model.state;
+    if (state.activeSurface !== "background-jobs" || state.activeLeftTab !== "jobs" ||
+      state.jobsPanePreferences.segment !== "jobs" || model.activeSegment() !== "jobs") return;
+    const jobId = model.selectedJob()?.id;
+    if (model.selectedJobId() === jobId && !model.selectedRunId()) return;
+    harnessStore.setJobsPanePreferences({ selectedJobId: jobId, selectedRunId: undefined, selectedNotificationId: undefined });
+  });
+}
+
 export function createBackgroundJobsPanelController(model: BackgroundJobsPanelModel) {
   const navigation = createBackgroundJobNavigationActions(model);
   const selection = createBackgroundJobSelectionActions(model, navigation.openJobDetails);
@@ -338,6 +354,7 @@ export function createBackgroundJobsPanelController(model: BackgroundJobsPanelMo
   registerNavigationEffects(model, navigation);
   registerSelectionEffects(model, selection.clearPendingSelectionTimer);
   registerSelectedRunEffect(model);
+  registerSelectedJobEffect(model);
   registerDiagnosticsEffects(model, diagnostics);
   return { ...navigation, ...selection, ...bulk, ...editor, ...diagnostics, ...notifications };
 }

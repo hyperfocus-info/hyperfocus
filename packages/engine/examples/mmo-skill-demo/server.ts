@@ -14,11 +14,11 @@ const browserIsolationHeaders = {
   "cross-origin-resource-policy": "same-origin"
 };
 const staticFiles = createStaticFileHandler({
-  root: engineRoot,
-  index: "examples/mmo-skill-demo/client.html",
+  root: process.env.MMO_SKILL_STATIC_ROOT || engineRoot,
+  index: process.env.MMO_SKILL_STATIC_ROOT ? "client.html" : "examples/mmo-skill-demo/client.html",
   headers: browserIsolationHeaders,
   allow(path) {
-    return path === "examples/mmo-skill-demo/client.html"
+    return (Boolean(process.env.MMO_SKILL_STATIC_ROOT) && (path === "client.html" || path === "dist/client.js" || path.startsWith("assets/") || /^brand\/[a-z0-9-]+\.(svg|png|ico|json|webmanifest)$/.test(path))) || /^examples\/mmo-skill-demo\/brand\/[a-z0-9-]+\.(svg|png|ico|json|webmanifest)$/.test(path) || path === "examples/mmo-skill-demo/client.html"
       || path === "examples/mmo-skill-demo/dist/client.js"
       || (path.startsWith("examples/mmo-skill-demo/assets/") && path.toLowerCase().endsWith(".png"));
   },
@@ -65,6 +65,7 @@ async function staticResponse(request: Request) {
       ? new Response(null, { headers: { ...browserIsolationHeaders, "cache-control": "no-store", "content-type": "application/json" } })
       : Response.json(replicationTelemetrySnapshot(), { headers: { ...browserIsolationHeaders, "cache-control": "no-store" } });
   }
+  if (process.env.MMO_SKILL_STATIC_ROOT && url.pathname.startsWith("/examples/mmo-skill-demo/")) { url.pathname = url.pathname.slice("/examples/mmo-skill-demo".length); return staticFiles(new Request(url, request)); }
   return staticFiles(request);
 }
 
@@ -78,6 +79,7 @@ const game = createMmoSkillDemoGame();
 
 const server = createAuthoritativeServer({
   transport: "websocket",
+  hostname: process.env.HOST?.trim() || "127.0.0.1",
   port,
   devMode: true,
   rooms: game.engineWorld.roomTypes(),
@@ -91,6 +93,7 @@ server.createRoom(game.instances.cottage.roomType, game.instances.cottage.roomId
 server.start();
 
 const staticServer = Bun.serve({
+  hostname: process.env.HOST?.trim() || "127.0.0.1",
   port: staticPort,
   fetch: staticResponse
 });

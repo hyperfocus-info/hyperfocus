@@ -1,28 +1,23 @@
+import { formatBytes } from "./preference-display-values";
+import { usePreferencesPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
-import { Show } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
 import type { RunModelPreference } from "@hyperfocus/ai-core/protocol";
-import { FolderOpen, HelpCircle, Trash2 } from "lucide-solid";
-import type { PreferencesPanelModel } from "../preferences-modal";
+import { Input } from "@hyperfocus/ui";
+import * as stylex from "@stylexjs/stylex";
+import { FolderOpen,HelpCircle,Trash2 } from "lucide-solid";
+import { Show } from "solid-js";
 import { ActionButton } from "../action-button";
 import { DropdownControl } from "../primitives/dropdown";
-import { Input } from "../primitives/input";
 import { Tooltip } from "../primitives/tooltip";
-import type { PreferencesOperationalActions } from "./preferences-actions";
-import { AdvancedDisclosure, PreferenceRow, PreferenceSection, PreferenceToggle, RangeControl, SegmentedControl } from "./preferences-controls";
+import { AdvancedDisclosure,PreferenceRow,PreferenceSection,PreferenceToggle,RangeControl,SegmentedControl } from "./preferences-controls";
 import { preferenceStyles } from "./preferences.styles";
 
-function formatBytes(bytes: number) {
-  if (bytes >= 1024 * 1024 * 1024) return (bytes / 1024 / 1024 / 1024).toFixed(1) + " GB";
-  if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
-  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return bytes + " bytes";
-}
 
-export function PreferencesSafety(props: { model: PreferencesPanelModel; actions: PreferencesOperationalActions; updateSavedPreference: (update: () => void) => void }) {
-  const { state, store } = props.model;
-  const { handleBranchfsCleanup } = props.actions;
-  const { updateSavedPreference } = props;
+export function PreferencesSafety() {
+  const panel = usePreferencesPanel();
+  const { state, store } = panel.model;
+  const { handleBranchfsCleanup } = panel.operational;
+  const { updateSavedPreference } = panel.persistence;
   const subagentWorktreeOptions = () => [
     { value: "same-worktree", label: "Same checkout", description: "Subagents edit inside current working tree." },
     { value: "separate-worktrees", label: "Isolated mounts (BranchFS)", description: "Subagents work in isolated BranchFS mounts before merge." },
@@ -156,4 +151,3 @@ export function PreferencesSafety(props: { model: PreferencesPanelModel; actions
       </PreferenceSection>
     );
   }
-

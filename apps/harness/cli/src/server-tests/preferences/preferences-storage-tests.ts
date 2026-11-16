@@ -3,7 +3,7 @@ import { createMemoryEntryId, type SetupCheck } from "@hyperfocus/ai-core/protoc
 import { createPiRuntime } from "../../agent-runtimes/pi-runtime";
 import { createAgentRuntimeRegistry } from "../../agent-runtimes/runtime-registry";
 import { createFakeCodexRuntime } from "../../test-support/fake-codex-runtime";
-import { createSocket, waitForEvent } from "../support/server-test-client";
+import { createSocket, parseMessageEventPayloads, waitForEvent } from "../support/server-test-client";
 import type { ServerSuiteFixture } from "../support/server-suite-fixture";
 import type { ServerTestRegistrar } from "../support/server-test-sharding";
 export function registerPreferencesStorageTests(serverTest: ServerTestRegistrar, fixture: ServerSuiteFixture) {
@@ -12,6 +12,24 @@ export function registerPreferencesStorageTests(serverTest: ServerTestRegistrar,
 }
 
 function registerProviderPreferenceStorageTests(serverTest: ServerTestRegistrar, fixture: ServerSuiteFixture) {
+    serverTest("portable bundled runtime updates reject without an installed acknowledgement", async () => {
+        await fixture.restart({ launchMode: "portable-launcher" });
+        const socket = createSocket(fixture.port);
+        const received: string[] = [];
+        socket.addEventListener("message", (event) => {
+            for (const payload of parseMessageEventPayloads(event)) received.push(payload.type);
+        });
+        await waitForEvent(socket, "connection.ready");
+        try {
+            for (const agentId of ["pi", "codex-cli"] as const) {
+                const requestId = `portable-update-${agentId}`;
+                const rejected = waitForEvent(socket, "command.rejected", (event) => event.requestId === requestId);
+                socket.send(JSON.stringify({ type: "cli-updates.install", requestId, payload: { agentId } }));
+                expect((await rejected).payload.detail).toContain("Download a new Harness release");
+            }
+            expect(received).not.toContain("cli-updates.installed");
+        } finally { socket.close(); }
+    }, 60000);
     serverTest("saves preferences and persists API key", async () => {
         const { repository, port } = fixture;
         const socket = createSocket(port);

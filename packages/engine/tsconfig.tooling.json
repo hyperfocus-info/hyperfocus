@@ -1,9 +1,13 @@
 {
   "extends": "./tsconfig.json",
   "include": [
+    "./scripts/combat-determinism/*.ts",
     "./benchmarks/low-level-performance-spikes.ts",
     "./scripts/build-package.ts",
     "./scripts/build-package.test.ts",
+    "./scripts/build-project.test.ts",
+    "./scripts/project-build/receipt.test.ts",
+    "./scripts/project-build/runtime-boundaries.test.ts",
     "./scripts/build-types.ts",
     "./scripts/build-types.test.ts",
     "./scripts/create-project.ts",

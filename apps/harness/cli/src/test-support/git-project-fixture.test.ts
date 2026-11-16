@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync, writeFileSync } from "node:fs";
+import { describe,expect,test } from "bun:test";
+import { existsSync,writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { normalizeNewlines } from "./fixtures/text-comparison";
 import { useGitProjectFixture } from "./git-project-fixture";
 
 describe("git project fixture", () => {
@@ -37,7 +38,3 @@ describe("git project fixture", () => {
     expect(existsSync(path.join(fixture.getTemplateRoot(), "local-only.txt"))).toBe(false);
   });
 });
-
-function normalizeNewlines(input: string) {
-  return input.replace(/\r\n/g, "\n");
-}

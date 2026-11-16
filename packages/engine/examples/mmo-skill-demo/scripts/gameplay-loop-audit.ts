@@ -1,3 +1,4 @@
+import { formatPercent as pct } from "@hyperfocus/utilities/text";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { worldFactionQuestSteps } from "../src/data/world-quests.ts";
@@ -55,9 +56,7 @@ function formatArg(): Format {
   throw new Error(`Unknown format: ${value}`);
 }
 
-function pct(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
+
 
 function byBand<T extends { progressionBand?: string }>(band: Band, rows: readonly T[]) {
   return rows.filter((row) => row.progressionBand === band);

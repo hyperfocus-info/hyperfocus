@@ -1,3 +1,4 @@
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { afterAll, beforeAll } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { copyFile, lstat, mkdir, readdir, readlink, rm, symlink } from "node:fs/promises";
@@ -124,7 +125,7 @@ function initializeGitRepo(rootPath: string) {
 
 function runSync(command: string[], cwd: string) {
   const ceilingDirectory = path.dirname(cwd);
-  const proc = Bun.spawnSync({
+  const proc = spawnBackgroundProcessSync({
     cmd: command,
     cwd,
     env: {

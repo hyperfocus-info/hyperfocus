@@ -1,16 +1,19 @@
-import type { Database } from "bun:sqlite";
 import { ASSISTANT_WORKLOAD_PAGE_SIZE } from "@hyperfocus/ai-core/protocol";
+import { isRecord } from "@hyperfocus/utilities/records";
+import type { Database } from "bun:sqlite";
 import {
-  ASSISTANT_PAGE_POSITION_ID_MAX_LENGTH,
-  ASSISTANT_PAGE_POSITION_TIMESTAMP_MAX_LENGTH,
-  assistantLearningVisibilitySql,
-  assistantTimestampPageabilitySql,
-  assistantTodoPageabilitySql
+ASSISTANT_PAGE_POSITION_ID_MAX_LENGTH,
+ASSISTANT_PAGE_POSITION_TIMESTAMP_MAX_LENGTH,
+assistantLearningVisibilitySql,
+assistantTimestampPageabilitySql,
+assistantTodoPageabilitySql
 } from "./persistence/assistant-pageability";
-import { createPageCursorError, decodePageCursor, encodePageCursor, isPageCursorError,
-  type PageCursorError } from "./persistence/page-cursor-codec";
+import {
+createPageCursorError,decodePageCursor,encodePageCursor,isPageCursorError,
+type PageCursorError
+} from "./persistence/page-cursor-codec";
 
-export { assistantLearningVisibilitySql, assistantTimestampPageabilitySql, assistantTodoPageabilitySql };
+export { assistantLearningVisibilitySql,assistantTimestampPageabilitySql,assistantTodoPageabilitySql };
 
 export type AssistantPageCollection =
   | "summaries"
@@ -313,9 +316,6 @@ function decodeAssistantPageCursor<Position>(
   return position;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function parseAssistantTimestampPagePosition(position: unknown): AssistantTimestampPagePosition | undefined {
   if (

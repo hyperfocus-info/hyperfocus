@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import path from "node:path";
 import { checkStandaloneUpdate, parseDesktopProtocolTarget } from "@hyperfocus/desktop-runtime";
 import { HARNESS_APP_VERSION } from "@hyperfocus/ai-core/app-version";
@@ -124,7 +125,7 @@ export async function openSystemBrowser(url: string) {
         : ["xdg-open", url];
 
   try {
-    const browserProcess = Bun.spawn({ cmd: command, stdout: "ignore", stderr: "ignore" });
+    const browserProcess = spawnBackgroundProcess({ cmd: command, stdout: "ignore", stderr: "ignore" });
     const exitCode = await browserProcess.exited;
     if (exitCode !== 0) {
       console.warn(`Failed to open browser automatically. Open ${url} manually.`);
@@ -156,13 +157,13 @@ export async function registerDesktopProtocol(input: {
   executablePath?: string;
   launcherArgs?: readonly string[];
   platform?: NodeJS.Platform;
-  spawn?: typeof Bun.spawn;
+  spawn?: typeof spawnBackgroundProcess;
 }) {
   const platform = input.platform ?? process.platform;
   if (platform !== "win32") {
     throw new Error("Automatic ide:// registration currently requires the Windows desktop release");
   }
-  const spawn = input.spawn ?? Bun.spawn;
+  const spawn = input.spawn ?? spawnBackgroundProcess;
   for (const args of buildWindowsProtocolRegistration({
     executablePath: input.executablePath ?? process.execPath,
     launcherArgs: input.launcherArgs

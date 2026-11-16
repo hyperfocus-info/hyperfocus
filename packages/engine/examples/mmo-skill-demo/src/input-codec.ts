@@ -12,11 +12,11 @@ const actionToByte = new Map<MmoSkillDemoAction, number>(actionByteEntries);
 
 const byteToAction = new Map<number, MmoSkillDemoAction>(actionByteEntries.map(([action, value]) => [value, action]));
 
-const HAS_TARGET = 1 << 0;
-const HAS_ITEM = 1 << 1;
-const HAS_DEV_FIELD = 1 << 2;
-const HAS_DEV_TEXT = 1 << 3;
-const HAS_DEV_VALUE = 1 << 4;
+const HAS_TARGET = 1;
+const HAS_ITEM = 2;
+const HAS_DEV_FIELD = 4;
+const HAS_DEV_TEXT = 8;
+const HAS_DEV_VALUE = 16;
 const FIXED_BYTES = 12;
 
 function axisByte(value: unknown) {

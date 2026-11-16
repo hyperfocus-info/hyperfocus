@@ -1,3 +1,5 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 import { seededRandom, type TileMapAnchorSpec } from "./generator.ts";
 import type { TileMapMarker, TileValue } from "./tile-map.ts";
 
@@ -266,9 +268,7 @@ export function regionMapHeight(config: Pick<RegionConfig, "chunkGrid">) {
   return assertRegionGrid(config).height;
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+
 
 function insetRange(size: number) {
   return size >= 3 ? { min: 1, max: size - 2 } : { min: 0, max: size - 1 };

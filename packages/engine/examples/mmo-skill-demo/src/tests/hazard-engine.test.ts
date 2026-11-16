@@ -1,3 +1,4 @@
+import { rngSequence } from "./test-fixtures.ts";
 import { expect, test } from "bun:test";
 import {
   gatheringHazardProfiles,
@@ -7,11 +8,6 @@ import {
   type GatheringHazardMaterial
 } from "../server/hazardEngine.ts";
 import { type MmoSkillDemoState } from "../shared-contracts.ts";
-
-function rngSequence(values: number[]) {
-  let index = 0;
-  return () => values[Math.min(index++, values.length - 1)] ?? 0;
-}
 
 const player = { id: "player-one", x: 100, y: 120, zoneId: "ashwood" as const };
 const node = { id: "node-one", x: 132, y: 140, zoneId: "ashwood" as const };

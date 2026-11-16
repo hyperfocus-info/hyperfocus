@@ -1,3 +1,5 @@
+import { asObject as asRecord } from "@hyperfocus/utilities/records";
+
 import type { NormalizedField, ReplicationSchema } from "./schema.ts";
 
 type ByteWriter = {
@@ -165,13 +167,9 @@ function createReader(bytes: Uint8Array): ByteReader {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {};
-}
+
+
 
 function cachedUtf8Bytes(value: string) {
   let bytes = encodedStringBytes.get(value);
@@ -224,6 +222,7 @@ function decodeString(reader: ByteReader, maxLength: number) {
 function numberField(type: string, value: unknown, fallback = 0) {
   const next = value ?? fallback;
   if (typeof next !== "number" || !Number.isFinite(next)) throw new Error(`${type} field must be a finite number`);
+  if (type === "f32" && !Number.isFinite(Math.fround(next))) throw new Error("f32 field must fit a finite 32-bit float");
   return next;
 }
 

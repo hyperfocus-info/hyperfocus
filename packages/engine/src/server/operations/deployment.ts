@@ -1,3 +1,4 @@
+import { requireText } from "@hyperfocus/utilities/text";
 import type { BackupEncryptionKey, SessionReplayConsumeResult, SessionReplayStore, SessionSigningKey } from "./operations.ts";
 import type { PersistenceAdapter } from "../core/types.ts";
 
@@ -70,7 +71,7 @@ export type DeploymentControlPlaneOptions = {
 /** Deployable fetch handler for the authenticated control-plane clients in this module. */
 export function createDeploymentControlPlaneHandler(options: DeploymentControlPlaneOptions): (request: Request) => Promise<Response> {
   const token = text(options.bearerToken, "bearerToken");
-  const maximum = integer(options.maxRequestBytes ?? 64 * 1024, 1_024, 1024 * 1024, "maxRequestBytes");
+  const maximum = integer(options.maxRequestBytes ?? 65536, 1_024, 1048576, "maxRequestBytes");
   return async (request) => {
     try {
       if (request.method !== "POST") return response({ error: "method-not-allowed" }, 405);
@@ -161,7 +162,7 @@ export function createRegionalAutoscaler(
   const outStep = integer(policy.scaleOutStep ?? 1, 1, maximum, "scaleOutStep");
   const inStep = integer(policy.scaleInStep ?? 1, 1, maximum, "scaleInStep");
   const queuePerInstance = integer(policy.queuePerInstance ?? 100, 1, 1_000_000, "queuePerInstance");
-  const cooldown = integer(policy.cooldownMs ?? 60_000, 0, 24 * 60 * 60_000, "cooldownMs");
+  const cooldown = integer(policy.cooldownMs ?? 60_000, 0, 86400000, "cooldownMs");
   const lastAction = new Map<string, number>();
   return {
     async evaluate(sample) {
@@ -298,14 +299,14 @@ function heartbeatInput(body: Record<string, unknown>): Parameters<RegionCoordin
   const capacity = integer(body.capacity, 1, 1_000_000, "capacity");
   return {
     nodeId: text(body.nodeId, "nodeId"), region: text(body.region, "region"), endpoint: endpoint.href,
-    capacity, load: integer(body.load, 0, capacity, "load"), ttlMs: integer(body.ttlMs, 1_000, 24 * 60 * 60_000, "ttlMs"),
+    capacity, load: integer(body.load, 0, capacity, "load"), ttlMs: integer(body.ttlMs, 1_000, 86400000, "ttlMs"),
   };
 }
 
 function leaseInput(body: Record<string, unknown>): Parameters<RegionCoordinatorBackend["acquireLease"]>[0] {
   return {
     name: text(body.name, "name"), nodeId: text(body.nodeId, "nodeId"), region: text(body.region, "region"),
-    ttlMs: integer(body.ttlMs, 1_000, 24 * 60 * 60_000, "ttlMs"),
+    ttlMs: integer(body.ttlMs, 1_000, 86400000, "ttlMs"),
   };
 }
 
@@ -337,7 +338,7 @@ function record(value: unknown): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value));
 }
 
-function text(value: unknown, label: string): string { if (typeof value !== "string" || value.trim().length === 0 || value.length > 4096) throw new Error(`${label} must be bounded non-empty text.`); return value; }
+function text(value: unknown, label: string): string { return requireText(value, { max: 4096, nonBlank: true, message: `${label} must be bounded non-empty text.` }); }
 function integer(value: unknown, minimum: number, maximum: number, label: string): number { if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(`${label} must be an integer from ${minimum} through ${maximum}.`); return value; }
 function range(value: unknown, minimum: number, maximum: number, label: string): number { if (typeof value !== "number" || !Number.isFinite(value) || value < minimum || value > maximum) throw new Error(`${label} must be from ${minimum} through ${maximum}.`); return value; }
 function https(value: unknown, label: string): string { const result = text(value, label); if (new URL(result).protocol !== "https:") throw new Error(`${label} must use HTTPS.`); return result; }

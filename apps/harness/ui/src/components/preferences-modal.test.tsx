@@ -1,9 +1,10 @@
+import { clientCommandSchema } from "@hyperfocus/ai-core/protocol";
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
 import { createUiTest, requireButton, requireInput } from "../utils/tests/test-harness";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
-import { PreferenceSectionNav, PreferencesModal } from "./preferences-modal";
-import { harnessStore, readBrowserUiSession, readLocalPreferences } from "../harness-store";
+import { PreferencesModal } from "./preferences-modal";
+import { createInitialViewState, harnessStore, readBrowserUiSession, readLocalPreferences } from "../harness-store";
 import { toastStore } from "../toast-store";
 import { captureDispatchedCommands, clearBrowserStateForTests, requireCommand, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
 import { createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
@@ -21,7 +22,7 @@ createUiTest("PreferencesModal", () => {
   function renderPreferencesWithSideNav() {
     return render(() => (
       <>
-        <PreferenceSectionNav />
+
         <PreferencesModal />
       </>
     ));
@@ -67,7 +68,7 @@ createUiTest("PreferencesModal", () => {
     renderPreferencesWithSideNav();
     expect(screen.getByText("Preferences")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close preferences" }));
     expect(harnessStore.state.activeLeftTab).toBe("projects");
   });
 
@@ -83,10 +84,10 @@ createUiTest("PreferencesModal", () => {
     renderPreferencesWithSideNav();
 
     const panel = document.querySelector("[data-test-preferences-panel]");
-    const footer = panel?.querySelector("footer");
+    const content = panel?.querySelector("[data-ui-settings-content]");
     expect(panel?.className).toContain("overflowVisible");
     expect(panel?.className).toContain("lgOverflowHidden");
-    expect(footer?.className).toContain("shrink0");
+    expect(content).not.toBeNull();
   });
 
   it("does not expose hidden interactive test shims", () => {
@@ -173,12 +174,12 @@ createUiTest("PreferencesModal", () => {
     );
 
     renderPreferencesWithSideNav();
-    fireEvent.input(screen.getByLabelText("Search settings"), { target: { value: "dirty" } });
+    fireEvent.input(screen.getByLabelText("Search preferences"), { target: { value: "dirty" } });
 
     expect(await screen.findByText("Search results")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Worktree and git safety/i }));
 
-    expect(requireInput(screen.getByLabelText("Search settings")).value).toBe("");
+    expect(requireInput(screen.getByLabelText("Search preferences")).value).toBe("");
     expect(await screen.findByText("Worktree and git safety")).not.toBeNull();
   });
 
@@ -186,7 +187,7 @@ createUiTest("PreferencesModal", () => {
     seedHarnessStoreForTests(createHarnessStateFixture({ preferencesModalOpen: true }));
 
     renderPreferencesWithSideNav();
-    fireEvent.input(screen.getByLabelText("Search settings"), { target: { value: "approval safety" } });
+    fireEvent.input(screen.getByLabelText("Search preferences"), { target: { value: "approval safety" } });
 
     expect(await screen.findByRole("button", { name: /Planning and approval/i })).not.toBeNull();
     expect(screen.queryByText("No matching settings.")).toBeNull();
@@ -206,7 +207,7 @@ createUiTest("PreferencesModal", () => {
 
     try {
       renderPreferencesWithSideNav();
-      fireEvent.input(screen.getByLabelText("Search settings"), { target: { value: "new assistant" } });
+      fireEvent.input(screen.getByLabelText("Search preferences"), { target: { value: "new assistant" } });
 
       expect(await screen.findByText("Search results")).not.toBeNull();
       fireEvent.click(screen.getByRole("button", { name: /New assistant/i }));
@@ -332,19 +333,25 @@ createUiTest("PreferencesModal", () => {
     captureDispatchedCommands(commands);
 
     renderPreferencesWithSideNav();
-    fireEvent.click(screen.getByRole("button", { name: /Usage/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Usage" }));
 
     expect(await screen.findByText("Current session")).not.toBeNull();
     expect(screen.getByText("Lifetime")).not.toBeNull();
-    expect(screen.getByText("2,000")).not.toBeNull();
-    expect(screen.getByText("9,000")).not.toBeNull();
+    expect(screen.getAllByText("1,500").length).toBeGreaterThan(0);
+    expect(screen.getByText("6,500")).not.toBeNull();
+    expect(screen.queryByText("2,000")).toBeNull();
+    expect(screen.queryByText("9,000")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Reset token usage" }));
     expect(harnessStore.state.tokenUsageResetDialogOpen).toBe(true);
-    expect(await screen.findByText("Token counters will start again from the next observed model usage event.")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm token usage reset" }));
+    expect(await screen.findByText("This does not restore Codex account quota. Local counters start again from the next observed usage event.")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm local counter reset; account quota is unchanged" }));
 
     expect(commands).toContainEqual({ type: "usage.reset", requestId: expect.any(String) });
+    expect(harnessStore.state.tokenUsageResetDialogOpen).toBe(true);
+    const reset = commands.map(value => clientCommandSchema.parse(value)).find(value => value.type === "usage.reset");
+    if (!reset) throw new Error("Missing reset command");
+    harnessStore.applyServerEvent({ type: "usage.updated", requestId: reset.requestId, payload: { tokenUsage: createInitialViewState().tokenUsage } });
     expect(harnessStore.state.tokenUsageResetDialogOpen).toBe(false);
   });
 
@@ -441,6 +448,33 @@ createUiTest("PreferencesModal", () => {
     expect(commands).toHaveLength(0);
   });
 
+  it("repairs multiple saved contrast failures without resetting unrelated theme settings", async () => {
+    const font = CUSTOM_THEME_FONT_OPTIONS["--font-ui"][2].value;
+    seedHarnessStoreForTests(createHarnessStateFixture({
+      preferencesModalOpen: true, preferencesActiveSectionId: "general-ui",
+      themePreference: { themeId: "custom", mode: "light", custom: {
+        baseThemeId: "graphite", light: { "--accent": "#ffffff", "--muted": "#ffffff", "--font-ui": font }
+      } }
+    }));
+    renderPreferencesWithSideNav();
+    fireEvent.click(screen.getByRole("button", { name: /General & UI/i }));
+    expect(await screen.findByText(/Some saved colors need more contrast/)).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Muted hex"), { target: { value: "#445566" } });
+    expect(readLocalPreferences().themePreference?.custom?.light?.["--muted"]).toBe("#445566");
+    expect(screen.getByText(/Some saved colors need more contrast/)).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Accent hex"), { target: { value: "#286f6b" } });
+    expect(screen.queryByText(/Some saved colors need more contrast/)).toBeNull();
+    expect(readLocalPreferences().themePreference?.custom?.light).toMatchObject({
+      "--muted": "#445566", "--accent": "#286f6b", "--font-ui": font
+    });
+
+    fireEvent.change(screen.getByLabelText("Muted hex"), { target: { value: "#ffffff" } });
+    expect(readLocalPreferences().themePreference?.custom?.light?.["--muted"]).toBe("#445566");
+    expect(toastStore.toasts.at(-1)?.title).toBe("Theme contrast too low");
+  });
+
   it("shows custom theme color and font controls", async () => {
     const commands: unknown[] = [];
     seedHarnessStoreForTests(
@@ -507,7 +541,7 @@ createUiTest("PreferencesModal", () => {
     renderPreferencesWithSideNav();
     fireEvent.click(screen.getByRole("button", { name: /General & UI/i }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Solid" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Solid" }));
     const terminalPreferenceCommand = commands.find((command) => command.type === "terminal.preferences.save");
     expect(terminalPreferenceCommand?.payload.preferences.rendererMode).toBe("solid-prototype");
     expect(terminalStore.state.preferences.rendererMode).toBe("solid-prototype");
@@ -530,13 +564,13 @@ createUiTest("PreferencesModal", () => {
 
     renderPreferencesWithSideNav();
     fireEvent.click(screen.getByRole("button", { name: /General & UI/i }));
-    fireEvent.click(await screen.findByRole("button", { name: "Simple" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Simple" }));
 
     expect(harnessStore.state.experienceMode).toBe("simple");
     expect(harnessStore.state.chatPaneTab).toBe("chat");
     expect(readLocalPreferences().experienceMode).toBe("simple");
 
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Advanced" }));
     expect(harnessStore.state.experienceMode).toBe("advanced");
     expect(readLocalPreferences().experienceMode).toBe("advanced");
   });
@@ -560,7 +594,7 @@ createUiTest("PreferencesModal", () => {
 
     captureDispatchedCommands(commands);
     renderPreferencesWithSideNav();
-    fireEvent.click(screen.getByRole("button", { name: "GPT" }));
+    fireEvent.click(screen.getByRole("radio", { name: "GPT" }));
 
     expect(toastStore.toasts.length).toBe(0);
     expect(commands.length).toBe(1);
@@ -569,7 +603,7 @@ createUiTest("PreferencesModal", () => {
     expect(saveCommand.payload.anthropicApiKey).toBeUndefined();
   });
 
-  it("autosaves preferences through typed command payload", () => {
+  it("saves only an explicitly selected key through the typed command payload", () => {
     const commands: unknown[] = [];
     seedHarnessStoreForTests(
       createHarnessStateFixture({
@@ -592,7 +626,8 @@ createUiTest("PreferencesModal", () => {
     captureDispatchedCommands(commands);
     renderPreferencesWithSideNav();
     fireEvent.input(screen.getByPlaceholderText("sk-..."), { target: { value: "sk-local-456" } });
-
+    expect(commands.length).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Save OpenAI API key" }));
     expect(commands.length).toBe(1);
     const saveCommand = requireCommand(commands, 0, "preferences.save");
     expect(saveCommand.payload.blockChatOnDirtyGitDefault).toBe(false);
@@ -602,6 +637,9 @@ createUiTest("PreferencesModal", () => {
     expect(saveCommand.payload.memoryBankEnabledDefault).toBe(false);
     expect(saveCommand.payload.memoryBankRecordRunsDefault).toBe(false);
     expect(saveCommand.payload.checkCliUpdatesDefault).toBe(false);
+    expect(saveCommand.payload.openAiApiKey).toBe("sk-local-456");
+    expect(saveCommand.payload.googleApiKey).toBeUndefined();
+    expect(harnessStore.state.openAiApiKeyDraft).toBe("sk-local-456");
   });
 
   it("renders pull-based project note preference toggles", async () => {
@@ -663,7 +701,7 @@ createUiTest("PreferencesModal", () => {
     );
 
     renderPreferencesWithSideNav();
-    fireEvent.click(screen.getByRole("button", { name: "Medium" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Medium" }));
 
     expect(harnessStore.state.selectedReasoningStrength).toBe("medium");
   });
@@ -703,7 +741,7 @@ createUiTest("PreferencesModal", () => {
 
     harnessStore.applyServerEvent({
       type: "preferences.providerConnectionTested",
-      requestId: "req-test",
+      requestId: requireCommand(commands, 0, "preferences.testProviderConnection").requestId,
       payload: {
         provider: "openai",
         status: "ready",
@@ -715,7 +753,7 @@ createUiTest("PreferencesModal", () => {
     expect(await screen.findByText("Connection ready. 2 models visible.")).not.toBeNull();
   });
 
-  it("clears keys through typed command payload", () => {
+  it("clears keys through typed command payload", async () => {
     const commands: unknown[] = [];
     seedHarnessStoreForTests(
       createHarnessStateFixture({
@@ -727,8 +765,13 @@ createUiTest("PreferencesModal", () => {
 
     captureDispatchedCommands(commands);
     renderPreferencesWithSideNav();
-    fireEvent.click(screen.getByRole("button", { name: "Clear keys" }));
-
+    fireEvent.click(screen.getByRole("button", { name: "Developer & Advanced" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all provider keys" }));
+    expect(commands.length).toBe(0);
+    fireEvent.click(await screen.findByRole("button", { name: "Keep provider keys" }));
+    expect(commands.length).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Clear all provider keys" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove all saved provider keys" }));
     expect(commands.length).toBe(1);
     expect(requireCommand(commands, 0, "preferences.clearApiKey").type).toBe("preferences.clearApiKey");
   });
@@ -787,6 +830,15 @@ createUiTest("PreferencesModal", () => {
 
     fireEvent.click(requireButton(screen.getAllByRole("button", { name: "Delete Workspace preferences keybinding" })[0]));
 
-    expect(readLocalPreferences().appHotkeyPreferences?.openPreferences).toEqual(["Mod+,"]);
+    expect(readLocalPreferences().appHotkeyPreferences?.openPreferences).toEqual(["Meta+,", "Control+,"]);
+  });
+
+  it("keeps new view-state hotkey defaults independent from earlier state edits", () => {
+    const first = createInitialViewState();
+    const second = createInitialViewState();
+    const expected = [...second.appHotkeyPreferences.openPreferences];
+    first.appHotkeyPreferences.openPreferences.splice(0, 1);
+    expect(second.appHotkeyPreferences.openPreferences).toEqual(expected);
+    expect(createInitialViewState().appHotkeyPreferences.openPreferences).toEqual(expected);
   });
 });

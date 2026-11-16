@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AssistantLearning, AssistantQuestion } from "@hyperfocus/ai-core/protocol";
-import { evaluateAssistantQuestionPolicy, readAssistantPendingPromptQuestions, readAssistantPromptQuestions } from "./assistant-question-policy";
+import { createAssistantQuestionPolicyEffects, evaluateAssistantQuestionPolicy, readAssistantPendingPromptQuestions, readAssistantPromptQuestions } from "./assistant-question-policy";
 
 const now = new Date().toISOString();
 
@@ -165,7 +165,7 @@ describe("assistant question policy", () => {
     ).toBe("ask");
   });
 
-  test("suppresses already pending duplicates", () => {
+  test("keeps already pending duplicates blocking until answered", () => {
     const decision = evaluateAssistantQuestionPolicy({
       prompt: "Which game folder should I inspect first?",
       questions: [
@@ -176,7 +176,38 @@ describe("assistant question policy", () => {
       ]
     });
 
-    expect(decision.kind).toBe("suppress");
+    expect(decision.kind).toBe("ask");
+  });
+
+  test("mandatory blocking and risk take precedence over durable category guidance", () => {
+    const questions = [question({ prompt: "Which project should I inspect?", answerText: "Use your best judgment." })];
+    for (const input of [
+      { prompt: "Which project should I inspect?", forceBlocking: true },
+      { prompt: "Which project should I delete from production?" },
+      { prompt: "Which project should I inspect?", autoApproveNonBlocking: false }
+    ]) expect(evaluateAssistantQuestionPolicy({ ...input, questions }).kind).toBe("ask");
+  });
+
+  test("unknown questions cannot reuse unrelated guidance or default to authorization", () => {
+    const questions = [question({ prompt: "Should I use concise prose?", answerText: "Use your best judgment." })];
+    for (const prompt of ["Should I permanently delete production data?", "Should I publish these changes?"]) {
+      expect(evaluateAssistantQuestionPolicy({ prompt, questions }).kind).toBe("ask");
+      expect(evaluateAssistantQuestionPolicy({ prompt, questions: [] }).kind).toBe("ask");
+    }
+  });
+
+  test("default assumptions are not recorded as high-confidence guidance", () => {
+    const prompt = "Which project should I inspect?";
+    const decision = evaluateAssistantQuestionPolicy({ prompt, questions: [] });
+    expect(decision.kind).toBe("note");
+    if (decision.kind === "ask") throw new Error("Expected a non-blocking assumption");
+    expect(createAssistantQuestionPolicyEffects("assistant-1", prompt, decision, now).learning.confidence).toBe("low");
+  });
+
+  test("deferred questions remain blocking even when target learnings suggest a default", () => {
+    expect(evaluateAssistantQuestionPolicy({ prompt: "Which project should I inspect?",
+      questions: [question({ prompt: "Which project should I inspect?", status: "deferred" })],
+      learnings: [learning("Choose a random target.")] }).kind).toBe("ask");
   });
 
   test("uses learnings as durable guidance", () => {

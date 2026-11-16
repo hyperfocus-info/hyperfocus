@@ -75,6 +75,8 @@ export interface MmoUiShellConfig {
   theme?: Partial<MmoUiTheme>
   login?: false | MmoUiLoginConfig
   toolbar?: readonly MmoUiToolbarAction[]
+  /** Browser-only presentation adapter. Plain icon strings always remain text. */
+  renderToolbarIcon?: (options: { action: MmoUiToolbarAction; document: Document }) => Node | undefined
   panels?: readonly MmoUiPanelConfig[]
   inventory?: MmoUiInventoryConfig
   equipment?: MmoUiEquipmentConfig

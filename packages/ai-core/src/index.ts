@@ -22,7 +22,8 @@ export type {
   HarnessSendResult,
   HarnessWebSocket,
   SendChatInput
-} from "./client";export * from "./harness/protocol/assistants";
+} from "./client";
+export * from "./harness/protocol/assistants";
 export * from "./harness/protocol/client-command";
 export * from "./harness/protocol/conversation";
 export * from "./harness/protocol/execution";

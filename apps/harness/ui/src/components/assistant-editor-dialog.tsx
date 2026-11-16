@@ -1,55 +1,59 @@
-import { Show, createEffect, createMemo, createSignal } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import {
-  Bot,
-  Brain,
-  Cpu,
-  FolderOpen,
-  Gauge,
-  Globe,
-  Split,
-} from "lucide-solid";
 import { resolveModeCatalog } from "@hyperfocus/ai-core/modes";
 import {
-  createAssistantAssetRefId,
-  createAssistantId,
-  createRequestId,
-  type Assistant,
-  type AssistantAssetRef,
-  type ComposerReasoningStrength,
-  type ProviderBrand,
+createAssistantAssetRefId,
+createAssistantId,
+createRequestId,
+type Assistant,
+type AssistantAssetRef,
+type ComposerReasoningStrength,
+type ProviderBrand,
 } from "@hyperfocus/ai-core/protocol";
+import { Input } from "@hyperfocus/ui";
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
+import * as stylex from "@stylexjs/stylex";
 import {
-  COMPOSER_REASONING_STRENGTHS,
-  DEFAULT_COMPOSER_REASONING_STRENGTH,
-  getComposerControlState,
-  getExecutionModelOptionsForAgent,
-  type AssistantEditorDraft,
-  harnessStore,
+Bot,
+Brain,
+Cpu,
+FolderOpen,
+Gauge,
+Globe,
+Split,
+} from "lucide-solid";
+import { Show,createEffect,createMemo,createSignal } from "solid-js";
+import {
+COMPOSER_REASONING_STRENGTHS,
+DEFAULT_COMPOSER_REASONING_STRENGTH,
+getComposerControlState,
+getExecutionModelOptionsForAgent,
+harnessStore,
+type AssistantEditorDraft,
 } from "../harness-store";
 import { pushToast } from "../toast-store";
 import { assistantUtilityStyles } from "./assistants-panel.styles";
+import { assistantAssetKinds,isAssistantAssetKind } from "./assistants/state/asset-kinds";
+import { ModelSelect } from "./models/model-select";
 import { Button } from "./primitives/button";
 import { Dialog } from "./primitives/dialog";
 import { DropdownControl } from "./primitives/dropdown";
 import {
-  getAgentDropdownIcon,
-  getModeDropdownIcon,
+getAgentDropdownIcon,
+getModeDropdownIcon,
 } from "./primitives/dropdown-option-icons";
 import {
-  DialogField,
-  DialogFormSection,
-  DialogInlineNote,
+DialogField,
+DialogFormSection,
+DialogInlineNote,
 } from "./primitives/form-layout";
-import { Input } from "./primitives/input";
 import { Textarea } from "./primitives/textarea";
 
-const assistantAssetKinds = [
-  "skill",
-  "script",
-  "mode",
-  "background-template",
-] as const;
+const editorStyles = stylex.create({
+  dialog: { maxWidth: "52rem" },
+  grid: { gap: tokens.space3, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 15rem), 1fr))", },
+  disclosure: { borderTopColor: tokens.border, borderTopStyle: "solid", borderTopWidth: "1px", minWidth: 0, paddingTop: tokens.space3, },
+  summary: { paddingBlock: tokens.space2, color: tokens.foreground, cursor: "pointer", fontSize: tokens.fontControl, fontWeight: 600, outlineColor: tokens.focus, minHeight: "2.25rem", },
+});
+
 
 function createAssistantEditorFields() {
   const [name, setName] = createSignal("");
@@ -269,18 +273,7 @@ function AssistantCatalogFields(props: {
   const { fields, options } = props;
   return (
     <>
-      <div class={stylex.attrs(
-        assistantUtilityStyles.grid,
-        assistantUtilityStyles.gap3,
-        assistantUtilityStyles.lgGridColsDialogIdentity,
-      ).class}>
-        <DialogField label="Name">
-          <Input
-            value={fields.name()}
-            onInput={(event) => fields.setName(event.currentTarget.value)}
-            placeholder="Mr Miyagi"
-          />
-        </DialogField>
+      <div class={stylex.attrs(editorStyles.grid).class}>
         <DialogField label="Agent runtime">
           <DropdownControl
             kind="select"
@@ -296,12 +289,7 @@ function AssistantCatalogFields(props: {
           />
         </DialogField>
       </div>
-      <div class={stylex.attrs(
-        assistantUtilityStyles.grid,
-        assistantUtilityStyles.gap3,
-        assistantUtilityStyles.smGridCols2,
-        assistantUtilityStyles.xlGridCols4,
-      ).class}>
+      <div class={stylex.attrs(editorStyles.grid).class}>
         <DialogField label="Scope">
           <DropdownControl
             kind="select"
@@ -368,15 +356,9 @@ function AssistantExecutionFields(props: {
   const { fields, options } = props;
   return (
     <>
-      <div class={stylex.attrs(
-        assistantUtilityStyles.grid,
-        assistantUtilityStyles.gap3,
-        assistantUtilityStyles.smGridCols2,
-        assistantUtilityStyles.xlGridCols4,
-      ).class}>
+      <div class={stylex.attrs(editorStyles.grid).class}>
         <DialogField label="Execution model">
-          <DropdownControl
-            kind="select"
+          <ModelSelect
             ariaLabel="Select assistant execution model"
             icon={assistantEditorControlIcon("cpu")}
             size="md"
@@ -415,14 +397,7 @@ function AssistantExecutionFields(props: {
           />
         </DialogField>
       </div>
-      <DialogField label="Description">
-        <Textarea
-          rows="2"
-          value={fields.description()}
-          onInput={(event) => fields.setDescription(event.currentTarget.value)}
-          placeholder="Short purpose summary."
-        />
-      </DialogField>
+
     </>
   );
 }
@@ -432,10 +407,8 @@ export function AssistantEditorDialog() {
   const sendCommand = harnessStore.actions.sendCommand;
   const fields = createAssistantEditorFields();
   const {
-    name, setName, scope, setScope, projectId, setProjectId, description, setDescription,
-    personalityPrompt, setPersonalityPrompt, jobPrompt, setJobPrompt, agentId, setAgentId,
-    providerBrand, setProviderBrand, modeId, setModeId, executionModelId, setExecutionModelId,
-    reasoningStrength, setReasoningStrength, fastMode, setFastMode, assetRefsText, setAssetRefsText
+    name, setName, scope, description, setDescription, personalityPrompt, setPersonalityPrompt,
+    jobPrompt, setJobPrompt, assetRefsText, setAssetRefsText,
   } = fields;
 
   const catalogOptions = createAssistantCatalogOptions(state, fields);
@@ -451,7 +424,7 @@ export function AssistantEditorDialog() {
       }
       eyebrow="Assistants"
       description="Define role, prompts, scope, and linked skills/scripts."
-      class={stylex.attrs(assistantUtilityStyles.maxW5xl).class}
+      class={stylex.attrs(editorStyles.dialog).class}
       contentClass={stylex.attrs(assistantUtilityStyles.gap5).class}
       footer={
         <>
@@ -477,12 +450,13 @@ export function AssistantEditorDialog() {
         </>
       }
     >
-      <DialogFormSection
-        title="Identity"
-        description="Name, ownership scope, runtime, and default execution posture."
-      >
-        <AssistantCatalogFields fields={fields} options={catalogOptions} />
-        <AssistantExecutionFields fields={fields} options={executionOptions} />
+      <DialogFormSection title="Purpose" description="Name and both prompts are required. Configuration can be adjusted below.">
+        <DialogField label="Name">
+          <Input value={name()} onInput={event => setName(event.currentTarget.value)} placeholder="Release reviewer" required />
+        </DialogField>
+        <DialogField label="Description">
+          <Textarea rows="2" value={description()} onInput={event => setDescription(event.currentTarget.value)} placeholder="Short purpose summary (optional)." />
+        </DialogField>
       </DialogFormSection>
       <DialogFormSection
         title="Prompts"
@@ -490,16 +464,12 @@ export function AssistantEditorDialog() {
       >
         <div
           class={
-            stylex.attrs(
-              assistantUtilityStyles.grid,
-              assistantUtilityStyles.gap3,
-              assistantUtilityStyles.lgGridCols2,
-            ).class
+            stylex.attrs(editorStyles.grid).class
           }
         >
           <DialogField label="Personality prompt">
             <Textarea
-              rows="9"
+              rows="5"
               value={personalityPrompt()}
               onInput={(event) =>
                 setPersonalityPrompt(event.currentTarget.value)
@@ -510,7 +480,7 @@ export function AssistantEditorDialog() {
 
           <DialogField label="Job prompt">
             <Textarea
-              rows="9"
+              rows="5"
               value={jobPrompt()}
               onInput={(event) => setJobPrompt(event.currentTarget.value)}
               placeholder="Role, success criteria, research mandate, proactive work rules."
@@ -519,6 +489,15 @@ export function AssistantEditorDialog() {
         </div>
       </DialogFormSection>
 
+      <details class={stylex.attrs(editorStyles.disclosure).class}>
+        <summary class={stylex.attrs(editorStyles.summary).class}>Execution and scope Â· {scope() === "global" ? "All projects" : "Current project"}</summary>
+        <DialogFormSection title="Execution and scope" description="Choose ownership, runtime and model defaults.">
+          <AssistantCatalogFields fields={fields} options={catalogOptions} />
+          <AssistantExecutionFields fields={fields} options={executionOptions} />
+        </DialogFormSection>
+      </details>
+      <details class={stylex.attrs(editorStyles.disclosure).class}>
+        <summary class={stylex.attrs(editorStyles.summary).class}>Linked assets (optional)</summary>
       <DialogFormSection
         title="Linked assets"
         description="Attach reusable skills, scripts, modes, or background templates."
@@ -538,6 +517,7 @@ export function AssistantEditorDialog() {
           {assistantAssetKinds.join(", ")}.
         </DialogInlineNote>
       </DialogFormSection>
+      </details>
     </Dialog>
   );
 }
@@ -613,8 +593,4 @@ function parseAssetRefs(input: string, assistantId: string) {
   }
 
   return { value } as const;
-}
-
-function isAssistantAssetKind(value: string | undefined): value is (typeof assistantAssetKinds)[number] {
-  return value === "skill" || value === "script" || value === "mode" || value === "background-template";
 }

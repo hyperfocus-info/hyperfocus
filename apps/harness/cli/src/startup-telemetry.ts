@@ -139,7 +139,7 @@ type StartupSessionState = {
 type EmitStartupEvent = (input: EmitEventInput) => void;
 
 const STARTUP_LOG_DIR = "pi-harness-startup";
-const LOG_RETENTION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const LOG_RETENTION_MAX_AGE_MS = 604800000;
 const LOG_RETENTION_MAX_FILES = 20;
 const FAST_PULSE_MS = 2_000;
 const SLOW_PULSE_MS = 5_000;

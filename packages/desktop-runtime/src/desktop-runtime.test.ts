@@ -25,6 +25,15 @@ describe("desktop deep links", () => {
     });
     expect(resolved).toMatchObject({ kind: "file", projectRoot: nestedRoot, filePath: "src/main.ts" });
   });
+
+  test("accepts double-dot child names but excludes sibling projects", async () => {
+    const root = path.resolve("audit/project");
+    const fileSystem = { stat: async () => ({ isFile: () => true, isDirectory: () => false }) };
+    const child = await resolveDesktopTarget({ target: path.join(root, "..notes/file.md"), projectRoots: [root], fileSystem });
+    expect(child).toMatchObject({ projectRoot: root, filePath: "..notes/file.md" });
+    const sibling = await resolveDesktopTarget({ target: path.join(root, "../sibling/file.md"), projectRoots: [root], fileSystem });
+    expect(sibling.projectRoot).toBe(path.resolve(root, "../sibling"));
+  });
 });
 
 describe("desktop client leases", () => {
@@ -57,7 +66,21 @@ describe("standalone updates", () => {
 
   test("compares tagged numeric versions", () => {
     expect(compareVersions("v1.10.0", "1.9.9")).toBe(1);
-    expect(compareVersions("1.0.0", "1.0.0-beta.2")).toBe(0);
+    expect(compareVersions("1.0.0", "1.0.0-beta.2")).toBe(1);
+  });
+
+  test("offers stable to RC users and orders prerelease identifiers without precision loss", async () => {
+    const versions = ["1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "1.0.0"];
+    for (let i = 1; i < versions.length; i++) {
+      expect(compareVersions(versions[i - 1]!, versions[i]!)).toBe(-1);
+      expect(compareVersions(versions[i]!, versions[i - 1]!)).toBe(1);
+    }
+    expect(compareVersions("1.2.0+build.1", "1.2+build.2")).toBe(0);
+    expect(compareVersions("1.0.0-9007199254740992", "1.0.0-9007199254740993")).toBe(-1);
+    expect(await checkStandaloneUpdate({ enabled: true, currentVersion: "1.2.0-rc.1", source: { getLatestRelease: async () => ({ version: "1.2.0" }) } })).toMatchObject({ status: "available" });
+    for (const invalid of ["1.0.0garbage", "1.0.0-", "1.0.0-01", "1.0.0+", "1." + "0".repeat(257)]) {
+      expect(() => compareVersions(invalid, "1.0.0")).toThrow("Invalid version");
+    }
   });
 
   test("delegates installation only after explicit consumer approval", async () => {

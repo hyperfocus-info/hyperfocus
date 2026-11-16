@@ -1,3 +1,5 @@
+
+
 import type { PhysicsShape2D } from "./2d.ts";
 
 export const PHYSICS_DEBUG_SEGMENT_STRIDE = 5;
@@ -188,9 +190,7 @@ export function boundedInteger(value: number, minimum: number, maximum: number, 
   return value;
 }
 
-export function clamp(value: number, minimum: number, maximum: number) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
+export { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
 
 export function normalizeAngle(value: number) {
   const wrapped = (value + Math.PI) % (Math.PI * 2);

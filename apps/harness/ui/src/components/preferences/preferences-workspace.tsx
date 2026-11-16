@@ -1,13 +1,13 @@
+import { usePreferencesPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
-import * as stylex from "@stylexjs/stylex";
 import { createRequestId } from "@hyperfocus/ai-core/protocol";
+import * as stylex from "@stylexjs/stylex";
 import { Save } from "lucide-solid";
 import { ActionButton } from "../action-button";
 import { ModeEditorPanel } from "../mode-editor-panel";
 import type { PreferencesPanelModel } from "../preferences-modal";
 import { Textarea } from "../primitives/textarea";
-import type { PreferencesOperationalActions } from "./preferences-actions";
-import { PreferenceRow, PreferenceSection, PreferenceToggle } from "./preferences-controls";
+import { PreferenceRow,PreferenceSection,PreferenceToggle } from "./preferences-controls";
 import { preferenceStyles } from "./preferences.styles";
 
 function updateWorkspaceDraft(model: PreferencesPanelModel, kind: "rules" | "memory", value: string) {
@@ -51,15 +51,12 @@ function updateWorkspaceDraft(model: PreferencesPanelModel, kind: "rules" | "mem
   });
 }
 
-export function PreferencesWorkspace(props: {
-  model: PreferencesPanelModel;
-  actions: PreferencesOperationalActions;
-  updateSavedPreference: (update: () => void) => void;
-}) {
-  const { model } = props;
+export function PreferencesWorkspace() {
+  const panel = usePreferencesPanel();
+  const { model } = panel;
   const { state, store, sendCommand, workspaceModes, workspaceRuleDraft } = model;
   const savedToggle = (checked: boolean, update: (value: boolean) => void) =>
-    props.updateSavedPreference(() => update(checked));
+    panel.persistence.updateSavedPreference(() => update(checked));
   return (
     <PreferenceSection title="Workspace & Memory" description="Human-readable alignment, pull-based project notes, and archive behavior.">
       <PreferenceRow id="workspace-context" title="Workspace rules" description="Prefer repository AGENTS.md files for durable direction; use this typed workspace override only when every project needs the same rule.">
@@ -68,7 +65,7 @@ export function PreferencesWorkspace(props: {
             <span class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.fontMedium, preferenceStyles.colorForeground).class}>Workspace rules</span>
             <Textarea rows="5" value={workspaceRuleDraft()} onInput={(event) => updateWorkspaceDraft(model, "rules", event.currentTarget.value)} />
           </label>
-          <ActionButton tooltip="Save explicit workspace rules" variant="secondary" icon={<Save class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={props.actions.handleSaveWorkspaceContext}>
+          <ActionButton tooltip="Save explicit workspace rules" variant="secondary" icon={<Save class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={panel.operational.handleSaveWorkspaceContext}>
             Save workspace rules
           </ActionButton>
         </div>
@@ -86,7 +83,9 @@ export function PreferencesWorkspace(props: {
         title="Workspace custom modes"
         scope="workspace"
         modes={workspaceModes()}
-        onSave={(mode) => sendCommand({ type: "mode.save", requestId: createRequestId(), payload: { scope: "workspace", mode } })}
+        draftOwner={store}
+        draftKey="workspace"
+        onSave={(mode) => store.actions.saveMode({ type: "mode.save", requestId: createRequestId(), payload: { scope: "workspace", mode } })}
         onDelete={(modeId) => sendCommand({ type: "mode.delete", requestId: createRequestId(), payload: { scope: "workspace", modeId } })}
       />
     </PreferenceSection>

@@ -1,110 +1,20 @@
-import { For, Show, createMemo } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import { Braces, CaseSensitive, Regex, Replace } from "lucide-solid";
-import type { IdeSearchResult } from "@hyperfocus/ai-core/protocol";
-import { ActionButton } from "../components/action-button";
-import { Input } from "../components/primitives/input";
-import { ideStyles, ideUtilityStyles } from "./ide-workbench.styles";
+import { For, Show, createMemo } from 'solid-js';
+import * as stylex from '@stylexjs/stylex';
+import { tokens } from '@hyperfocus/ui/tokens.stylex';
+import type { IdeSearchResult } from '@hyperfocus/ai-core/protocol';
+import { Button } from '../components/primitives/button';
+import { Input } from "@hyperfocus/ui";
+import { ideStyles } from './ide-workbench.styles';
 
-function SearchModeControls(props: {
-  regexSearch: boolean;
-  caseSensitiveSearch: boolean;
-  wholeWordSearch: boolean;
-  onRegexSearch: (value: boolean) => void;
-  onCaseSensitiveSearch: (value: boolean) => void;
-  onWholeWordSearch: (value: boolean) => void;
-}) {
-  const buttonClass = stylex.attrs(ideUtilityStyles.h8, ideUtilityStyles.w8, ideUtilityStyles.roundedLg).class;
-  const iconClass = stylex.attrs(ideUtilityStyles.h35, ideUtilityStyles.w35).class;
-  return (
-    <div class={stylex.attrs(ideUtilityStyles.flex, ideUtilityStyles.itemsCenter, ideUtilityStyles.gap1).class}>
-      <ActionButton
-        tooltip="Use regular expression search"
-        ariaLabel="Use regular expression search"
-        icon={<Regex class={iconClass} />}
-        variant={props.regexSearch ? "secondary" : "ghost"}
-        size="icon"
-        class={buttonClass}
-        onClick={() => props.onRegexSearch(!props.regexSearch)}
-      />
-      <ActionButton
-        tooltip="Match case"
-        ariaLabel="Match case"
-        icon={<CaseSensitive class={iconClass} />}
-        variant={props.caseSensitiveSearch ? "secondary" : "ghost"}
-        size="icon"
-        class={buttonClass}
-        onClick={() => props.onCaseSensitiveSearch(!props.caseSensitiveSearch)}
-      />
-      <ActionButton
-        tooltip="Match whole word"
-        ariaLabel="Match whole word"
-        icon={<Braces class={iconClass} />}
-        variant={props.wholeWordSearch ? "secondary" : "ghost"}
-        size="icon"
-        class={buttonClass}
-        onClick={() => props.onWholeWordSearch(!props.wholeWordSearch)}
-      />
-      <ActionButton
-        tooltip="Replace is planned for the editing pass"
-        icon={<Replace class={iconClass} />}
-        variant="secondary"
-        size="sm"
-      >
-        Replace
-      </ActionButton>
-    </div>
-  );
-}
-
-function SearchResults(props: {
-  results: IdeSearchResult[];
-  count: number;
-  onOpenPath: (path: string, line?: number, column?: number) => void;
-}) {
-  return (
-    <Show
-      when={props.count > 0}
-      fallback={
-        <div class={stylex.attrs(ideUtilityStyles.roundedLg, ideUtilityStyles.border,
-          ideUtilityStyles.borderDashed, ideUtilityStyles.borderIde, ideUtilityStyles.p3,
-          ideUtilityStyles.textXs, ideUtilityStyles.textIdeMuted).class}>
-          Type to search files.
-        </div>
-      }
-    >
-      <For each={props.results}>
-        {(result) => (
-          <div class={stylex.attrs(ideUtilityStyles.roundedLg, ideUtilityStyles.border,
-            ideUtilityStyles.borderIde, ideUtilityStyles.bgIdeRow, ideUtilityStyles.p2).class}>
-            <button
-              type="button"
-              class={stylex.attrs(ideUtilityStyles.block, ideUtilityStyles.wFull,
-                ideUtilityStyles.truncate, ideUtilityStyles.textLeft, ideUtilityStyles.textXs,
-                ideUtilityStyles.fontSemibold, ideUtilityStyles.textIdeText).class}
-              onClick={() => props.onOpenPath(result.path)}
-            >
-              {result.path}
-            </button>
-            <For each={result.matches}>
-              {(match) => (
-                <button
-                  type="button"
-                  class={stylex.attrs(ideUtilityStyles.mt1, ideUtilityStyles.block,
-                    ideUtilityStyles.wFull, ideUtilityStyles.truncate, ideUtilityStyles.textLeft,
-                    ideUtilityStyles.fontMono, ideUtilityStyles.text07, ideUtilityStyles.textIdeMuted).class}
-                  onClick={() => props.onOpenPath(result.path, match.line, match.column)}
-                >
-                  {match.line}:{match.column} {match.preview}
-                </button>
-              )}
-            </For>
-          </div>
-        )}
-      </For>
-    </Show>
-  );
-}
+const styles = stylex.create({
+  root: { padding: tokens.space3, gap: tokens.space3, overflow: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, },
+  label: { gap: tokens.space2, display: 'grid', fontSize: tokens.fontControl, fontWeight: 600, },
+  modes: { gap: tokens.space1, display: 'flex', flexWrap: 'wrap', },
+  status: { color: 'var(--ide-muted)', fontSize: tokens.fontCaption, lineHeight: 1.5, overflowWrap: 'anywhere' },
+  result: { gap: tokens.space1, paddingBlock: tokens.space2, display: 'grid', borderTopColor: 'var(--ide-border)', borderTopStyle: 'solid', borderTopWidth: '1px', minWidth: 0, },
+  target: { justifyContent: 'flex-start', overflowWrap: 'anywhere', textAlign: 'start', height: 'auto', minHeight: '44px', width: '100%', },
+  preview: { fontFamily: 'var(--font-mono)', fontSize: tokens.fontCaption, fontWeight: 400 },
+});
 
 export function GlobalSearchView(props: {
   searchQuery: string;
@@ -123,37 +33,24 @@ export function GlobalSearchView(props: {
   onCaseSensitiveSearch: (value: boolean) => void;
   onWholeWordSearch: (value: boolean) => void;
 }) {
-  const resultCount = createMemo(() =>
-    props.searchResults.reduce((sum, result) => sum + result.matches.length, 0));
-  return (
-    <div class={stylex.attrs(ideUtilityStyles.flex, ideUtilityStyles.minH0, ideUtilityStyles.flex1,
-      ideUtilityStyles.flexCol, ideUtilityStyles.gap3, ideUtilityStyles.overflowAuto,
-      ideUtilityStyles.p3).class}>
-      <div class={stylex.attrs(ideUtilityStyles.flex, ideUtilityStyles.flexCol, ideUtilityStyles.gap2).class}>
-        <Input
-          ref={props.searchInputRef}
-          aria-label="Find in files"
-          placeholder="Find"
-          value={props.searchQuery}
-          onInput={(event) => props.onSearchQuery(event.currentTarget.value)}
-          class={stylex.attrs(ideStyles.input).class}
-        />
-        <Input
-          aria-label="Replace in files"
-          placeholder="Replace"
-          value={props.replaceQuery}
-          onInput={(event) => props.onReplaceQuery(event.currentTarget.value)}
-          class={stylex.attrs(ideStyles.input).class}
-        />
-        <SearchModeControls {...props} />
-      </div>
-      <div class={stylex.attrs(ideUtilityStyles.text065, ideUtilityStyles.fontSemibold,
-        ideUtilityStyles.uppercase, ideUtilityStyles.textIdeMuted).class}>
-        {props.searchLoading
-          ? "Searching..."
-          : `${resultCount()} results${props.searchTruncated ? " (truncated)" : ""}`}
-      </div>
-      <SearchResults results={props.searchResults} count={resultCount()} onOpenPath={props.onOpenPath} />
+  const resultCount = createMemo(() => props.searchResults.reduce((sum, result) => sum + result.matches.length, 0));
+  return <div {...stylex.attrs(styles.root)}>
+    <label {...stylex.attrs(styles.label)}>Find in files
+      <Input ref={props.searchInputRef} aria-label="Find in files" placeholder="Search project contents" value={props.searchQuery}
+        onInput={event => props.onSearchQuery(event.currentTarget.value)} class={stylex.attrs(ideStyles.input).class} />
+    </label>
+    <div role="group" aria-label="Search options" {...stylex.attrs(styles.modes)}>
+      <Button tooltip="Use regular expression search" variant={props.regexSearch ? 'secondary' : 'ghost'} size="sm" aria-pressed={props.regexSearch} onClick={() => props.onRegexSearch(!props.regexSearch)}>Regex</Button>
+      <Button tooltip="Match case" variant={props.caseSensitiveSearch ? 'secondary' : 'ghost'} size="sm" aria-pressed={props.caseSensitiveSearch} onClick={() => props.onCaseSensitiveSearch(!props.caseSensitiveSearch)}>Match case</Button>
+      <Button tooltip="Match whole word" variant={props.wholeWordSearch ? 'secondary' : 'ghost'} size="sm" aria-pressed={props.wholeWordSearch} onClick={() => props.onWholeWordSearch(!props.wholeWordSearch)}>Whole word</Button>
     </div>
-  );
+    <div role="status" {...stylex.attrs(styles.status)}>{props.searchLoading ? 'Searching…' : !props.searchQuery.trim() ? 'Enter text to search project files.' : resultCount() === 0 ? 'No matches. Try a different search.' : `${resultCount()} results${props.searchTruncated ? ' — refine your search to see omitted results' : ''}`}</div>
+    <Show when={!props.searchLoading && props.searchQuery.trim()}>
+      <For each={props.searchResults}>{result => <section aria-label={result.path} {...stylex.attrs(styles.result)}>
+        <Button tooltip={`Open ${result.path}`} variant="ghost" class={stylex.attrs(styles.target).class} onClick={() => props.onOpenPath(result.path)}>{result.path}</Button>
+        <For each={result.matches}>{match => <Button tooltip={`Open ${result.path} at ${match.line}:${match.column}`} variant="ghost" class={stylex.attrs(styles.target, styles.preview).class}
+          onClick={() => props.onOpenPath(result.path, match.line, match.column)}>{match.line}:{match.column} {match.preview}</Button>}</For>
+      </section>}</For>
+    </Show>
+  </div>;
 }

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { readHyperfocusProjectPair } from "../src/project/filesystem.ts";
 import { migrateProject } from "../src/project/editor.ts";
-import { createProjectStarter } from "../tooling/create-project.ts";
+import { createProjectStarter } from "../tooling/create-project-runtime.ts";
 import { projectEditCliHelp, setProjectPlayerSpeed } from "./edit-project.ts";
 
 describe("beginner-safe project edit", () => {

@@ -9,6 +9,7 @@ import {
 } from "./project-switcher-dialog";
 import { captureDispatchedCommands, clearBrowserStateForTests, requireCommand, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
 import { createHarnessStateFixture, createRunFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
+import { harnessStore } from "../harness-store";
 
 createUiTest("ProjectSwitcherDialog", () => {
   beforeEach(() => {
@@ -166,6 +167,41 @@ createUiTest("ProjectSwitcherDialog", () => {
 
     expect(commands).toHaveLength(1);
     expect(requireCommand(commands, 0, "project.create").payload.rootPath).toBe("C:\\new-repo");
+  });
+
+  it("keeps an exact absolute path as the Enter target when nearby discovery results arrive", async () => {
+    const commands: unknown[] = [];
+    const query = "C:\\new-repo";
+    seedHarnessStoreForTests(
+      createHarnessStateFixture({
+        projectSwitcherOpen: true,
+        projectSearchQuery: query,
+        workspace: {
+          activeProjectId: "project-nearby",
+          projects: [createViewProjectFixture({
+            id: "project-nearby",
+            name: "new-repo-archive",
+            rootPath: "C:\\new-repo-archive"
+          })]
+        }
+      })
+    );
+
+    captureDispatchedCommands(commands);
+    render(() => <ProjectSwitcherDialog />);
+    harnessStore.startProjectSearch("search-exact-path", query);
+    harnessStore.applyProjectSearchResults("search-exact-path", query, [{
+      id: "C:\\new-repo-old",
+      name: "new-repo-old",
+      rootPath: "C:\\new-repo-old",
+      repoKind: "git-repo",
+      matchKind: "path-prefix"
+    }]);
+    await Promise.resolve();
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+
+    expect(commands).toHaveLength(1);
+    expect(requireCommand(commands, 0, "project.create").payload.rootPath).toBe(query);
   });
 
   it("activates exact already-open paths instead of adding again", async () => {

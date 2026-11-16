@@ -59,7 +59,7 @@
       }
 
       button:disabled {
-        cursor: not-allowed;
+        cursor:pointer;
         opacity: var(--ce-ui-disabled-opacity, 0.45);
       }
 
@@ -427,7 +427,7 @@
           linear-gradient(90deg, color-mix(in srgb, var(--passive-color, #d7ff8d) 16%, transparent), transparent),
           rgba(5, 10, 9, 0.68);
         box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
-        font-size: 10px;
+        font-size: 0.75rem;
         font-weight: 800;
         text-shadow: 0 1px 2px #000;
       }
@@ -532,7 +532,7 @@
           color-mix(in srgb, var(--weapon-color, #d5ff8d) 30%, rgba(4, 9, 8, 0.84));
         box-shadow: 0 0 12px color-mix(in srgb, var(--weapon-color, #d5ff8d) 42%, transparent);
         color: #ffffff;
-        font-size: 10px;
+        font-size: 0.75rem;
         font-weight: 850;
         line-height: 1;
       }
@@ -555,7 +555,7 @@
         border: 1px solid rgba(255, 255, 255, 0.18);
         background: rgba(255, 255, 255, 0.08);
         color: #dfffd4;
-        font-size: 9px;
+        font-size: 0.75rem;
         font-weight: 850;
         line-height: 1;
         text-shadow: none;
@@ -659,7 +659,7 @@
         top: 6px;
         left: 8px;
         color: #cbf38e;
-        font-size: 10px;
+        font-size: 0.75rem;
         font-weight: 750;
         letter-spacing: 0;
         line-height: 1;
@@ -686,7 +686,7 @@
         display: flex;
         justify-content: space-between;
         color: #d8ffd0;
-        font-size: 9px;
+        font-size: 0.75rem;
         font-weight: 800;
         line-height: 1;
         text-shadow: 0 1px 2px #000;
@@ -809,6 +809,7 @@
         position: fixed;
         inset: 0;
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         place-items: center;
         overflow: auto;
         padding: 18px;
@@ -957,7 +958,8 @@
       }
 
       .menu-panel {
-        width: min(1100px, calc(100vw - 24px));
+        width: min(1100px, 100%);
+        min-width: 0;
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
         gap: 16px;
@@ -966,6 +968,8 @@
 
       .menu-copy,
       .lobby-panel {
+        min-width: 0;
+        overflow-wrap: anywhere;
         border: 1px solid rgba(210, 230, 180, 0.3);
         background: linear-gradient(180deg, rgba(8, 13, 12, 0.9), rgba(4, 8, 7, 0.84));
         backdrop-filter: blur(12px);
@@ -995,8 +999,18 @@
       .lobby-actions,
       .room-list {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: 8px;
       }
+
+      .menu input,
+      .menu button {
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+
+      .menu input { width: 100%; }
 
       .menu-actions {
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1019,7 +1033,7 @@
         border: 1px solid rgba(202, 226, 183, 0.18);
         background: rgba(3, 8, 8, 0.58);
         color: #d7ead1;
-        font-size: 11px;
+        font-size: 0.75rem;
         font-weight: 850;
         line-height: 1.15;
       }
@@ -1109,7 +1123,7 @@
         border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 46%, rgba(255, 255, 255, 0.12));
         background: rgba(0, 0, 0, 0.28);
         color: color-mix(in srgb, var(--class-color, #d7ff8d) 80%, white 12%);
-        font-size: 9px;
+        font-size: 0.75rem;
         font-weight: 950;
         line-height: 1;
       }
@@ -1155,20 +1169,20 @@
 
       .class-card em {
         color: color-mix(in srgb, var(--class-color, #d7ff8d) 75%, white 20%);
-        font-size: 10px;
+        font-size: 0.75rem;
         font-weight: 850;
         text-transform: uppercase;
       }
 
       .class-card span {
         color: #e9f8df;
-        font-size: 11px;
+        font-size: 0.75rem;
         font-weight: 750;
       }
 
       .class-card small {
         color: #afc4aa;
-        font-size: 10px;
+        font-size: 0.75rem;
       }
 
       .class-loadout {
@@ -1196,7 +1210,7 @@
       .class-loadout-label {
         display: block;
         color: color-mix(in srgb, var(--class-color, #d7ff8d) 74%, white 12%);
-        font-size: 9px;
+        font-size: 0.75rem;
         font-weight: 850;
         line-height: 1;
         text-transform: uppercase;
@@ -1206,7 +1220,7 @@
         display: block;
         overflow: hidden;
         color: #f8fff1;
-        font-size: 11px;
+        font-size: 0.75rem;
         font-weight: 850;
         line-height: 1.2;
         text-overflow: ellipsis;
@@ -1223,7 +1237,7 @@
         display: -webkit-box;
         overflow: hidden;
         color: #d1dfc9;
-        font-size: 10px;
+        font-size: 0.75rem;
         font-weight: 650;
         line-height: 1.25;
         -webkit-box-orient: vertical;
@@ -1250,7 +1264,7 @@
         border: 1px solid color-mix(in srgb, var(--class-color, #d7ff8d) 36%, rgba(255, 255, 255, 0.12));
         background: rgba(0, 0, 0, 0.22);
         color: color-mix(in srgb, var(--class-color, #d7ff8d) 74%, white 16%);
-        font-size: 9px;
+        font-size: 0.75rem;
         font-weight: 850;
         line-height: 1.1;
         text-transform: uppercase;
@@ -1262,7 +1276,7 @@
         gap: 5px;
         min-width: 0;
         color: #d2e1cf;
-        font-size: 10px;
+        font-size: 0.75rem;
         font-weight: 850;
       }
 
@@ -1325,7 +1339,7 @@
 
       .loadout-section-header strong,
       .loadout-section-header span {
-        font-size: 11px;
+        font-size: 0.75rem;
         font-weight: 900;
         line-height: 1;
         text-transform: uppercase;
@@ -1415,7 +1429,7 @@
         min-width: 0;
         overflow: hidden;
         color: #f8fff1;
-        font-size: 10px;
+        font-size: 0.75rem;
         font-weight: 900;
         line-height: 1.12;
         text-overflow: ellipsis;
@@ -1425,7 +1439,7 @@
       .loadout-option span {
         min-width: 0;
         color: color-mix(in srgb, var(--class-color, #d7ff8d) 70%, white 14%);
-        font-size: 9px;
+        font-size: 0.75rem;
         font-weight: 900;
         line-height: 1;
         text-transform: uppercase;
@@ -1498,7 +1512,7 @@
         border: 1px solid rgba(202, 226, 183, 0.22);
         background: rgba(5, 10, 9, 0.58);
         color: #e6f7dc;
-        font-size: 11px;
+        font-size: 0.75rem;
         font-weight: 750;
         line-height: 1;
       }
@@ -1545,7 +1559,7 @@
       .architect-card h3 {
         margin: 0;
         color: #f8fff4;
-        font-size: 11px;
+        font-size: 0.75rem;
         line-height: 1.1;
         min-height: 24px;
       }
@@ -1553,7 +1567,7 @@
       .architect-role {
         margin-top: 3px;
         color: color-mix(in srgb, var(--architect-color, #d5ff8d) 70%, white 20%);
-        font-size: 10px;
+        font-size: 0.75rem;
         font-weight: 800;
         line-height: 1;
       }
@@ -1719,7 +1733,7 @@
       .choice-kind {
         overflow: hidden;
         color: color-mix(in srgb, var(--choice-color, #d7ff8d) 80%, white 12%);
-        font-size: 9px;
+        font-size: 0.75rem;
         font-weight: 900;
         line-height: 1.05;
         text-align: center;
@@ -1741,7 +1755,7 @@
         border: 1px solid color-mix(in srgb, var(--choice-color, #d7ff8d) 58%, rgba(255, 255, 255, 0.18));
         background: color-mix(in srgb, var(--choice-color, #d7ff8d) 18%, rgba(0, 0, 0, 0.6));
         color: color-mix(in srgb, var(--choice-color, #d7ff8d) 84%, white 16%);
-        font-size: 10px;
+        font-size: 0.75rem;
         font-weight: 900;
         text-transform: uppercase;
       }
@@ -1776,7 +1790,7 @@
         border-left: 2px solid color-mix(in srgb, var(--choice-color, #d7ff8d) 66%, rgba(255, 255, 255, 0.12));
         background: color-mix(in srgb, var(--choice-color, #d7ff8d) 12%, rgba(0, 0, 0, 0.32));
         color: #f1ffe5;
-        font-size: 11px;
+        font-size: 0.75rem;
         font-weight: 850;
         line-height: 1.2;
       }
@@ -2015,7 +2029,7 @@
         }
       }
     </style>
-  </head>
+  <!-- app-brand:start --><link rel="icon" type="image/svg+xml" href="./brand/favicon.svg"><link rel="icon" type="image/png" sizes="32x32" href="./brand/favicon-32.png"><link rel="apple-touch-icon" href="./brand/apple-touch-icon.png"><link rel="manifest" href="./brand/site.webmanifest"><meta property="og:type" content="website"><meta property="og:site_name" content="Three Arena"><meta property="og:title" content="Three Arena"><meta property="og:description" content="Three Arena interactive example."><meta property="og:locale" content="en_US"><meta property="og:image:alt" content="Three Arena logo"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="Three Arena"><meta name="twitter:description" content="Three Arena interactive example."><meta name="twitter:image:alt" content="Three Arena logo"><!-- app-brand:end --></head>
   <body class="menu-open">
     <div id="reticle" aria-hidden="true"></div>
     <div id="fxOverlay" class="fx-overlay" aria-hidden="true"></div>
@@ -2129,7 +2143,7 @@
         <div class="pause-settings hidden" id="pauseSettingsPanel" aria-label="Settings">
           <div class="pause-header">
             <strong>Settings</strong>
-            <p class="small">Controls and audio update live.</p>
+
           </div>
           <div class="pause-settings-grid">
             <label class="pause-setting" for="mouseSensitivityInput">

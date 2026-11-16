@@ -1,27 +1,35 @@
-import { createRequestId, getUtf8ByteLength, parseServerEventFrame, SERVER_EVENT_FRAME_MAX_BYTES,
-  type ClientCommand, type PreferencesState, type ServerEvent } from "@hyperfocus/ai-core/protocol";
 import {
-  canSelectProviderBrand,
-  getBrowserUiSessionRestoreCommands,
-  harnessStore,
-  type LocalPreferencesState,
-  type ViewWorkspaceState,
-  persistMergedLocalPreferences,
-  readBrowserUiSession,
-  readLocalPreferences
+createRequestId,getUtf8ByteLength,parseServerEventFrame,SERVER_EVENT_FRAME_MAX_BYTES,
+type ClientCommand,type PreferencesState,type ServerEvent
+} from "@hyperfocus/ai-core/protocol";
+import { readValueFrame } from "@hyperfocus/serialization";
+import { isObject as isTelemetryRecord } from "@hyperfocus/utilities/records";
+import { createControlCommandQueue,restoreQueuedControlCommandOwnership } from "./control-command-queue";
+import {
+canSelectProviderBrand,
+getBrowserUiSessionRestoreCommands,
+harnessStore,
+persistMergedLocalPreferences,
+readBrowserUiSession,
+readLocalPreferences,
+type LocalPreferencesState,
+type ViewWorkspaceState
 } from "./harness-store";
-import { recordUiTelemetry } from "./lib/ui-telemetry";
-import { openAgentRunSource, openAssistantSource, openBackgroundRunInJobsPane, openPreferencesSectionSource,
-  openProjectThreadSource } from "./source-navigation";
-import { terminalStore } from "./terminal/terminal-store";
-import { ideStore } from "./ide/ide-store";
 import { consumeIdeLaunchRequest } from "./ide/ide-launch";
-import { acceptCliAttachRequest, acceptTerminalAttachRequest, closeAllTerminalSockets, openTerminalSocket, ownCliAttachRequest, ownCliStartingRequest, ownTerminalAttachRequest, ownTerminalCreatingAttachRequest, ownsSessionSocket, rejectCliAttachRequest, rejectTerminalAttachRequest, requestCliAttach, resetCliAttachRequests, resetTerminalAttachRequests, revokeCliAttachRequest, revokeTerminalAttachRequest } from "./terminal/terminal-transport";
-import { pushToast, reportUiError } from "./toast-store";
-import { createControlCommandQueue, restoreQueuedControlCommandOwnership } from "./control-command-queue";
-import { beginRunDetailRetry, clearRunDetailRecovery, createRunDetailRequests,
-  setRunDetailRecovery } from "./store/run-detail-state";
-import { authorizeHarnessUrl, readHarnessSessionToken } from "./transport/harness-session";
+import { ideStore } from "./ide/ide-store";
+import { recordUiTelemetry } from "./lib/ui-telemetry";
+import {
+openAgentRunSource,openAssistantSource,openBackgroundRunInJobsPane,openPreferencesSectionSource,
+openProjectThreadSource
+} from "./source-navigation";
+import {
+beginRunDetailRetry,clearRunDetailRecovery,createRunDetailRequests,
+setRunDetailRecovery
+} from "./store/run-detail-state";
+import { terminalStore } from "./terminal/terminal-store";
+import { acceptCliAttachRequest,acceptTerminalAttachRequest,closeAllTerminalSockets,openTerminalSocket,ownCliAttachRequest,ownCliStartingRequest,ownsSessionSocket,ownTerminalAttachRequest,ownTerminalCreatingAttachRequest,rejectCliAttachRequest,rejectTerminalAttachRequest,requestCliAttach,resetCliAttachRequests,resetTerminalAttachRequests,revokeCliAttachRequest,revokeTerminalAttachRequest } from "./terminal/terminal-transport";
+import { pushToast,reportUiError } from "./toast-store";
+import { authorizeHarnessUrl,readHarnessSessionToken } from "./transport/harness-session";
 
 type HarnessSocket = {
   sendCommand: (command: ClientCommand) => void;
@@ -44,7 +52,7 @@ export function authorizeTerminalEvent(event: ServerEvent) {
     : acceptTerminalAttachRequest(event.payload.sessionId, event.requestId!);
 }
 const CONTROL_HEARTBEAT_INTERVAL_MS = 15_000;
-const CLI_UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const CLI_UPDATE_CHECK_INTERVAL_MS = 21600000;
 const CONTROL_MISSED_PONG_LIMIT = 2;
 const PTY_HEARTBEAT = 0x00;
 const MAX_PENDING_CONTROL_COMMANDS = 100;
@@ -64,13 +72,14 @@ export function getRuntimeResyncReconnectDelay(attempt: number) {
 }
 
 export function parseServerEventData(data: unknown) {
-  if (typeof data !== "string") throw new Error("Server event frame must be text");
-  if (data.length > SERVER_EVENT_FRAME_MAX_BYTES || getUtf8ByteLength(data) > SERVER_EVENT_FRAME_MAX_BYTES) {
+  const size = typeof data === "string" ? getUtf8ByteLength(data)
+    : data instanceof ArrayBuffer || ArrayBuffer.isView(data) ? data.byteLength : 0;
+  if (size > SERVER_EVENT_FRAME_MAX_BYTES) {
     const error = new Error(`Server event frame exceeds ${SERVER_EVENT_FRAME_MAX_BYTES} bytes`);
     error.name = SERVER_EVENT_FRAME_TOO_LARGE_ERROR_NAME;
     throw error;
   }
-  return parseServerEventFrame(JSON.parse(data));
+  return parseServerEventFrame(typeof data === "string" ? JSON.parse(data) : readValueFrame(data, { maxBytes: SERVER_EVENT_FRAME_MAX_BYTES }));
 }
 
 function persistedUiPreferenceSnapshot() {
@@ -195,6 +204,9 @@ function handleControlEventSideEffects(options: {
     pushToast(`${event.payload.label} updated`, event.payload.output || "Update complete.", "info", () =>
       openPreferencesSectionSource("developer-advanced")
     );
+  }
+  if (event.type === "thread.inputRejected") {
+    pushToast("Message not sent", event.payload.reason, "info");
   }
   if (event.type === "command.rejected") {
     if (event.requestId) {
@@ -582,6 +594,7 @@ export function connectHarnessWebSocket(
       ? harnessStore.state.connectionError : undefined);
     commandQueue.markDisconnected();
     const controlSocket = new ControlWebSocket(authorizedEndpoint);
+    controlSocket.binaryType = "arraybuffer";
     const generation = ++controlSocketGeneration;
     let readyReceived = false;
     socket = controlSocket;
@@ -746,9 +759,6 @@ function readTelemetryPayloadField(input: unknown, key: string) {
   return typeof input.payload[key] === "string" ? input.payload[key] : undefined;
 }
 
-function isTelemetryRecord(input: unknown): input is Record<string, unknown> {
-  return typeof input === "object" && input !== null;
-}
 
 export function sendCliSessionInput(sessionId: string, input: string | Uint8Array) {
   const socket = ptySockets.get(sessionId);

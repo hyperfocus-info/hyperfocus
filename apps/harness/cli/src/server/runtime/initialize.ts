@@ -9,7 +9,7 @@ import { createBackgroundJobScheduler as createScheduler } from "../../backgroun
 import type { pickProjectFolder } from "../../folder-picker";
 import type { PiAgentAdapter } from "../../pi-agent-adapter";
 import { emitAssistantChatCompleteToAll, emitAssistantChatDeltaToAll, emitAssistantChatFailedToAll, emitAssistantChatMessageAppendedToAll, emitAssistantCreatedCardToAll, emitAssistantLogAppendedToAll, emitAssistantSummaryDeltaToAll } from "../automation/assistant-actions";
-import { isBackgroundRunLive, resumeAndRepairBackgroundJobRuns, safeLaunchBackgroundJobRun, syncBackgroundJobFailureTracking } from "../automation/background-runs";
+import { isBackgroundRunLive, reconcileBackgroundJobRunBlockers, safeLaunchBackgroundJobRun, syncBackgroundJobFailureTracking } from "../automation/background-runs";
 import { emitBackgroundJobRunUpdatedToAll, emitBackgroundJobsUpdatedToAll, emitNotificationsUpdatedToAll } from "../automation/background-events";
 import type { BackgroundRunControl, DevHmrDebouncePolicy, HarnessConnection, HarnessServerOsAdapters, HarnessServerState, PendingBrowserApproval, UiServingState } from "../core/contracts";
 import { createEmptyTokenUsageTotals, emitCliSessionAttachReadyToClient, emitCliSessionExitedToAll, emitCliSessionStartedToAll, emitCliSessionUpdatedToAll, emitExecutionControlUpdatedToAll, emitTerminalAttachReadyToClient, emitTerminalHistoryListedToAll, emitTerminalPreferencesSavedToAll, emitTerminalSessionCreatedToAll, emitTerminalSessionExitedToAll, emitTerminalSessionUpdatedToAll, emitTerminalSessionsUpdatedToAll, emitTerminalShellsUpdatedToAll } from "../transport/events";
@@ -73,6 +73,7 @@ export async function initializeHarnessServerState(input: {
         ui: resolveUiServingState({
           serverOnly: input.serverOnly,
           hotDevelopmentMode: input.hotDevelopmentMode,
+          launchMode: input.launchMode,
           uiAssetManagerFactory: input.uiAssetManagerFactory,
           hotReloadDebouncePolicy: input.hotReloadDebouncePolicy,
           existingUi: input.existingState?.ui
@@ -374,11 +375,13 @@ export async function runUiStartupPhase(startupTelemetry: StartupTelemetrySink |
   await runStartupPhase(
     startupTelemetry,
     "ui-assets",
-    ui.liveReload === "debounced-poll" ? "building and watching debounced dev ui assets" : "building and watching ui assets",
+    ui.liveReload === "debounced-poll" ? "building and watching debounced dev ui assets" : "verifying ui assets",
     "ui assets ready",
     async () => {
       await ui.uiAssets.ensureBuilt();
-      ui.uiAssets.startWatching();
+      if (ui.liveReload === "debounced-poll") {
+        ui.uiAssets.startWatching();
+      }
     }
   );
 }
@@ -403,16 +406,11 @@ export function createBackgroundJobScheduler(input: {
         backgroundRunControllers.get(run.id)?.abortController.abort();
       }
     },
-    repairActiveRuns(now) {
-      return resumeAndRepairBackgroundJobRuns(
+    repairActiveRuns(now, interruptedQueuedRunIds) {
+      return reconcileBackgroundJobRunBlockers(
         repository,
-        connections,
-        runtimeRegistry,
-        runtime,
-        backgroundRunControllers,
-        assistantManager,
-        now,
-        tokenUsageSession
+        (run) => isBackgroundRunLive(backgroundRunControllers, runtime, run),
+        { now, interruptedQueuedRunIds }
       );
     },
     async onRunsRepaired(runs) {

@@ -1,32 +1,69 @@
+import { normalize } from "../utils/tests/text-comparison";
 /** @jsxImportSource solid-js */
-import { beforeEach, expect, it } from "bun:test";
-import { createUiTest, requireButton } from "../utils/tests/test-harness";
-import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import type { Assistant, BackgroundJob, BackgroundJobRun, ClientCommand } from "@hyperfocus/ai-core/protocol";
-import { TracePanel } from "./trace-panel";
-import { createDefaultJobsPanePreferences, createEmptyAssistantsState, harnessStore } from "../harness-store";
-import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
+import type { Assistant,BackgroundJob,BackgroundJobRun,ClientCommand } from "@hyperfocus/ai-core/protocol";
+import { cleanup,fireEvent,render,screen,waitFor } from "@solidjs/testing-library";
+import { beforeEach,expect,it } from "bun:test";
+import { createDefaultJobsPanePreferences,createEmptyAssistantsState,harnessStore } from "../harness-store";
+import { captureDispatchedCommands,clearBrowserStateForTests,seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
 import {
-  createBrowserActivityFixture,
-  createBrowserSessionFixture,
-  createAgentPlanFixture,
-  createExecutionPlanFixture,
-  createHarnessStateFixture,
-  createRunFixture,
-  createSubtaskFixture,
-  createTraceFixture,
-  createViewProjectFixture
+createAgentPlanFixture,
+createBrowserActivityFixture,
+createBrowserSessionFixture,
+createExecutionPlanFixture,
+createHarnessStateFixture,
+createRunFixture,
+createSubtaskFixture,
+createTraceFixture,
+createViewProjectFixture
 } from "../utils/tests/test-fixtures";
+import { createUiTest,requireButton } from "../utils/tests/test-harness";
+import { TracePanel } from "./trace-panel";
 
 const now = "2026-04-28T12:00:00.000Z";
 const later = "2026-04-28T12:05:00.000Z";
 
 function expectRunningAgentsText(expected: string) {
-  const normalize = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim();
+
   expect(normalize(document.querySelector("[data-test-trace-running-counts]")?.textContent)).toBe(expected);
 }
 
 createUiTest("TracePanel", () => {
+
+  it("updates retry availability and its command target when switching projects without remounting", () => {
+    const streaming = createViewProjectFixture({ id: "trace-first", name: "First",
+      session: { ...createViewProjectFixture().session, isStreaming: true },
+      lastRun: createRunFixture({ id: "first-run", status: "failed", retryable: true }) });
+    const idle = createViewProjectFixture({ id: "trace-second", name: "Second",
+      lastRun: createRunFixture({ id: "second-run", status: "failed", retryable: true }) });
+    seedHarnessStoreForTests(createHarnessStateFixture({ workspace: {
+      activeProjectId: streaming.id, projects: [streaming, idle] } }));
+    render(() => <TracePanel />);
+    const card = document.querySelector("[data-test-trace-run-card]");
+    expect(requireButton(screen.getByRole("button", { name: "Retry last run" })).disabled).toBe(true);
+    harnessStore.replaceStateForTests(createHarnessStateFixture({ workspace: {
+      activeProjectId: idle.id, projects: [streaming, idle] } }));
+    expect(document.querySelector("[data-test-trace-run-card]")).toBe(card);
+    const retry = requireButton(screen.getByRole("button", { name: "Retry last run" }));
+    expect(retry.disabled).toBe(false);
+    const commands: unknown[] = [];
+    captureDispatchedCommands(commands);
+    fireEvent.click(retry);
+    expect(commands).toContainEqual(expect.objectContaining({ type: "run.retry", payload: {
+      projectId: idle.id, threadId: idle.activeThreadId, runId: "second-run" } }));
+  });
+
+  it("explains paused browser approval while keeping rejection available", () => {
+    const run = createRunFixture({ status: "running-main", browserSessions: [createBrowserSessionFixture({ pendingApproval: {
+      toolCallId: "paused-approval", toolName: "browser", kind: "navigate", label: "Open report", status: "pending", requestedAt: now,
+    } })] });
+    const project = createViewProjectFixture({ activeRun: run, lastRun: run });
+    seedHarnessStoreForTests(createHarnessStateFixture({ workspace: { activeProjectId: project.id, projects: [project] },
+      executionControl: { isPaused: true, deferredPlanningQuestionCount: 0, deferredAssistantQuestionCount: 0, deferredBrowserApprovalCount: 0 } }));
+    render(() => <TracePanel />);
+    expect(screen.getByText("Global execution pause is active")).not.toBeNull();
+    expect(requireButton(screen.getByRole("button", { name: "Approve this browser step" })).disabled).toBe(true);
+    expect(requireButton(screen.getByRole("button", { name: "Reject this browser step" })).disabled).toBe(false);
+  });
   beforeEach(() => {
     clearBrowserStateForTests();
   });
@@ -78,6 +115,9 @@ createUiTest("TracePanel", () => {
 
     render(() => <TracePanel />);
 
+    expect(screen.getByText("Run details")).not.toBeNull();
+    expect(screen.queryByText(/Retryable:/)).toBeNull();
+    expect(screen.queryByText(/Resumable:/)).toBeNull();
     expect(screen.getByLabelText("Subtask running")).not.toBeNull();
     expect(screen.getByLabelText("Subtask completed")).not.toBeNull();
     expect(screen.getByLabelText("Subtask failed")).not.toBeNull();
@@ -572,10 +612,10 @@ createUiTest("TracePanel", () => {
     expect(harnessStore.state.jobsPanePreferences).toMatchObject({
       segment: "jobs",
       selectedJobId: job.id,
-      selectedRunId: undefined,
       jobSearch: "",
-      risk: undefined
     });
+    expect(harnessStore.state.jobsPanePreferences.selectedRunId).toBeUndefined();
+    expect(harnessStore.state.jobsPanePreferences.risk).toBeUndefined();
   });
 
   it("shows selected job run execution log", () => {
@@ -620,6 +660,9 @@ createUiTest("TracePanel", () => {
 
     expect(screen.getAllByText("Job").length).toBeGreaterThan(0);
     expect(screen.getByText(/Selected job event/)).not.toBeNull();
+    const context = document.querySelector("[data-test-trace-context-summary]");
+    expect(context?.textContent).not.toContain("Risk");
+    expect(context?.textContent).not.toContain("Kind");
     expectRunningAgentsText("Running agents: 1 current / 1 total");
   });
 

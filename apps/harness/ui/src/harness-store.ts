@@ -1,112 +1,118 @@
-import { createStore, reconcile, unwrap } from "solid-js/store";
+import { getModelCapability, getAvailableReasoningStrengthsForSelection, getSupportsFastModeForSelection, isModelIdForProvider } from "./store/preferences/model-capabilities";
+export { getModelCapability, getAvailableReasoningStrengthsForSelection, getSupportsFastModeForSelection, getCapabilityTags } from "./store/preferences/model-capabilities";
 import { defaultAgentCatalog } from "@hyperfocus/ai-core/agent-catalog";
 import { defaultProviderCapabilities } from "@hyperfocus/ai-core/capabilities";
-import { DEFAULT_MODE_ID, resolveModeById, resolveModeCatalog } from "@hyperfocus/ai-core/modes";
+import { DEFAULT_MODE_ID,resolveModeById,resolveModeCatalog } from "@hyperfocus/ai-core/modes";
 import {
-  createRequestId, executionModelIdSchema, hasUniqueAgentRunChildren, hasValidAgentRunOwnership,
-  hasValidBrowserApprovalIntegrity, parseClientCommand,
-  type Assistant,
-  type AssistantAssetRef,
-  type AssistantDetail,
-  type AssistantLearning,
-  type AssistantLogEntry,
-  type AssistantQuestion,
-  type AssistantsState,
-  type AssistantTodo,
-  type AgentId,
-  type AgentPlan,
-  type AgentRunState,
-  type AgentTrace,
-  type AgentRuntimeCapability,
-  type BackgroundJob,
-  type BackgroundJobApprovalPolicy,
-  type BackgroundJobSchedulerStatus,
-  type BackgroundJobsState,
-  type BackgroundJobSchedulePreview,
-  type BranchfsCleanupSummary,
-  type CliSession,
-  type ComposerReasoningStrength,
-  type ExperimentInspection,
-  type MemorySummary,
-  type MemoryEntry,
-  type ModelCapability,
-  type ModeDefinition,
-  type NotificationInboxState,
-  type ProjectContextUsage,
-  type ProviderBrand,
-  type ExecutionModelId,
-  type AgentOption,
-  type ConnectionState,
-  type PreferencesState,
-  type ProviderCapability,
-  type ProjectSearchResult,
-  type ProjectThreadSummary,
-  type RunModelPreference,
-  type RunDiagnosticsWindowDays,
-  type RunPreflight,
-  type ClientCommand,
-  type ServerEvent,
-  type SetupState,
-  type StreamingTailSegment,
-  type ExecutionPlan,
-  type ExecutionControlState,
-  type TokenUsageState,
-  type TokenUsageTotals,
-  type WorkspaceRuleSource,
-  type WorkspaceProjectState,
-  type WorkspaceState
+createRequestId,executionModelIdSchema,hasUniqueAgentRunChildren,hasValidAgentRunOwnership,
+hasValidBrowserApprovalIntegrity,parseClientCommand,
+type AgentId,
+type AgentOption,
+type AgentPlan,
+type AgentRuntimeCapability,
+type AgentTrace,
+type Assistant,
+type AssistantDetail,
+type BackgroundJob,
+type BackgroundJobApprovalPolicy,
+type BackgroundJobSchedulePreview,
+type BackgroundJobSchedulerStatus,
+type BackgroundJobsState,
+type BranchfsCleanupSummary,
+type ClientCommand,
+type CliSession,
+type ComposerReasoningStrength,
+type ConnectionState,
+type ExecutionControlState,
+type ExecutionModelId,
+type ExecutionPlan,
+type ExperimentInspection,
+type MemoryEntry,
+type MemorySummary,
+type ModeDefinition,
+type NotificationInboxState,
+type PreferencesState,
+type ProjectContextUsage,
+type ProjectSearchResult,
+type ProjectThreadSummary,
+type ProviderBrand,
+type ProviderCapability,
+type RunDiagnosticsWindowDays,
+type RunModelPreference,
+type RunPreflight,
+type ServerEvent,
+type SetupState,
+type StreamingTailSegment,
+type TokenUsageState,
+type TokenUsageTotals,
+type WorkspaceProjectState,
+type WorkspaceRuleSource,
+type WorkspaceState
 } from "@hyperfocus/ai-core/protocol";
-import * as assistantWorkloads from "./store/assistant-workload-pages";
-import * as assistantDetails from "./store/assistant-detail-state";
-import * as assistantRoster from "./store/assistant-roster-state";
-import { shouldAcceptRunLifecycle, shouldAcceptRunPatch, toRunSummary, upsertRunSummary } from "./store/assistant-event-order";
-import { applyAssistantSummaryDelta, hydrateAssistants, hydrateAssistantsForReconnect, rejectAssistantRequests,
-  resolveMissingReconnectAssistant, resolveReconnectAssistants } from "./store/assistant-hydration";
-import type { AssistantDetailTab, AssistantRosterSort, AssistantScopeFilter,
-  ViewAssistantsState } from "./store/assistant-view-state";
-import { applyWorkspacePageEvent, createWorkspacePageRequests, emptyWorkspacePagingStatus, hydratePagedWorkspace,
-  mergePagedWorkspace, prepareWorkspaceForPageEvent, retainWorkspaceMessageWindow,
-  type WorkspacePagingStatus } from "./store/workspace-page-state";
-import { createReadyContinuationRequests, mergeBackgroundJobPage, mergeNotificationPage } from "./store/ready-continuation-state";
-import { createPagingUnavailableCallbacks, retryUnavailablePagingItems, type PagingUnavailableItem } from "./store/paging-unavailable-state";
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
+import { createStore,reconcile,unwrap } from "solid-js/store";
+import { getBackgroundJobSourcePatch,getClearPendingBackgroundJobSourcePatch,type PendingBackgroundJobSource } from "./background-job-source-state";
 import {
-  EXPERIENCE_MODE_STORAGE_KEY, isComposerReasoningStrength, parseBooleanStorageValue,
-  parseExperienceModeStorageValue, parseProviderBrandStorageValue, parseReasoningStrengthStorageValue,
-  type HarnessExperienceMode
-} from "./store/preferences/local-preference-values";
-export type { HarnessExperienceMode } from "./store/preferences/local-preference-values";
-import { createHarnessVisualPreferenceActions } from "./store/preferences/harness-visual-actions";
-import { createEmptyBackgroundJobsState, createEmptyNotificationInboxState, createInitialExecutionControlState,
-  createInitialRunDiagnosticsState, createDefaultMainPanelSizes, createInitialSetupState,
-  type MainPanelSizes, type RunDiagnosticsViewState } from "./store/initial-runtime-state";
-export { createEmptyBackgroundJobsState, createEmptyNotificationInboxState, createInitialExecutionControlState,
-  createInitialRunDiagnosticsState, createDefaultMainPanelSizes, createInitialSetupState,
-  type MainPanelSizes, type RunDiagnosticsViewState } from "./store/initial-runtime-state";
-import { getBackgroundJobSourcePatch, getClearPendingBackgroundJobSourcePatch, type PendingBackgroundJobSource } from "./background-job-source-state";
-import type { JobsRunFilter } from "./store/background-jobs-pane-state";
-import { boundBackgroundRuns, createBackgroundJobDeletionTombstones, filterDeletedAssistantWorkloadPage, getBackgroundJobsDeletedViewPatch, getBackgroundJobsUpdatedPatch, isDeletedBackgroundRun, type BackgroundJobDeletionTombstones } from "./store/background-workload-cache";
-import {
-  DEFAULT_APP_HOTKEY_PREFERENCES, normalizeAppHotkeys,
-  normalizeAppHotkeyPreferences,
-  type AppHotkeyId,
-  type AppHotkeyPreferences
+normalizeAppHotkeyPreferences,
+type AppHotkeyPreferences
 } from "./lib/app-hotkeys";
+import { isTutorialGoalSatisfied } from "./lib/tutorial-progress";
 import { upsertProjectMemoryEntry } from "./memory/memory-model";
+import * as assistantDetails from "./store/assistant-detail-state";
+import { shouldAcceptRunLifecycle,shouldAcceptRunPatch,toRunSummary,upsertRunSummary } from "./store/assistant-event-order";
+import {
+applyAssistantSummaryDelta,hydrateAssistants,hydrateAssistantsForReconnect,rejectAssistantRequests,
+resolveMissingReconnectAssistant,resolveReconnectAssistants
+} from "./store/assistant-hydration";
+import * as assistantRoster from "./store/assistant-roster-state";
+import type {
+AssistantDetailTab,AssistantRosterSort,AssistantScopeFilter,
+ViewAssistantsState
+} from "./store/assistant-view-state";
+import * as assistantWorkloads from "./store/assistant-workload-pages";
+import type { JobsRunFilter } from "./store/background-jobs-pane-state";
+import { createJobSaveRequests } from "./store/background-jobs/job-save-requests";
+import { boundBackgroundRuns,createBackgroundJobDeletionTombstones,filterDeletedAssistantWorkloadPage,getBackgroundJobsDeletedViewPatch,getBackgroundJobsUpdatedPatch,isDeletedBackgroundRun,type BackgroundJobDeletionTombstones } from "./store/background-workload-cache";
+import {
+createDefaultMainPanelSizes,
+createEmptyBackgroundJobsState,createEmptyNotificationInboxState,createInitialExecutionControlState,
+createInitialRunDiagnosticsState,
+createInitialSetupState,
+type MainPanelSizes,type RunDiagnosticsViewState
+} from "./store/initial-runtime-state";
+import { createModeSaveRequests } from "./store/modes/mode-save-requests";
+import { createPagingUnavailableCallbacks,retryUnavailablePagingItems,type PagingUnavailableItem } from "./store/paging-unavailable-state";
+import { createHarnessVisualPreferenceActions } from "./store/preferences/harness-visual-actions";
+import {
+clampPanelSize,EXPERIENCE_MODE_STORAGE_KEY,isComposerReasoningStrength,parseBooleanStorageValue,parseBoundedDecimalStorageValue,parseBoundedIntegerStorageValue,parseExperienceModeStorageValue,parseProviderBrandStorageValue,parseReasoningStrengthStorageValue,
+type HarnessExperienceMode
+} from "./store/preferences/local-preference-values";
+import { createProviderKeySaves } from "./store/preferences/provider-key-saves";
+import { createReadyContinuationRequests,mergeBackgroundJobPage,mergeNotificationPage } from "./store/ready-continuation-state";
+import {
+applyWorkspacePageEvent,createWorkspacePageRequests,emptyWorkspacePagingStatus,hydratePagedWorkspace,
+mergePagedWorkspace,prepareWorkspaceForPageEvent,retainWorkspaceMessageWindow,
+type WorkspacePagingStatus
+} from "./store/workspace-page-state";
 import { applyThemePreference } from "./theme/theme-apply";
 import {
-  createDefaultCustomTheme,
-  DEFAULT_THEME_PREFERENCE,
-  normalizeThemePreference,
-  withThemePreference,
-  type CustomThemeDefinition,
-  type ThemeId,
-  type ThemeModePreference,
-  type ThemePreference
+DEFAULT_THEME_PREFERENCE,
+normalizeThemePreference,
+type ThemePreference
 } from "./theme/theme-model";
-import { pushToast, reportUiError } from "./toast-store";
-import { isTutorialGoalSatisfied } from "./lib/tutorial-progress";
-export { getSelectedAssistant, getVisibleAssistants } from "./assistant-view-selectors";
+import { pushToast,reportUiError } from "./toast-store";
+export { getSelectedAssistant,getVisibleAssistants } from "./assistant-view-selectors";
+export type {
+AssistantDetailTab,AssistantRosterSort,AssistantScopeFilter,
+ViewAssistantsState
+} from "./store/assistant-view-state";
 export type { AssistantWorkloadPageState } from "./store/assistant-workload-pages";
+export {
+createDefaultMainPanelSizes,createEmptyBackgroundJobsState,createEmptyNotificationInboxState,createInitialExecutionControlState,
+createInitialRunDiagnosticsState,createInitialSetupState,
+type MainPanelSizes,type RunDiagnosticsViewState
+} from "./store/initial-runtime-state";
+export type { HarnessExperienceMode } from "./store/preferences/local-preference-values";
 export const OPENAI_API_KEY_STORAGE_KEY = "openai_api_key";
 export const GOOGLE_API_KEY_STORAGE_KEY = "google_api_key";
 export const ANTHROPIC_API_KEY_STORAGE_KEY = "anthropic_api_key";
@@ -154,8 +160,6 @@ export type ProjectSidebarProjectSort = "last-user-message" | "created-at" | "ma
 export type ProjectSidebarThreadSort = "last-user-message" | "created-at";
 export type ProjectSidebarGrouping = "repository" | "repository-path" | "separate";
 export type JobsPaneSegment = "jobs" | "inbox" | "health";
-export type { AssistantDetailTab, AssistantRosterSort, AssistantScopeFilter,
-  ViewAssistantsState } from "./store/assistant-view-state";
 export type JobsPaneJobSort = "next-run" | "updated" | "created" | "status" | "risk";
 export type JobsPaneRunSort = "urgency" | "updated" | "queued" | "status";
 export type JobsJobStateFilter = "all" | BackgroundJobSchedulerStatus | "backoff";
@@ -281,12 +285,12 @@ export type BackgroundJobEditorDraft = {
   aiSubagentWorktreeStrategy?: "same-worktree" | "separate-worktrees";
   shellExecutable: string;
   shellArgsText: string;
+  shellArgs?: string[];
   shellCwd: string;
   shellEnvRefsText: string;
   shellTimeoutSeconds: number;
   shellNetworkAccess: boolean;
 };
-
 export type StreamingHeartbeatMessage = {
   id: string;
   content: string;
@@ -333,6 +337,7 @@ export type ViewWorkspaceState = {
 };
 
 export type HarnessViewState = {
+  sharedAiPreferences?: PreferencesState["sharedAiPreferences"];
   connectionState: ConnectionState;
   connectionError?: string;
   availableAgents: AgentOption[];
@@ -353,6 +358,11 @@ export type HarnessViewState = {
   diagnosticsRefreshVersion: number;
   tokenUsage: TokenUsageState;
   tokenUsageResetDialogOpen: boolean;
+  usageDialogOpen?: boolean;
+  usageRefreshRequestId?: string;
+  usageResetRequestId?: string;
+  usageRefreshError?: string;
+  usageResetError?: string;
   notifications: NotificationInboxState;
   pagingUnavailableItems: PagingUnavailableItem[];
   executionControl: ExecutionControlState;
@@ -611,6 +621,8 @@ export function createEmptyTokenUsageState(overrides: Partial<TokenUsageState> =
   return {
     session: createEmptyTokenUsageTotals(overrides.session ?? {}),
     lifetime: createEmptyTokenUsageTotals(overrides.lifetime ?? {}),
+    codexLimits: overrides.codexLimits,
+    sources: overrides.sources,
     resetAt: typeof overrides.resetAt === "string" && overrides.resetAt.trim() ? overrides.resetAt : undefined
   };
 }
@@ -689,7 +701,7 @@ export function createInitialViewState(): HarnessViewState {
     memoryBankEnabledDefault: true,
     memoryBankRecordRunsDefault: false,
     checkCliUpdatesDefault: true,
-    appHotkeyPreferences: { ...DEFAULT_APP_HOTKEY_PREFERENCES },
+    appHotkeyPreferences: normalizeAppHotkeyPreferences(undefined),
     themePreference: DEFAULT_THEME_PREFERENCE,
     numericRightAlignmentEnabled: true,
     experienceMode: "advanced",
@@ -819,7 +831,9 @@ function reduceWorkspaceServerEvent(
       return {
         ...state,
         tokenUsage: event.payload.tokenUsage,
-        tokenUsageResetDialogOpen: false
+        tokenUsageResetDialogOpen: state.usageResetRequestId === event.requestId ? false : state.tokenUsageResetDialogOpen,
+        usageResetRequestId: state.usageResetRequestId === event.requestId ? undefined : state.usageResetRequestId,
+        usageRefreshRequestId: state.usageRefreshRequestId === event.requestId ? undefined : state.usageRefreshRequestId
       };
     case "agent.list":
       return {
@@ -1685,11 +1699,10 @@ function addTokenUsageTotals(left: TokenUsageTotals, right: TokenUsageTotals) {
     updatedAt: [left.updatedAt, right.updatedAt].filter(Boolean).sort().at(-1)
   });
 }
-
 function createHarnessStoreContext() {
   const [state, setState] = createStore(createInitialViewState());
-  let commandDispatcher: ((command: ClientCommand) => void) | undefined;
-  let assistantDetailDemandCount = 0;
+  const providerKeySaves = createProviderKeySaves(), modeSaves = createModeSaveRequests(), jobSaves = createJobSaveRequests();
+  let commandDispatcher: ((command: ClientCommand) => void) | undefined, assistantDetailDemandCount = 0;
   const recordedTokenUsageEventKeys = new Set<string>();
   const persistBrowserUiStateIfChanged = (previousSnapshot: BrowserUiSessionState, nextState: HarnessViewState) => {
     const nextSnapshot = getBrowserUiSessionSnapshot(nextState);
@@ -1714,12 +1727,12 @@ function createHarnessStoreContext() {
       return false;
     }
     try {
-      if (isPreflightCapableCommand(command)) {
-        setState("pendingPreflightCommands", { ...state.pendingPreflightCommands, [command.requestId]: command });
-      }
+      if (isPreflightCapableCommand(command)) setState("pendingPreflightCommands", { ...state.pendingPreflightCommands, [command.requestId]: command });
+      providerKeySaves.track(command);
       commandDispatcher(command);
       return true;
     } catch (error) {
+      providerKeySaves.reset();
       if (isPreflightCapableCommand(command)) setState("pendingPreflightCommands", command.requestId, undefined);
       pushToast("Command failed", error instanceof Error ? error.message : "Command send failed.", "error");
       reportUiError(error, "Command send failed", { rethrow: "dev-only" });
@@ -1789,20 +1802,22 @@ function createHarnessStoreContext() {
     };
   };
   return {
-    state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
+    state, setState, providerKeySaves, modeSaves, jobSaves, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
     commitBrowserUiState, normalizeMainPanelSizes, sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail, registerAssistantDetailDemand,
-    setCommandDispatcher: (dispatcher?: (command: ClientCommand) => void) => { commandDispatcher = dispatcher; },
+    setCommandDispatcher: (dispatcher?: (command: ClientCommand) => void) => { if (!dispatcher) { modeSaves.cancel(); jobSaves.cancel(); } commandDispatcher = dispatcher; },
     hasCommandDispatcher: () => Boolean(commandDispatcher),
   };
 }
-
 type HarnessStoreFactoryContext = ReturnType<typeof createHarnessStoreContext>;
-
 function createHarnessTransportActions(context: HarnessStoreFactoryContext) {
-  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
-    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  const {
+    state, setState, persistBrowserUiStateIfChanged, sendCommand, workspacePages, readyContinuation,
+    requestSelectedAssistantDetail,
+  } = context;
   return {
       setCommandDispatcher(dispatcher?: (command: ClientCommand) => void) { context.setCommandDispatcher(dispatcher); },
+      saveMode(command: Extract<ClientCommand, { type: "mode.save" }>) { return context.modeSaves.save(command, sendCommand); },
+      saveBackgroundJob(command: Extract<ClientCommand, { type: "background-job.save" }>) { return context.jobSaves.save(command, sendCommand); },
       startAssistantWorkloadRequest(assistantId: string, collection: "jobs" | "runs", request: { id: string; cursor?: string }) {
         setState("assistants", assistantWorkloads.markAssistantWorkloadLoading(state.assistants, assistantId, collection, request));
       },
@@ -1909,11 +1924,15 @@ function createHarnessTransportActions(context: HarnessStoreFactoryContext) {
 }
 
 function createHarnessConnectionActions(context: HarnessStoreFactoryContext) {
-  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
-    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  const { state, setState, persistBrowserUiStateIfChanged, sendCommand, workspacePages, readyContinuation } = context;
   return {
     setConnectionState(connectionState: ConnectionState, connectionError?: string) {
-      if (connectionState !== "connected") { workspacePages.reset(); readyContinuation.reset(); }
+      if (connectionState !== "connected") { workspacePages.reset(); readyContinuation.reset(); context.providerKeySaves.reset(); context.modeSaves.cancel(); context.jobSaves.cancel(); }
+      if (connectionState !== "connected") setState({
+        usageRefreshError: state.usageRefreshRequestId ? "Connection lost. Refresh after reconnecting." : state.usageRefreshError,
+        usageResetError: state.usageResetRequestId ? "Reset was not acknowledged. Refresh usage before retrying." : state.usageResetError,
+        usageRefreshRequestId: undefined, usageResetRequestId: undefined
+      });
       setState({ connectionState, connectionError, pendingBackgroundJobSource: connectionState === "connected" ? state.pendingBackgroundJobSource : undefined, assistants: connectionState === "connected" ? state.assistants
         : assistantWorkloads.failPendingAssistantWorkloads(state.assistants, connectionError ?? "Connection lost. Retry after reconnecting.") });
     },
@@ -2051,8 +2070,7 @@ function createHarnessConnectionActions(context: HarnessStoreFactoryContext) {
 }
 
 function createHarnessAssistantPaneActions(context: HarnessStoreFactoryContext) {
-  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
-    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  const { state, setState, persistBrowserUiStateIfChanged } = context;
   return {
     setAssistantScopeFilter(scopeFilter: AssistantScopeFilter) {
       const previousSnapshot = getBrowserUiSessionSnapshot(state);
@@ -2157,8 +2175,7 @@ function createHarnessAssistantPaneActions(context: HarnessStoreFactoryContext) 
 }
 
 function createHarnessProjectPreferenceActions(context: HarnessStoreFactoryContext) {
-  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
-    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  const { state, setState, persistBrowserUiStateIfChanged } = context;
   return {
     setProjectDraft(projectId: string, draft: string) {
       const project = state.workspace.projects.find((entry) => entry.id === projectId);
@@ -2304,8 +2321,7 @@ function createHarnessProjectPreferenceActions(context: HarnessStoreFactoryConte
 }
 
 function createHarnessDialogAndTutorialActions(context: HarnessStoreFactoryContext) {
-  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
-    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  const { state, setState, persistBrowserUiStateIfChanged, sendCommand } = context;
   return {
     openPreferencesModal() {
       const previousSnapshot = getBrowserUiSessionSnapshot(state);
@@ -2344,15 +2360,25 @@ function createHarnessDialogAndTutorialActions(context: HarnessStoreFactoryConte
     closeHelpDialog() {
       setState({ helpDialogOpen: false });
     },
+    openUsageDialog() { setState({ usageDialogOpen: true }); },
+    closeUsageDialog() { setState({ usageDialogOpen: false }); },
     openTokenUsageResetDialog() {
-      setState({ tokenUsageResetDialogOpen: true });
+      setState({ tokenUsageResetDialogOpen: true, usageResetError: undefined });
     },
     closeTokenUsageResetDialog() {
       setState({ tokenUsageResetDialogOpen: false });
     },
     resetTokenUsage() {
-      recordedTokenUsageEventKeys.clear();
-      if (sendCommand({ type: "usage.reset", requestId: createRequestId() })) setState({ tokenUsageResetDialogOpen: false });
+      if (state.usageResetRequestId) return;
+      const requestId = createRequestId();
+      setState({ usageResetRequestId: requestId, usageResetError: undefined });
+      if (!sendCommand({ type: "usage.reset", requestId })) setState({ usageResetRequestId: undefined, usageResetError: "Could not send reset. Reconnect and retry." });
+    },
+    refreshTokenUsage() {
+      if (state.usageRefreshRequestId) return;
+      const requestId = createRequestId();
+      setState({ usageRefreshRequestId: requestId, usageRefreshError: undefined });
+      if (!sendCommand({ type: "usage.refresh", requestId })) setState({ usageRefreshRequestId: undefined, usageRefreshError: "Could not refresh usage. Reconnect and retry." });
     },
     openSetupChecklist() {
       setState({ setupChecklistOpen: true });
@@ -2435,26 +2461,19 @@ function createHarnessDialogAndTutorialActions(context: HarnessStoreFactoryConte
 }
 
 function createHarnessLocalPreferenceActions(context: HarnessStoreFactoryContext) {
-  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
-    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  const { state, setState } = context;
   return {
     setOpenAiApiKeyDraft(openAiApiKeyDraft: string) {
-      setState({
-        openAiApiKeyDraft,
-        apiKeyDirty: true
-      });
+      setState("providerConnectionTests", "openai", { status: "idle" });
+      setState({ openAiApiKeyDraft, apiKeyDirty: true });
     },
     setGoogleApiKeyDraft(googleApiKeyDraft: string) {
-      setState({
-        googleApiKeyDraft,
-        apiKeyDirty: true
-      });
+      setState("providerConnectionTests", "google", { status: "idle" });
+      setState({ googleApiKeyDraft, apiKeyDirty: true });
     },
     setAnthropicApiKeyDraft(anthropicApiKeyDraft: string) {
-      setState({
-        anthropicApiKeyDraft,
-        apiKeyDirty: true
-      });
+      setState("providerConnectionTests", "anthropic", { status: "idle" });
+      setState({ anthropicApiKeyDraft, apiKeyDirty: true });
     },
     setProviderBrand(providerBrand: ProviderBrand) {
       setState(reconcile(finalizeHarnessViewState({
@@ -2530,13 +2549,13 @@ function createHarnessLocalPreferenceActions(context: HarnessStoreFactoryContext
         hasGlobalSelectedReasoningStrength:
           localPreferences.selectedReasoningStrength !== undefined || state.hasGlobalSelectedReasoningStrength,
         hasGlobalSelectedFastMode: localPreferences.selectedFastMode !== undefined || state.hasGlobalSelectedFastMode,
-        openAiApiKeyDraft: localPreferences.openAiApiKey ?? "",
-        googleApiKeyDraft: localPreferences.googleApiKey ?? "",
-        anthropicApiKeyDraft: localPreferences.anthropicApiKey ?? "",
-        apiKeyDirty: false,
-        hasLocalOpenAiApiKey: Boolean(localPreferences.openAiApiKey),
-        hasLocalGoogleApiKey: Boolean(localPreferences.googleApiKey),
-        hasLocalAnthropicApiKey: Boolean(localPreferences.anthropicApiKey),
+        openAiApiKeyDraft: "openAiApiKey" in localPreferences ? localPreferences.openAiApiKey ?? "" : state.openAiApiKeyDraft,
+        googleApiKeyDraft: "googleApiKey" in localPreferences ? localPreferences.googleApiKey ?? "" : state.googleApiKeyDraft,
+        anthropicApiKeyDraft: "anthropicApiKey" in localPreferences ? localPreferences.anthropicApiKey ?? "" : state.anthropicApiKeyDraft,
+        apiKeyDirty: "openAiApiKey" in localPreferences ? false : state.apiKeyDirty,
+        hasLocalOpenAiApiKey: "openAiApiKey" in localPreferences ? Boolean(localPreferences.openAiApiKey) : state.hasLocalOpenAiApiKey,
+        hasLocalGoogleApiKey: "googleApiKey" in localPreferences ? Boolean(localPreferences.googleApiKey) : state.hasLocalGoogleApiKey,
+        hasLocalAnthropicApiKey: "anthropicApiKey" in localPreferences ? Boolean(localPreferences.anthropicApiKey) : state.hasLocalAnthropicApiKey,
         hasLocalProviderBrandPreference: localPreferences.providerBrand !== undefined,
         hasLocalDebugPreference: localPreferences.debugEnabled !== undefined,
         hasLocalTracePreference: localPreferences.tracePanelDefaultOpen !== undefined,
@@ -2568,8 +2587,7 @@ function createHarnessLocalPreferenceActions(context: HarnessStoreFactoryContext
 }
 
 function createHarnessHydrationActions(context: HarnessStoreFactoryContext) {
-  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
-    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  const { state, setState } = context;
   return {
     setHasUsableApiKey(hasUsableApiKey: boolean) {
       setState({ hasUsableApiKey });
@@ -2691,14 +2709,33 @@ function createHarnessHydrationActions(context: HarnessStoreFactoryContext) {
 }
 
 function createHarnessEventActions(context: HarnessStoreFactoryContext) {
-  const { state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, setThemePreferenceState,
-    sendCommand, pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail } = context;
+  const {
+    state, setState, recordedTokenUsageEventKeys, persistBrowserUiStateIfChanged, sendCommand,
+    pagingUnavailable, workspacePages, readyContinuation, requestSelectedAssistantDetail,
+  } = context;
   return {
     applyServerEvent(event: ServerEvent) {
+      if (event.type === "thread.inputAccepted") {
+        const project = state.workspace.projects.find(item => item.id === event.payload.projectId);
+        if (project?.activeThreadId === event.payload.threadId && project.draft.trim() === event.payload.content) {
+          persistThreadDraft(project.id, event.payload.threadId, "");
+          setState("workspace", "projects", item => item.id === project.id, "draft", "");
+        }
+        return;
+      }
+      if (event.type === "command.rejected") {
+        if (event.requestId === state.usageResetRequestId && state.usageResetRequestId) setState({ usageResetRequestId: undefined, usageResetError: event.payload.message });
+        if (event.requestId === state.usageRefreshRequestId && state.usageRefreshRequestId) setState({ usageRefreshRequestId: undefined, usageRefreshError: event.payload.message });
+      }
+      if (event.type === "usage.updated" && state.usageResetRequestId === event.requestId) {
+        recordedTokenUsageEventKeys.clear();
+        pushToast("Local usage reset", "Session and lifetime counters cleared. Codex account quota is unchanged.");
+      }
+      if (!context.providerKeySaves.accepts(event, state)) return;
       if (event.type === "workspace.projects.listed" && !workspacePages.accepts(event)) return;
       if (event.type === "workspace.projectChildren.listed" && !workspacePages.accepts(event)) return;
       if (!readyContinuation.accepts(event)) return;
-      let currentState: HarnessViewState = unwrap(state);
+      let currentState: HarnessViewState = { ...unwrap(state), ...context.providerKeySaves.apply(event, state) };
       if (event.type === "background-jobs.page.listed") currentState = { ...currentState,
         backgroundJobs: readyContinuation.prepareBackgroundJobs(currentState.backgroundJobs, event) };
       if (event.type === "notifications.page.listed") currentState = { ...currentState,
@@ -2719,6 +2756,7 @@ function createHarnessEventActions(context: HarnessStoreFactoryContext) {
           firstNotificationIds: event.payload.notifications.items.map(({ id }) => id) });
       }
       workspacePages.handle(event);
+      context.modeSaves.apply(event); context.jobSaves.apply(event);
       readyContinuation.handle(event);
       if (event.type === "notifications.updated") readyContinuation.notificationsUpdated(state.notifications);
       if (event.type === "background-jobs.updated") readyContinuation.backgroundJobsUpdated(state.backgroundJobs);
@@ -2726,13 +2764,6 @@ function createHarnessEventActions(context: HarnessStoreFactoryContext) {
       if (event.type === "project.removed") pagingUnavailable.projectDeleted(event.payload.projectId);
       if (event.type === "assistants.updated" && event.payload.invalidatedDetailAssistantIds?.includes(
         state.assistants.selectedAssistantId ?? "")) requestSelectedAssistantDetail();
-      if (event.type === "preferences.providerConnectionTested") {
-        if (typeof document !== "undefined") {
-          document
-            .querySelectorAll<HTMLElement>(`[data-provider-test-message="${event.payload.provider}"]`)
-            .forEach((element) => element.replaceChildren(event.payload.message));
-        }
-      }
       persistBrowserUiStateIfChanged(previousSnapshot, nextState);
       const retryCommand = getRepairedPreflightRetryCommand(nextState, event);
       if (retryCommand) {
@@ -2865,30 +2896,8 @@ function upsertById<T extends { id: string }>(entries: T[], nextEntry: T) {
     : [nextEntry, ...entries];
 }
 
-function mergeItemsById<T extends { id: string }>(incoming: T[], existing: T[]) {
-  const seen = new Set<string>();
-  const merged: T[] = [];
-  for (const entry of [...incoming, ...existing]) {
-    if (seen.has(entry.id)) {
-      continue;
-    }
-    seen.add(entry.id);
-    merged.push(entry);
-  }
-  return merged;
-}
-
 function replaceScopedItems<T extends { assistantId: string }>(existing: T[], assistantId: string, incoming: T[]) {
   return [...incoming, ...existing.filter((entry) => entry.assistantId !== assistantId)];
-}
-
-function mergeScopedItems<T extends { id: string; assistantId: string }>(existing: T[], assistantId: string, incoming: T[],
-  limit = Number.MAX_SAFE_INTEGER, preferIncoming = false) {
-  const scoped = existing.filter((entry) => entry.assistantId === assistantId);
-  const merged = preferIncoming ? mergeItemsById(incoming, scoped) : mergeItemsById(scoped, incoming);
-  return merged.slice(0, limit).concat(
-    existing.filter((entry) => entry.assistantId !== assistantId)
-  );
 }
 
 function upsertCliSession(sessions: CliSession[], session: CliSession) {
@@ -2913,15 +2922,6 @@ function updateProjectState(
         ? retainWorkspaceMessageWindow(updater(project)) : project)
     }
   };
-}
-
-function updateThreadScopedProject(
-  state: HarnessViewState,
-  projectId: string,
-  threadId: string,
-  updater: (project: ViewProjectState) => ViewProjectState
-) {
-  return updateProjectState(state, projectId, (project) => (project.activeThreadId === threadId ? updater(project) : project));
 }
 
 function upsertProject(projects: ViewProjectState[], nextProject: ViewProjectState) {
@@ -3133,14 +3133,14 @@ function toViewProject(project: WorkspaceProjectState): ViewProjectState {
 function mergeIncomingProject(existing: ViewProjectState, incoming: ViewProjectState): ViewProjectState {
   const activeThreadChanged = existing.activeThreadId !== incoming.activeThreadId;
   const rememberedThreadLiveTranscript = filterThreadLiveTranscriptByKnownThreads(
-    {
-      ...existing.threadLiveTranscriptById,
-      [existing.activeThreadId]: getActiveThreadLiveTranscriptState(existing)
-    },
-    incoming.threads
+    { ...existing.threadLiveTranscriptById, [existing.activeThreadId]: getActiveThreadLiveTranscriptState(existing) }, incoming.threads
   );
-  const activeThreadLiveTranscript =
+  const rememberedLiveTranscript =
     rememberedThreadLiveTranscript[incoming.activeThreadId] ?? getPersistedThreadLiveTranscriptState(incoming);
+  const activeThreadLiveTranscript = { ...rememberedLiveTranscript, activeRun: rememberedLiveTranscript.activeRun ?? incoming.activeRun,
+    lastRun: rememberedLiveTranscript.lastRun ?? incoming.lastRun,
+    runSummaries: rememberedLiveTranscript.runSummaries.length ? rememberedLiveTranscript.runSummaries : incoming.runSummaries
+  };
   return {
     ...incoming,
     latestPlan: activeThreadLiveTranscript.latestPlan,
@@ -3289,6 +3289,7 @@ function applyReadyPreferencesState(state: HarnessViewState, preferences: Prefer
     : preferences.tracePanelDefaultOpen;
 
   return {
+    sharedAiPreferences: preferences.sharedAiPreferences,
     hasUsableApiKey: preferences.hasUsableApiKey,
     hasStoredApiKey: preferences.hasStoredApiKey,
     hasUsableOpenAiApiKey: preferences.hasUsableOpenAiApiKey,
@@ -3499,14 +3500,14 @@ export function readLocalPreferences(): LocalPreferencesState {
 
 export function readAppHotkeyPreferences(): AppHotkeyPreferences {
   if (typeof window === "undefined") {
-    return { ...DEFAULT_APP_HOTKEY_PREFERENCES };
+    return normalizeAppHotkeyPreferences(undefined);
   }
 
   try {
     const raw = window.localStorage.getItem(APP_HOTKEY_PREFERENCES_STORAGE_KEY);
     return normalizeAppHotkeyPreferences(raw ? JSON.parse(raw) : undefined);
   } catch {
-    return { ...DEFAULT_APP_HOTKEY_PREFERENCES };
+    return normalizeAppHotkeyPreferences(undefined);
   }
 }
 
@@ -3941,7 +3942,7 @@ function getBrowserUiSessionSnapshot(state: HarnessViewState): BrowserUiSessionS
     selectedFastMode: state.hasGlobalSelectedFastMode ? state.selectedFastMode : undefined,
     tracePanelMode: state.hasPersistedTracePanelOpen ? state.tracePanelMode : undefined,
     activeLeftTab: state.activeLeftTab,
-    mainPanelSizes: state.mainPanelSizes,
+    mainPanelSizes: { ...state.mainPanelSizes },
     chatPaneTab: state.chatPaneTab,
     assistantPane: {
       scopeFilter: state.assistants.scopeFilter,
@@ -3963,7 +3964,7 @@ function getBrowserUiSessionSnapshot(state: HarnessViewState): BrowserUiSessionS
       runFilter: state.jobsRunFilter
     },
     lastActiveProjectId: state.lastActiveProjectId,
-    lastActiveThreadByProjectId: state.lastActiveThreadByProjectId
+    lastActiveThreadByProjectId: { ...state.lastActiveThreadByProjectId }
   };
 }
 
@@ -4137,9 +4138,6 @@ function normalizeOptionalStorageString(input: unknown) {
   return typeof input === "string" && input.trim() ? input.trim() : undefined;
 }
 
-function isRecord(input: unknown): input is Record<string, unknown> {
-  return typeof input === "object" && input !== null;
-}
 
 function normalizeAssistantsViewState(state: HarnessViewState): ViewAssistantsState {
   const scopeFilter = normalizeAssistantScopeFilter(state.assistants.scopeFilter);
@@ -4432,31 +4430,12 @@ function normalizeMainPanelSizes(input: unknown): MainPanelSizes {
   return {
     left: clampPanelSize(parsed.left, defaults.left),
     center: clampPanelSize(parsed.center, defaults.center),
-    right: clampPanelSize(parsed.right, defaults.right)
+    right: clampPanelSize(parsed.right, defaults.right), ...(parsed.leftCollapsed === true ? { leftCollapsed: true } : {}),
   };
 }
 
-function clampPanelSize(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? Math.max(0.75, Math.min(5, value)) : fallback;
-}
 
-function parseBoundedIntegerStorageValue(value: string | null, min: number, max: number) {
-  if (!value) {
-    return undefined;
-  }
 
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? Math.max(min, Math.min(max, Math.round(parsed))) : undefined;
-}
-
-function parseBoundedDecimalStorageValue(value: string | null, min: number, max: number, step: number) {
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? Math.max(min, Math.min(max, Math.round(parsed / step) * step)) : undefined;
-}
 
 function persistStorageValue(key: string, value: string | undefined) {
   if (value?.trim()) {
@@ -4710,41 +4689,6 @@ export function getActiveMode(state: HarnessViewState, project = getActiveProjec
   return resolveModeById(modeId, state.workspace.workspaceModes, project?.projectModes ?? []);
 }
 
-export function getModelCapability(state: HarnessViewState, modelId: string | undefined): ModelCapability | undefined {
-  if (!modelId) {
-    return undefined;
-  }
-
-  return state.capabilities.flatMap((provider) => provider.models).find((model) => model.modelId === modelId);
-}
-
-export function getAvailableReasoningStrengthsForSelection(
-  state: HarnessViewState,
-  agentId: AgentId,
-  modelId: string | undefined
-): ComposerReasoningStrength[] {
-  const runtime = state.agentRuntimes.find((entry) => entry.agentId === agentId);
-  if (runtime?.supportsReasoningStrengthControl === false) {
-    return [DEFAULT_COMPOSER_REASONING_STRENGTH];
-  }
-
-  const modelStrengths = getModelCapability(state, modelId)?.supportedReasoningStrengths ?? COMPOSER_REASONING_STRENGTHS;
-  return COMPOSER_REASONING_STRENGTHS.filter((strength) => modelStrengths.includes(strength));
-}
-
-export function getSupportsFastModeForSelection(
-  state: HarnessViewState,
-  agentId: AgentId,
-  modelId: string | undefined
-) {
-  const runtime = state.agentRuntimes.find((entry) => entry.agentId === agentId);
-  if (runtime?.supportsFastModeControl === false) {
-    return false;
-  }
-
-  return Boolean(getModelCapability(state, modelId)?.supportsFastMode);
-}
-
 export function getComposerControlState(
   state: HarnessViewState,
   agentId: AgentId,
@@ -4753,20 +4697,4 @@ export function getComposerControlState(
   return resolveComposerControlState(state, agentId, parseExecutionModelId(modelId));
 }
 
-export function getCapabilityTags(state: HarnessViewState, modelId: string | undefined) {
-  return getModelCapability(state, modelId)?.tags ?? [];
-}
-
-export function isModelIdForProvider(modelId: string | undefined, providerBrand: ProviderBrand) {
-  if (!modelId) {
-    return false;
-  }
-
-  if (providerBrand === "gemini") {
-    return modelId.startsWith("google/");
-  }
-  if (providerBrand === "claude") {
-    return modelId.startsWith("anthropic/");
-  }
-  return modelId.startsWith("openai/");
-}
+export { isModelIdForProvider } from "./store/preferences/model-capabilities";

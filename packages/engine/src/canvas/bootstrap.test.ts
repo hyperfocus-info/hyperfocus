@@ -1,8 +1,8 @@
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { registerTestDom } from "../test-support/register-dom.ts";
 import { expect, test } from "bun:test";
 import { init } from "./bootstrap.ts";
 
-if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
+registerTestDom();
 
 function createCanvas() {
   const canvas = globalThis.document.createElement("canvas");
@@ -50,6 +50,22 @@ function installFrameScheduler(frames: FrameRequestCallback[] = []) {
     globalThis.cancelAnimationFrame = previousCancel;
   };
 }
+
+test("changing logical dimensions updates fit, backing store and later resizes together", () => {
+  setWindowMetrics(2);
+  const canvas = createCanvas();
+  const app = init({ canvas, parent: fixedParent(808, 782), width: 760, height: 480, scaleMode: "fit" });
+  app.resize({ width: 1240, height: 980 });
+  expect([app.width, app.height, canvas.width, canvas.height]).toEqual([1240, 980, 2480, 1960]);
+  expect([canvas.style.width, canvas.style.height]).toEqual(["808px", "638px"]);
+  app.resize();
+  expect([canvas.width, canvas.height, canvas.style.height]).toEqual([2480, 1960, "638px"]);
+  expect(() => app.resize({ width: 100, height: 0 })).toThrow("canvas height");
+  expect([app.width, app.height, canvas.width, canvas.height]).toEqual([1240, 980, 2480, 1960]);
+  app.resize({ width: 1200, height: 720 });
+  expect([canvas.width, canvas.height, canvas.style.height]).toEqual([2400, 1440, "484px"]);
+  app.destroy();
+});
 
 test("init scale modes distinguish aspect fit from viewport stretch", () => {
   setWindowMetrics(2);

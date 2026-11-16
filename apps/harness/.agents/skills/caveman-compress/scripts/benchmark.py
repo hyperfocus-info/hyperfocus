@@ -18,13 +18,13 @@ except ImportError:
 
 def count_tokens(text):
     if _enc is None:
-        return len(text.split())  # fallback: word count
-    return len(_enc.encode(text))
+        raise RuntimeError("Token measurement requires tiktoken; install it with python -m pip install tiktoken.")
+    return len(_enc.encode(text, disallowed_special=()))
 
 
 def benchmark_pair(orig_path: Path, comp_path: Path):
-    orig_text = orig_path.read_text()
-    comp_text = comp_path.read_text()
+    orig_text = orig_path.read_bytes().decode("utf-8")
+    comp_text = comp_path.read_bytes().decode("utf-8")
 
     orig_tokens = count_tokens(orig_text)
     comp_tokens = count_tokens(comp_text)
@@ -35,6 +35,7 @@ def benchmark_pair(orig_path: Path, comp_path: Path):
 
 
 def print_table(rows):
+    print("Tokenizer: o200k_base. Text size only; task quality, latency and live model usage are not measured.")
     print("\n| File | Original | Compressed | Saved % | Valid |")
     print("|------|----------|------------|---------|-------|")
     for r in rows:

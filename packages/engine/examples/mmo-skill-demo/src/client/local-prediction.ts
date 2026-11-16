@@ -1,3 +1,5 @@
+import { finiteOr } from "@hyperfocus/utilities/math";
+import { clamp01 } from "@hyperfocus/utilities/math";
 import { selectedAbilityForSlot } from "../shared-loadout.ts";
 import { type MmoSkillDemoInput, type MmoSkillDemoState, type PlayerEntity } from "../shared-contracts.ts";
 import { NPC_DEFAULT_SIZE, NPC_SIZE_BY_KIND, NPC_SIZE_BY_ROLE, PLAYER_SIZE, RESOURCE_SIZE_BY_KIND } from "../data/entity-sizes.ts";
@@ -68,9 +70,7 @@ function resetLocalPredictionState(prediction: LocalPredictionState, player: Pla
   prediction.momentumY = finiteOr(player?.momentumY, 0);
 }
 
-function finiteOr(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+
 
 function hasAbility(player: PlayerEntity, abilityId: string) {
   return Boolean(player.abilitySlots?.[abilityId]);
@@ -110,7 +110,7 @@ function localPlayerSpeed(player: PlayerEntity, state: MmoSkillDemoState, input:
 }
 
 function localPlayerTetheredBySentinel(player: PlayerEntity, state: MmoSkillDemoState) {
-  const tetherRadiusSq = 150 * 150;
+  const tetherRadiusSq = 22500;
   for (const id in state.npcs) {
     const npc = state.npcs[id]!;
     if (npc.kind !== "void-sent-sentinel" || npc.hp <= 0 || npc.zoneId !== player.zoneId) continue;
@@ -125,9 +125,7 @@ function baseRushSpeed(player: PlayerEntity) {
   return 118 + Math.min(38, player.combatLevel * 2) + Math.min(14, Math.max(0, player.masteryRank - 1) * 2);
 }
 
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
+
 
 function decayMomentum(prediction: LocalPredictionState, dtMs: number) {
   const decay = clamp01(dtMs / PLAYER_MOMENTUM_DAMP_MS);
@@ -291,7 +289,7 @@ function applyRushPrediction(prediction: LocalPredictionState, player: PlayerEnt
     ? directionToAim(prediction, input, prediction.rushVectorX, prediction.rushVectorY)
     : { x: prediction.rushVectorX, y: prediction.rushVectorY };
   const maxTurnDeg = 3 - rushT * 2.7;
-  const turnScale = Math.max(0.25, dtMs / (1000 / 60));
+  const turnScale = Math.max(0.25, dtMs / (16.666666666666668));
   const turned = rotateVectorToward(prediction.rushVectorX, prediction.rushVectorY, aimDirection.x, aimDirection.y, ((maxTurnDeg * Math.PI) / 180) * turnScale);
   prediction.rushVectorX = turned.x;
   prediction.rushVectorY = turned.y;

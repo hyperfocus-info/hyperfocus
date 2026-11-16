@@ -2,10 +2,31 @@
   "name": "@hyperfocus/ui",
   "version": "0.0.1",
   "description": "Solid and StyleX UI primitives for Hyperfocus applications.",
-  "license": "SEE LICENSE IN ../../LICENSE",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
-  "sideEffects": ["**/*.css"],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
+    "./feedback": "./src/feedback/index.ts",
+    "./theme/contrast": "./src/theme/contrast.ts",
+    "./shortcuts": "./src/shortcuts/app-shortcuts.ts",
+    "./overlay-stack": "./src/primitives/overlay-stack.ts",
+    "./attention": "./src/attention/inspect.ts",
+    "./attention/required-controls": "./src/attention/required-controls.ts",
+    "./navigation/contract": "./src/primitives/navigation/contract.ts",
+    "./data-table": "./src/data-table/index.ts",
+    "./data-table/styles.css": "./src/data-table/styles.css",
+    "./task-review/progress": "./src/task-review/progress.ts",
+    "./dom-tooltip": "./src/primitives/dom-tooltip.ts",
+    "./context-menu": "./src/primitives/context-menu.ts",
+    "./dom": "./src/dom/elements.ts",
+    "./task-review": "./src/task-review/index.ts",
+    "./task-review/quality": "./src/task-review/quality-review.tsx",
+    "./connections": "./src/connections.tsx",
+    "./tutorial": "./src/tutorial/index.ts",
+    "./tutorial/session": "./src/tutorial/session.ts",
+    "./game-menu": "./src/game-menu/index.ts",
     ".": "./src/index.ts",
     "./primitives": "./src/primitives/index.ts",
     "./preferences": "./src/preferences/index.ts",
@@ -15,25 +36,40 @@
     "./terminal": "./src/terminal/index.ts",
     "./workbench": "./src/workbench/index.ts",
     "./workbench/layout": "./src/workbench/layout.ts",
+    "./workbench/model": "./src/workbench/model.ts",
     "./source-editor": "./src/source-editor/index.ts",
+    "./source-editor/document": "./src/source-editor/document.ts",
     "./build/stylex-solid-plugin": "./build-tools/stylex-solid-plugin.ts",
     "./stylex-entry.css": "./src/stylex-entry.css",
     "./tokens": "./src/theme/tokens.stylex.ts",
-    "./tokens.stylex": "./src/theme/tokens.stylex.ts"
+    "./tokens.stylex": "./src/theme/tokens.stylex.ts",
+    "./branding": "./src/branding/fields.tsx",
+    "./testing/browser": "./src/testing/browser.ts"
   },
-  "files": ["src", "dist", "build-tools", "README.md"],
+  "files": [
+    "src",
+    "dist",
+    "build-tools",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "bench:measured-window": "bun benchmarks/measured-window-benchmark.ts",
     "build": "bun build.ts",
+    "showcase": "bun scripts/design-system/build-showcase.ts",
+    "verify:visual": "bun scripts/design-system/verify-showcase.ts",
     "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json",
-    "test": "bun test --cwd ../.. packages/ui"
+    "test": "bun ../../scripts/testing/run-package-tests.ts --ui"
   },
   "peerDependencies": {
-    "solid-js": "^1.9.12"
+    "solid-js": "^1.9.12",
+    "playwright-core": "^1.62.1"
   },
   "devDependencies": {
+    "@hyperfocus/desktop-runtime": "workspace:*",
     "@hyperfocus/performance": "workspace:*",
-    "playwright": "^1.59.1"
+    "playwright": "^1.59.1",
+    "playwright-core": "1.62.1"
   },
   "dependencies": {
     "@babel/core": "^7.29.0",
@@ -48,6 +84,14 @@
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "solid-markdown": "^2.1.1",
-    "babel-preset-solid": "^1.9.12"
+    "babel-preset-solid": "^1.9.12",
+    "@hyperfocus/ai-core": "workspace:*",
+    "@hyperfocus/branding": "workspace:*",
+    "@hyperfocus/utilities": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "playwright-core": {
+      "optional": true
+    }
   }
 }

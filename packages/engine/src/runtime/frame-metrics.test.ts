@@ -13,8 +13,20 @@ test("frame metrics retain bounded rolling summaries and long frames", () => {
 
   const snapshot = metrics.snapshot();
   expect(snapshot.series["frame.ms"]).toMatchObject({ count: 3, latest: 20, min: 2, max: 20, p50: 3, p95: 3 });
-  expect(snapshot.longFrames).toEqual([{ durationMs: 20, at: 4 }]);
+  expect(snapshot.longFrames).toEqual([{ metric: "frame.ms", durationMs: 20, at: 4 }]);
   expect(snapshot.droppedSeries).toBe(1);
+});
+
+test("presentation gaps remain visible when measured callback work is cheap", () => {
+  const metrics = createFrameMetrics({ maxLongFrames: 2, now: () => 10 });
+  metrics.record('frame.gap.ms', 120);
+  metrics.record('frame.ms', 2);
+  expect(metrics.snapshot().longFrames).toEqual([{ metric: 'frame.gap.ms', durationMs: 120, at: 10 }]);
+  metrics.record('frame.ms', 30);
+  metrics.record('frame.gap.ms', 80);
+  expect(metrics.snapshot().longFrames.map(record => record.metric)).toEqual(['frame.ms', 'frame.gap.ms']);
+  metrics.reset();
+  expect(metrics.snapshot().longFrames).toEqual([]);
 });
 
 test("frame metric timers record once and isolate reset state", () => {

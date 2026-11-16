@@ -1,0 +1,23 @@
+{
+  "name": "@hyperfocus/artifact-review",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ../../scripts/artifact-review ../../scripts/game-art"
+  },
+  "exports": {
+    "./server": "./src/server.ts",
+    "./create": "./src/create.ts",
+    "./schema": "./src/schema.ts",
+    "./persistence": "./src/persistence.ts",
+    "./integrity": "./src/integrity.ts",
+    "./media": "./src/media-response.ts",
+    "./constraints": "./src/constraints.ts",
+    "./direction": "./src/direction.ts"
+  },
+  "dependencies": {
+    "@hyperfocus/review-store": "workspace:*",
+    "@hyperfocus/utilities": "workspace:*"
+  }
+}

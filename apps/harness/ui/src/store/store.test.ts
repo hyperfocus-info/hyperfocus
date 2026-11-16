@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { unwrap } from "solid-js/store";
 import {
   createEmptySession,
   createProjectId,
@@ -6,7 +7,6 @@ import {
   type ClientCommand,
   type ProjectSearchResult,
   createWorkspaceProjectState,
-  type ExecutionPlan,
   type PreferencesState,
   type ServerEvent,
   type WorkspaceProjectState
@@ -45,6 +45,7 @@ import {
   reduceServerEvent
 } from "../harness-store";
 import { DEFAULT_THEME_PREFERENCE } from "../theme/theme-model";
+import { createAgentPlanFixture, createExecutionPlanFixture } from "../utils/tests/test-fixtures";
 
 const defaultPreferences: PreferencesState = {
   hasUsableApiKey: false,
@@ -121,6 +122,19 @@ function clearBrowserUiSessionStorage() {
 }
 
 describe("harness store reducer", () => {
+  test("persists nested panel changes before reactive reconciliation mutates the prior state", () => {
+    window.localStorage.clear();
+    const store = createHarnessStore();
+    const first = { left: 2, center: 4, right: 1.5, leftCollapsed: true };
+    store.setMainPanelSizes(first);
+    expect(readBrowserUiSession().mainPanelSizes).toEqual(first);
+    const second = { left: 1.5, center: 3, right: 1.25 };
+    store.setMainPanelSizes(second);
+    expect(readBrowserUiSession().mainPanelSizes).toEqual(second);
+    const restored = createHarnessStore();
+    restored.actions.hydrateBrowserUiSession();
+    expect(restored.state.mainPanelSizes).toEqual(second);
+  });
   test("browser trace session override beats default trace preference on ready", () => {
     clearBrowserUiSessionStorage();
     persistBrowserUiSession({ tracePanelMode: "closed" });
@@ -379,7 +393,7 @@ describe("harness store reducer", () => {
     });
     store.hydrateLocalPreferences();
 
-    expect(store.state.projectSidebarPreferences).toMatchObject({
+    expect(unwrap(store.state.projectSidebarPreferences)).toMatchObject({
       projectSort: "manual",
       threadSort: "last-user-message",
       grouping: "repository-path",
@@ -2784,17 +2798,11 @@ describe("harness store reducer", () => {
         }
       }
     });
-    const selectedExecutionPlan: ExecutionPlan = {
-      runId: "run-1",
-      origin: "initial",
-      iteration: 1,
+    const selectedExecutionPlan = createExecutionPlanFixture({
       summary: "Plan",
       finalExecutionBrief: "Do work",
       difficultyScore: 20,
-      planningModelId: "openai/gpt-5.4",
-      executionModelId: "openai/gpt-5.4",
       route: "main",
-      subagentWorktreeStrategy: "same-worktree",
       targetSubagentCount: 0,
       actualSubagentCount: 0,
       gating: {
@@ -2803,8 +2811,7 @@ describe("harness store reducer", () => {
       },
       prerequisites: [],
       contracts: [],
-      correctnessPolicy: "ask-before-iterate"
-    };
+    });
 
     const stateWithDialog = {
       ...seededRunState,
@@ -3614,25 +3621,16 @@ function initialStateWithPlan(project: WorkspaceProjectState) {
     payload: {
       projectId: project.id,
       threadId: project.activeThreadId,
-      plan: {
+      plan: createAgentPlanFixture({
         sessionId: project.session.sessionId,
-        agentId: "pi",
-        planningModelId: "openai/gpt-5.4",
         difficultyScore: 20,
         usesSubagents: false,
-        executionModelId: "openai/gpt-5.4",
         subtaskCount: 0,
-        executionPlan: {
-          runId: "run-1",
-          origin: "initial",
-          iteration: 1,
+        executionPlan: createExecutionPlanFixture({
           summary: "Plan",
           finalExecutionBrief: "Do work",
           difficultyScore: 20,
-          planningModelId: "openai/gpt-5.4",
-          executionModelId: "openai/gpt-5.4",
           route: "main",
-          subagentWorktreeStrategy: "same-worktree",
           targetSubagentCount: 0,
           actualSubagentCount: 0,
           gating: {
@@ -3641,9 +3639,8 @@ function initialStateWithPlan(project: WorkspaceProjectState) {
           },
           prerequisites: [],
           contracts: [],
-          correctnessPolicy: "ask-before-iterate"
-        }
-      }
+        })
+      })
     }
   });
 }

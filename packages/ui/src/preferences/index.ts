@@ -19,3 +19,5 @@ export {
   writeHyperfocusSharedUserPreferences,
   type HyperfocusSharedUserPreferences,
 } from "./storage";
+
+export { SettingsWorkspace } from "./settings-workspace";

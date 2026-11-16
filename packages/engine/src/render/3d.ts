@@ -1,3 +1,5 @@
+import { modulo as positiveModulo } from "@hyperfocus/utilities/math";
+import { clampLowerFirst as clampCameraRigValue } from "@hyperfocus/utilities/math";
 import * as THREE from "three";
 import type {
   ThreeLikeBufferAttributeConstructor,
@@ -2119,9 +2121,7 @@ function normalizeSmoothingSeconds(value: number | undefined, fallback: number) 
   return assertNonNegativeFinite(value, "3D camera smoothing seconds");
 }
 
-function clampCameraRigValue(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+
 
 function smoothStep(amount: number) {
   const t = clampCameraRigValue(amount, 0, 1);
@@ -2614,9 +2614,7 @@ function shortestToroidalAxisDelta(delta: number, size: number) {
   return wrapped === -half && delta > 0 ? half : wrapped;
 }
 
-function positiveModulo(value: number, modulus: number) {
-  return ((value % modulus) + modulus) % modulus;
-}
+
 
 function resolvePixelRatio(cap: number) {
   const rawRatio = typeof globalThis.devicePixelRatio === "number" ? globalThis.devicePixelRatio : 1;

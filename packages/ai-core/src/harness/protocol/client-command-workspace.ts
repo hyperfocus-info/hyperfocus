@@ -25,6 +25,16 @@ const filePathPageLimitSchema = z.number().int().min(1).max(WORKSPACE_FILE_PATH_
 
 export const workspaceClientCommandSchema = z.discriminatedUnion("type", [
   z.object({
+    type: z.literal("thread.message"), requestId: requestIdSchema,
+    payload: z.object({ projectId: projectIdSchema, sourceThreadId: threadIdSchema, targetThreadId: threadIdSchema,
+      message: z.string().trim().min(1).max(16000), deliveryId: z.string().uuid() })
+  }),
+  z.object({
+    type: z.literal("thread.input"), requestId: requestIdSchema,
+    payload: z.object({ projectId: projectIdSchema, threadId: threadIdSchema,
+      message: z.string().trim().min(1).max(16000), deliveryId: z.string().uuid(), mode: z.enum(["queue", "steer"]) })
+  }),
+  z.object({
     type: z.literal("connection.ping"),
     requestId: requestIdSchema,
     payload: z
@@ -36,6 +46,9 @@ export const workspaceClientCommandSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("agent.list"),
     requestId: requestIdSchema
+  }),
+  z.object({
+    type: z.literal("usage.refresh"), requestId: requestIdSchema
   }),
   z.object({
     type: z.literal("usage.reset"),

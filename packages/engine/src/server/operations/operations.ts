@@ -1,3 +1,7 @@
+import { utf8, decodeUtf8, copyBytes, ownedArrayBuffer } from "./encoding.ts";
+import { classifyAuthFailure, boundedCount, assertIdentifier, assertRecordId, assertTimestamp, readClock, positiveInteger, boundedPositiveInteger, boundedNonNegativeInteger, assertExactKeys } from "./validation.ts";
+import { constantTimeTextEqual, compareText } from "@hyperfocus/utilities/text";
+import { isPlainRecord } from "@hyperfocus/utilities/records";
 import { createServerMetrics, type ServerMetrics } from "./metrics.ts";
 import { createGracefulDrainController, type GracefulDrainController, type GracefulDrainState } from "./graceful-drain.ts";
 import type { AuthAdapter, AuthResult, PersistenceAdapter } from "../core/types.ts";
@@ -12,25 +16,25 @@ const BACKUP_VERSION = 1;
 const ENCRYPTED_BACKUP_FORMAT = "hyperfocus-encrypted-backup";
 const ENCRYPTED_BACKUP_VERSION = 1;
 const SNAPSHOT_VERSION = 1;
-const DEFAULT_MAX_TOKEN_BYTES = 8 * 1024;
-const DEFAULT_MAX_ATTRIBUTES_BYTES = 4 * 1024;
+const DEFAULT_MAX_TOKEN_BYTES = 8192;
+const DEFAULT_MAX_ATTRIBUTES_BYTES = 4096;
 const DEFAULT_MAX_REPLAY_ENTRIES = 100_000;
 const DEFAULT_MAX_CLOCK_SKEW_MS = 5_000;
-const DEFAULT_MAX_SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
-const DEFAULT_MAX_BACKUP_BYTES = 64 * 1024 * 1024;
-const DEFAULT_MAX_RECORD_BYTES = 2 * 1024 * 1024;
+const DEFAULT_MAX_SESSION_TTL_MS = 86400000;
+const DEFAULT_MAX_BACKUP_BYTES = 67108864;
+const DEFAULT_MAX_RECORD_BYTES = 2097152;
 const DEFAULT_MAX_RECORDS = 100_000;
 const DEFAULT_MAX_EVENTS = 1_000_000;
 const DEFAULT_MAX_JSON_DEPTH = 64;
 const DEFAULT_MAX_JSON_NODES = 1_000_000;
-const MAX_CONFIGURED_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
-const MAX_CONFIGURED_CLOCK_SKEW_MS = 5 * 60_000;
-const MAX_CONFIGURED_TOKEN_BYTES = 64 * 1024;
-const MAX_CONFIGURED_ATTRIBUTES_BYTES = 32 * 1024;
+const MAX_CONFIGURED_SESSION_TTL_MS = 604800000;
+const MAX_CONFIGURED_CLOCK_SKEW_MS = 300000;
+const MAX_CONFIGURED_TOKEN_BYTES = 65536;
+const MAX_CONFIGURED_ATTRIBUTES_BYTES = 32768;
 const MAX_CONFIGURED_REPLAY_ENTRIES = 10_000_000;
 const MAX_CONFIGURED_RECORDS = 10_000_000;
-const MAX_CONFIGURED_BACKUP_BYTES = 1024 * 1024 * 1024;
-const MAX_CONFIGURED_RECORD_BYTES = 16 * 1024 * 1024;
+const MAX_CONFIGURED_BACKUP_BYTES = 1073741824;
+const MAX_CONFIGURED_RECORD_BYTES = 16777216;
 const MAX_CONFIGURED_JSON_DEPTH = 128;
 const MAX_CONFIGURED_JSON_NODES = 10_000_000;
 const MAX_CONFIGURED_METRIC_SERIES = 100_000;
@@ -125,7 +129,7 @@ export function createSignedSessionAuthority(options: SignedSessionAuthorityOpti
   const issuer = options.issuer;
   const audience = options.audience;
   const maxSessionTtlMs = boundedPositiveInteger(options.maxSessionTtlMs ?? DEFAULT_MAX_SESSION_TTL_MS, "maxSessionTtlMs", MAX_CONFIGURED_SESSION_TTL_MS);
-  const sessionTtlMs = positiveInteger(options.sessionTtlMs ?? Math.min(60 * 60 * 1_000, maxSessionTtlMs), "sessionTtlMs");
+  const sessionTtlMs = positiveInteger(options.sessionTtlMs ?? Math.min(3600000, maxSessionTtlMs), "sessionTtlMs");
   if (sessionTtlMs > maxSessionTtlMs) throw new Error("sessionTtlMs cannot exceed maxSessionTtlMs.");
   const maxClockSkewMs = boundedNonNegativeInteger(options.maxClockSkewMs ?? DEFAULT_MAX_CLOCK_SKEW_MS, "maxClockSkewMs", MAX_CONFIGURED_CLOCK_SKEW_MS);
   const maxTokenBytes = boundedPositiveInteger(options.maxTokenBytes ?? DEFAULT_MAX_TOKEN_BYTES, "maxTokenBytes", MAX_CONFIGURED_TOKEN_BYTES);
@@ -899,101 +903,4 @@ function base64UrlDecode(value: string): Uint8Array {
   const bytes = Uint8Array.from(output);
   if (base64UrlEncode(bytes) !== value) throw new Error("Session token base64url segment is not canonical.");
   return bytes;
-}
-
-function classifyAuthFailure(value: unknown): string {
-  const message = value instanceof Error ? value.message : String(value);
-  if (/replay/i.test(message)) return "replay";
-  if (/expired|lifetime|future|validity/i.test(message)) return "time";
-  if (/signature|signing key/i.test(message)) return "signature";
-  if (/draining/i.test(message)) return "draining";
-  return "invalid";
-}
-
-function boundedCount(value: number, label: string): number {
-  if (!Number.isSafeInteger(value) || value < 0 || value > 100_000_000) throw new Error(`${label} must be a non-negative bounded integer.`);
-  return value;
-}
-
-function assertIdentifier(value: unknown, label: string, maxBytes: number): asserts value is string {
-  if (typeof value !== "string" || !value || utf8(value).byteLength > maxBytes || /[\u0000-\u001f\u007f]/.test(value)) throw new Error(`${label} must be non-empty bounded text without control characters.`);
-}
-
-function assertRecordId(value: unknown, label: string): asserts value is string {
-  assertIdentifier(value, label, 256);
-}
-
-function assertTimestamp(value: unknown, label: string): asserts value is number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error(`${label} must be a non-negative safe integer timestamp.`);
-}
-
-function readClock(clock: () => number, label: string): number {
-  const value = clock();
-  assertTimestamp(value, label);
-  return value;
-}
-
-function positiveInteger(value: number, label: string): number {
-  if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${label} must be a positive safe integer.`);
-  return value;
-}
-
-function nonNegativeInteger(value: number, label: string): number {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${label} must be a non-negative safe integer.`);
-  return value;
-}
-
-function boundedPositiveInteger(value: number, label: string, maximum: number): number {
-  const result = positiveInteger(value, label);
-  if (result > maximum) throw new Error(`${label} may not exceed ${maximum}.`);
-  return result;
-}
-
-function boundedNonNegativeInteger(value: number, label: string, maximum: number): number {
-  const result = nonNegativeInteger(value, label);
-  if (result > maximum) throw new Error(`${label} may not exceed ${maximum}.`);
-  return result;
-}
-
-function assertExactKeys(value: Record<string, unknown>, keys: readonly string[], label: string): void {
-  const actual = Object.keys(value).sort(compareText);
-  const expected = [...keys].sort(compareText);
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) throw new Error(`${label} has unknown or missing fields.`);
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function utf8(value: string): Uint8Array {
-  return new TextEncoder().encode(value);
-}
-
-function decodeUtf8(value: Uint8Array): string {
-  try { return new TextDecoder("utf-8", { fatal: true }).decode(value); }
-  catch { throw new Error("Encoded data is not valid UTF-8."); }
-}
-
-function copyBytes(value: Uint8Array): Uint8Array {
-  if (!(value instanceof Uint8Array)) throw new TypeError("Backup source must be a UTF-8 string or Uint8Array.");
-  return new Uint8Array(value);
-}
-
-function ownedArrayBuffer(value: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(value.byteLength);
-  copy.set(value);
-  return copy.buffer;
-}
-
-function constantTimeTextEqual(a: string, b: string): boolean {
-  let difference = a.length ^ b.length;
-  const length = Math.max(a.length, b.length);
-  for (let index = 0; index < length; index += 1) difference |= (a.charCodeAt(index) || 0) ^ (b.charCodeAt(index) || 0);
-  return difference === 0;
-}
-
-function compareText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }

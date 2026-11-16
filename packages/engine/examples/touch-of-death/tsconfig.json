@@ -1,0 +1,13 @@
+{
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@hyperfocus/engine": ["../../src/index.ts"],
+      "@hyperfocus/engine/combat/net": ["../../src/combat/net/protocol.ts"],
+      "@hyperfocus/engine/render/3d-material-presets": ["../../src/render/materials/3d-presets.ts"],
+      "@hyperfocus/engine/*": ["../../src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "host/**/*.ts", "browser-tests/**/*.ts"],
+  "exclude": [".local"]
+}

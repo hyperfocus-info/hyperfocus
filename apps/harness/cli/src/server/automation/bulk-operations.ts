@@ -21,7 +21,7 @@ export type BulkOperationInput = {
   apply: boolean;
   payload: BulkOperationPayload;
   requestId: string;
-  ws: Bun.ServerWebSocket<HarnessConnection>;
+  ws: import("../transport/events").ControlEventSocket;
   repository: WorkspaceRepository;
   runtime: WorkspaceRuntimeStore;
   runtimeRegistry: AgentRuntimeRegistry;

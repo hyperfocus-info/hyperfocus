@@ -16,7 +16,7 @@ let previousFrameStartedAt = 0;
 let updateWorkMs = 0;
 
 export const arenaFrameDriver = createFixedStepDriver({
-  step: 1 / 60,
+  step: 0.016666666666666666,
   maxFrame: 0.05,
   update(dt) {
     const startedAt = performance.now();

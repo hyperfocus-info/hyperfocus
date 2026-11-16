@@ -1,84 +1,64 @@
+import { usePreferencesPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
+import { CheckboxField,typography } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
-import type { PreferencesPanelModel } from "../preferences-modal";
-import type { PreferencesOperationalActions } from "./preferences-actions";
-import { PasswordKeyInput, PreferenceRow, PreferenceSection, PreferenceToggle, SegmentedControl } from "./preferences-controls";
-import { preferenceStyles } from "./preferences.styles";
+import { SegmentedControl } from "./preferences-controls";
+import { ProviderCredential } from "./providers/provider-credential";
+import { providerStyles as styles } from "./providers/providers.styles";
 
-export function PreferencesAiProviders(props: { model: PreferencesPanelModel; actions: PreferencesOperationalActions; updateSavedPreference: (update: () => void) => void }) {
-  const { state, store } = props.model;
-  const { keyStatus, handleTestProvider } = props.actions;
-  const { updateSavedPreference } = props;
-  const renderToggle = (checked: boolean, onInput: (checked: boolean) => void, label: string) => (
-    <PreferenceToggle checked={checked} label={label} onChange={(value) => updateSavedPreference(() => onInput(value))} />
+export function PreferencesAiProviders() {
+  const panel = usePreferencesPanel();
+  const { state, store } = panel.model;
+  return (
+    <section data-test-ai-providers="" {...stylex.attrs(styles.page)}>
+      <header {...stylex.attrs(styles.copy)}>
+        <h3 {...stylex.attrs(typography.page)}>AI &amp; Providers</h3>
+
+      </header>
+      <section id="provider-keys" data-test-preference-row="provider-keys" aria-labelledby="provider-connections-heading" {...stylex.attrs(styles.section)}>
+        <div {...stylex.attrs(styles.copy)}>
+          <h4 id="provider-connections-heading" {...stylex.attrs(typography.section)}>Provider connections</h4>
+          <p {...stylex.attrs(typography.body, styles.muted)}>Keys stay on this machine. Test checks model access without saving. Choose Save key to keep a new or replacement key.</p>
+        </div>
+        <div {...stylex.attrs(styles.credentials)}>
+          <ProviderCredential provider="openai" label="OpenAI API key" value={state.openAiApiKeyDraft} placeholder="sk-..."
+            available={state.hasUsableOpenAiApiKey}
+            stored={state.hasStoredOpenAiApiKey || state.hasLocalOpenAiApiKey} test={state.providerConnectionTests.openai}
+            onInput={store.setOpenAiApiKeyDraft} onTest={() => panel.operational.handleTestProvider("openai", state.openAiApiKeyDraft)} onSave={() => panel.persistence.saveProviderKey("openai")} />
+          <ProviderCredential provider="google" label="Google API key" value={state.googleApiKeyDraft} placeholder="AIza..."
+            available={state.hasUsableGoogleApiKey}
+            stored={state.hasStoredGoogleApiKey || state.hasLocalGoogleApiKey} test={state.providerConnectionTests.google}
+            onInput={store.setGoogleApiKeyDraft} onTest={() => panel.operational.handleTestProvider("google", state.googleApiKeyDraft)} onSave={() => panel.persistence.saveProviderKey("google")} />
+          <ProviderCredential provider="anthropic" label="Anthropic API key" value={state.anthropicApiKeyDraft} placeholder="sk-ant-..."
+            available={state.hasUsableAnthropicApiKey}
+            stored={state.hasStoredAnthropicApiKey || state.hasLocalAnthropicApiKey} test={state.providerConnectionTests.anthropic}
+            onInput={store.setAnthropicApiKeyDraft} onTest={() => panel.operational.handleTestProvider("anthropic", state.anthropicApiKeyDraft)} onSave={() => panel.persistence.saveProviderKey("anthropic")} />
+        </div>
+      </section>
+      <section id="composer-defaults" data-test-preference-row="composer-defaults" aria-labelledby="composer-defaults-heading" {...stylex.attrs(styles.section, styles.defaults)}>
+        <div {...stylex.attrs(styles.copy)}>
+          <h4 id="composer-defaults-heading" {...stylex.attrs(typography.section)}>Conversation defaults</h4>
+          <p {...stylex.attrs(typography.body, styles.muted)}>Provider and reasoning defaults apply to Editor and PadPilot unless that app has an override. Models, Fast mode, credentials and execution permissions stay app-specific.</p>
+        </div>
+        <div {...stylex.attrs(styles.defaultGrid)}>
+          <div id="provider-brand" data-test-preference-row="provider-brand" {...stylex.attrs(styles.copy)}>
+            <p {...stylex.attrs(typography.control)}>Preferred provider</p>
+            <SegmentedControl ariaLabel="Active provider" value={state.providerBrand}
+              options={[{ value: "gpt", label: "GPT" }, { value: "gemini", label: "Gemini" }, { value: "claude", label: "Claude" }]}
+              onChange={(value) => panel.persistence.updateAiDefaults(() => store.setProviderBrand(value))} />
+          </div>
+          <div {...stylex.attrs(styles.copy)}>
+            <p {...stylex.attrs(typography.control)}>Reasoning effort</p>
+            <SegmentedControl ariaLabel="Reasoning effort" value={state.selectedReasoningStrength}
+              options={[{ value: "low", label: "Low" }, { value: "medium", label: "Medium" }, { value: "high", label: "High" }]}
+              onChange={(value) => panel.persistence.updateAiDefaults(() => store.setSelectedReasoningStrength(value))} />
+          </div>
+        </div>
+        <CheckboxField label="Fast mode" description="Use the faster service tier where supported. Provider pricing may differ.">
+          <input type="checkbox" aria-label="Fast mode" checked={state.selectedFastMode} {...stylex.attrs(styles.checkbox)}
+            onInput={(event) => panel.persistence.updateSavedPreference(() => store.setSelectedFastMode(event.currentTarget.checked))} />
+        </CheckboxField>
+      </section>
+    </section>
   );
-    return (
-      <PreferenceSection title="AI & Providers" description="Credentials and composer defaults for AI runs.">
-        <PreferenceRow id="provider-keys" title="Provider API keys" description="Keys stay local to this machine; test checks provider model-list access without saving drafts.">
-          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap4).class}>
-            <PasswordKeyInput
-              label="OpenAI API key"
-              value={state.openAiApiKeyDraft}
-              placeholder="sk-..."
-              status={keyStatus("openai")}
-              testStatus={state.providerConnectionTests.openai.status}
-              testMessage={state.providerConnectionTests.openai.message}
-              testMessageId="openai"
-              onInput={(value) => updateSavedPreference(() => store.setOpenAiApiKeyDraft(value))}
-              onTest={() => handleTestProvider("openai", state.openAiApiKeyDraft)}
-            />
-            <PasswordKeyInput
-              label="Google API key"
-              value={state.googleApiKeyDraft}
-              placeholder="AIza..."
-              status={keyStatus("google")}
-              testStatus={state.providerConnectionTests.google.status}
-              testMessage={state.providerConnectionTests.google.message}
-              testMessageId="google"
-              onInput={(value) => updateSavedPreference(() => store.setGoogleApiKeyDraft(value))}
-              onTest={() => handleTestProvider("google", state.googleApiKeyDraft)}
-            />
-            <PasswordKeyInput
-              label="Anthropic API key"
-              value={state.anthropicApiKeyDraft}
-              placeholder="sk-ant-..."
-              status={keyStatus("anthropic")}
-              testStatus={state.providerConnectionTests.anthropic.status}
-              testMessage={state.providerConnectionTests.anthropic.message}
-              testMessageId="anthropic"
-              onInput={(value) => updateSavedPreference(() => store.setAnthropicApiKeyDraft(value))}
-              onTest={() => handleTestProvider("anthropic", state.anthropicApiKeyDraft)}
-            />
-          </div>
-        </PreferenceRow>
-        <PreferenceRow id="provider-brand" title="Active provider" description="Provider preference for new chat and model defaults.">
-          <SegmentedControl
-            ariaLabel="Active provider"
-            value={state.providerBrand}
-            options={[
-              { value: "gpt", label: "GPT" },
-              { value: "gemini", label: "Gemini" },
-              { value: "claude", label: "Claude" }
-            ]}
-            onChange={(value) => updateSavedPreference(() => store.setProviderBrand(value))}
-          />
-        </PreferenceRow>
-        <PreferenceRow id="composer-defaults" title="Composer defaults" description="Browser-local defaults for reasoning effort and fast mode.">
-          <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
-            <SegmentedControl
-              ariaLabel="Reasoning effort"
-              value={state.selectedReasoningStrength}
-              options={[
-                { value: "low", label: "Low" },
-                { value: "medium", label: "Medium" },
-                { value: "high", label: "High" }
-              ]}
-              onChange={(value) => updateSavedPreference(() => store.setSelectedReasoningStrength(value))}
-            />
-            {renderToggle(state.selectedFastMode, store.setSelectedFastMode, "Fast mode")}
-          </div>
-        </PreferenceRow>
-      </PreferenceSection>
-    );
-  }
-
+}

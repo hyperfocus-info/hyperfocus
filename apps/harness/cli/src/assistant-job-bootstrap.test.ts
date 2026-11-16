@@ -55,11 +55,28 @@ test("default job prompts push research toward skills, scripts, todos, and imple
   expect(prompts[0]).toContain("Bun + Happy DOM");
   expect(prompts.every((prompt) => prompt.includes("SolidJS + StyleX"))).toBe(true);
   expect(prompts.some((prompt) => prompt.includes("Tailwind"))).toBe(false);
-  expect(prompts.every((prompt) => prompt.includes("documentation comments for new functions and variables"))).toBe(true);
+  expect(prompts.some((prompt) => prompt.includes("documentation comments for new functions and variables"))).toBe(false);
   expect(prompts[1]).toContain("Clear stale completed or obsolete todos");
   expect(prompts[1]).toContain("TypeScript-script todos");
   expect(prompts[1]).toContain("most active todos should be app-code or automation-code");
   expect(prompts[2]).toContain("Prefer app/code/product behavior and TypeScript automation scripts");
   expect(prompts[2]).toContain("build or change something real");
-  expect(prompts[2]).toContain("shared primitives first");
+  expect(prompts[2]).toContain("existing shared primitives where applicable");
+});
+
+test("generated jobs preserve research-only and documentation-only deliverables", () => {
+  for (const jobPrompt of ["Read-only research: compare the APIs and report findings. Do not implement code.",
+    "Documentation-only: update the README guide. Do not create scripts or an app."]) {
+    const jobs = buildAssistantJobBootstrapJobs({ assistant: assistantFixture({ description: jobPrompt, jobPrompt }),
+      projectId: "project-1", now: new Date("2026-05-25T12:00:00.000Z") });
+    expect(jobs[2]?.name).toBe("Work todos");
+    for (const job of jobs) {
+      expect(job.definition.prompt).toContain(jobPrompt);
+      expect(job.definition.prompt).toContain("Explicit user requirements and exclusions remain authoritative");
+      expect(job.definition.prompt).not.toContain("most active todos should be app-code");
+      expect(job.definition.prompt).not.toContain("Eagerly build");
+      expect(job.definition.prompt).not.toContain("convert one todo into a TypeScript script");
+      expect(job.definition.prompt).not.toContain("SolidJS + StyleX");
+    }
+  }
 });

@@ -35,11 +35,11 @@ const styles = stylex.create({
     zIndex: 10000,
   },
   header: { alignItems: "center", display: "flex", justifyContent: "space-between", marginBlockEnd: tokens.space2 },
-  progress: { color: tokens.accent, fontFamily: tokens.fontMono, fontSize: "0.7rem", fontWeight: 750, letterSpacing: "0.07em", textTransform: "uppercase" },
+  progress: { color: tokens.accent, fontFamily: tokens.fontMono, fontSize: tokens.fontCaption, fontWeight: 750, letterSpacing: "normal", textTransform: "uppercase" },
   title: { margin: 0, fontSize: "1rem", lineHeight: 1.3, },
-  description: { marginBlock: tokens.space2, color: tokens.muted, fontSize: "0.82rem", lineHeight: 1.55, },
-  interaction: { padding: tokens.space2, borderRadius: tokens.radiusSmall, marginBlock: tokens.space3, backgroundColor: tokens.selection, color: tokens.foreground, fontSize: "0.75rem", },
-  unavailable: { marginBlock: tokens.space3, color: tokens.warning, fontSize: "0.75rem", },
+  description: { marginBlock: tokens.space2, color: tokens.muted, fontSize: tokens.fontBody, lineHeight: 1.55, },
+  interaction: { padding: tokens.space2, borderRadius: tokens.radiusSmall, marginBlock: tokens.space3, backgroundColor: tokens.selection, color: tokens.foreground, fontSize: tokens.fontCaption, },
+  unavailable: { marginBlock: tokens.space3, color: tokens.warning, fontSize: tokens.fontCaption, },
   footer: { gap: tokens.space2, display: "flex", justifyContent: "space-between", marginBlockStart: tokens.space4, },
 });
 

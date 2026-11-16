@@ -4,10 +4,10 @@ import { getThreadCleanupActivityAt, getThreadCleanupCandidates, parseThreadClea
 
 describe("thread cleanup helpers", () => {
   test("parses supported duration inputs", () => {
-    expect(parseThreadCleanupDuration("30d")).toEqual({ ok: true, ms: 30 * 24 * 60 * 60 * 1000 });
-    expect(parseThreadCleanupDuration("2w")).toEqual({ ok: true, ms: 2 * 7 * 24 * 60 * 60 * 1000 });
-    expect(parseThreadCleanupDuration("12h")).toEqual({ ok: true, ms: 12 * 60 * 60 * 1000 });
-    expect(parseThreadCleanupDuration("90m")).toEqual({ ok: true, ms: 90 * 60 * 1000 });
+    expect(parseThreadCleanupDuration("30d")).toEqual({ ok: true, ms: 2592000000 });
+    expect(parseThreadCleanupDuration("2w")).toEqual({ ok: true, ms: 1209600000 });
+    expect(parseThreadCleanupDuration("12h")).toEqual({ ok: true, ms: 43200000 });
+    expect(parseThreadCleanupDuration("90m")).toEqual({ ok: true, ms: 5400000 });
   });
 
   test("rejects invalid duration inputs", () => {
@@ -61,7 +61,7 @@ describe("thread cleanup helpers", () => {
       ]
     });
 
-    expect(getThreadCleanupCandidates([project], undefined, 7 * 24 * 60 * 60 * 1000, new Date("2026-02-01T00:00:00.000Z"))).toEqual([
+    expect(getThreadCleanupCandidates([project], undefined, 604800000, new Date("2026-02-01T00:00:00.000Z"))).toEqual([
       { projectId: "project-cleanup", threadId: "thread-old" }
     ]);
   });

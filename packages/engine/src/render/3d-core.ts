@@ -1,3 +1,5 @@
+import { requireCapacity, requireFinite } from "./validation/core-3d.ts";
+export { createFrustumPlanes3D, extractFrustumPlanes3D } from "./three/frustum.ts";
 /**
  * Dependency-free, data-oriented 3D foundation.
  *
@@ -53,19 +55,9 @@ const PLANE_LENGTH = 4;
 const FRUSTUM_PLANE_COUNT = 6;
 const EPSILON = 1e-12;
 
-function requireCapacity(value: number, label: string): number {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new RangeError(`${label} must be a non-negative integer; received ${value}.`);
-  }
-  return value;
-}
 
-function requireFinite(value: number, label: string): number {
-  if (!Number.isFinite(value)) {
-    throw new RangeError(`${label} must be finite; received ${value}.`);
-  }
-  return value;
-}
+
+
 
 function isCartesianVector3(value: Vector3Input): value is Readonly<{ x: number; y: number; z: number }> {
   return "x" in value;
@@ -286,35 +278,6 @@ export function lookAtViewMat4(
   return out;
 }
 
-export function createFrustumPlanes3D(): Float32Array {
-  return new Float32Array(FRUSTUM_PLANE_COUNT * PLANE_LENGTH);
-}
-
-/** Plane order: left, right, bottom, top, near, far. */
-export function extractFrustumPlanes3D(out: Float32Array, viewProjection: ArrayLike<number>): Float32Array {
-  if (out.length < FRUSTUM_PLANE_COUNT * PLANE_LENGTH || viewProjection.length < MATRIX_LENGTH) {
-    throw new RangeError("frustum extraction requires 24 output and 16 matrix elements.");
-  }
-  const rows = [0, 0, 1, 1, 2, 2] as const;
-  const signs = [1, -1, 1, -1, 1, -1] as const;
-  for (let plane = 0; plane < FRUSTUM_PLANE_COUNT; plane += 1) {
-    const row = rows[plane];
-    const sign = signs[plane];
-    const nx = viewProjection[3] + sign * viewProjection[row];
-    const ny = viewProjection[7] + sign * viewProjection[4 + row];
-    const nz = viewProjection[11] + sign * viewProjection[8 + row];
-    const d = viewProjection[15] + sign * viewProjection[12 + row];
-    const length = Math.hypot(nx, ny, nz);
-    if (length <= EPSILON) throw new RangeError(`frustum plane ${plane} is degenerate.`);
-    const offset = plane * PLANE_LENGTH;
-    out[offset] = nx / length;
-    out[offset + 1] = ny / length;
-    out[offset + 2] = nz / length;
-    out[offset + 3] = d / length;
-  }
-  return out;
-}
-
 export function sphereIntersectsFrustum3D(
   planes: ArrayLike<number>,
   x: number,
@@ -391,6 +354,10 @@ export type TransformHierarchy3D = {
   setPosition(index: number, x: number, y: number, z: number): void;
   setScale(index: number, x: number, y: number, z: number): void;
   setRotationQuaternion(index: number, x: number, y: number, z: number, w: number): void;
+  /** Same input/liveness checks as the setters, without renderer storage writes. */
+  validateTrs(index: number, position: ArrayLike<number>, rotation: ArrayLike<number>, scale: ArrayLike<number>): void;
+  /** Live handle assertion when an exclusive owner already validated numeric input. */
+  assertActive(index: number): void;
   updateWorldMatrices(): number;
   copyWorldMatrix(index: number, out: Float32Array): Float32Array;
 };
@@ -426,6 +393,17 @@ export function createTransformHierarchy3D(capacity: number): TransformHierarchy
     if (!Number.isInteger(index) || index < 0 || index >= capacity || active[index] === 0) {
       throw new RangeError(`${label} ${index} is not an active transform.`);
     }
+  };
+  const validateVector = (index: number, x: number, y: number, z: number) => {
+    requireActive(index, "transform");
+    requireFinite(x, "x");requireFinite(y, "y");requireFinite(z, "z");
+  };
+  const validateQuaternion = (index: number, x: number, y: number, z: number, w: number) => {
+    requireActive(index, "transform");
+    requireFinite(x, "x");requireFinite(y, "y");requireFinite(z, "z");requireFinite(w, "w");
+    const length = Math.hypot(x, y, z, w);
+    if (length <= EPSILON) throw new RangeError("rotation quaternion must have non-zero length.");
+    return length;
   };
   const unlink = (index: number): void => {
     const parent = parents[index];
@@ -505,27 +483,36 @@ export function createTransformHierarchy3D(capacity: number): TransformHierarchy
       markSubtreeDirty(index);
     },
     setPosition(index, x, y, z) {
-      requireActive(index, "transform");
+      validateVector(index, x, y, z);
       const offset = index * 3;
-      positions[offset] = requireFinite(x, "x"); positions[offset + 1] = requireFinite(y, "y"); positions[offset + 2] = requireFinite(z, "z");
+      x = Math.fround(x);y = Math.fround(y);z = Math.fround(z);
+      if (Object.is(positions[offset], x) && Object.is(positions[offset + 1], y) && Object.is(positions[offset + 2], z)) return;
+      positions[offset] = x; positions[offset + 1] = y; positions[offset + 2] = z;
       markSubtreeDirty(index);
     },
     setScale(index, x, y, z) {
-      requireActive(index, "transform");
+      validateVector(index, x, y, z);
       const offset = index * 3;
-      scales[offset] = requireFinite(x, "x"); scales[offset + 1] = requireFinite(y, "y"); scales[offset + 2] = requireFinite(z, "z");
+      x = Math.fround(x);y = Math.fround(y);z = Math.fround(z);
+      if (Object.is(scales[offset], x) && Object.is(scales[offset + 1], y) && Object.is(scales[offset + 2], z)) return;
+      scales[offset] = x; scales[offset + 1] = y; scales[offset + 2] = z;
       markSubtreeDirty(index);
     },
     setRotationQuaternion(index, x, y, z, w) {
-      requireActive(index, "transform");
-      x = requireFinite(x, "x"); y = requireFinite(y, "y"); z = requireFinite(z, "z"); w = requireFinite(w, "w");
-      const length = Math.hypot(x, y, z, w);
-      if (length <= EPSILON) throw new RangeError("rotation quaternion must have non-zero length.");
+      const length = validateQuaternion(index, x, y, z, w);
       const offset = index * 4, inverseLength = 1 / length;
-      rotations[offset] = x * inverseLength; rotations[offset + 1] = y * inverseLength;
-      rotations[offset + 2] = z * inverseLength; rotations[offset + 3] = w * inverseLength;
+      x = Math.fround(x * inverseLength);y = Math.fround(y * inverseLength);z = Math.fround(z * inverseLength);w = Math.fround(w * inverseLength);
+      if (Object.is(rotations[offset], x) && Object.is(rotations[offset + 1], y) && Object.is(rotations[offset + 2], z) && Object.is(rotations[offset + 3], w)) return;
+      rotations[offset] = x; rotations[offset + 1] = y;
+      rotations[offset + 2] = z; rotations[offset + 3] = w;
       markSubtreeDirty(index);
     },
+    validateTrs(index, position, rotation, scale) {
+      validateVector(index, position[0]!, position[1]!, position[2]!);
+      validateVector(index, scale[0]!, scale[1]!, scale[2]!);
+      validateQuaternion(index, rotation[0]!, rotation[1]!, rotation[2]!, rotation[3]!);
+    },
+    assertActive(index) { requireActive(index, 'transform'); },
     updateWorldMatrices() {
       let updated = 0;
       for (let index = 0; index < capacity; index += 1) {
@@ -571,24 +558,27 @@ export function createTransformHierarchy3D(capacity: number): TransformHierarchy
   return hierarchy;
 }
 
-function transformHierarchy3DFactory(capacity: number): TransformHierarchy3D {
-  return createTransformHierarchy3D(capacity);
-}
-
-function isTransformHierarchy3DFactory(value: unknown): value is TransformHierarchy3DFactory {
-  if (typeof value !== "function") return false;
-  try {
-    Reflect.construct(Object, [], value);
-    return true;
-  } catch {
-    return false;
+// This initializer mutates only its own new compatibility function.
+export const TransformHierarchy3D = /* @__PURE__ */ (() => {
+  function transformHierarchy3DFactory(capacity: number): TransformHierarchy3D {
+    return createTransformHierarchy3D(capacity);
   }
-}
 
-function requireTransformHierarchy3DFactory(value: unknown): TransformHierarchy3DFactory {
-  if (!isTransformHierarchy3DFactory(value)) throw new Error("Transform hierarchy factory must be constructable");
-  return value;
-}
+  function isTransformHierarchy3DFactory(value: unknown): value is TransformHierarchy3DFactory {
+    if (typeof value !== "function") return false;
+    try {
+      Reflect.construct(Object, [], value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
-Object.defineProperty(transformHierarchy3DFactory, "prototype", { value: transformHierarchy3DPrototype });
-export const TransformHierarchy3D = requireTransformHierarchy3DFactory(transformHierarchy3DFactory);
+  function requireTransformHierarchy3DFactory(value: unknown): TransformHierarchy3DFactory {
+    if (!isTransformHierarchy3DFactory(value)) throw new Error("Transform hierarchy factory must be constructable");
+    return value;
+  }
+
+  Object.defineProperty(transformHierarchy3DFactory, "prototype", { value: transformHierarchy3DPrototype });
+  return requireTransformHierarchy3DFactory(transformHierarchy3DFactory);
+})();

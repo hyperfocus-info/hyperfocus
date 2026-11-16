@@ -1,7 +1,7 @@
 const DEFAULT_ATTACH_TOKEN_CAP = 256;
 const MAX_ATTACH_GAP_BYTES = 2_000_000;
-const MAX_ATTACH_REPLAY_BYTES = 8 * 1024 * 1024;
-const ATTACH_REPLAY_CHUNK_BYTES = 64 * 1024;
+const MAX_ATTACH_REPLAY_BYTES = 8388608;
+const ATTACH_REPLAY_CHUNK_BYTES = 65536;
 const MAX_ATTACH_ATTEMPTS = 256;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

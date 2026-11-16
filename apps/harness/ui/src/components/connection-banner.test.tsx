@@ -19,7 +19,7 @@ createUiTest("ConnectionBanner", () => {
 
     expect(banner?.getAttribute("role")).toBe("status");
     expect(banner?.getAttribute("data-connection-state")).toBe("error");
-    expect(banner?.textContent).toContain("error");
+    expect(banner?.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe("Connection: error");
     expect(container.querySelector("[data-test-connection-error]")?.textContent).toContain("Harness is unavailable");
   });
 

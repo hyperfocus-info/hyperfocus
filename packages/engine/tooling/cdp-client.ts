@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 type CdpPendingRequest = {
   resolve(value: unknown): void;
   reject(error: Error): void;
@@ -157,9 +158,7 @@ export async function connectCdpSession(url: string, closeReason: string, timeou
   return createCdpSession(socket, closeReason);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+
 
 function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));

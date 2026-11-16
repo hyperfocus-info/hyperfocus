@@ -1,4 +1,4 @@
-import type { Subprocess } from "bun";
+import { spawnBackgroundProcess, terminateProcessTree as terminateOwnedProcessTree, type OwnedProcess } from "@hyperfocus/desktop-runtime/process";
 import { createBoundedOutputBuffer, formatOutputCapExceeded } from "../bounded-output-buffer";
 import { buildToolchainPath } from "./toolchain";
 
@@ -19,7 +19,7 @@ export type CliProcessExecutionResult = {
 };
 
 export type InteractiveCliProcess = {
-  readonly proc: Subprocess<"pipe", "pipe", "pipe">;
+  readonly proc: OwnedProcess;
   readonly stdoutText: () => string;
   readonly stderrText: () => string;
   readonly settled: Promise<{ exitCode: number }>;
@@ -51,18 +51,8 @@ type InteractiveOptions = {
   onExit?: (exitCode: number) => void;
 };
 
-type ProcessKillSignal = Parameters<Subprocess<"ignore", "ignore", "ignore">["kill"]>[0];
-
-type KillableProcess = {
-  readonly pid: number;
-  readonly exitCode: number | null;
-  readonly exited: Promise<number>;
-  kill(signal?: ProcessKillSignal): void;
-};
-
 const WATCHDOG_POLL_MS = 250;
-const FORCE_KILL_DELAY_MS = 3000;
-export const CLI_PROCESS_OUTPUT_CAP_BYTES = 2 * 1024 * 1024;
+export const CLI_PROCESS_OUTPUT_CAP_BYTES = 2097152;
 
 export function buildCliProcessEnv(input: CliProcessEnvInput) {
   const pathValue = buildToolchainPath({ basePath: Bun.env.PATH }) ?? Bun.env.PATH ?? "";
@@ -89,7 +79,8 @@ export type CliProcessManager = {
 
 export function createCliProcessManager(): CliProcessManager {
   async function runNonInteractive(options: NonInteractiveOptions): Promise<CliProcessExecutionResult> {
-    const proc = Bun.spawn({
+    options.abortSignal?.throwIfAborted();
+    const proc = spawnBackgroundProcess({
       cmd: options.cmd,
       cwd: options.cwd,
       env: buildCliProcessEnv({
@@ -97,7 +88,7 @@ export function createCliProcessManager(): CliProcessManager {
         rows: options.rows,
         extraEnv: options.env
       }),
-      stdin: "pipe",
+      stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe"
     });
@@ -162,8 +153,7 @@ export function createCliProcessManager(): CliProcessManager {
     options.abortSignal?.addEventListener("abort", abortHandler, { once: true });
 
     try {
-      const exitCode = await proc.exited;
-      await Promise.all([stdoutReader, stderrReader]);
+      const [exitCode] = await Promise.all([proc.exited, stdoutReader, stderrReader]);
       settled = true;
       clearInterval(watchdog);
       options.abortSignal?.removeEventListener("abort", abortHandler);
@@ -180,11 +170,12 @@ export function createCliProcessManager(): CliProcessManager {
       settled = true;
       clearInterval(watchdog);
       options.abortSignal?.removeEventListener("abort", abortHandler);
+      if (proc.exitCode === null) await terminateProcessTree(proc);
     }
   }
 
   function startInteractive(options: InteractiveOptions): InteractiveCliProcess {
-    const proc = Bun.spawn({
+    const proc = spawnBackgroundProcess({
       cmd: options.cmd,
       cwd: options.cwd,
       env: buildCliProcessEnv({
@@ -284,57 +275,6 @@ function isStreamReaderCancelledError(error: unknown) {
   return error instanceof Error && error.name === "AbortError" && error.message.includes("releaseLock");
 }
 
-export async function terminateProcessTree(proc: KillableProcess) {
-  if (process.platform === "win32") {
-    await terminateWindowsProcessTree(proc);
-    return;
-  }
-
-  try {
-    proc.kill();
-  } catch {
-    return;
-  }
-
-  await Promise.race([
-    proc.exited,
-    new Promise((resolve) => setTimeout(resolve, FORCE_KILL_DELAY_MS))
-  ]);
-
-  if (proc.exitCode === null) {
-    try {
-      proc.kill("SIGKILL");
-    } catch {
-      return;
-    }
-  }
+export function terminateProcessTree(proc: OwnedProcess) {
+  return terminateOwnedProcessTree({ process: proc });
 }
-
-async function terminateWindowsProcessTree(proc: KillableProcess) {
-  if (proc.exitCode !== null) {
-    return;
-  }
-
-  const killProc = Bun.spawn({
-    cmd: buildWindowsKillTreeCommand(proc.pid),
-    stdout: "ignore",
-    stderr: "ignore"
-  });
-  await Promise.race([killProc.exited, new Promise((resolve) => setTimeout(resolve, FORCE_KILL_DELAY_MS))]);
-
-  if (proc.exitCode === null) {
-    try {
-      proc.kill("SIGKILL");
-    } catch {
-      return;
-    }
-  }
-}
-
-function buildWindowsKillTreeCommand(pid: number) {
-  return ["taskkill", "/PID", String(pid), "/T", "/F"];
-}
-
-export const testExports = {
-  buildWindowsKillTreeCommand
-};

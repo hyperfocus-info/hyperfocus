@@ -1,90 +1,25 @@
 ---
 name: ui-audit
-description: Deep screenshot-backed UI/UX audit workflow for apps, sites, dashboards, tools, games, and harness interfaces. Use when Codex needs to deeply scan an interface, screenshot pages, tabs, menus, dialogs, drawers, trace or debug panels, inspect visual quality, evaluate polish or "magic", create a holistic UX analysis doc, or produce a high-fidelity UX polish plan.
+description: Audit an existing interface with visual evidence when a UX review or polish plan is requested. Report findings without implementing changes unless requested; isolated screenshot capture uses screenshot.
 ---
 
 # UI Audit
 
-## Goal
+Agree scope from the request and local product context. Inspect the relevant user
+journey, its actual screenshots, and interaction behavior; use `screenshot` when
+capture help is needed. Read code when it helps explain a finding. A focused review
+does not require every route, viewport, overlay, or loading state.
 
-Audit the real interface, not an imagined one. Build visual ground truth first, inspect screenshots before judging, then produce evidence-backed findings and a concrete polish plan.
+Judge against the user's goal, supplied references, and the existing design system.
+Distinguish a demonstrated usability defect from a subjective suggestion. Do not
+invent a preferred palette, radius, density, or definition of "polish."
 
-Keep this skill generic. Put project-specific findings in the project's audit artifact;
-keep only durable cross-project observations in `LEARNINGS.md`.
+For a broad audit or an unfamiliar interaction, use the relevant questions in
+[the rubric](references/ui-audit-rubric.md). Choose additional states based on the
+task and likely failure: narrow layouts, keyboard use, long content, or recovery.
 
-## Workflow
-
-1. Discover how the app runs and how screenshots are captured. Prefer repo scripts, docs, package metadata, and existing test helpers before inventing browser commands.
-2. Start or connect to the app without changing repo-tracked files unless the user asked for implementation work.
-3. Enumerate the surface map: routes, primary tabs, secondary tabs, drawers, sheets, dialogs, popovers, menus, trace/debug panels, empty states, loading states, error states, success states, and long-content states.
-4. Capture desktop and mobile screenshots unless the user narrows scope. Add tablet when responsive layout is a meaningful risk.
-5. Open interactive surfaces before capture: navigation tabs, filters, sort menus, creation/edit dialogs, help/tutorial overlays, notification inboxes, trace panels, and developer/debug menus.
-6. Read each screenshot before diagnosing. Use image inspection, visible text, and DOM text snapshots when useful.
-7. Inspect UI code only after visual ground truth, and only to explain causes or make an implementation-ready plan.
-8. Separate observed evidence from inference. Do not claim a defect unless the screenshot, DOM, console, or code supports it.
-9. Rate findings by severity:
-   - P0: broken, blocked, unusable, inaccessible, or content clipped.
-   - P1: major UX/polish issue that harms core workflow speed, trust, or clarity.
-   - P2: quality issue that makes the product feel less refined.
-   - P3: small polish or enhancement.
-10. If writing docs, keep code references minimal and focus on product, UX, and workflow concepts.
-
-## Evidence Checklist
-
-Capture or explicitly note coverage for:
-
-- desktop, mobile, and any requested viewport
-- first screen and primary navigation
-- every top-level page or tab
-- important secondary tabs and segmented views
-- sidebars, sheets, drawers, and responsive nav
-- dialogs, modals, popovers, menus, and tooltips
-- trace, debug, logs, developer panels, and raw-output areas
-- empty, loading, success, warning, and error states
-- long lists, overflow, scroll regions, and dense content
-- form validation, destructive actions, and disabled states
-- keyboard focus, escape behavior, and visible focus rings when relevant
-- console errors and browser warnings when available
-
-## Audit Rubric
-
-Read `references/ui-audit-rubric.md` when preparing findings or a polish plan. Use it as the scoring lens, not as a rigid template.
-
-## Output Contract
-
-For a scan or audit, include:
-
-- artifact path for screenshots and trace notes
-- surface coverage summary
-- findings first, sorted by severity
-- evidence links or screenshot filenames for each important finding
-- clear distinction between observed evidence and inferred cause
-- residual unknowns or states not captured
-
-For a holistic analysis doc, include:
-
-- scan scope and date
-- product/experience thesis
-- surface-by-surface notes
-- severity-ranked gaps
-- accessibility and responsive notes
-- high-level UX principles for the product
-- implementation-ready polish roadmap
-
-For a high-fidelity polish plan, specify:
-
-- exact surfaces to change
-- visual treatment and interaction behavior
-- information hierarchy and content changes
-- responsive/mobile behavior
-- accessibility expectations
-- tests and screenshot verification
-- acceptance criteria that leave no design decisions open
-
-## Writing Standards
-
-- Be direct and evidence-backed.
-- Avoid vague praise or taste-only critique.
-- Prefer concrete UI language: hierarchy, contrast, density, affordance, feedback, wayfinding, recovery, latency, focus, overflow.
-- Treat "magic" as instant orientation, confident control, visible system intelligence, graceful recovery, and small moments of delight.
-- Do not overfit the skill to one app, stack, palette, or domain.
+Return findings by impact, with evidence and the affected action. Note inferred
+causes and important coverage gaps. A plan should identify the intended behavior
+and acceptance evidence; leave reversible design details open where several
+solutions work. Create a separate report only when requested or useful for a
+substantial review. Audit-only work does not authorize implementation.

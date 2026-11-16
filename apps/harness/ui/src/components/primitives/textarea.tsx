@@ -1,6 +1,7 @@
 /** @jsxImportSource solid-js */
 import type { JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import { cn } from "../../lib/utils";
 
 const styles = stylex.create({
@@ -12,17 +13,21 @@ const styles = stylex.create({
     outline: "none",
     paddingBlock: '0.625rem',
     paddingInline: '0.75rem',
-    backgroundColor: "rgb(255 255 255 / 0.7)",
+    backgroundColor: "var(--panel)",
     boxShadow: { default: "0 1px 2px rgb(0 0 0 / 0.05)", ":focus-visible": "0 0 0 2px var(--ring)" },
+    boxSizing: "border-box",
     color: "var(--foreground)",
     cursor: { default: "text", ":disabled": "not-allowed" },
     display: "flex",
-    fontSize: "0.75rem",
+    fontSize: tokens.fontControl,
     opacity: { default: 1, ":disabled": 0.5 },
     transitionDuration: "150ms",
     transitionProperty: "color, background-color, border-color, box-shadow",
+    maxWidth: "100%",
     minHeight: "4.2rem",
+    minWidth: 0,
     width: "100%",
+    "::placeholder": { color: "var(--muted)", opacity: 1 },
   }
 });
 

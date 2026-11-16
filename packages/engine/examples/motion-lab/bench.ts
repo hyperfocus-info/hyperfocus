@@ -1,3 +1,4 @@
+import { positiveInteger, nonNegativeInteger, positiveNumber } from "./src/benchmark-options.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -28,7 +29,7 @@ const controllers = Array.from({ length: options.characters }, (_, index) => {
 });
 
 for (let frame = 0; frame < options.warmup; frame += 1) {
-  for (const controller of controllers) controller.update(1 / 60);
+  for (const controller of controllers) controller.update(0.016666666666666666);
 }
 
 const samples = new Float64Array(options.frames);
@@ -38,7 +39,7 @@ let invalidPoses = 0;
 for (let frame = 0; frame < options.frames; frame += 1) {
   const started = performance.now();
   for (const controller of controllers) {
-    const state = controller.update(1 / 60);
+    const state = controller.update(0.016666666666666666);
     maximumFootSlip = Math.max(maximumFootSlip, state.metrics.footSlipDistance);
     maximumVerticalError = Math.max(maximumVerticalError, state.metrics.plantedVerticalError);
     if (!state.metrics.poseFinite) invalidPoses += 1;
@@ -136,22 +137,4 @@ function findSkinnedMesh(gltf: GLTF): SkinnedMesh {
 
 function percentile(ordered: readonly number[], ratio: number) {
   return ordered[Math.min(ordered.length - 1, Math.floor((ordered.length - 1) * ratio))] ?? 0;
-}
-
-function positiveInteger(value: string | undefined, label: string) {
-  const number = Number(value);
-  if (!Number.isSafeInteger(number) || number <= 0) throw new Error(`${label} must be a positive integer`);
-  return number;
-}
-
-function nonNegativeInteger(value: string | undefined, label: string) {
-  const number = Number(value);
-  if (!Number.isSafeInteger(number) || number < 0) throw new Error(`${label} must be a non-negative integer`);
-  return number;
-}
-
-function positiveNumber(value: string | undefined, label: string) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0) throw new Error(`${label} must be a positive number`);
-  return number;
 }

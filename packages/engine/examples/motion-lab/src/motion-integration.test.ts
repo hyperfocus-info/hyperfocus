@@ -120,11 +120,11 @@ describe("motion laboratory integration seam", () => {
     const rig = createTestRig(true);
     const adapter = adapterFor(rig, "canonical");
     const signals = resolveLabSignals("forward", { speedMetersPerSecond: 2.4 });
-    for (let step = 0; step < 90; step += 1) adapter.step(1 / 60, signals);
+    for (let step = 0; step < 90; step += 1) adapter.step(0.016666666666666666, signals);
     const first = adapter.snapshot();
 
     adapter.reset();
-    for (let step = 0; step < 90; step += 1) adapter.step(1 / 60, signals);
+    for (let step = 0; step < 90; step += 1) adapter.step(0.016666666666666666, signals);
     const second = adapter.snapshot();
 
     expect(first.metrics.poseChecksum).toBe(second.metrics.poseChecksum);
@@ -140,7 +140,7 @@ describe("motion laboratory integration seam", () => {
   test("incomplete intermediate joints gate IK while preserving base locomotion", () => {
     const rig = createTestRig(false);
     const adapter = adapterFor(rig, "incomplete");
-    adapter.step(1 / 60, resolveLabSignals("strafe"));
+    adapter.step(0.016666666666666666, resolveLabSignals("strafe"));
     const snapshot = adapter.snapshot();
 
     expect(snapshot.capabilities.proceduralLocomotion).toBe(true);
@@ -157,7 +157,7 @@ describe("motion laboratory integration seam", () => {
   test("renamed joints map by stable skin ordinal and remain reviewable", () => {
     const rig = createTestRig(true, true);
     const adapter = adapterFor(rig, "renamed-bones");
-    adapter.step(1 / 60, resolveLabSignals("aim"));
+    adapter.step(0.016666666666666666, resolveLabSignals("aim"));
     const snapshot = adapter.snapshot();
 
     expect(snapshot.capabilities.proceduralLocomotion).toBe(true);

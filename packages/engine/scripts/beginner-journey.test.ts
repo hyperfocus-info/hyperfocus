@@ -14,6 +14,7 @@ describe("verified beginner journey", () => {
     expect(evidence.errorEvents).toBeGreaterThanOrEqual(1);
     expect(evidence.recoveredLastGoodBuild).toBe(true);
     expect(evidence.releaseFileCount).toBe(1);
+    expect(evidence.releaseReceiptVerified).toBe(true);
     expect(evidence.standaloneBytes).toBeGreaterThan(1_000);
     expect(evidence.workspaceRemoved).toBe(true);
   }, 20_000);

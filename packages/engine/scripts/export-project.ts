@@ -1,3 +1,5 @@
+import { compareText } from "@hyperfocus/utilities/text";
+import { errorMessage } from "@hyperfocus/utilities/text";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
@@ -27,8 +29,8 @@ export {
   type NeutralExportManifest,
 } from "../src/project/neutral-export.ts";
 
-const MAX_PROJECT_BYTES = 10 * 1024 * 1024;
-const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
+const MAX_PROJECT_BYTES = 10485760;
+const MAX_ARCHIVE_BYTES = 536870912;
 const NEUTRAL_COMPONENTS = new Set(["transform", "sprite", "collider", "input", "camera", "audio", "ui"]);
 
 export type NeutralExportResult = {
@@ -114,7 +116,7 @@ function validateNeutralProject(project: NeutralExportProject): void {
 
 async function assertCanonicalPair(directory: string): Promise<void> {
   const entries = await readdir(directory, { withFileTypes: true }).catch((cause) => {
-    throw new Error(`Cannot read canonical project directory ${directory}: ${errorMessage(cause)}`);
+    throw new Error(`Cannot read canonical project directory ${directory}: ${errorMessage(cause, { stringify: true })}`);
   });
   const names = entries.map((entry) => entry.name).sort(compareText);
   const expected = [HYPERFOCUS_ASSETS_FILENAME, HYPERFOCUS_PROJECT_FILENAME].sort(compareText);
@@ -132,13 +134,9 @@ function resolveExportPath(root: string, portablePath: string): string {
   return target;
 }
 
-function compareText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
 
-function errorMessage(value: unknown): string {
-  return value instanceof Error ? value.message : String(value);
-}
+
+
 
 export function neutralExportCliHelp(): string {
   return [
@@ -184,7 +182,7 @@ if (import.meta.main) {
   try {
     process.exitCode = await runNeutralExportCli(process.argv.slice(2));
   } catch (cause) {
-    console.error(`Neutral export error: ${errorMessage(cause)}`);
+    console.error(`Neutral export error: ${errorMessage(cause, { stringify: true })}`);
     console.error("Run with --help for usage and output details.");
     process.exitCode = 1;
   }

@@ -25,6 +25,7 @@ export function readPersistedIdeWindowState() {
   }
   try {
     const parsed = JSON.parse(window.localStorage.getItem(IDE_WINDOW_STORAGE_KEY) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fallback;
     return {
       open: typeof parsed.open === "boolean" ? parsed.open : fallback.open,
       maximized: typeof parsed.maximized === "boolean" ? parsed.maximized : fallback.maximized,
@@ -59,4 +60,3 @@ function normalizeIdeWindowBounds(value: unknown, fallback: IdeWindowBounds): Id
 function clampWindowNumber(value: unknown, min: number, max: number, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 }
-

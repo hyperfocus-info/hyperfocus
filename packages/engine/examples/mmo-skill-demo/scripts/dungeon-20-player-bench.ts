@@ -1,3 +1,4 @@
+import { roundDecimal } from "@hyperfocus/utilities/math";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { decodeReplicationFrame, encodeSnapshot } from "@hyperfocus/engine/protocol";
@@ -122,7 +123,7 @@ function createServer(options: { now?: () => number; binaryReplication?: boolean
       ? {
           snapshotRate: 1,
           deltaRate: 10,
-          maxBytesPerClientPerSecond: 24 * 1024,
+          maxBytesPerClientPerSecond: 24576,
           binary: true,
           maxClientsPerTick: 100,
           spread: "round-robin",
@@ -132,10 +133,7 @@ function createServer(options: { now?: () => number; binaryReplication?: boolean
   });
 }
 
-function round(value: number, digits = 3) {
-  const scale = 10 ** digits;
-  return Math.round(value * scale) / scale;
-}
+function round(value: number, digits = 3) { return roundDecimal(value, digits); }
 
 function memorySnapshot(): MemorySnapshot {
   const memory = process.memoryUsage();

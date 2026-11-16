@@ -1,8 +1,9 @@
-import { describe, expect, it } from "bun:test";
 import { transformFileAsync } from "@babel/core";
 import typescriptPreset from "@babel/preset-typescript";
 import stylexBabelPlugin from "@stylexjs/babel-plugin";
 import solidPreset from "babel-preset-solid";
+import { describe,expect,it } from "bun:test";
+import { toWindowsPath } from "../utils/tests/style-policy";
 import { readStylexRules } from "../utils/tests/stylex-test-utils";
 
 const terminalSources = [
@@ -64,7 +65,3 @@ describe("Terminal StyleX boundary", () => {
     expect(css).toContain("@layer hyperfocus.priority");
   });
 });
-
-function toWindowsPath(pathname: string) {
-  return pathname.replace(/^\/(?:[A-Za-z]:)/, (drive) => drive.slice(1));
-}

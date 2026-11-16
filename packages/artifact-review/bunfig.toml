@@ -1,0 +1,3 @@
+# Native HTTP review tests must not receive the root application's DOM preload.
+[test]
+preload = []

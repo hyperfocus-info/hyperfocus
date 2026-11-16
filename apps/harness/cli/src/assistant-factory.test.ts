@@ -1,13 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import {
+createAssistantAssetRefId,createAssistantId,createAssistantQuestionId,createBackgroundJobId,createProjectId,
+createThreadId,type Assistant,type BackgroundJob
+} from "@hyperfocus/ai-core/protocol";
 import { Database } from "bun:sqlite";
+import { describe,expect,test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { createAssistantAssetRefId, createAssistantId, createAssistantQuestionId, createBackgroundJobId, createProjectId,
-  createThreadId, type Assistant, type BackgroundJob } from "@hyperfocus/ai-core/protocol";
-import { bootstrapAssistantJobsIfNone, createOrUpdateAssistantWithJobs } from "./assistant-factory";
+import { bootstrapAssistantJobsIfNone,createOrUpdateAssistantWithJobs } from "./assistant-factory";
 import { findExistingAssistantForThreadIntent } from "./server/automation/assistant-actions";
-import { createWorkspaceRepository } from "./workspace-repository";
+import { assistant } from "./test-support/fixtures/assistant-results";
 import { resolveHarnessTestTempRoot } from "./test-support/test-temp-root";
+import { createWorkspaceRepository } from "./workspace-repository";
 
 function createTempDir() {
   const tempRoot = resolveHarnessTestTempRoot();
@@ -29,10 +32,7 @@ describe("assistant factory", () => {
   test("finds exact thread-intent identity beyond the bounded assistant summary", () => {
     const repository = createRepository();
     const targetId = createAssistantId();
-    const assistant = (id: string, name: string, createdAt: string): Assistant => ({ id, name, scope: "global",
-      personalityPrompt: "Be precise.", jobPrompt: "Maintain exact intent identity.", agentId: "pi", runState: "active",
-      bootstrapState: "completed", failureStreakCount: 0, circuitBreakerState: "closed", unreadQuestionCount: 0,
-      createdAt, updatedAt: createdAt });
+
     repository.saveAssistant(assistant(targetId, "Exact Intent", "2000-01-01T00:00:00.000Z"));
     for (let index = 0; index < 512; index += 1) repository.saveAssistant(assistant(
       createAssistantId(), `Recent ${index}`, new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString()));
@@ -295,7 +295,7 @@ describe("assistant factory", () => {
       assistantId: historicalAssistantId, automationThreadId: createThreadId(), kind: "ai-routine", name: "Reassigned job",
       status: "enabled", riskLevel: "safe", definition: { kind: "ai-routine", prompt: "Test deletion." },
       schedule: { type: "one-off", runAt: now, sourceText: "now" }, scheduleInput: "now", createdAt: now, updatedAt: now };
-    const job = required(repository.saveBackgroundJob(jobInput).jobs[0], "saved background job");
+    const job = repository.saveBackgroundJob(jobInput);
     repository.createAgentRun(project.id, "linked work", "openai/gpt-5.4", job.automationThreadId);
     const linkedAgentRun = required(repository.getLatestThreadRun(project.id, job.automationThreadId), "linked agent run");
     repository.setAgentRunStatus(project.id, linkedAgentRun.id, "running-main");

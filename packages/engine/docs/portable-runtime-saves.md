@@ -34,7 +34,7 @@ Invalid declarations block editor and CLI builds. Corrupt, future-version, or mi
 
 ## Standalone API and storage
 
-When a save declaration exists, `globalThis.__hyperfocusPlayable` exposes asynchronous `save`, `load`, `deleteSaveSlot`, `deleteSaveProfile`, `exportSaveProfile`, and `importSaveProfile` methods, plus synchronous `reset` and the normalized `savePolicy`. A game UI can call these methods or bind equivalent host controls.
+When a save declaration exists, `globalThis.__hyperfocusPlayable` exposes asynchronous `save`, `load`, `deleteSaveSlot`, `deleteSaveProfile`, `exportSaveProfile`, and `importSaveProfile` methods, plus synchronous `reset` and the normalized `savePolicy`. The first-party 2D standalone player also provides **Save and restore progress** controls for saving, restoring, exporting and importing these same profiles. Import checks the declared byte limit before reading the file and requires an explicit checkbox to replace existing progress. Named policies expose a slot selector. A game UI can call the same methods or bind equivalent host controls.
 
 Standalone builds store checksummed profile envelopes in IndexedDB. Commits use a bounded optimistic compare-and-swap transaction, so concurrent page instances retry instead of silently losing an update. Every read and write rechecks the declared byte limit. Profiles are keyed by the portable project ID and local profile ID.
 

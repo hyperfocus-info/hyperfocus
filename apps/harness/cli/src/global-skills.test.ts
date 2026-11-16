@@ -12,6 +12,14 @@ describe("global skills", () => {
     const sourceSkill = path.join(sourceRoot, ".agents", "skills", "caveman");
     mkdirSync(sourceSkill, { recursive: true });
     writeFileSync(path.join(sourceSkill, "SKILL.md"), "# caveman\n");
+    mkdirSync(path.join(sourceSkill, "scripts", "__pycache__"), { recursive: true });
+    writeFileSync(path.join(sourceSkill, "scripts", "__pycache__", "helper.cpython-312.pyc"), "generated");
+    writeFileSync(path.join(sourceSkill, "scripts", "helper.pyo"), "generated");
+    writeFileSync(path.join(sourceSkill, "scripts", "compiled.pyc"), "generated");
+    writeFileSync(path.join(sourceSkill, "scripts", "helper.py"), "print('source')\n");
+    const userCache = path.join(globalRoot, "caveman", "scripts", "local.pyc");
+    mkdirSync(path.dirname(userCache), { recursive: true });
+    writeFileSync(userCache, "existing local cache");
 
     try {
       const synced = syncBundledSkillsToGlobalRoot({
@@ -23,6 +31,11 @@ describe("global skills", () => {
       expect(synced).toEqual(["caveman"]);
       expect(existsSync(path.join(globalRoot, "caveman", "SKILL.md"))).toBe(true);
       expect(readFileSync(path.join(globalRoot, "caveman", "SKILL.md"), "utf8")).toBe("# caveman\n");
+      expect(existsSync(path.join(globalRoot, "caveman", "scripts", "__pycache__"))).toBe(false);
+      expect(existsSync(path.join(globalRoot, "caveman", "scripts", "helper.pyo"))).toBe(false);
+      expect(existsSync(path.join(globalRoot, "caveman", "scripts", "compiled.pyc"))).toBe(false);
+      expect(readFileSync(path.join(globalRoot, "caveman", "scripts", "helper.py"), "utf8")).toBe("print('source')\n");
+      expect(readFileSync(userCache, "utf8")).toBe("existing local cache");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

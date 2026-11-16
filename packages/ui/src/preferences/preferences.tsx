@@ -1,44 +1,45 @@
+import { Tooltip } from "../primitives/tooltip";
 import * as stylex from "@stylexjs/stylex";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, createUniqueId, For, Show } from "solid-js";
+import { CheckboxField } from "../form/form";
+import { Input } from "../form/input";
+import { SettingsWorkspace } from "./settings-workspace";
+import { typography } from "../theme/typography";
+import { sharedStyles } from "../theme/styles";
 import { Button } from "../primitives/button";
+import { SelectControl } from "../primitives/selection/select-control";
 import { StatusChip } from "../primitives/status-chip";
+import { SegmentedControl } from "../primitives/segmented-control";
 import { tokens } from "../theme/tokens.stylex";
 import { filterPreferences, type PreferenceDefinition, type PreferenceSectionDefinition, type PreferenceValue, type PreferenceValues } from "./model";
 
 const styles = stylex.create({
-  root: { backgroundColor: tokens.panel, color: tokens.foreground, display: "grid", gridTemplateColumns: { default: "minmax(12rem, 15rem) minmax(0, 1fr)", "@media (max-width: 760px)": "minmax(0, 1fr)" }, minHeight: "30rem", minWidth: 0 },
-  navigation: { padding: tokens.space3, backgroundColor: tokens.background, display: "flex", flexDirection: "column", borderBottomColor: { default: "transparent", "@media (max-width: 760px)": tokens.border }, borderBottomStyle: "solid", borderBottomWidth: { default: 0, "@media (max-width: 760px)": "1px" }, borderRightColor: tokens.border, borderRightStyle: "solid", borderRightWidth: { default: "1px", "@media (max-width: 760px)": 0 }, minWidth: 0, },
-  searchLabel: { display: "block" },
-  search: { borderColor: tokens.border, borderRadius: tokens.radiusSmall, borderStyle: "solid", borderWidth: "1px", outline: { default: "none", ":focus": `2px solid ${tokens.focus}` }, paddingInline: tokens.space3, backgroundColor: tokens.panelRaised, color: tokens.foreground, fontFamily: tokens.fontUi, minHeight: "2.35rem", width: "100%", },
-  sectionList: { gap: tokens.space1, display: { default: "grid", "@media (max-width: 760px)": "flex" }, marginTop: tokens.space3, overflowX: { default: "visible", "@media (max-width: 760px)": "auto" }, },
-  sectionButton: { padding: tokens.space2, borderColor: "transparent", borderRadius: tokens.radiusSmall, borderStyle: "solid", borderWidth: "1px", gap: tokens.space2, alignItems: "center", backgroundColor: { default: "transparent", ":hover": tokens.selection }, color: tokens.muted, cursor: "pointer", display: "flex", flexShrink: 0, justifyContent: "space-between", textAlign: "left", minHeight: "3.25rem", minWidth: { default: 0, "@media (max-width: 760px)": "10rem" }, width: { default: "100%", "@media (max-width: 760px)": "auto" }, },
-  sectionCopy: { gap: "0.18rem", display: "grid", lineHeight: 1.25, minWidth: 0, },
-  activeSection: { borderColor: tokens.borderStrong, backgroundColor: tokens.selection, color: tokens.foreground, },
-  count: { fontFamily: tokens.fontMono, fontSize: "0.68rem", fontVariantNumeric: tokens.numericVariant },
-  content: { display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0 },
-  header: { padding: tokens.space4, gap: tokens.space3, alignItems: "flex-start", display: "flex", flexWrap: "wrap", justifyContent: "space-between", borderBottomColor: tokens.border, borderBottomStyle: "solid", borderBottomWidth: "1px", },
-  eyebrow: { color: tokens.accent, fontFamily: tokens.fontMono, fontSize: "0.62rem", fontWeight: 750, letterSpacing: "0.1em" },
-  title: { marginBlock: "0.3rem", fontFamily: tokens.fontUi, fontSize: "1.2rem", },
-  description: { margin: 0, color: tokens.muted, fontSize: "0.78rem", lineHeight: 1.5, },
-  rows: { overflow: "auto", display: "grid", minHeight: 0, },
-  row: { padding: tokens.space4, gap: tokens.space4, alignItems: "center", display: "grid", gridTemplateColumns: { default: "minmax(12rem, 1fr) minmax(12rem, auto)", "@media (max-width: 760px)": "minmax(0, 1fr)" }, borderBottomColor: tokens.border, borderBottomStyle: "solid", borderBottomWidth: "1px", },
+  root: { backgroundColor: tokens.panel, color: tokens.foreground, containerType: "inline-size", display: "flex", flexDirection: "column", height: "100%", minHeight: 0, minWidth: 0, },
+  content: { display: "grid", minWidth: 0 },
+  header: { padding: tokens.space3, gap: tokens.space2, alignItems: "start", display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", minWidth: 0 },
   copy: { minWidth: 0 },
-  rowTitle: { gap: tokens.space2, alignItems: "center", display: "flex", flexWrap: "wrap", },
-  control: { alignItems: "center", display: "flex", justifyContent: { default: "flex-end", "@media (max-width: 760px)": "flex-start" }, minWidth: 0 },
-  toggle: { gap: tokens.space2, alignItems: "center", cursor: "pointer", display: "inline-flex", },
-  range: { gap: tokens.space2, alignItems: "center", display: "grid", gridTemplateColumns: "4.5rem minmax(8rem, 13rem)", },
-  select: { borderColor: tokens.border, borderRadius: tokens.radiusSmall, borderStyle: "solid", borderWidth: "1px", paddingInline: tokens.space2, backgroundColor: tokens.panelRaised, color: tokens.foreground, minHeight: "2.25rem", minWidth: "12rem", },
-  segmented: { borderColor: tokens.border, borderRadius: tokens.radiusSmall, borderStyle: "solid", borderWidth: "1px", overflow: "hidden", alignItems: "center", display: "inline-flex", },
-  textInput: { borderColor: tokens.border, borderRadius: tokens.radiusSmall, borderStyle: "solid", borderWidth: "1px", paddingInline: tokens.space2, backgroundColor: tokens.panelRaised, color: tokens.foreground, minHeight: "2.25rem", minWidth: "14rem", },
-  disclosure: { borderBottomColor: tokens.border, borderBottomStyle: "solid", borderBottomWidth: "1px" },
-  advancedRows: { display: "grid" },
-  empty: { padding: tokens.space4, gap: tokens.space2, alignItems: "center", color: tokens.muted, display: "grid", justifyItems: "center", minHeight: "14rem", },
-  footer: { padding: tokens.space4, display: "flex", justifyContent: "flex-end", borderTopColor: tokens.border, borderTopStyle: "solid", borderTopWidth: "1px", },
-  visuallyHidden: { overflow: "hidden", clip: "rect(0 0 0 0)", clipPath: "inset(50%)", position: "absolute", whiteSpace: "nowrap", height: "1px", width: "1px", },
+  headerCopy: { display: "contents" },
+  headerDescription: { gridColumnEnd: '-1',
+ gridColumnStart: '1' },
+  title: { overflowWrap: "anywhere", marginBottom: tokens.space1, marginTop: 0, },
+  description: { margin: 0, color: tokens.muted, overflowWrap: "anywhere" },
+  rows: { display: "grid", minWidth: 0 },
+  row: { padding: tokens.space3, gap: tokens.space3, alignItems: "center", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))", borderBottomColor: tokens.border, borderBottomStyle: "solid", borderBottomWidth: tokens.borderWidth, minWidth: 0 },
+  rowTitle: { cursor: "pointer", overflowWrap: "anywhere" },
+  rowHelp: { overflow: "hidden", clipPath: "inset(50%)", position: "absolute", whiteSpace: "nowrap", height: 1, width: 1 },
+  control: { display: "grid", minWidth: 0 },
+  range: { gap: tokens.space2, display: "grid", minWidth: 0 },
+  slider: { margin: 0, accentColor: tokens.accent, boxSizing: "border-box", minHeight: tokens.controlTouch, minWidth: 0, width: "100%", },
+  disclosure: { borderBottomColor: tokens.border, borderBottomStyle: "solid", borderBottomWidth: tokens.borderWidth, minWidth: 0 },
+  summary: { padding: tokens.space4, boxSizing: "border-box", cursor: "pointer", overflowWrap: "anywhere", minHeight: tokens.controlTouch, },
+  empty: { padding: tokens.space4, gap: tokens.space2, color: tokens.muted, display: "grid", minWidth: 0 },
+  footer: { padding: tokens.space4, gap: tokens.space3, display: "grid", justifyItems: "start", minWidth: 0 },
+  error: { margin: 0, color: tokens.danger, overflowWrap: "anywhere" },
 });
 
 export function PreferencesSurface(props: {
   title?: string;
+  onClose?: () => void;
   sections: readonly PreferenceSectionDefinition[];
   definitions: readonly PreferenceDefinition[];
   values: PreferenceValues;
@@ -46,9 +47,13 @@ export function PreferencesSurface(props: {
   onReset?: (scope?: PreferenceDefinition["scope"]) => void;
   onSave?: () => void;
   saveLabel?: string;
+  saveError?: string;
+  resetDescription?: string;
 }) {
+  const saveErrorId = createUniqueId();
   const [query, setQuery] = createSignal("");
   const [activeSection, setActiveSection] = createSignal(props.sections[0]?.id ?? "");
+  const sections = createMemo(() => props.sections.map(section => ({ id: section.id, label: section.title })));
   const matches = createMemo(() => filterPreferences(props.definitions, query()));
   const visible = createMemo(() => query().trim()
     ? matches()
@@ -56,100 +61,82 @@ export function PreferencesSurface(props: {
   const currentSection = createMemo(() => props.sections.find((section) => section.id === activeSection()));
   const standard = createMemo(() => visible().filter((definition) => !definition.advanced));
   const advanced = createMemo(() => visible().filter((definition) => definition.advanced));
+  const commonScope = createMemo(() => {
+    const first = visible()[0]?.scope;
+    return first && visible().every(definition => definition.scope === first) ? first : undefined;
+  });
+  const headerScope = createMemo(() => {
+    const scope = commonScope();
+    return scope && scopeLabel(scope) !== currentSection()?.title ? scope : undefined;
+  });
 
   return (
     <section {...stylex.attrs(styles.root)} aria-label={props.title ?? "Preferences"} data-test-preferences-surface="">
-      <aside {...stylex.attrs(styles.navigation)}>
-        <label {...stylex.attrs(styles.searchLabel)}>
-          <span {...stylex.attrs(styles.visuallyHidden)}>Search preferences</span>
-          <input
-            {...stylex.attrs(styles.search)}
-            type="search"
-            value={query()}
-            placeholder="Search preferences"
-            onInput={(event) => setQuery(event.currentTarget.value)}
-          />
-        </label>
-        <nav {...stylex.attrs(styles.sectionList)} aria-label="Preference sections">
-          <For each={props.sections}>{(section) => {
-            const count = () => props.definitions.filter((definition) => definition.sectionId === section.id).length;
-            return (
-              <button
-                {...stylex.attrs(styles.sectionButton, !query() && activeSection() === section.id && styles.activeSection)}
-                type="button"
-                aria-current={!query() && activeSection() === section.id ? "page" : undefined}
-                onClick={() => { setQuery(""); setActiveSection(section.id); }}
-              >
-                <span {...stylex.attrs(styles.sectionCopy)}><strong>{section.title}</strong><small>{section.description}</small></span>
-                <span {...stylex.attrs(styles.count)}>{count()}</span>
-              </button>
-            );
-          }}</For>
-        </nav>
-      </aside>
-      <main {...stylex.attrs(styles.content)}>
+      <SettingsWorkspace title={props.title} sections={sections()} activeSection={activeSection()} onSectionChange={setActiveSection}
+        query={query()} onQueryChange={setQuery} onClose={props.onClose}>
+      <div {...stylex.attrs(styles.content)}>
         <header {...stylex.attrs(styles.header)}>
-          <div>
-            <span {...stylex.attrs(styles.eyebrow)}>{query() ? "SEARCH RESULTS" : "PREFERENCES"}</span>
-            <h2 {...stylex.attrs(styles.title)}>{query() ? `Results for “${query()}”` : currentSection()?.title ?? props.title ?? "Preferences"}</h2>
-            <p {...stylex.attrs(styles.description)}>{query() ? `${visible().length} matching settings` : currentSection()?.description}</p>
+          <div {...stylex.attrs(styles.headerCopy)}>
+            <h2 {...stylex.attrs(typography.section, styles.title)}>{query().trim() ? "Search results" : currentSection()?.title ?? props.title ?? "Preferences"}</h2>
+            <Show when={headerScope()}>{scope => <div {...stylex.attrs(styles.headerDescription)}><StatusChip tone={scopeTone(scope())}>{scopeLabel(scope())}</StatusChip></div>}</Show>
+            <p {...stylex.attrs(typography.caption, styles.description, styles.headerDescription)}>{query().trim() ? `${visible().length} matching settings` : currentSection()?.description}</p>
           </div>
-          <Show when={props.onReset}>
-            <Button variant="ghost" size="small" tooltip="Reset the visible preference values" onClick={() => props.onReset?.()}>Reset</Button>
-          </Show>
         </header>
         <div {...stylex.attrs(styles.rows)}>
-          <For each={standard()}>{(definition) => <PreferenceRow definition={definition} value={props.values[definition.id]} onChange={props.onChange} />}</For>
+          <For each={standard()}>{(definition) => <PreferenceRow definition={definition} hideScope={Boolean(commonScope())} value={props.values[definition.id]} onChange={props.onChange} />}</For>
           <Show when={advanced().length > 0}>
             <details {...stylex.attrs(styles.disclosure)}>
-              <summary>Advanced <span>{advanced().length}</span></summary>
-              <div {...stylex.attrs(styles.advancedRows)}>
-                <For each={advanced()}>{(definition) => <PreferenceRow definition={definition} value={props.values[definition.id]} onChange={props.onChange} />}</For>
+              <summary {...stylex.attrs(typography.control, sharedStyles.focusRing, styles.summary)}>Advanced <span>{advanced().length}</span></summary>
+              <div {...stylex.attrs(styles.rows)}>
+                <For each={advanced()}>{(definition) => <PreferenceRow definition={definition} hideScope={Boolean(commonScope())} value={props.values[definition.id]} onChange={props.onChange} />}</For>
               </div>
             </details>
           </Show>
           <Show when={visible().length === 0}>
-            <div {...stylex.attrs(styles.empty)} role="status"><strong>No matching preferences</strong><span>Try a broader search term.</span></div>
+            <div {...stylex.attrs(styles.empty)} role="status"><strong {...stylex.attrs(typography.emphasis)}>No matching preferences</strong><span {...stylex.attrs(typography.body)}>Try a broader search term or clear the search.</span></div>
           </Show>
         </div>
-        <Show when={props.onSave}>
+        <Show when={props.onSave || props.onReset}>
           <footer {...stylex.attrs(styles.footer)}>
-            <Button variant="primary" size="medium" tooltip={props.saveLabel ?? "Save preference changes"} onClick={() => props.onSave?.()}>{props.saveLabel ?? "Save changes"}</Button>
+            <Show when={props.saveError}><p {...stylex.attrs(typography.body, styles.error)} role="alert" id={saveErrorId}>{props.saveError}</p></Show>
+            <Show when={props.onSave}><Button aria-describedby={props.saveError ? saveErrorId : undefined} variant="primary" size="medium" tooltip={props.saveLabel ?? "Save preference changes"} onClick={() => props.onSave?.()}>{props.saveLabel ?? "Save changes"}</Button></Show>
+            <Show when={props.onReset}><Button size="small" variant="ghost" tooltip={props.resetDescription ?? "Reset preferences to defaults"} onClick={() => props.onReset?.()}>Reset</Button></Show>
           </footer>
         </Show>
-      </main>
+      </div>
+      </SettingsWorkspace>
     </section>
   );
 }
 
-export function PreferenceRow(props: { definition: PreferenceDefinition; value: PreferenceValue | undefined; onChange: (id: string, value: PreferenceValue) => void }) {
-  const value = () => props.value ?? props.definition.defaultValue;
+export function PreferenceRow(props: { definition: PreferenceDefinition; value: PreferenceValue | undefined; hideScope?: boolean; onChange: (id: string, value: PreferenceValue) => void }) {
+  const descriptionId = createUniqueId();
   return (
     <div {...stylex.attrs(styles.row)} data-preference-id={props.definition.id}>
-      <div {...stylex.attrs(styles.copy)}>
-        <div {...stylex.attrs(styles.rowTitle)}><strong>{props.definition.title}</strong><StatusChip tone={scopeTone(props.definition.scope)}>{scopeLabel(props.definition.scope)}</StatusChip></div>
-        <p>{props.definition.description}</p>
+      <div {...stylex.attrs(styles.copy)}><Tooltip content={props.definition.description}>
+        <span tabindex="0" aria-describedby={descriptionId} data-preference-help {...stylex.attrs(sharedStyles.focusRing, styles.rowTitle)}><strong {...stylex.attrs(typography.emphasis)}>{props.definition.title}</strong><Show when={!props.hideScope}> <StatusChip tone={scopeTone(props.definition.scope)}>{scopeLabel(props.definition.scope)}</StatusChip></Show></span></Tooltip>
+        <p {...stylex.attrs(typography.body, styles.description, styles.rowHelp)} id={descriptionId}>{props.definition.description}</p>
       </div>
-      <div {...stylex.attrs(styles.control)}>{renderControl(props.definition, value(), props.onChange)}</div>
+      <div {...stylex.attrs(styles.control)}><PreferenceControl definition={props.definition} value={props.value ?? props.definition.defaultValue} describedBy={descriptionId} onChange={props.onChange} /></div>
     </div>
   );
 }
 
-function renderControl(definition: PreferenceDefinition, value: PreferenceValue, onChange: (id: string, value: PreferenceValue) => void) {
-  const control = definition.control;
+function PreferenceControl(props: { definition: PreferenceDefinition; value: PreferenceValue; describedBy: string; onChange: (id: string, value: PreferenceValue) => void }) {
+  const control = props.definition.control;
   if (control.kind === "toggle") {
-    return <label {...stylex.attrs(styles.toggle)}><input type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(definition.id, event.currentTarget.checked)} /><span aria-hidden="true" /><b>{Boolean(value) ? "On" : "Off"}</b></label>;
+    return <CheckboxField label={Boolean(props.value) ? "On" : "Off"}><input type="checkbox" aria-label={props.definition.title} aria-describedby={props.describedBy} checked={Boolean(props.value)} onChange={event => props.onChange(props.definition.id, event.currentTarget.checked)} /></CheckboxField>;
   }
   if (control.kind === "range") {
-    return <label {...stylex.attrs(styles.range)}><output>{Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}{control.unit ?? ""}</output><input type="range" min={control.minimum} max={control.maximum} step={control.step} value={Number(value)} onInput={(event) => onChange(definition.id, Number(event.currentTarget.value))} /></label>;
+    return <div {...stylex.attrs(styles.range)}><output {...stylex.attrs(typography.metadata)}>{Number(props.value).toLocaleString(undefined, { maximumFractionDigits: 2 })}{control.unit ?? ""}</output><input {...stylex.attrs(styles.slider, sharedStyles.focusRing)} type="range" aria-label={props.definition.title} aria-describedby={props.describedBy} min={control.minimum} max={control.maximum} step={control.step} value={Number(props.value)} onInput={event => props.onChange(props.definition.id, Number(event.currentTarget.value))} /></div>;
   }
   if (control.kind === "select") {
-    return <select {...stylex.attrs(styles.select)} value={String(value)} aria-label={definition.title} onChange={(event) => onChange(definition.id, event.currentTarget.value)}><For each={control.options}>{(option) => <option value={option.value}>{option.label}</option>}</For></select>;
+    return <SelectControl ariaLabel={props.definition.title} describedBy={props.describedBy} size="md" value={String(props.value)} options={control.options} onChange={next => props.onChange(props.definition.id, next)} />;
   }
   if (control.kind === "segmented") {
-    return <div {...stylex.attrs(styles.segmented)} role="group" aria-label={definition.title}><For each={control.options}>{(option) => <Button variant={String(value) === option.value ? "secondary" : "ghost"} size="small" tooltip={option.description ?? `Set ${definition.title} to ${option.label}`} aria-pressed={String(value) === option.value} onClick={() => onChange(definition.id, option.value)}>{option.label}</Button>}</For></div>;
+    return <SegmentedControl ariaLabel={props.definition.title} describedBy={props.describedBy} value={String(props.value)} options={control.options} onValueChange={value => props.onChange(props.definition.id, value)} />;
   }
-  return <input {...stylex.attrs(styles.textInput)} type="text" value={String(value)} placeholder={control.placeholder} aria-label={definition.title} onInput={(event) => onChange(definition.id, event.currentTarget.value)} />;
+  return <Input type="text" value={String(props.value)} placeholder={control.placeholder} aria-label={props.definition.title} aria-describedby={props.describedBy} onInput={event => props.onChange(props.definition.id, event.currentTarget.value)} />;
 }
 
 function scopeLabel(scope: PreferenceDefinition["scope"]) {

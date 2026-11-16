@@ -1,27 +1,30 @@
-import { ZodError, type ZodIssue } from "zod";
 import {
-  plannerTurnResultSchema,
-  providerModelIdSchema,
-  type ChatMessage,
-  type ComposerReasoningStrength,
-  type ModeDefinition,
-  type ProjectContextUsage,
-  type PlannerTurnResult,
-  type PlanningQuestion,
-  type ProviderBrand,
-  type ProviderModelId,
-  type RunPromptStats,
-  type WorkspaceRuleSource
+plannerTurnResultSchema,
+providerModelIdSchema,
+type ChatMessage,
+type ComposerReasoningStrength,
+type ModeDefinition,
+type PlannerTurnResult,
+type PlanningQuestion,
+type ProjectContextUsage,
+type ProviderBrand,
+type ProviderModelId,
+type RunPromptStats,
+type WorkspaceRuleSource
 } from "@hyperfocus/ai-core/protocol";
-import type { PiAgentAdapter, PiAgentPromptRequest } from "./pi-agent-adapter";
+import { isRecord as isUnknownRecord } from "@hyperfocus/utilities/records";
+import { ZodError,type ZodIssue } from "zod";
 import { buildPromptAttachmentContext } from "./chat-attachment-prompt";
-import { resolveSubagentModelId } from "./subagent-defaults";
-import { buildWorkspacePathGuidance, normalizeWorkspaceRelativePaths } from "./workspace-path-intent";
 import { assembleDeterministicPrompt } from "./deterministic-prompt";
-import type { PromptCacheIdentity } from "./prompt-cache";
 import type { GeminiCachedAttachmentContext } from "./gemini-cached-contents";
 import { buildGitRepositoryPromptContext } from "./git-context";
+import type { PiAgentAdapter,PiAgentPromptRequest } from "./pi-agent-adapter";
+import { projectDiscoveryPrompt } from "./project-discovery/inspect";
+import type { PromptCacheIdentity } from "./prompt-cache";
 import { DEFAULT_CODING_STACK_GUIDANCE } from "./prompts/coding-stack-defaults";
+import { taskDesignGuidance } from "./prompts/design-guidance";
+import { resolveSubagentModelId } from "./subagent-defaults";
+import { buildWorkspacePathGuidance,normalizeWorkspaceRelativePaths } from "./workspace-path-intent";
 
 export const GPT_DEFAULT_PLANNING_MODEL_ID = "openai/gpt-5.4";
 export const GPT_DEFAULT_EXECUTION_MODEL_ID = "openai/gpt-5.4";
@@ -41,6 +44,7 @@ function createPlannerContextUsage(contextUsage: PromptContextUsage, modelId: Pr
     sourceLabel: "planner",
     modelId,
     tokens: contextUsage.tokens,
+    inputTokens: Math.max(0, contextUsage.sessionStats.tokens.total - contextUsage.sessionStats.tokens.output),
     contextWindow: contextUsage.contextWindow,
     usagePercent: contextUsage.usagePercent,
     totalProcessedTokens: contextUsage.sessionStats.tokens.total,
@@ -76,12 +80,22 @@ export async function planTask(
   });
   const workspacePathGuidance = buildWorkspacePathGuidance(options.latestUserPrompt, options.cwd);
   const normalizedLatestUserPrompt = normalizeWorkspaceRelativePaths(options.latestUserPrompt, options.cwd);
-  const transcriptIncludesLatestTask = attachmentContext.transcript.trimEnd().endsWith(`USER: ${normalizedLatestUserPrompt}`);
+  let latestMessage: ChatMessage | undefined;
+  for (let index = options.messages.length - 1; index >= 0; index -= 1) {
+    if (options.messages[index]!.role !== "system") {
+      latestMessage = options.messages[index];
+      break;
+    }
+  }
+  const transcriptIncludesLatestTask = latestMessage?.role === "user"
+    && normalizeWorkspaceRelativePaths(latestMessage.content, options.cwd) === normalizedLatestUserPrompt;
+  const hasAttachments = options.messages.some((message) => message.role !== "system" && message.attachments?.length);
   const prompt = assembleDeterministicPrompt([
     {
       kind: "system",
       content: [
         "You are the planning stage for a local coding harness.",
+        taskDesignGuidance({ task: options.latestUserPrompt }),
         "Return JSON only. Do not wrap it in markdown fences.",
         "Schema:",
         `{"type":"question","summary":"","questions":[{"id":"question-1","prompt":"","placeholder":"","choices":[{"id":"choice-1","label":"","description":"","answerText":"","recommended":true},{"id":"choice-2","label":"","description":"","answerText":"","recommended":false},{"id":"choice-3","label":"","description":"","answerText":"","recommended":false}],"required":true}]}`,
@@ -101,23 +115,28 @@ export async function planTask(
         "- Do not emit usesSubagents=true or non-empty subtasks while any required question remains unanswered.",
         "- subtasks must be empty when usesSubagents is false.",
         "- subtasks must be specific and independent when usesSubagents is true.",
-        "- Main planning owns all decomposition before execution. Subagents receive implementation packets, not open-ended planning work.",
+        "- Decompose independent work with clear ownership and acceptance boundaries; leave local implementation choices to the responsible worker.",
         "- When usesSubagents is true, emit contracts with concrete ownedPaths whenever possible.",
-        "- Each contract instruction must include the file update plan, expected public functions/classes/components/signatures, required data flow, and acceptance notes for that subtask.",
+        "- Each contract must state the outcome, owned paths, acceptance evidence, and any cross-worker interfaces that must remain compatible.",
         "- Contract deliverables must name concrete files, exported symbols, UI states, or behavior the subagent must produce.",
         "- Contract integrationPoints must name the sibling files, imports, call sites, or runtime surfaces the main agent will merge or verify.",
-        "- Contract verificationCommands are for the main harness verification pass; do not put verification work into subtask instructions.",
+        "- Workers validate their changed behavior; contract verificationCommands are the host's independent acceptance pass. Avoid duplicate broad suites.",
+        "- For substantial work include supervision: {request: exact latest user request, intent, outcome, experience, evidence: [observable acceptance], constraints: [preserved properties], budget: justified effort and stopping conditions, decision: continue|redirect|stop|escalate, reason}. Optional deadlineAt is an authorized absolute Unix-millisecond budget, never an invented limit. Omit supervision for trivial work.",
+        "- Each supervised contract includes contribution: {outcome: exact parent outcome, limitingFactor, evidence: observed basis for choosing this intervention, expectedImprovement, stopWhen}. Existing effortPoints, deliverables, verificationCommands and mergeNotes carry cost, completion and integration. Child completion is evidence, never parent acceptance.",
+        "- Use continue only for causally relevant work worth its cost. Otherwise redirect, stop or escalate; the host prevents dispatch. Put required pilot/domain acceptance in prerequisite verificationCommands before expensive expansion. Tests/render completion/model ratings cannot establish qualitative acceptance.",
+        "- For repeated work, use relevant prior evidence in finalExecutionBrief: strongest existing result and owning implementation, accepted properties to preserve, one known failure, and the unresolved gap. Mark missing evidence explicitly; do not invent approval. Reuse learned checks at the actual caller before expansion and distinguish better defect detection from better output.",
+        "- Resolve verification from the actual project declarations and owning instructions. If none is established, keep verificationCommands empty and state the missing verification in mergeNotes; never invent Bun/TypeScript checks for another stack.",
         "- Contract verificationScope must be exactly \"owned-files-only\" or \"worktree-full\". Use \"worktree-full\" for full app, full workspace, or whole project checks.",
+        "- Every prerequisite requires verificationCommands: concrete setup acceptance commands executed by the host before dependent work. Keep status pending; model claims cannot complete prerequisites.",
         "- prerequisites[].owner must be exactly \"main\" or \"subagent\".",
-        "- Use prerequisites[].owner=\"main\" for user-requested setup, shared setup, scaffolding, repo inspection, migrations, and any work not owned by one subagent.",
+        "- Use prerequisites[].owner=\"main\" for independently verifiable setup shared by multiple workers or explicitly required before implementation. Keep routine repository inspection and scaffolding inside finalExecutionBrief for single-agent work; a self-contained single-file product normally needs prerequisites: [].",
         "- Never emit \"user\", \"human\", \"developer\", \"assistant\", \"executor\", or \"agent\" as a prerequisite owner.",
         "- Every enum field must use one of the exact schema literals shown.",
         "- Same-worktree parallel work requires contracts with non-overlapping ownedPaths.",
-        "- For greenfield apps, use prerequisites for shared scaffold/setup, then split subagents by concrete files or folders.",
+        "- For greenfield apps with multiple workers, use prerequisites only for shared scaffold/setup those workers depend on, then split subagents by concrete files or folders.",
         `- ${DEFAULT_CODING_STACK_GUIDANCE}`,
-        "- Frontend/component test contracts should use Bun plus Happy DOM with the createUiTest-style setup from harness/ui/src/utils/tests/test-harness.ts.",
-        "- Greenfield UI plans should create shared primitives before feature components, routes, screens, or workflows.",
-        "- Recommended scripts for generated TypeScript Bun projects are dev=\"bun --hot src/server.ts\", start=\"bun src/server.ts\", test=\"bun test\", typecheck=\"bunx tsc --noEmit\", and build:ui=\"bun run scripts/build-ui.ts\" only when the matching backend/UI surface exists.",
+        "- Use the active project's test tools and helpers. For a new Bun UI project, Bun plus Happy DOM is an option for component tests; choose browser checks for behavior that needs a real browser.",
+        "- Reuse existing UI components. Add shared primitives or setup tasks only when the requested work has concrete consumers for them.",
         "- For new directories, include the first file each subagent should create so implementation can start without extra discovery.",
         "- If paths are genuinely ambiguous, keep subagent contracts but use ownedPaths [\"(planner-unspecified)\"]; execution will upgrade to isolated worktrees.",
         `- Use ${requestedExecutionModelId} unless the user explicitly requires another execution model from the same provider family.`
@@ -139,18 +158,19 @@ export async function planTask(
       ? ["Rule sources:", ...options.ruleSources.map((rule) => `[${rule.scope}] ${rule.label}: ${rule.content}`)].join("\n")
       : "",
         buildGitRepositoryPromptContext(options.cwd),
+        projectDiscoveryPrompt(options.cwd),
         workspacePathGuidance ?? ""
       ]
     },
     {
       kind: "attachments",
-      content: attachmentContext.transcript === formatMessagesWithoutAttachments(options.messages) ? undefined : attachmentContext.transcript
+      content: hasAttachments ? attachmentContext.transcript : undefined
     },
     {
       kind: "dynamic",
       content: [
-        "Conversation transcript:",
-        attachmentContext.transcript,
+        hasAttachments ? undefined : "Conversation transcript:",
+        hasAttachments ? undefined : attachmentContext.transcript,
         "",
         "Prior planning Q/A:",
         formatPlanningQuestions(options.priorQuestions ?? []),
@@ -240,13 +260,6 @@ export async function planTask(
 
 function parsePlannerTurnPayload(input: unknown) {
   return plannerTurnResultSchema.parse(normalizePlannerPayload(input));
-}
-
-function formatMessagesWithoutAttachments(messages: ChatMessage[]) {
-  return messages
-    .filter((message) => message.role !== "system")
-    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
-    .join("\n");
 }
 
 function buildPlannerRepairPrompt(originalPrompt: string, invalidPayload: unknown, error: ZodError) {
@@ -556,7 +569,8 @@ function normalizePlannerWorkspacePaths(plannerResult: PlannerTurnResult, cwd: s
       ...prerequisite,
       title: normalizeWorkspaceRelativePaths(prerequisite.title, cwd),
       instruction: normalizeWorkspaceRelativePaths(prerequisite.instruction, cwd),
-      reason: normalizeWorkspaceRelativePaths(prerequisite.reason, cwd)
+      reason: normalizeWorkspaceRelativePaths(prerequisite.reason, cwd),
+      verificationCommands: prerequisite.verificationCommands?.map(command => normalizeWorkspaceRelativePaths(command, cwd))
     })),
     contracts: plannerResult.contracts?.map((contract) => ({
       ...contract,
@@ -579,9 +593,6 @@ function normalizePlannerPathValue(value: string, cwd: string) {
   return normalizeWorkspaceRelativePaths(value, cwd);
 }
 
-function isUnknownRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export function getDefaultPlanningModelId(providerBrand: ProviderBrand): ProviderModelId {
   if (providerBrand === "gemini") {

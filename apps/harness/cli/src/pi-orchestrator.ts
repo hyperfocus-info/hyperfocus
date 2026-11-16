@@ -1,10 +1,10 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import {
   createChatMessage,
   type AgentId,
   type AgentPlan,
   type AgentTrace,
   type ChatMessage,
-  type ChatSessionState,
   type ComposerReasoningStrength,
   type CorrectnessIterationMode,
   type ExecutionPlan,
@@ -37,21 +37,15 @@ import {
   prepareBranchfsIntegrationLease,
   verifyBranchfsIntegrationLease
 } from "./branchfs-subagent-integration";
-import {
-  getDefaultPlanningModelId,
-  planTask
-} from "./pi-planner";
-import { buildWorkspacePathGuidance, normalizeWorkspaceRelativePaths } from "./workspace-path-intent";
+import { getDefaultPlanningModelId, planTask } from "./pi-planner";
 import {
   executeSubagents,
   resolveSubagentConcurrency,
   scheduleSubagentTasks,
   type SubagentResult
 } from "./pi-subagents";
-import { buildPromptAttachmentContext } from "./chat-attachment-prompt";
 import { resolveSingleAgentModelId, resolveSubagentModelId, resolveSubagentReasoningStrength } from "./subagent-defaults";
 import { createMilestoneDeltaParser, extractMilestoneLines, stripMilestoneLines } from "./run-milestone-windows";
-import { assembleDeterministicPrompt } from "./deterministic-prompt";
 import type { PromptCacheIdentity } from "./prompt-cache";
 import type { GeminiCachedAttachmentContext } from "./gemini-cached-contents";
 import {
@@ -60,10 +54,17 @@ import {
   resolveRepoRoot,
   SUBAGENT_MILESTONE_INSTRUCTION
 } from "./subagent-environment";
-import { buildGitRepositoryPromptContext, resolveGitRepositoryPromptContext } from "./git-context";
-import { buildExecutionSkillContext } from "./prompts/execution-skill-context";
+import { resolveGitRepositoryPromptContext } from "./git-context";
+import { buildExecutionInput, buildExecutionPrompt as createExecutionPrompt } from "./prompts/execution-input";
+import { buildSubagentRecoveryPrompt, formatSubagentCompletionDetail, formatSubagentResults } from "./prompts/subagent-results";
+import { runVerificationCommands } from "@hyperfocus/ai-runtime/quality/commands";
+import { projectVerificationCommands } from "./project-discovery/inspect";
+import type { QualityTrace } from "@hyperfocus/ai-core/quality";
+import { assertOutcomeAdmission } from "@hyperfocus/ai-runtime/quality/execution";
+import { executeWithQuality } from "./verification/supervision";
 
 export type PiOrchestratorCallbacks = {
+  onQuality?: (trace: QualityTrace) => void;
   onPlan?: (plan: AgentPlan) => void;
   onTrace?: (trace: AgentTrace) => void;
   onDelta?: (delta: string) => void;
@@ -93,6 +94,7 @@ export type PiOrchestratorCallbacks = {
     owner: "planner" | "main" | "subagent" | "aggregator";
     subagentId?: string;
   }) => Promise<PiAgentMemorySearchResult>;
+  threadTools?: (subagentId?: string) => import("./thread-tools").ThreadTools;
 };
 
 export type PlannerTurnOutcome = {
@@ -201,6 +203,7 @@ export async function runPlannerTurn(
   }
 
   const executionPlan = buildExecutionPlan({
+    projectRoot: options.cwd,
     runId: options.runId,
     planningModelId,
     plannerResult,
@@ -285,6 +288,10 @@ type ExecuteReadyRunOptions = {
   subagentModelPreference?: RunModelPreference;
 };
 export async function executeReadyRun(adapter: PiAgentAdapter, options: ExecuteReadyRunOptions): Promise<ExecutionOutcome> {
+  return executeWithQuality(adapter, options, prepared => executeReadyRunWork(prepared, options));
+}
+
+async function executeReadyRunWork(adapter: PiAgentAdapter, options: ExecuteReadyRunOptions): Promise<ExecutionOutcome> {
   if (!options.readyPlan.usesSubagents) {
     return executeSingleAgentReadyRun(adapter, options);
   }
@@ -378,7 +385,8 @@ export async function executeReadyRun(adapter: PiAgentAdapter, options: ExecuteR
       onSettled(result) {
         options.callbacks?.onSubagentResult?.(result);
       },
-      searchMemory: options.callbacks?.searchMemory
+      searchMemory: options.callbacks?.searchMemory,
+      threadTools: options.callbacks?.threadTools
     }
   });
 
@@ -413,7 +421,7 @@ export async function executeReadyRun(adapter: PiAgentAdapter, options: ExecuteR
     });
 
     if (integration) {
-      await verifyBranchfsIntegrationLease(integration);
+      await verifyBranchfsIntegrationLease(integration, { commands: contracts.flatMap(contract => contract.verificationCommands), signal: options.abortSignal });
       await flushBranchfsIntegrationLease(integration);
     }
   } catch (error) {
@@ -588,7 +596,7 @@ async function executeSameWorktreeSubagents(adapter: PiAgentAdapter, options: Ex
             subagentReasoningStrength,
             subagentEnvironmentBrief
           );
-          const contractDriftPaths = await inspectSameWorktreeSubagentDrift(
+          const unattributedChangePaths = await inspectSameWorktreeChanges(
             options.cwd,
             beforeSnapshot,
             entry.contractSettings
@@ -598,7 +606,7 @@ async function executeSameWorktreeSubagents(adapter: PiAgentAdapter, options: Ex
             sessionId: options.sessionId,
             stage: "subagent-complete",
             message: `Completed ${entry.task.title}`,
-            detail: formatSubagentCompletionDetail(output, contractDriftPaths),
+            detail: formatSubagentCompletionDetail(output, unattributedChangePaths),
             subagentId: entry.task.id,
             modelId: subagentModelId,
             durationMs: Date.now() - startedAt
@@ -614,7 +622,7 @@ async function executeSameWorktreeSubagents(adapter: PiAgentAdapter, options: Ex
               durationMs: Date.now() - startedAt,
               mountPath: options.cwd,
               worktreePath: options.cwd,
-              contractDriftPaths: contractDriftPaths.length > 0 ? contractDriftPaths : undefined
+              unattributedChangePaths: unattributedChangePaths.length > 0 ? unattributedChangePaths : undefined
             }
           };
         } catch (error) {
@@ -697,7 +705,7 @@ async function runSameWorktreeAgent(
     "Do not run browser, Playwright, dev server, python -m http.server, visible app smoke tests, or commands that can open windows.",
     "Do not use Start-Process for verification.",
     "Do not perform broad verification unless this subtask explicitly names a verification command.",
-    "On Windows, use PowerShell-compatible syntax only; do not use Bash heredocs like <<'EOF'.",
+    "On Windows, use PowerShell syntax, invoke Bun as bun.exe (including bun.exe x), and pass rg patterns as quoted literal arguments; never invoke policy-blocked .ps1 shims or Bash heredocs.",
     "Prefer bundled rg for search. If rg is unavailable, use Get-ChildItem plus Select-String.",
     "Return a concise changed-file summary.",
     SUBAGENT_MILESTONE_INSTRUCTION,
@@ -723,6 +731,7 @@ async function runSameWorktreeAgent(
     fastMode: options.fastMode,
     promptCacheIdentity: options.promptCacheIdentity,
     memorySearch: createMemorySearchCallback(options.callbacks, "subagent", entry.task.id),
+    threadTools: options.callbacks?.threadTools?.(entry.task.id),
     onTextDelta(delta: string) {
       milestoneParser.push(delta);
     },
@@ -779,19 +788,10 @@ async function executeMainAgent(
   finalExecutionBrief: string
 ) {
   const startedAt = Date.now();
-  const executionInput = await buildExecutionInput(options.cwd, options.messages, finalExecutionBrief, options.executionPlan, undefined, {
+  const executionInput = await buildExecutionInput({ cwd: options.cwd, messages: options.messages, finalExecutionBrief, executionPlan: options.executionPlan,
     geminiCachedAttachmentContext: options.geminiCachedAttachmentContext
   });
-  const continuationInput = await buildExecutionInput(
-    options.cwd,
-    options.messages,
-    finalExecutionBrief,
-    options.executionPlan,
-    "continue",
-    {
-      geminiCachedAttachmentContext: options.geminiCachedAttachmentContext
-    }
-  );
+  const continuationInput = await buildExecutionInput({ cwd: options.cwd, messages: options.messages, finalExecutionBrief, executionPlan: options.executionPlan, prefix: "continue", geminiCachedAttachmentContext: options.geminiCachedAttachmentContext });
   const agentLabel = getAgentRuntimeLabel(options.agentId);
   emitTrace(options.callbacks, {
     sessionId: options.sessionId,
@@ -813,6 +813,7 @@ async function executeMainAgent(
     reasoningStrength: options.reasoningStrength,
     fastMode: options.fastMode,
     memorySearch: createMemorySearchCallback(options.callbacks, "main"),
+    threadTools: options.callbacks?.threadTools?.(),
     onTextDelta(delta: string) {
       options.callbacks?.onDelta?.(delta);
     },
@@ -856,6 +857,7 @@ async function executeMainAgent(
       sourceLabel: "main",
       modelId: executionModelId,
       tokens: result.contextUsage.tokens,
+      inputTokens: Math.max(0, result.contextUsage.sessionStats.tokens.total - result.contextUsage.sessionStats.tokens.output),
       contextWindow: result.contextUsage.contextWindow,
       usagePercent: result.contextUsage.usagePercent,
       totalProcessedTokens: result.contextUsage.sessionStats.tokens.total,
@@ -904,6 +906,8 @@ export async function executePlanPrerequisites(
     onPrerequisiteComplete?: (executionPlan: ExecutionPlan) => void | Promise<void>;
   }
 ) {
+  assertOutcomeAdmission({ cwd: options.cwd, plan: options.executionPlan,
+    request: options.messages.filter(message => message.role === "user").at(-1)?.content ?? options.executionPlan.finalExecutionBrief });
   if (options.executionPlan.prerequisites.every((prerequisite) => prerequisite.status === "completed")) {
     return options.executionPlan;
   }
@@ -914,6 +918,8 @@ export async function executePlanPrerequisites(
   };
 
   for (const prerequisite of executionPlan.prerequisites) {
+    assertOutcomeAdmission({ cwd: options.cwd, plan: executionPlan,
+      request: options.messages.filter(message => message.role === "user").at(-1)?.content ?? executionPlan.finalExecutionBrief });
     if (prerequisite.status === "completed") {
       continue;
     }
@@ -952,6 +958,7 @@ export async function executePlanPrerequisites(
       reasoningStrength: options.reasoningStrength,
       fastMode: options.fastMode,
       memorySearch: createMemorySearchCallback(options.callbacks, "main"),
+      threadTools: options.callbacks?.threadTools?.(),
       promptCacheIdentity: options.promptCacheIdentity,
       geminiCachedContentName: options.geminiCachedAttachmentContext?.cachedContentName,
       abortSignal: options.abortSignal
@@ -969,6 +976,7 @@ export async function executePlanPrerequisites(
         sourceLabel: "prerequisite",
         modelId: options.executionModelId,
         tokens: response.contextUsage.tokens,
+        inputTokens: Math.max(0, response.contextUsage.sessionStats.tokens.total - response.contextUsage.sessionStats.tokens.output),
         contextWindow: response.contextUsage.contextWindow,
         usagePercent: response.contextUsage.usagePercent,
         totalProcessedTokens: response.contextUsage.sessionStats.tokens.total,
@@ -977,6 +985,11 @@ export async function executePlanPrerequisites(
       });
     }
 
+    if (!prerequisite.verificationCommands?.length) {
+      throw new Error(`Prerequisite verification pending: ${prerequisite.title} has no declared acceptance check.`);
+    }
+    await runVerificationCommands({ cwd: options.cwd, commands: prerequisite.verificationCommands,
+      signal: options.abortSignal, onResult: options.callbacks?.onRunMilestone });
     prerequisite.status = "completed";
     emitTrace(options.callbacks, {
       sessionId: options.sessionId,
@@ -992,7 +1005,7 @@ export async function executePlanPrerequisites(
 }
 
 async function runProcess(cwd: string, cmd: string[]) {
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd,
     cwd,
     stdout: "pipe",
@@ -1135,14 +1148,14 @@ function isDependencyRootPath(relativePath: string) {
   );
 }
 
-async function inspectSameWorktreeSubagentDrift(
+async function inspectSameWorktreeChanges(
   cwd: string,
   beforeSnapshot: Map<string, ChangedFileSnapshot>,
   contractSettings: TaskContractSettings
 ) {
   const afterSnapshot = await snapshotChangedFiles(cwd);
   const normalizedPaths = new Set([...beforeSnapshot.keys(), ...afterSnapshot.keys()]);
-  const changedByTask = [...normalizedPaths].flatMap((normalizedPath) => {
+  const changedDuringTask = [...normalizedPaths].flatMap((normalizedPath) => {
     const before = beforeSnapshot.get(normalizedPath);
     const after = afterSnapshot.get(normalizedPath);
     if (before?.fingerprint === after?.fingerprint) {
@@ -1154,7 +1167,7 @@ async function inspectSameWorktreeSubagentDrift(
   const outOfScopePaths =
     contractSettings.explicitOwnedPaths.length === 0
       ? []
-      : changedByTask.filter(
+      : changedDuringTask.filter(
           (relativePath) =>
             !contractSettings.explicitOwnedPaths.some((ownedPath) =>
               isPathWithinSameWorktreeScope(relativePath, ownedPath)
@@ -1237,28 +1250,6 @@ async function verifySubagentResultAgainstContracts(
   return [];
 }
 
-function buildSubagentRecoveryPrompt(
-  task: PlannerSubtask,
-  result: SubagentResult,
-  contractSettings: TaskContractSettings,
-  strategy: "same-worktree" | "separate-worktrees"
-) {
-  return [
-    "Recovery attempt. Repair this subtask.",
-    `Previous failure: ${result.errorMessage ?? "Unknown subagent failure"}`,
-    strategy === "same-worktree"
-      ? "Work in the same checkout and use owned paths as the primary work area."
-      : "Work inside this isolated subagent mount.",
-    contractSettings.explicitOwnedPaths.length > 0
-      ? `Owned paths: ${contractSettings.explicitOwnedPaths.join(", ")}`
-      : "Owned paths: planner did not specify paths. Treat task as exclusive.",
-    `Retry subtask title: ${task.title}`,
-    "Focus on the previous failure cause, complete the file changes, and return a concise changed-file summary."
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 export async function aggregateSubagentResults(
   adapter: PiAgentAdapter,
   options: {
@@ -1282,7 +1273,7 @@ export async function aggregateSubagentResults(
   integrationNote?: string
 ) {
   const startedAt = Date.now();
-  const executionInput = await buildExecutionInput(options.cwd, options.messages, finalExecutionBrief, options.executionPlan, undefined, {
+  const executionInput = await buildExecutionInput({ cwd: options.cwd, messages: options.messages, finalExecutionBrief, executionPlan: options.executionPlan,
     geminiCachedAttachmentContext: options.geminiCachedAttachmentContext
   });
   options.callbacks?.onAggregationStart?.();
@@ -1323,6 +1314,7 @@ export async function aggregateSubagentResults(
       reasoningStrength: options.reasoningStrength,
       fastMode: options.fastMode,
       memorySearch: createMemorySearchCallback(options.callbacks, "aggregator"),
+      threadTools: options.callbacks?.threadTools?.(),
       onTextDelta(delta: string) {
         options.callbacks?.onDelta?.(delta);
       },
@@ -1356,6 +1348,7 @@ export async function aggregateSubagentResults(
       reasoningStrength: options.reasoningStrength,
       fastMode: options.fastMode,
       memorySearch: createMemorySearchCallback(options.callbacks, "aggregator"),
+      threadTools: options.callbacks?.threadTools?.(),
       onTextDelta(delta: string) {
         options.callbacks?.onDelta?.(delta);
       },
@@ -1389,6 +1382,7 @@ export async function aggregateSubagentResults(
       sourceLabel: "aggregator",
       modelId: executionModelId,
       tokens: result.contextUsage.tokens,
+      inputTokens: Math.max(0, result.contextUsage.sessionStats.tokens.total - result.contextUsage.sessionStats.tokens.output),
       contextWindow: result.contextUsage.contextWindow,
       usagePercent: result.contextUsage.usagePercent,
       totalProcessedTokens: result.contextUsage.sessionStats.tokens.total,
@@ -1408,69 +1402,8 @@ export async function aggregateSubagentResults(
   return createChatMessage("assistant", result.text.trim());
 }
 
-export function buildExecutionPrompt(
-  messages: ChatMessage[],
-  finalExecutionBrief: string,
-  executionPlan?: ExecutionPlan,
-  cwd?: string
-) {
-  return assembleDeterministicPrompt([
-    {
-      kind: "system",
-      content: [
-        "You are the execution stage for a local coding harness.",
-        "Use the available coding tools when needed and respond with the final assistant answer only."
-      ]
-    },
-    {
-      kind: "workspace",
-      content: cwd ? buildExecutionWorkspaceContext(messages, finalExecutionBrief, executionPlan, cwd) : undefined
-    },
-    {
-      kind: "frozen-plan",
-      content: finalExecutionBrief
-    },
-    {
-      kind: "dynamic",
-      content: ["Conversation transcript:", formatMessages(messages)]
-    }
-  ]);
-}
-
-function buildExecutionWorkspaceContext(
-  messages: ChatMessage[],
-  finalExecutionBrief: string,
-  executionPlan?: ExecutionPlan,
-  cwd?: string
-) {
-  const workspacePathGuidance = cwd
-    ? buildWorkspacePathGuidance(
-        [...messages.filter((message) => message.role === "user").slice(-3).map((message) => message.content), finalExecutionBrief].join(
-          "\n"
-        ),
-        cwd
-      )
-    : undefined;
-  const normalizedFinalExecutionBrief = cwd
-    ? normalizeWorkspaceRelativePaths(finalExecutionBrief, cwd)
-    : finalExecutionBrief;
-  return [
-    executionPlan?.mode
-      ? [
-          "Active mode:",
-          `- ${executionPlan.mode.label}: ${executionPlan.mode.description}`,
-          `- Execution guidance: ${executionPlan.mode.executionPrompt}`,
-          `- Tool policy: ${executionPlan.mode.toolPolicy}`
-        ].join("\n")
-      : "",
-    executionPlan?.ruleSources && executionPlan.ruleSources.length > 0
-      ? ["Rule sources:", ...executionPlan.ruleSources.map((rule) => `[${rule.scope}] ${rule.label}: ${rule.content}`)].join("\n")
-      : "",
-    cwd ? buildGitRepositoryPromptContext(cwd) : "",
-    cwd ? buildExecutionSkillContext(cwd) : "",
-    workspacePathGuidance ?? "",
-    `Execution brief: ${normalizedFinalExecutionBrief}`
-  ].filter(Boolean).join("\n");
+export function buildExecutionPrompt(messages: ChatMessage[], finalExecutionBrief: string, executionPlan?: ExecutionPlan, cwd?: string) {
+  return createExecutionPrompt({ messages, finalExecutionBrief, executionPlan, cwd });
 }
 
 function createMemorySearchCallback(
@@ -1497,7 +1430,7 @@ function buildPrerequisitePrompt(
     ? prerequisite.requiredForTaskIds.join(", ")
     : "all planned work";
   return [
-    buildExecutionPrompt(messages, executionPlan.finalExecutionBrief, executionPlan, cwd),
+    createExecutionPrompt({ messages, finalExecutionBrief: executionPlan.finalExecutionBrief, executionPlan, cwd }),
     "",
     "Run this prerequisite setup step now. Complete only this prerequisite before subagent work starts.",
     `Prerequisite id: ${prerequisite.id}`,
@@ -1508,83 +1441,6 @@ function buildPrerequisitePrompt(
     "",
     "Report concise setup result when complete."
   ].join("\n");
-}
-
-async function buildExecutionInput(
-  cwd: string,
-  messages: ChatMessage[],
-  finalExecutionBrief: string,
-  executionPlan?: ExecutionPlan,
-  prefix?: string,
-  options: { geminiCachedAttachmentContext?: GeminiCachedAttachmentContext } = {}
-) {
-  const attachmentContext = await buildPromptAttachmentContext(messages, {
-    geminiCachedAttachmentContext: options.geminiCachedAttachmentContext
-  });
-  const basePrompt = assembleDeterministicPrompt([
-    {
-      kind: "system",
-      content: [
-        "You are the execution stage for a local coding harness.",
-        "Use the available coding tools when needed and respond with the final assistant answer only."
-      ]
-    },
-    {
-      kind: "workspace",
-      content: buildExecutionWorkspaceContext(messages, finalExecutionBrief, executionPlan, cwd)
-    },
-    {
-      kind: "attachments",
-      content: attachmentContext.transcript === formatMessages(messages) ? undefined : attachmentContext.transcript
-    },
-    {
-      kind: "frozen-plan",
-      content: finalExecutionBrief
-    },
-    {
-      kind: "dynamic",
-      content: ["Conversation transcript:", formatMessages(messages)]
-    }
-  ]);
-  const prompt = [prefix, prefix ? "" : undefined, basePrompt].filter(Boolean).join("\n");
-
-  return {
-    prompt,
-    images: attachmentContext.images,
-    cacheableUserBlocks: attachmentContext.cacheableUserBlocks
-  };
-}
-
-function formatMessages(messages: ChatMessage[]) {
-  const visibleMessages = messages.filter((message) => message.role !== "system");
-  return visibleMessages.map((message) => `${message.role.toUpperCase()}: ${message.content}`).join("\n");
-}
-
-function formatSubagentResults(subtasks: PlannerSubtask[], subagentResults: SubagentResult[]) {
-  return subtasks
-    .map((task) => {
-      const result = subagentResults.find((entry) => entry.id === task.id);
-      return [
-        `Subtask ${task.id}: ${task.title}`,
-        `Instruction: ${task.instruction}`,
-        `Status: ${result?.status ?? "missing"}`,
-        result?.output ? `Output: ${result.output}` : "Output: (missing)",
-        result?.contractDriftPaths && result.contractDriftPaths.length > 0
-          ? `Contract drift paths: ${result.contractDriftPaths.join(", ")}`
-          : "",
-        result?.errorMessage ? `Error: ${result.errorMessage}` : ""
-      ]
-        .filter(Boolean)
-        .join("\n");
-    })
-    .join("\n\n");
-}
-
-function formatSubagentCompletionDetail(output: string, contractDriftPaths: string[]) {
-  return [
-    output.slice(0, 240),
-    contractDriftPaths.length > 0 ? `Contract drift paths: ${contractDriftPaths.join(", ")}` : ""
-  ].filter(Boolean).join("\n");
 }
 
 function mergeSubagentResults(subtasks: PlannerSubtask[], existing: SubagentResult[], incoming: SubagentResult[]) {
@@ -1648,8 +1504,7 @@ export function executionPlanToTasks(executionPlan: ExecutionPlan): PlannerSubta
     ? []
     : bucketContracts(
         executionPlan.contracts,
-        executionPlan.actualSubagentCount,
-        executionPlan.subagentWorktreeStrategy
+        executionPlan.actualSubagentCount
       ).map((bucket) => {
         const taskId = bucket.length === 1 ? bucket[0]!.taskId : bucket.map((contract) => contract.taskId).join("+");
         const title =
@@ -1678,6 +1533,7 @@ export function executionPlanToTasks(executionPlan: ExecutionPlan): PlannerSubta
 }
 
 export function buildExecutionPlan(input: {
+  projectRoot?: string;
   runId: string;
   planningModelId: ProviderModelId;
   plannerResult: PlannerReadyTurn;
@@ -1691,12 +1547,13 @@ export function buildExecutionPlan(input: {
   origin: ExecutionPlan["origin"];
 }): ExecutionPlan {
   const prerequisites = normalizePrerequisites(input.plannerResult);
-  const contracts = normalizeContracts(input.plannerResult, input.subagentWorktreeStrategy);
+  const verification = input.projectRoot ? projectVerificationCommands(input.projectRoot) : [];
+  const contracts = normalizeContracts(input.plannerResult, input.subagentWorktreeStrategy, verification);
   const effectiveSubagentWorktreeStrategy =
     input.subagentWorktreeStrategy === "same-worktree" && requiresSeparateWorktreesForContracts(contracts)
       ? "separate-worktrees"
       : input.subagentWorktreeStrategy;
-  const targetSubagentCount = contracts.length === 0 ? 0 : getTargetSubagentCount(input.plannerResult.difficultyScore);
+  const targetSubagentCount = input.plannerResult.usesSubagents ? Math.min(input.plannerResult.subtasks.length, contracts.length) : 0;
   const actualSubagentCount =
     targetSubagentCount < 2 ? 0 : getActualSubagentCount(contracts, targetSubagentCount, effectiveSubagentWorktreeStrategy);
   const gateMode = resolveExecutionPlanGateMode(input.mode, input.planExecutionMode, actualSubagentCount);
@@ -1707,6 +1564,7 @@ export function buildExecutionPlan(input: {
     iteration: input.iteration,
     summary: input.plannerResult.summary,
     finalExecutionBrief: input.plannerResult.finalExecutionBrief,
+    supervision: input.plannerResult.supervision,
     difficultyScore: Math.round(input.plannerResult.difficultyScore),
     planningModelId: input.planningModelId,
     executionModelId: input.plannerResult.executionModelId,
@@ -1729,21 +1587,23 @@ export function buildExecutionPlan(input: {
 function normalizePrerequisites(plannerResult: PlannerReadyTurn): PlanPrerequisite[] {
   return (plannerResult.prerequisites ?? []).map((prerequisite) => ({
     ...prerequisite,
-    status: prerequisite.status ?? "pending"
+    status: "pending"
   }));
 }
 
 function normalizeContracts(
   plannerResult: PlannerReadyTurn,
-  subagentWorktreeStrategy: SubagentWorktreeStrategy
+  subagentWorktreeStrategy: SubagentWorktreeStrategy,
+  verification: string[]
 ): SubagentContract[] {
   if (plannerResult.contracts && plannerResult.contracts.length > 0) {
     return plannerResult.contracts.map((contract) => ({
       ...contract,
+      mergeNotes: contract.verificationCommands.length || (contract.verificationScope === "worktree-full" && verification.length) ? contract.mergeNotes : `${contract.mergeNotes}\nVerification pending: the main owner must establish task-specific checks from project instructions before claiming validation.`,
       verificationCommands:
         contract.verificationCommands.length > 0
           ? contract.verificationCommands
-          : defaultVerificationCommands(contract.ownedPaths, subagentWorktreeStrategy, contract.verificationScope)
+          : contract.verificationScope === "worktree-full" ? verification : []
     }));
   }
 
@@ -1757,12 +1617,8 @@ function normalizeContracts(
     deliverables: [task.title],
     integrationPoints: [],
     verificationScope: subagentWorktreeStrategy === "same-worktree" ? "owned-files-only" : "worktree-full",
-    verificationCommands: defaultVerificationCommands(
-      inferOwnedPaths(task.instruction),
-      subagentWorktreeStrategy,
-      subagentWorktreeStrategy === "same-worktree" ? "owned-files-only" : "worktree-full"
-    ),
-    mergeNotes: `Merge ${task.title} into final solution without dropping sibling work.`
+    verificationCommands: subagentWorktreeStrategy === "same-worktree" ? [] : verification,
+    mergeNotes: `Merge ${task.title} into final solution without dropping sibling work. Establish task-specific verification before claiming validation.`
   }));
 }
 
@@ -1784,30 +1640,9 @@ function inferEffortPoints(instruction: string) {
 }
 
 function inferOwnedPaths(instruction: string) {
-  const matches = instruction.matchAll(/([A-Za-z0-9_./-]+\.(?:ts|tsx|js|jsx|json|css|html|md))/g);
+  const matches = instruction.matchAll(/([A-Za-z0-9_./-]+\.(?:tsx?|jsx?|json|css|html|md|py|rs|c|cpp|cc|h|hpp|go|toml|ya?ml|cmake))\b/g);
   const values = [...matches].map((match) => match[1]!).filter(Boolean);
   return values.length > 0 ? values : ["(planner-unspecified)"];
-}
-
-function defaultVerificationCommands(
-  ownedPaths: string[],
-  subagentWorktreeStrategy: SubagentWorktreeStrategy,
-  verificationScope: SubagentContract["verificationScope"]
-) {
-  if (subagentWorktreeStrategy === "same-worktree" || verificationScope === "owned-files-only") {
-    const fileArgs = ownedPaths.filter((value) => value !== "(planner-unspecified)");
-    return fileArgs.length > 0 ? [`bunx tsc --noEmit ${fileArgs.join(" ")}`] : ["bunx tsc --noEmit"];
-  }
-
-  return ["bun run typecheck", "bun run test"];
-}
-
-function getTargetSubagentCount(difficultyScore: number) {
-  if (difficultyScore < 30) {
-    return 0;
-  }
-
-  return Math.max(2, Math.min(10, Math.round(2 + ((difficultyScore - 30) / 70) * 8)));
 }
 
 function getActualSubagentCount(
@@ -1817,7 +1652,7 @@ function getActualSubagentCount(
 ) {
   let bucketCount = Math.min(targetSubagentCount, contracts.length);
   while (bucketCount > 1) {
-    const buckets = bucketContracts(contracts, bucketCount, subagentWorktreeStrategy);
+    const buckets = bucketContracts(contracts, bucketCount);
     if (isEvenlyBucketed(buckets) && (subagentWorktreeStrategy !== "same-worktree" || hasDisjointOwnedPaths(buckets))) {
       return buckets.length;
     }
@@ -1834,18 +1669,17 @@ function getActualSubagentCount(
 
 function bucketContracts(
   contracts: SubagentContract[],
-  bucketCount: number,
-  subagentWorktreeStrategy: SubagentWorktreeStrategy
+  bucketCount: number
 ) {
   if (bucketCount <= 0) {
     return [];
   }
 
   if (bucketCount >= contracts.length) {
-    return contracts.map((contract) => [withDerivedVerification(contract, subagentWorktreeStrategy)]);
+    return contracts.map((contract) => [contract]);
   }
 
-  const prepared = contracts.map((contract) => withDerivedVerification(contract, subagentWorktreeStrategy));
+  const prepared = contracts;
   const targetEffort = prepared.reduce((sum, contract) => sum + getSchedulingEffortPoints(contract.effortPoints), 0) / bucketCount;
   const buckets: SubagentContract[][] = [];
   let currentBucket: SubagentContract[] = [];
@@ -1874,19 +1708,6 @@ function bucketContracts(
   }
 
   return buckets;
-}
-
-function withDerivedVerification(
-  contract: SubagentContract,
-  subagentWorktreeStrategy: SubagentWorktreeStrategy
-): SubagentContract {
-  return {
-    ...contract,
-    verificationCommands:
-      contract.verificationCommands.length > 0
-        ? contract.verificationCommands
-        : defaultVerificationCommands(contract.ownedPaths, subagentWorktreeStrategy, contract.verificationScope)
-  };
 }
 
 function isEvenlyBucketed(buckets: SubagentContract[][]) {
@@ -1944,15 +1765,4 @@ function pathsOverlap(leftPaths: string[], rightPaths: string[]) {
   );
 }
 
-export function chooseExecutionPath(difficultyScore: number) {
-  return difficultyScore > 40 ? "subagents" : "main";
-}
-
-export function applyAssistantMessage(state: ChatSessionState, assistantMessage: ChatMessage): ChatSessionState {
-  return {
-    ...state,
-    messages: [...state.messages, assistantMessage],
-    lastError: undefined,
-    isStreaming: false
-  };
-}
+export { applyAssistantMessage, chooseExecutionPath } from "./pi-agent/session-state";

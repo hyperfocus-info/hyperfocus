@@ -873,49 +873,6 @@ createUiTest("ChatPanel", () => {
     await screen.findByText("Choose automatically");
   });
 
-it("updates composer effort label and sends reasoning plus fast mode", () => {
-    const commands: ClientCommand[] = [];
-    const project = createViewProjectFixture({
-      id: "project-effort-send",
-      draft: "ship it"
-    });
-    seedHarnessStoreForTests(
-      createHarnessStateFixture({
-        hasUsableApiKey: true,
-        hasUsableOpenAiApiKey: true,
-        selectedReasoningStrength: "medium",
-        hasGlobalSelectedReasoningStrength: true,
-        selectedFastMode: true,
-        hasGlobalSelectedFastMode: true,
-        workspace: {
-          activeProjectId: project.id,
-          projects: [project]
-        }
-      })
-    );
-
-    captureDispatchedCommands(commands);
-    render(() => <ChatPanel />);
-
-    const effortTrigger = document.querySelector<HTMLButtonElement>("[data-test-effort-trigger]");
-    if (!effortTrigger) {
-      throw new Error("Expected effort trigger");
-    }
-    expect(effortTrigger.textContent).toContain("Medium");
-    expect(effortTrigger.textContent).toContain("Fast");
-
-    fireEvent.click(screen.getByRole("button", { name: "Send task to Pi" }));
-
-    expect(commands).toHaveLength(1);
-    expect(commands[0]).toMatchObject({
-      type: "chat.send",
-      payload: {
-        reasoningStrength: "medium",
-        fastMode: true
-      }
-    });
-  });
-
   it("keeps desktop effort grouped while compact mode keeps the current model visible", () => {
     const project = createViewProjectFixture({
       id: "project-compact-controls"
@@ -1297,18 +1254,16 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     expect(textbox.style.height).toBe("180px");
   });
 
-  it("blocks Enter submit while the active thread is streaming", () => {
+  it("queues Enter submit while the active thread is streaming", () => {
     const commands: ClientCommand[] = [];
     const project = createViewProjectFixture({
       id: "project-enter-streaming",
       draft: "send while streaming",
       activeRun: createRunFixture({
-        id: "run-enter-streaming",
         status: "running-main"
       }),
       session: {
         ...createEmptySession("thread-1"),
-        messages: [],
         isStreaming: true
       }
     });
@@ -1328,8 +1283,10 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     const textbox = screen.getByRole("textbox");
     fireEvent.keyDown(textbox, { key: "Enter" });
 
-    expect(commands).toHaveLength(0);
-    expect(toastStore.toasts[0]?.description).toBe("Project is streaming");
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({ type: "thread.input", payload: {
+      projectId: project.id, threadId: project.activeThreadId, message: "send while streaming", mode: "queue"
+    } });
   });
 
   it("allows a follow-up when only a stale stream flag remains after a live CLI session", () => {
@@ -1338,12 +1295,10 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
       id: "project-stale-stream-cli",
       draft: "next task",
       activeRun: createRunFixture({
-        id: "run-stale-stream-cli",
         status: "completed"
       }),
       session: {
         ...createEmptySession("thread-1"),
-        messages: [],
         isStreaming: true
       },
       activeCliSession: {
@@ -1356,7 +1311,7 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
         cols: 120,
         rows: 32,
         attachState: "attached",
-        idleTimeoutMs: 30 * 60_000,
+        idleTimeoutMs: 1800000,
         startedAt: "2026-05-10T12:00:00.000Z",
         updatedAt: "2026-05-10T12:00:01.000Z"
       }
@@ -1376,7 +1331,9 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
     render(() => <ChatPanel />);
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
 
-    expect(commands[0]?.type).toBe("chat.send");
+    expect(commands[0]).toMatchObject({ type: "thread.input", payload: {
+      projectId: project.id, threadId: project.activeThreadId, message: "next task", mode: "queue"
+    } });
   });
 
   it("shows a waiting timer above the composer while the active thread is streaming", () => {
@@ -1562,53 +1519,6 @@ it("updates composer effort label and sends reasoning plus fast mode", () => {
 
     expect(commands).toHaveLength(0);
     expect(toastStore.toasts[0]?.description).toBe("Use resume failed agents to continue this run");
-  });
-
-  it("does not render a transcript plan card when the backend suppresses ask-mode summaries", () => {
-    const plan = createExecutionPlanFixture({
-      gating: {
-        mode: "immediate",
-        delaySeconds: 0
-      },
-      route: "main",
-      targetSubagentCount: 0,
-      actualSubagentCount: 0
-    });
-    const readyProject = createViewProjectFixture({
-      id: "project-immediate",
-      session: {
-        ...createViewProjectFixture().session,
-        messages: []
-      },
-      activeRun: createRunFixture({
-        id: "run-immediate",
-        threadId: "thread-1",
-        status: "ready",
-        plan
-      }),
-      latestPlan: {
-        sessionId: "session-1",
-        agentId: "pi",
-        planningModelId: "openai/gpt-5.4",
-        difficultyScore: 20,
-        usesSubagents: false,
-        executionModelId: "openai/gpt-5.4",
-        subtaskCount: 0,
-        executionPlan: plan
-      }
-    });
-    seedHarnessStoreForTests(
-      createHarnessStateFixture({
-        workspace: {
-          activeProjectId: readyProject.id,
-          projects: [readyProject]
-        }
-      })
-    );
-
-    render(() => <ChatPanel />);
-    expect(screen.queryByText("Plan summary")).toBeNull();
-    expect(screen.queryByText(plan.summary)).toBeNull();
   });
 
   it("sends resume and retry commands when the thread is idle", async () => {

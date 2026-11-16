@@ -1,0 +1,32 @@
+name: Repository checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-policy:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - run: bun run check:release-readiness
+      - run: bun run check:agent-guidance
+      - run: bun run check:process-policy
+      - run: bun run check:repository-size
+      - run: bun run test:repository
+      - run: bun run check:source-structure
+      - run: bun run check:code-style

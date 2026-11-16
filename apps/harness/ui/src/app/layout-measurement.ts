@@ -6,7 +6,7 @@ export function shouldCollapseTabStrip(navElement: HTMLElement) {
 }
 
 export function measureTabStripMinimumWidth(navElement: HTMLElement) {
-  const tabWidths = Array.from(navElement.children).reduce((total, tabItem) => total + tabItem.getBoundingClientRect().width, 0);
+  const tabWidths = Array.from(navElement.children).reduce((total, tabItem) => total + Math.max(tabItem.getBoundingClientRect().width, tabItem.scrollWidth), 0);
   const computedStyle = window.getComputedStyle(navElement);
   const gap = Number.parseFloat(computedStyle.columnGap || computedStyle.gap) || 0;
   const padding = (Number.parseFloat(computedStyle.paddingLeft) || 0) + (Number.parseFloat(computedStyle.paddingRight) || 0);

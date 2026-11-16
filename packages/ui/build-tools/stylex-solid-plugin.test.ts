@@ -11,6 +11,23 @@ afterEach(async () => {
 });
 
 describe("stylexSolidPlugin", () => {
+  test("collects lazy chunk CSS and extracted rules into the host stylesheet", async () => {
+    const outdir = await mkdtemp(path.join(tmpdir(), "hyperfocus-stylex-split-"));
+    temporaryDirectories.push(outdir);
+    const result = await Bun.build({
+      entrypoints: [path.join(import.meta.dir, "fixtures", "stylex-split.tsx")],
+      outdir, target: "browser", format: "esm", splitting: true,
+      external: ["solid-js", "solid-js/web", "@stylexjs/stylex"],
+      plugins: [stylexSolidPlugin({ cssOutputFile: "main.css" })],
+    });
+    expect(result.success).toBe(true);
+    expect(result.outputs.filter(output => output.path.endsWith(".js")).length).toBeGreaterThan(1);
+    const css = await readFile(path.join(outdir, "main.css"), "utf8");
+    expect(css).toContain(".split-entry-fixture");
+    expect(css).toContain(".split-optional-fixture");
+    expect(css).toContain("rgb(18,52,86)");
+    expect(css).toContain("rgb(86,52,18)");
+  });
   test("emits Solid DOM code and extracted StyleX CSS in one build", async () => {
     const temporaryRoot = await mkdtemp(path.join(tmpdir(), "hyperfocus-stylex-solid-"));
     const outdir = path.join(temporaryRoot, "staging", "dist");

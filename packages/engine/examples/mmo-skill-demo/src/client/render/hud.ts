@@ -1,3 +1,5 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 import { renderableRecord, renderRecord, type Renderable, type RenderFramePool } from "@hyperfocus/engine/render";
 import { bankQty, hasInventoryItem, hasQuestFlag, hasSlot, itemQty, selectedAbilityForSlot } from "../../shared-loadout.ts";
 import { playerAbilityMetadata } from "../../shared-ability-catalog.ts";
@@ -214,9 +216,7 @@ function containsPoint(rect: { x: number; y: number; width: number; height: numb
   return Boolean(point && point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height);
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+
 
 const HUD_PANEL_FILL = "rgba(8, 12, 11, 0.84)";
 const HUD_PANEL_FILL_DENSE = "rgba(6, 9, 9, 0.92)";
@@ -312,12 +312,12 @@ function appendStatBar(
   width: number,
   fill: string
 ) {
-  const name = pushText(calls, pool, label, x, y + 9, "800 9px system-ui");
+  const name = pushText(calls, pool, label, x, y + 9, "800 12px system-ui");
   name.fill = HUD_MUTED;
   const bar = pushBar(calls, pool, x + 34, y, width - 34, 8, value, max);
   bar.background = "rgba(0,0,0,0.58)";
   bar.fill = fill;
-  const valueText = pushText(calls, pool, `${Math.ceil(value)}/${Math.ceil(max)}`, x + width - 4, y + 8, "800 9px system-ui");
+  const valueText = pushText(calls, pool, `${Math.ceil(value)}/${Math.ceil(max)}`, x + width - 4, y + 8, "800 12px system-ui");
   valueText.align = "right";
   valueText.fill = HUD_TEXT;
 }
@@ -332,7 +332,7 @@ function appendPlayerFrameCalls(state: MmoSkillDemoState, player: PlayerEntity |
   if (!player) {
     const title = pushText(calls, pool, state.roomLabel || "MMO Skill Demo", frameX + 12, frameY + 19, "800 13px system-ui");
     title.fill = HUD_TEXT;
-    const joining = pushText(calls, pool, "Joining authoritative zone...", frameX + 12, frameY + 38, "11px system-ui");
+    const joining = pushText(calls, pool, "Joining authoritative zone...", frameX + 12, frameY + 38, "12px system-ui");
     joining.fill = HUD_MUTED;
     return { x: frameX, y: frameY, width: frameW, height: frameH };
   }
@@ -349,7 +349,7 @@ function appendPlayerFrameCalls(state: MmoSkillDemoState, player: PlayerEntity |
   const name = pushText(calls, pool, player.name || "Adventurer", frameX + 58, frameY + 17, "900 13px system-ui");
   name.fill = HUD_TEXT;
   name.maxWidth = frameW - 152;
-  const rank = pushText(calls, pool, `MR ${player.masteryRank}  C${player.combatLevel} M${player.miningLevel} W${player.woodcuttingLevel}`, frameX + frameW - 12, frameY + 17, "800 10px system-ui");
+  const rank = pushText(calls, pool, `MR ${player.masteryRank}  C${player.combatLevel} M${player.miningLevel} W${player.woodcuttingLevel}`, frameX + frameW - 12, frameY + 17, "800 12px system-ui");
   rank.align = "right";
   rank.fill = HUD_MUTED;
   rank.maxWidth = 104;
@@ -359,7 +359,7 @@ function appendPlayerFrameCalls(state: MmoSkillDemoState, player: PlayerEntity |
 
   if (player.guardMs > 0 || player.berserkMs > 0) {
     const statusText = player.berserkMs > 0 ? "Berserk" : "Guard";
-    const status = pushText(calls, pool, statusText, frameX + 16, frameY + 60, "800 9px system-ui");
+    const status = pushText(calls, pool, statusText, frameX + 16, frameY + 60, "800 12px system-ui");
     status.fill = player.berserkMs > 0 ? "#ffb36b" : "#9bd6ff";
   }
 
@@ -380,7 +380,7 @@ function appendChip(calls: Renderable[], pool: RenderFramePool | undefined, text
   const chip = pushRect(calls, pool, x, y, width, 24);
   chip.fill = fill;
   chip.stroke = stroke;
-  const label = pushText(calls, pool, text, x + width * 0.5, y + 16, "800 11px system-ui");
+  const label = pushText(calls, pool, text, x + width * 0.5, y + 16, "800 12px system-ui");
   label.align = "center";
   label.fill = tone === "gold" ? HUD_GOLD : HUD_TEXT;
   label.maxWidth = width - 12;
@@ -401,7 +401,7 @@ function appendTopObjectiveCalls(state: MmoSkillDemoState, player: PlayerEntity,
   const objectiveW = centerW;
   const objectiveY = chipY + 30;
   appendPanel(calls, pool, chipX, objectiveY, objectiveW, 28, "rgba(8, 12, 11, 0.68)", "rgba(244, 211, 107, 0.30)");
-  const objective = pushText(calls, pool, nextGoalText(player), chipX + 12, objectiveY + 18, "800 11px system-ui");
+  const objective = pushText(calls, pool, nextGoalText(player), chipX + 12, objectiveY + 18, "800 12px system-ui");
   objective.fill = HUD_TEXT;
   objective.maxWidth = objectiveW - 24;
 }
@@ -416,10 +416,10 @@ function appendTooltipCalls(tooltip: AbilityTooltip, anchor: { x: number; y: num
   const header = pushText(calls, pool, tooltip.header, x + 12, y + 18, "900 12px system-ui");
   header.fill = HUD_GOLD;
   header.maxWidth = boxWidth - 24;
-  const description = pushTextBlock(calls, pool, tooltip.description, x + 12, y + 32, boxWidth - 24, 13, 2, "10px system-ui");
+  const description = pushTextBlock(calls, pool, tooltip.description, x + 12, y + 32, boxWidth - 24, 13, 2, "12px system-ui");
   description.fill = HUD_TEXT;
   for (let i = 0; i < detailCount; i += 1) {
-    const detail = pushText(calls, pool, tooltip.details[i] ?? "", x + 12, y + 58 + i * 12, "9px system-ui");
+    const detail = pushText(calls, pool, tooltip.details[i] ?? "", x + 12, y + 58 + i * 12, "12px system-ui");
     detail.fill = HUD_MUTED;
     detail.maxWidth = boxWidth - 24;
   }
@@ -437,9 +437,9 @@ function appendCombatBarCalls(state: MmoSkillDemoState, player: PlayerEntity | u
   if (player) {
     const energy = energyValue(player);
     const max = energyMax(player);
-    const energyLabel = pushText(calls, pool, "Energy", start, panelY + 18, "900 10px system-ui");
+    const energyLabel = pushText(calls, pool, "Energy", start, panelY + 18, "900 12px system-ui");
     energyLabel.fill = energyReady(player) ? HUD_GOLD : HUD_ENERGY;
-    const energyText = pushText(calls, pool, `${Math.floor(energy)}/${Math.floor(max)}`, start + totalWidth, panelY + 18, "900 10px system-ui");
+    const energyText = pushText(calls, pool, `${Math.floor(energy)}/${Math.floor(max)}`, start + totalWidth, panelY + 18, "900 12px system-ui");
     energyText.align = "right";
     energyText.fill = HUD_TEXT;
     const energyBar = pushBar(calls, pool, start + 50, panelY + 9, Math.max(24, totalWidth - 92), 8, energy, max);
@@ -471,7 +471,9 @@ function appendCombatBarCalls(state: MmoSkillDemoState, player: PlayerEntity | u
     const labelCall = pushText(calls, pool, label, x + slotWidth * 0.5, y + 15, "900 12px system-ui");
     labelCall.align = "center";
     labelCall.fill = unlocked && !rBlocked ? HUD_GOLD : "#8b9085";
-    const name = pushText(calls, pool, cooldownText || (unlocked ? hotbarName(player, label) : reveal.status), x + slotWidth * 0.5, y + 34, width < 700 ? "8px system-ui" : "9px system-ui");
+    const abilityName = cooldownText || (unlocked ? hotbarName(player, label) : reveal.status);
+    const visibleName = width < 700 && abilityName.length > 5 ? `${abilityName.slice(0, 4)}…` : abilityName;
+    const name = pushText(calls, pool, visibleName, x + slotWidth * 0.5, y + 34, "12px system-ui");
     name.align = "center";
     name.fill = unlocked && !rBlocked ? HUD_TEXT : "#919789";
     name.maxWidth = slotWidth - 6;
@@ -491,9 +493,9 @@ function appendCombatBarCalls(state: MmoSkillDemoState, player: PlayerEntity | u
   const promptY = panelY - 30;
   appendPanel(calls, pool, promptX, promptY, promptW, 24, "rgba(7, 10, 10, 0.72)", "rgba(120, 214, 180, 0.30)");
   const interactPrompt = inputDevice === "controller" ? "[L1] Interact" : "[Z] Interact";
-  const interactTitle = pushText(calls, pool, interactPrompt, promptX + 10, promptY + 16, "800 10px system-ui");
+  const interactTitle = pushText(calls, pool, interactPrompt, promptX + 10, promptY + 16, "800 12px system-ui");
   interactTitle.fill = HUD_ENERGY;
-  const interact = pushText(calls, pool, interactionLabel(state, player, currentInteractable), promptX + promptW - 10, promptY + 16, "10px system-ui");
+  const interact = pushText(calls, pool, interactionLabel(state, player, currentInteractable), promptX + promptW - 10, promptY + 16, "12px system-ui");
   interact.align = "right";
   interact.fill = HUD_TEXT;
   interact.maxWidth = promptW - (inputDevice === "controller" ? 116 : 104);
@@ -501,32 +503,33 @@ function appendCombatBarCalls(state: MmoSkillDemoState, player: PlayerEntity | u
 }
 
 function appendQuestPanelCalls(state: MmoSkillDemoState, player: PlayerEntity | undefined, width: number, calls: Renderable[], pool: RenderFramePool | undefined, minimapOpen: boolean) {
-  if (!player) return;
+  // The compact top objective remains visible; full details live in Quest.
+  if (!player || width < 700) return;
   const w = Math.min(width - 24, width < 700 ? 252 : 292);
   const x = Math.max(12, width - w - 12);
   const y = minimapOpen ? (width < 700 ? 248 : 250) : width < 700 ? 146 : 90;
   const showReturn = !hasQuestFlag(player, "heavy-lifting");
   const h = showReturn ? 136 : 108;
   appendPanel(calls, pool, x, y, w, h, "rgba(7, 10, 10, 0.74)", "rgba(244, 211, 107, 0.36)");
-  const title = pushText(calls, pool, "QUESTS", x + 10, y + 16, "900 10px system-ui");
+  const title = pushText(calls, pool, "QUESTS", x + 10, y + 16, "900 12px system-ui");
   title.fill = HUD_GOLD;
-  const event = pushText(calls, pool, eventProgressLine(state), x + w - 10, y + 16, "800 10px system-ui");
+  const event = pushText(calls, pool, eventProgressLine(state), x + w - 10, y + 16, "800 12px system-ui");
   event.align = "right";
   event.fill = HUD_MUTED;
   event.maxWidth = w - 76;
   appendDivider(calls, pool, x + 10, y + 24, w - 20);
-  const daily = pushText(calls, pool, "Daily", x + 10, y + 42, "800 10px system-ui");
+  const daily = pushText(calls, pool, "Daily", x + 10, y + 42, "800 12px system-ui");
   daily.fill = HUD_ENERGY;
-  const dailyLine = pushTextBlock(calls, pool, dailyQuestHudText(player), x + 52, y + 32, w - 62, 13, 2, "700 11px system-ui");
+  const dailyLine = pushTextBlock(calls, pool, dailyQuestHudText(player), x + 52, y + 32, w - 62, 13, 2, "700 12px system-ui");
   dailyLine.fill = HUD_TEXT;
-  const next = pushText(calls, pool, "Next", x + 10, y + 72, "800 10px system-ui");
+  const next = pushText(calls, pool, "Next", x + 10, y + 72, "800 12px system-ui");
   next.fill = HUD_GOLD;
-  const goal = pushTextBlock(calls, pool, nextGoalText(player), x + 52, y + 62, w - 62, 13, 2, "700 11px system-ui");
+  const goal = pushTextBlock(calls, pool, nextGoalText(player), x + 52, y + 62, w - 62, 13, 2, "700 12px system-ui");
   goal.fill = HUD_TEXT;
   if (showReturn) {
-    const ret = pushText(calls, pool, "Return", x + 10, y + 100, "800 10px system-ui");
+    const ret = pushText(calls, pool, "Return", x + 10, y + 100, "800 12px system-ui");
     ret.fill = HUD_ENERGY;
-    const retLine = pushTextBlock(calls, pool, earlyLoopReturnBriefing(state, player), x + 52, y + 90, w - 62, 12, 2, "700 10px system-ui");
+    const retLine = pushTextBlock(calls, pool, earlyLoopReturnBriefing(state, player), x + 52, y + 90, w - 62, 12, 2, "700 12px system-ui");
     retLine.fill = HUD_TEXT;
   }
   const progress = pushBar(calls, pool, x + 10, y + h - 12, w - 20, 4, state.worldEventProgress, Math.max(1, state.worldEventGoal));
@@ -543,7 +546,7 @@ function appendDialogCalls(dialog: DialogState | undefined, timeMs: number, widt
   appendPanel(calls, pool, x, y, w, h, "rgba(7, 10, 10, 0.90)", "rgba(245, 243, 232, 0.62)");
   const title = pushText(calls, pool, dialog.title, x + 12, y + 20, "900 13px system-ui");
   title.fill = HUD_TEXT;
-  const body = pushTextBlock(calls, pool, dialog.body, x + 12, y + 40, w - 24, 14, 4, "11px system-ui");
+  const body = pushTextBlock(calls, pool, dialog.body, x + 12, y + 40, w - 24, 14, 4, "12px system-ui");
   body.fill = "#dfe6ca";
 }
 
@@ -568,7 +571,7 @@ export function createHudRenderCalls(
     const contract = contractInfo(player.contractId);
     appendTopObjectiveCalls(state, player, width, playerFrame, calls, pool);
     if (width >= 920) {
-      const contractText = pushText(calls, pool, `${contract.name} ${Math.min(contract.targetKills, player.contractKills)}/${contract.targetKills}`, width - 16, 24, "800 11px system-ui");
+      const contractText = pushText(calls, pool, `${contract.name} ${Math.min(contract.targetKills, player.contractKills)}/${contract.targetKills}`, width - 16, 24, "800 12px system-ui");
       contractText.align = "right";
       contractText.fill = HUD_TEXT;
       contractText.maxWidth = Math.max(100, width - (playerFrame.x + playerFrame.width) - 560);

@@ -1,3 +1,5 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+import { clamp01 } from "@hyperfocus/utilities/math";
 import { MAP_HEIGHT, MAP_WIDTH, TILE } from "../world.ts";
 import type { Camera, ImpactActorVisual, ImpactSignal, ImpactSignalSink, ImpactWeight } from "./types.ts";
 
@@ -32,13 +34,9 @@ export type ImpactFeedbackController = ImpactSignalSink & {
 const MAX_SHAKE_PX = 4;
 const MAX_HOLD_AMPLITUDE = 3.2;
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
 
-function clamp01(value: number) {
-  return clamp(value, 0, 1);
-}
+
+
 
 function normalize(dx: number, dy: number) {
   const length = Math.hypot(dx, dy) || 1;

@@ -1,3 +1,4 @@
+import { nonNegativeNumberOr as nonNegativeNumber } from "@hyperfocus/utilities/math";
 import { createRenderEffect, createSignal, onCleanup } from "solid-js";
 
 export const DEFAULT_STREAM_RENDER_INTERVAL_MS = 32;
@@ -45,8 +46,4 @@ export function createCoalescedText(
   });
   onCleanup(clearTimer);
   return value;
-}
-
-function nonNegativeNumber(value: number | undefined, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
 }

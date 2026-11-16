@@ -1,3 +1,7 @@
+import { isFiniteNumber } from "@hyperfocus/utilities/math";
+import { roundDecimal } from "@hyperfocus/utilities/math";
+import { isRecord } from "@hyperfocus/utilities/records";
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { dirname, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 
@@ -31,9 +35,7 @@ function median(values: readonly number[]) {
   return sorted[Math.floor(sorted.length / 2)] ?? 0;
 }
 
-function round(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
+function round(value: number) { return roundDecimal(value, 3); }
 
 async function readReport(path: string): Promise<RenderReport> {
   return parseRenderReport(await Bun.file(path).json());
@@ -55,13 +57,9 @@ function parseRenderReport(value: unknown): RenderReport {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
+
+
 
 function runRenderBench(options: {
   mode: string;
@@ -73,7 +71,7 @@ function runRenderBench(options: {
   outputDir: string;
 }) {
   const out = resolve(options.outputDir, `exp-018-${options.mode}-${options.label}-${options.run}.json`);
-  const result = Bun.spawnSync({
+  const result = spawnBackgroundProcessSync({
     cmd: [
       process.execPath,
       benchScript,

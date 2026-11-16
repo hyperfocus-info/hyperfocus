@@ -1,4 +1,5 @@
 import { createAssistantStreamChunker } from "../../assistant-stream-chunker";
+import { qualityTraceSchema, type QualityTrace } from "@hyperfocus/ai-core/quality";
 import { createProjectNoteSearch } from "./project-note-search";
 import type { AssistantStreamChunk } from "../../assistant-stream-chunker";
 import type { ManagedExecutionState } from "../../execution-runtime";
@@ -10,7 +11,7 @@ import { DERIVED_PROGRESS_HEARTBEAT_MS, STREAM_DELTA_FLUSH_MS, STREAM_DELTA_MAX_
 import type { HarnessConnection, PendingBrowserApproval } from "../core/contracts";
 import { createEmptyTokenUsageTotals, emitControlEvent, recordServerTokenUsage } from "../transport/events";
 import { createExecutionActivityCallbacks } from "./activity";
-import { emitRunUpdatedById } from "../workspace/project-events";
+import { emitRunUpdatedById, emitProjectUpdated } from "../workspace/project-events";
 import { formatSubagentDoneStatus, formatSubagentFailedStatus, inferMilestonePhase, inferRunPhase, inferTracePhase, statusMessageFromTrace } from "./run-phase-format";
 import { createStreamPump, DEFAULT_STREAM_MAX_QUEUED_BYTES } from "../../stream-pump";
 import { withTraceTimestamp } from "../../trace-timestamps";
@@ -228,7 +229,7 @@ function createExecutionTranscriptController(input: ExecutionTranscriptControlle
 }
 
 export function createExecutionCallbacks(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -250,6 +251,26 @@ export function createExecutionCallbacks(
 
   return {
     searchMemory: createProjectNoteSearch(repository, { projectId, threadId, runId }),
+    threadTools(subagentId?: string) {
+      const sourceThreadId = subagentId ? repository.getSubagentThread({ runId, subagentId }) : threadId;
+      if (!sourceThreadId) throw new Error("Subagent thread has not started");
+      return {
+        list(input: { cursor?: string }) {
+          return { currentThreadId: sourceThreadId, ...repository.listWorkspaceProjectThreads(projectId, { cursor: input.cursor, limit: 40 }) };
+        },
+        read(input: { threadId: string; cursor?: string }) {
+          if (!repository.getProject(projectId).threads.some(thread => thread.id === input.threadId)) throw new Error("Unknown project thread");
+          const page = repository.listWorkspaceThreadMessages(projectId, input.threadId, { cursor: input.cursor, limit: 20 });
+          return { ...page, items: page.items.map(message => ({ ...message, content: message.content.slice(0, 8000), truncated: message.content.length > 8000 })) };
+        },
+        send(input: { threadId: string; message: string; deliveryId: string }) {
+          const result = repository.sendThreadMessage({ projectId, sourceThreadId, targetThreadId: input.threadId, message: input.message, deliveryId: input.deliveryId });
+          runtime.upsertPersistedProject(repository.getProject(projectId));
+          emitProjectUpdated(ws, requestId, projectId, repository.getProject(projectId), repository);
+          return result;
+        }
+      };
+    },
     onTrace(trace: AgentTrace) {
       const stampedTrace = withTraceTimestamp(trace);
       runtime.appendTrace(projectId, stampedTrace, threadId);
@@ -267,6 +288,15 @@ export function createExecutionCallbacks(
         recordRunMilestone(statusMessage, inferTracePhase(stampedTrace, transcript.getCurrentPhase()));
       }
     },
+    onQuality(trace: QualityTrace) {
+      const quality = qualityTraceSchema.parse(trace);
+      if (!quality.rules.some(rule => rule.eligible !== "no")) return;
+      const run = repository.getRun(projectId, runId);
+      if (!run?.plan) return;
+      const project = repository.setAgentRunExecutionPlan(projectId, runId, { ...run.plan, quality });
+      runtime.upsertPersistedProject(project);
+      emitRunUpdatedById(ws, requestId, repository, projectId, runId, connections);
+    },
     onRunMilestone(line: string) {
       recordRunMilestone(line);
     },
@@ -280,8 +310,15 @@ export function createExecutionCallbacks(
       assistantDeltaPump.push(delta);
     },
     onContextUsage(contextUsage: ProjectContextUsage) {
+      const input = contextUsage.inputTokens ?? contextUsage.tokens;
+      if (input !== undefined && contextUsage.totalProcessedTokens !== undefined) {
+        recordRunMilestone(`Usage ${contextUsage.sourceLabel} (${contextUsage.modelId}): input ${input}, output ${Math.max(0,
+          contextUsage.totalProcessedTokens - input)}, cached input ${contextUsage.cachedInputTokens ?? 0} (included).`);
+      }
       runtime.setProjectContextUsage(projectId, contextUsage, threadId);
-      const tokenUsage = recordServerTokenUsage(repository, tokenUsageSession, contextUsage);
+      const tokenUsage = recordServerTokenUsage(repository, tokenUsageSession, contextUsage, { projectId,
+        threadId: contextUsage.sourceKind === "subagent" ? repository.getSubagentThread({ runId, subagentId: contextUsage.sourceLabel }) : threadId,
+        runId, runtime: repository.getRun(projectId, runId)?.launchProfile?.agentId });
       emitControlEvent(connections, {
         type: "project.context",
         requestId,
@@ -295,8 +332,10 @@ export function createExecutionCallbacks(
     },
     onSubagentStart(task: PlannerReadyTurn["subtasks"][number], attempt: number = 1) {
       transcript.setCurrentPhase("subagents");
+      repository.ensureSubagentThread({ projectId, parentThreadId: threadId, runId, subagentId: task.id, title: task.title, instruction: task.instruction });
       const nextProject = repository.markSubtaskStarted(projectId, runId, task.id, attempt);
       runtime.upsertPersistedProject(nextProject);
+      emitProjectUpdated(ws, requestId, projectId, nextProject, repository);
       emitRunUpdatedById(ws, requestId, repository, projectId, runId, connections);
       if (attempt === 1) {
         recordRunMilestone(`Subagent ${task.title}: started.`);
@@ -306,6 +345,7 @@ export function createExecutionCallbacks(
       recordRunMilestone(`Subagent ${task.title}: retrying attempt ${attempt}.`);
     },
     onSubagentResult(result: SubagentResult) {
+      repository.finishSubagentThread({ runId, subagentId: result.id, status: result.status === "completed" ? "completed" : "failed", output: result.output ?? result.errorMessage ?? "" });
       const nextProject =
         result.status === "completed"
           ? repository.markSubtaskCompleted(
@@ -330,6 +370,7 @@ export function createExecutionCallbacks(
       runtime.upsertPersistedProject(nextProject);
       emitRunUpdatedById(ws, requestId, repository, projectId, runId, connections);
       const nextRun = repository.getRun(projectId, runId);
+      emitProjectUpdated(ws, requestId, projectId, nextProject, repository);
       if (nextRun) {
         recordRunMilestone(
           result.status === "completed"

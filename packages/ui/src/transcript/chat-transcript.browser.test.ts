@@ -1,3 +1,5 @@
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -21,6 +23,7 @@ test("ChatTranscript executes bounded Markdown rendering at desktop and narrow w
   expect(report).toHaveProperty("narrowLarge");
   expect(report).toHaveProperty("streamControl");
   expect(report).toHaveProperty("streamCoalesced");
+  expect(report).toHaveProperty("reading");
 }, 60_000);
 
 async function buildFixture() {
@@ -59,17 +62,17 @@ async function buildFixture() {
 }
 
 async function runBrowser(url: string) {
-  const process = Bun.spawn({
-    cmd: ["node", runner],
+  const child = spawnBackgroundProcess({
+    cmd: [process.execPath, runner],
     cwd: repositoryRoot,
     env: { ...Bun.env, TRANSCRIPT_BROWSER_URL: url },
     stdout: "pipe",
     stderr: "pipe"
   });
   const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-    process.exited
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited
   ]);
   if (exitCode !== 0) throw new Error(`Transcript browser runner failed with exit ${exitCode}.\n${stdout}\n${stderr}`);
   return stdout.trim();
@@ -78,8 +81,4 @@ async function runBrowser(url: string) {
 function toImportPath(target: string) {
   const relative = path.relative(smokeRoot, target).replaceAll("\\", "/");
   return relative.startsWith(".") ? relative : `./${relative}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

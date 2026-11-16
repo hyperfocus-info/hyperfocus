@@ -1,3 +1,5 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 import { type MmoSkillDemoInput, type MmoSkillDemoState, type NpcEntity, type PlayerEntity } from "../../../shared-contracts.ts";
 import {
   activeNpcFromReplicatedState,
@@ -666,9 +668,7 @@ function wrappedIndex(index: number, length: number) {
   return ((index % length) + length) % length;
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

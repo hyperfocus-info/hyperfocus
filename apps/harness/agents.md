@@ -7,9 +7,15 @@ routes; load only the reference branches needed for the edit.
 - Keep runtime and persistence in `apps/harness/cli`, portable contracts in
   `packages/ai-core`, and reusable presentation in `packages/ui`.
 - Validate external, websocket, persisted, and model-produced data at a typed boundary.
-- Keep local-first state, plan-first execution, explicit recovery, and visible
-  capability limits intact.
+- Preserve local persistence, execution-mode approval gates, recovery, and visible
+  capability limits. Plan mode requires approval; do not impose that gate on
+  ordinary authorized implement-mode work.
 - For UI work, also read [DESIGN.md](../../DESIGN.md) and use `app-ui-standard`.
+  AI preference ownership, task-derived design context, and concise handoffs route through the
+  [UI workflow](../../docs/design-system/agent-workflow.md).
+- For existing settings, job, or assistant surfaces, search the
+  [Harness design evidence](../../docs/design-system/harness-debt.md) for the affected
+  interaction; batch handoffs are evidence, not mandatory reading for every edit.
 - Shipped behavior is documented in [the harness README](README.md). Product stories,
   coverage, audits, and roadmap evidence route through
   [docs/harness/README.md](../../docs/harness/README.md).

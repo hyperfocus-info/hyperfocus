@@ -1,3 +1,6 @@
+import { compareText } from "@hyperfocus/utilities/text";
+import { errorMessage as message } from "@hyperfocus/utilities/text";
+import { isPlainRecord as isRecord } from "@hyperfocus/utilities/records";
 import {
   createSaveMigrationRegistry,
   createSaveProfileStore,
@@ -7,12 +10,12 @@ import {
   type SaveMigrationRegistry,
   type SaveProfile,
 } from "../save/index.ts";
-import type { PlayableProject2D, PlayableWorldSnapshot } from "./runtime-2d-contracts.ts";
-import type { PlayableWorld } from "./runtime-world-2d.ts";
-import { parsePlayableWorldSnapshot } from "./runtime-2d-support.ts";
+import type { PlayableProject2D, PlayableWorldSnapshot } from "./runtime2d/runtime-2d-contracts.ts";
+import type { PlayableWorld } from "./runtime2d/runtime-world-2d.ts";
+import { parsePlayableWorldSnapshot } from "./runtime2d/runtime-2d-support.ts";
 
 export const PLAYABLE_WORLD_SAVE_SCHEMA = "portable-world-snapshot-v1" as const;
-const MAX_DECLARED_SAVE_BYTES = 4 * 1024 * 1024;
+const MAX_DECLARED_SAVE_BYTES = 4194304;
 const MAX_DECLARED_SLOTS = 16;
 
 export type PlayableSaveDeclaration2D = {
@@ -35,6 +38,8 @@ export type PlayableSaveControllerOptions2D = {
   profileId?: string;
   migrations?: SaveMigrationRegistry;
   stateProviders?: readonly PlayableSaveStateProvider2D[];
+  /** Hosts can acquire the destination scene before any world state is changed. */
+  prepareRestore?: (snapshot: PlayableWorldSnapshot) => Promise<void>;
 };
 
 export type PlayableSaveStateProvider2D = {
@@ -137,6 +142,7 @@ export function createPlayableSaveController2D(
     const slot = await store.loadSlot(profileId, resolveSlot(slotName));
     if (!slot) return false;
     const decoded = decodeWorldSave(slot.data, declaration.schema, providers);
+    await options.prepareRestore?.(decoded.snapshot);
     const rollback = world.snapshot();
     const providerRollback = new Map(providers.map((provider) => [provider.key, provider.snapshot()]));
     try {
@@ -145,7 +151,7 @@ export function createPlayableSaveController2D(
     } catch (cause) {
       world.restore(rollback);
       for (const provider of providers) provider.restore(providerRollback.get(provider.key)!);
-      throw new Error(`Playable save restore failed: ${message(cause)}`, { cause });
+      throw new Error(`Playable save restore failed: ${message(cause, { stringify: true })}`, { cause });
     }
     return true;
   };
@@ -260,12 +266,3 @@ function saveName(value: unknown, label: string): string {
 function isIntegerBetween(value: unknown, minimum: number, maximum: number): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function compareText(a: string, b: string) { return a < b ? -1 : a > b ? 1 : 0; }
-function message(value: unknown) { return value instanceof Error ? value.message : String(value); }

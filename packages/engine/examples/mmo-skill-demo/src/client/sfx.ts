@@ -43,7 +43,7 @@ export type SfxPlayer = {
   play(event: SfxEvent, intensity?: number): void;
 };
 
-type SfxAudioContext = Omit<AudioContextLike, "createBufferSource" | "createGain"> & Pick<
+type SfxAudioContext = Omit<AudioContextLike, "createBufferSource" | "createGain" | "createBiquadFilter" | "createOscillator" | "createBuffer" | "sampleRate"> & Pick<
   AudioContext,
   "createBiquadFilter" | "createBuffer" | "createBufferSource" | "createGain" | "createOscillator" | "sampleRate"
 >;

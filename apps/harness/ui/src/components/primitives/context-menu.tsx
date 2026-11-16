@@ -1,8 +1,10 @@
-import { createEffect, For, onCleanup, Show } from "solid-js";
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
+import { createEffect, createUniqueId, For, onCleanup, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
 import { Button } from "./button";
 import { PrimitivePortal } from "./primitive-portal";
+import { registerOverlay } from "./overlay-stack";
 
 export type ContextMenuAction = {
   id: string;
@@ -38,15 +40,19 @@ const styles = stylex.create({
     fontSize: "0.75rem",
     position: "fixed",
     zIndex: 150,
+    maxHeight: "calc(100dvh - 16px)",
+    maxWidth: "calc(100vw - 16px)",
+    overflowY: "auto",
     width: "13rem",
   },
-  action: { paddingInline: "0.5rem", justifyContent: "space-between", textAlign: "left", height: "2rem", width: "100%", },
+  action: { paddingInline: tokens.space2, justifyContent: "space-between", overflowWrap: "anywhere", textAlign: "left", whiteSpace: "normal", minHeight: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch }, width: "100%", },
   disabled: { opacity: 0.5 },
-  shortcut: { color: "var(--muted)", fontSize: "0.62rem" }
+  shortcut: { color: "var(--muted)", fontSize: tokens.fontCaption }
 });
 
 export function ContextMenu(props: ContextMenuProps) {
   let surfaceRef: HTMLDivElement | undefined;
+  const overlayId = `popover-context-${createUniqueId()}`;
 
   createEffect(() => {
     if (!props.open) {
@@ -59,17 +65,22 @@ export function ContextMenu(props: ContextMenuProps) {
       }
       props.onClose();
     };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        props.onClose();
-      }
+    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    const unregister = registerOverlay(overlayId, { onEscape: () => { props.onClose(); origin?.focus(); } });
+    const place = () => {
+      if (!surfaceRef) return;
+      const bounds = surfaceRef.getBoundingClientRect();
+      surfaceRef.style.left = `${Math.max(8, Math.min(props.x, innerWidth - bounds.width - 8))}px`;
+      surfaceRef.style.top = `${Math.max(8, Math.min(props.y, innerHeight - bounds.height - 8))}px`;
     };
+    queueMicrotask(() => { place(); surfaceRef?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus(); });
     window.addEventListener("pointerdown", closeOnPointer);
-    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", place);
     onCleanup(() => {
+      unregister();
       window.removeEventListener("pointerdown", closeOnPointer);
-      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", place);
+      if (surfaceRef?.contains(document.activeElement)) origin?.focus();
     });
   });
 
@@ -89,11 +100,22 @@ export function ContextMenu(props: ContextMenuProps) {
           {...stylex.attrs(styles.surface)}
           style={position()}
           onContextMenu={(event) => event.preventDefault()}
+          onKeyDown={(event) => {
+            if (event.key === "Tab") { props.onClose(); return; }
+            if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            const items = [...(surfaceRef?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [])];
+            const index = items.findIndex(item => item === document.activeElement);
+            const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+            items[next]?.focus();
+          }}
         >
           <For each={props.actions}>
             {(action) => (
               <Button
-                tooltip={action.disabled && action.disabledReason ? action.disabledReason : action.label}
+                {...(action.disabled && action.disabledReason
+                  ? { tooltip: action.disabledReason }
+                  : { justificationForNoTooltip: "The menu item has a visible action label." })}
                 variant="ghost"
                 size="sm"
                 class={cn(stylex.attrs(styles.action, action.disabled && styles.disabled).class)}

@@ -63,7 +63,7 @@ test("Kenney sidecar is canonical and drives the scaled rig through an unscaled 
   controller.teleport({ x: 4, y: 0, z: -2 });
   controller.setFacing({ x: 1, y: 0, z: 0 });
   controller.move({ x: 3, y: 0, z: 0 });
-  controller.update(1 / 60);
+  controller.update(0.016666666666666666);
   expect(fixture.motionRoot.scale.toArray()).toEqual([1, 1, 1]);
   expect(fixture.rigRoot.scale.toArray()).toEqual([0.03, 0.03, 0.03]);
   expect(fixture.motionRoot.position.x).toBeGreaterThan(4);

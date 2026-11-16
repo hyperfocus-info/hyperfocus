@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const RUN_DETAIL_MAX_BYTES = 96 * 1024 * 1024;
+export const RUN_DETAIL_MAX_BYTES = 100663296;
 export const RUN_DETAIL_CHUNK_MAX_BYTES = 8_192;
 
 import {
@@ -9,6 +9,7 @@ import {
   experimentRunSchema,
   memoryRetrievalSchema,
   planPrerequisiteSchema,
+  outcomeSupervisionSchema,
   subagentContractSchema
 } from "./conversation";
 import {
@@ -24,6 +25,8 @@ import {
   planningChoiceIdSchema,
   projectIdSchema,
   providerModelIdSchema,
+  providerBrandSchema,
+  composerReasoningStrengthSchema,
   questionIdSchema,
   runExecutionTargetSchema,
   runIdSchema,
@@ -273,6 +276,7 @@ export const projectContextUsageSchema = z.object({
   sourceLabel: z.string().min(1).max(128),
   modelId: executionModelIdSchema,
   tokens: z.number().int().min(0).optional(),
+  inputTokens: z.number().int().min(0).optional(),
   contextWindow: z.number().int().min(1),
   usagePercent: z.number().min(0).max(100).optional(),
   totalProcessedTokens: z.number().int().min(0).optional(),
@@ -420,6 +424,12 @@ export const subagentTaskStateSchema = z.object({
 });
 
 export const threadRunSequenceSchema = z.number().int().positive().safe();
+export const runLaunchProfileSchema = z.object({
+  agentId: agentIdSchema,
+  providerBrand: providerBrandSchema,
+  reasoningStrength: composerReasoningStrengthSchema.optional(),
+  fastMode: z.boolean().optional()
+});
 const agentRunStateShapeSchema = z.object({
   id: runIdSchema,
   threadId: threadIdSchema,
@@ -427,6 +437,7 @@ const agentRunStateShapeSchema = z.object({
   status: agentRunStatusSchema,
   latestUserPrompt: z.string().min(1),
   planningModelId: providerModelIdSchema.optional(),
+  launchProfile: runLaunchProfileSchema.optional(),
   executionModelId: executionModelIdSchema.optional(),
   difficultyScore: z.number().min(0).max(100).optional(),
   summary: z.string().min(1).optional(),
@@ -643,6 +654,7 @@ export const plannerQuestionTurnSchema = z.object({
 });
 
 export const plannerReadyTurnSchema = z.object({
+  supervision: outcomeSupervisionSchema.optional(),
   type: z.literal("ready"),
   difficultyScore: z.number().min(0).max(100),
   summary: z.string().min(1),
@@ -650,7 +662,7 @@ export const plannerReadyTurnSchema = z.object({
   usesSubagents: z.boolean(),
   subtasks: z.array(plannerSubtaskSchema).max(8),
   finalExecutionBrief: z.string().min(1),
-  prerequisites: z.array(planPrerequisiteSchema).max(16).optional(),
+  prerequisites: z.array(planPrerequisiteSchema.transform((value): z.infer<typeof planPrerequisiteSchema> => ({ ...value, status: "pending" }))).max(16).optional(),
   contracts: z.array(subagentContractSchema).max(16).optional()
 });
 

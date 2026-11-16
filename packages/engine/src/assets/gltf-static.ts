@@ -1,3 +1,6 @@
+import { compareText } from "@hyperfocus/utilities/text";
+import { errorMessage } from "@hyperfocus/utilities/text";
+import { isPlainRecord as isJsonRecord } from "@hyperfocus/utilities/records";
 /** Provider-neutral glTF 2.0 static-mesh cooking. This module performs no I/O. */
 
 const GLTF_FLOAT = 5126;
@@ -7,29 +10,32 @@ const GLTF_SHORT = 5122;
 const GLTF_UNSIGNED_SHORT = 5123;
 const GLTF_UNSIGNED_INT = 5125;
 const GLTF_TRIANGLES = 4;
+const GLB_MAGIC = 0x46546c67;
+const GLB_JSON_CHUNK = 0x4e4f534a;
+const GLB_BINARY_CHUNK = 0x004e4942;
 
 const DEFAULT_LIMITS = {
   maxBuffers: 64,
-  maxBufferBytes: 256 * 1024 * 1024,
+  maxBufferBytes: 268435456,
   maxBufferViews: 100_000,
   maxAccessors: 100_000,
   maxMeshes: 10_000,
   maxPrimitives: 50_000,
   maxVertices: 10_000_000,
   maxIndices: 30_000_000,
-  maxOutputBytes: 512 * 1024 * 1024,
+  maxOutputBytes: 536870912,
 } as const;
 
 const HARD_LIMITS = {
   maxBuffers: 1_024,
-  maxBufferBytes: 1024 * 1024 * 1024,
+  maxBufferBytes: 1073741824,
   maxBufferViews: 1_000_000,
   maxAccessors: 1_000_000,
   maxMeshes: 100_000,
   maxPrimitives: 1_000_000,
   maxVertices: 100_000_000,
   maxIndices: 300_000_000,
-  maxOutputBytes: 1024 * 1024 * 1024,
+  maxOutputBytes: 1073741824,
 } as const;
 
 export type GltfStaticDiagnostic = {
@@ -68,6 +74,10 @@ export type CookedGltfStaticMesh = {
 };
 
 export type GltfStaticCookLimits = { [Key in keyof typeof DEFAULT_LIMITS]?: number };
+export type GltfStaticCookOptions = GltfStaticCookLimits & {
+  /** Permit JOINTS/WEIGHTS attributes when a separate skin cooker owns those streams. */
+  allowSkinAttributes?: boolean;
+};
 
 export type GltfStaticCookResult = {
   ok: boolean;
@@ -97,7 +107,42 @@ export type GltfBufferResolutionResult = {
   totalBytes: number;
 };
 
-export type ResolveAndCookGltfStaticOptions = GltfBufferResolverOptions & { cook?: GltfStaticCookLimits };
+export type ParsedGltfContainer = { document: unknown; embeddedBuffers: ReadonlyMap<number, Uint8Array>; kind: "gltf" | "glb" };
+
+/** Parses UTF-8 glTF JSON or a GLB 2.0 container without filesystem, DOM, or network access. */
+export function parseGltfContainer(bytes: Uint8Array): ParsedGltfContainer {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 4) throw new Error("glTF asset is too short.");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, true) !== GLB_MAGIC) return { document: parseGltfJson(bytes), embeddedBuffers: new Map(), kind: "gltf" };
+  if (bytes.byteLength < 20) throw new Error("GLB header and JSON chunk are incomplete.");
+  const version = view.getUint32(4, true), declaredLength = view.getUint32(8, true);
+  if (version !== 2) throw new Error(`Only GLB version 2 is supported; received ${version}.`);
+  if (declaredLength !== bytes.byteLength) throw new Error(`GLB declares ${declaredLength} bytes but contains ${bytes.byteLength}.`);
+  let offset = 12, document: unknown, binary: Uint8Array | undefined;
+  while (offset < bytes.byteLength) {
+    if (offset + 8 > bytes.byteLength) throw new Error("GLB chunk header exceeds the container length.");
+    const length = view.getUint32(offset, true), type = view.getUint32(offset + 4, true), start = offset + 8, end = start + length;
+    if (end > bytes.byteLength) throw new Error("GLB chunk exceeds the container length.");
+    if (type === GLB_JSON_CHUNK) { if (document !== undefined) throw new Error("GLB contains more than one JSON chunk."); document = parseGltfJson(bytes.subarray(start, end)); }
+    else if (type === GLB_BINARY_CHUNK) { if (binary) throw new Error("GLB contains more than one binary chunk."); binary = bytes.slice(start, end); }
+    offset = end;
+  }
+  if (document === undefined) throw new Error("GLB is missing its JSON chunk.");
+  const buffers = typeof document === "object" && document !== null && "buffers" in document ? document.buffers : undefined;
+  if (buffers !== undefined && !Array.isArray(buffers)) throw new Error("GLB buffers must be an array.");
+  const uriLess = buffers?.map((buffer, index) => buffer.uri === undefined ? index : -1).filter((index) => index >= 0) ?? [];
+  if (uriLess.length > 1) throw new Error("GLB may declare at most one URI-less binary buffer.");
+  if (uriLess.length === 1 && !binary) throw new Error("GLB declares a URI-less buffer but has no binary chunk.");
+  return { document, embeddedBuffers: binary && uriLess.length ? new Map([[uriLess[0]!, binary]]) : new Map(), kind: "glb" };
+}
+
+function parseGltfJson(bytes: Uint8Array): unknown {
+  let end = bytes.byteLength; while (end > 0 && (bytes[end - 1] === 0 || bytes[end - 1] === 0x20)) end -= 1;
+  try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, end))); }
+  catch (cause) { throw new Error(`Asset is not valid UTF-8 glTF JSON: ${errorMessage(cause, { stringify: true })}`); }
+}
+
+export type ResolveAndCookGltfStaticOptions = GltfBufferResolverOptions & { cook?: GltfStaticCookOptions };
 
 type ResolvedLimits = { [Key in keyof typeof DEFAULT_LIMITS]: number };
 type JsonRecord = Record<string, unknown>;
@@ -152,7 +197,7 @@ export async function resolveGltfStaticBuffers(document: unknown, options: GltfB
             try {
               resolved = await options.resolveExternal({ index, uri, declaredByteLength: byteLength, pointer: `${pointer}/uri` });
             } catch (cause) {
-              fail("external-buffer-resolution-failed", `${pointer}/uri`, `External buffer resolution failed: ${errorMessage(cause)}`);
+              fail("external-buffer-resolution-failed", `${pointer}/uri`, `External buffer resolution failed: ${errorMessage(cause, { stringify: true })}`);
             }
             bytes = copyBufferSource(resolved, `${pointer}/uri`);
           }
@@ -177,7 +222,7 @@ export async function resolveGltfStaticBuffers(document: unknown, options: GltfB
 export function cookGltfStaticMeshes(
   document: unknown,
   buffers: readonly (ArrayBuffer | ArrayBufferView)[],
-  options: GltfStaticCookLimits = {},
+  options: GltfStaticCookOptions = {},
 ): GltfStaticCookResult {
   const limits = resolveLimits(options);
   const diagnostics: GltfStaticDiagnostic[] = [];
@@ -198,7 +243,7 @@ export function cookGltfStaticMeshes(
     if (!Array.isArray(buffers)) fail("buffers-input", "/buffers", "Resolved buffers must be supplied as an array.");
     if (buffers.length !== bufferDeclarations.length) fail("buffer-count-mismatch", "/buffers", `Expected ${bufferDeclarations.length} resolved buffers but received ${buffers.length}.`);
     const bytes = validateResolvedBuffers(bufferDeclarations, buffers, limits);
-    const context = { root, bufferDeclarations, bufferViews, accessors, buffers: bytes, limits };
+    const context = { root, bufferDeclarations, bufferViews, accessors, buffers: bytes, limits, allowSkinAttributes: options.allowSkinAttributes === true };
     let primitiveCount = 0;
     for (let meshIndex = 0; meshIndex < meshes.length; meshIndex += 1) {
       const meshPointer = `/meshes/${meshIndex}`;
@@ -249,6 +294,7 @@ type CookContext = {
   accessors: unknown[];
   buffers: Uint8Array[];
   limits: ResolvedLimits;
+  allowSkinAttributes: boolean;
 };
 
 function estimatePrimitiveOutputBytes(context: CookContext, input: unknown, pointer: string): number {
@@ -302,7 +348,10 @@ function cookPrimitive(
   for (const semantic of Object.keys(attributes).sort(compareText)) {
     if (semantic === "POSITION" || semantic === "NORMAL" || semantic === "TEXCOORD_0") continue;
     const attributePointer = `${pointer}/attributes/${escapePointer(semantic)}`;
-    if (/^(JOINTS|WEIGHTS)_/.test(semantic)) fail("skinning-unsupported", attributePointer, `Skinned attribute ${semantic} is not supported by the static-mesh cooker.`);
+    if (/^(JOINTS|WEIGHTS)_/.test(semantic)) {
+      if (!context.allowSkinAttributes) fail("skinning-unsupported", attributePointer, `Skinned attribute ${semantic} is not supported by the static-mesh cooker.`);
+      continue;
+    }
     diagnostics.push({ severity: "warning", code: "attribute-ignored", pointer: attributePointer, message: `Attribute ${semantic} is not emitted by the static-mesh cooker.` });
   }
   if (!("POSITION" in attributes)) fail("position-required", `${pointer}/attributes/POSITION`, "Primitive POSITION accessor is required.");
@@ -663,11 +712,7 @@ function checkedAdd(current: number, addition: number, maximum: number, pointer:
   return result;
 }
 
-function isJsonRecord(value: unknown): value is JsonRecord {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+
 
 function record(value: unknown, pointer: string, code: string, message: string): JsonRecord {
   if (!isJsonRecord(value)) fail(code, pointer, message);
@@ -711,17 +756,11 @@ function fail(code: string, pointer: string, message: string): never {
 
 function toDiagnostic(cause: unknown, fallbackPointer: string): GltfStaticDiagnostic {
   if (isGltfFailure(cause)) return { severity: "error", code: cause.code, pointer: cause.pointer, message: cause.message };
-  return { severity: "error", code: "internal-validation-error", pointer: fallbackPointer, message: errorMessage(cause) };
+  return { severity: "error", code: "internal-validation-error", pointer: fallbackPointer, message: errorMessage(cause, { stringify: true }) };
 }
 
-function errorMessage(value: unknown): string {
-  return value instanceof Error ? value.message : String(value);
-}
+
 
 function escapePointer(value: string): string {
   return value.replaceAll("~", "~0").replaceAll("/", "~1");
-}
-
-function compareText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }

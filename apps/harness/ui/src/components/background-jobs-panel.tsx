@@ -1,63 +1,73 @@
-import { For, Show, createMemo, createSignal, type JSX } from "solid-js";
+import { createRequestId,type AgentRunState,type BackgroundJob,type BackgroundJobRun,type RunDiagnosticsWindowDays } from "@hyperfocus/ai-core/protocol";
+import { ActionMenu,MenuItem,Button as UiButton,typography } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
-import { createRequestId, type AgentRunState, type BackgroundJob, type BackgroundJobRun, type BulkOperationAction, type BulkOperationTarget, type RunDiagnosticsWindowDays } from "@hyperfocus/ai-core/protocol";
 import { formatForDisplay } from "@tanstack/solid-hotkeys";
-import { harnessStore, type JobsJobStateFilter,
-  type JobsPaneJobSort, type JobsPaneRunSort, type RunDiagnosticsViewState } from "../harness-store";
-import type { JobsRunFilter } from "../store/background-jobs-pane-state";
-import { formatShortTimestamp } from "../lib/time-format";
+import {
+Bell,
+BellOff,
+Bot,
+Calendar,
+CheckCircle2,
+CheckSquare2,
+CircleX,
+Clock3,
+ListFilter,
+LoaderCircle,
+MessageSquareText,
+Pause,
+Play,
+Plus,
+RefreshCcw,
+ShieldCheck,
+Square,
+Terminal,
+Trash2
+} from "lucide-solid";
+import { For,Show,createContext,createMemo,createSignal,useContext,type JSX } from "solid-js";
+import { usePaneNavigation } from "../app/pane-navigation";
+import {
+harnessStore,type JobsJobStateFilter,
+type JobsPaneJobSort,type JobsPaneRunSort,type RunDiagnosticsViewState
+} from "../harness-store";
 import { normalizeAppHotkeyPreferences } from "../lib/app-hotkeys";
 import type { ChatFileTarget } from "../lib/chat-file-links";
 import { openIdeWindow } from "../lib/ide-window";
+import { formatShortTimestamp } from "../lib/time-format";
 import { toProperCase } from "../lib/utils";
+import { rightAlignedNumbersEnabled } from "../lib/visual-flags";
+import type { JobsRunFilter } from "../store/background-jobs-pane-state";
 import { ActionButton } from "./action-button";
-import { FileLinkedText, type FileLinkConfig } from "./file-linked-text";
+import { backgroundJobsStyles as styles } from "./background-jobs.styles";
+import { createBackgroundJobsPanelController } from "./background-jobs/background-jobs-panel-controller";
+import { BackgroundRunActions } from "./background-jobs/background-run-actions";
+import { HealthTable } from "./background-jobs/health-table";
+import { formatFailureCategory,formatFailureTracking } from "./background-jobs/job-diagnostics";
+import { compareOptionalIsoAsc,formatShare,fuzzyTokenMatch,isSchedulerHeartbeatStale,toggleId } from "./background-jobs/job-display-values";
+import { JobOutcome } from "./background-jobs/job-outcome";
+import { JobRosterRow } from "./background-jobs/job-roster-row";
+import { jobsPaneSegmentItems } from "./background-jobs/jobs-pane-menu";
+import { jobsRosterStyles as jobStyles } from "./background-jobs/jobs-roster.styles";
+import { FileLinkedText,type FileLinkConfig } from "./file-linked-text";
+import { ContextMenu,type ContextMenuAction } from "./primitives/context-menu";
 import { CopyTextButton } from "./primitives/copy-text-button";
-import { ContextMenu, type ContextMenuAction } from "./primitives/context-menu";
-import { ExecutionLog } from "./primitives/execution-log";
 import { Dialog } from "./primitives/dialog";
+import { ExecutionLog } from "./primitives/execution-log";
 import {
-  DetailEmptyState,
-  LeftPaneEmptyState,
-  LeftPaneFilterBlock,
-  LeftPaneHeader,
-  LeftPaneListSection,
-  LeftPaneSearchInput,
-  LeftPaneSearchMenu,
-  LeftPaneShell,
-  type LeftPaneSearchMenuItem
+DetailEmptyState,
+LeftPaneBody,
+LeftPaneEmptyState,
+LeftPaneFilterBlock,
+LeftPaneHeader,
+LeftPaneListSection,
+LeftPaneSearchInput,
+LeftPaneSearchMenu,
+LeftPaneShell,
+type LeftPaneSearchMenuItem
 } from "./primitives/left-pane";
 import { ScrollArea } from "./primitives/scroll-area";
-import { StatusChip, type StatusChipTone } from "./primitives/status-chip";
+import { StatusChip,type StatusChipTone } from "./primitives/status-chip";
 import { Tooltip } from "./primitives/tooltip";
 import { VirtualList } from "./primitives/virtual-list";
-import { backgroundJobsStyles as styles } from "./background-jobs.styles";
-import { BackgroundRunActions } from "./background-jobs/background-run-actions";
-import { createBackgroundJobsPanelController } from "./background-jobs/background-jobs-panel-controller";
-import { jobsPaneSegmentItems } from "./background-jobs/jobs-pane-menu";
-import { rightAlignedNumbersEnabled } from "../lib/visual-flags";
-import {
-  Bell,
-  BellOff,
-  Bot,
-  BriefcaseBusiness,
-  Calendar,
-  CheckCircle2,
-  CheckSquare2,
-  Clock3,
-  CircleX,
-  ListFilter,
-  LoaderCircle,
-  MessageSquareText,
-  Pause,
-  Play,
-  Plus,
-  RefreshCcw,
-  ShieldCheck,
-  Square,
-  Terminal,
-  Trash2
-} from "lucide-solid";
 
 type BackgroundJobsPanelProps = {
   variant?: "full" | "left" | "detail";
@@ -93,34 +103,9 @@ function tooltipWithPrimaryHotkey(label: string, hotkey: string | undefined) {
   return hotkey ? `${label} (${formatHotkeyHint(hotkey)})` : label;
 }
 
-function toggleId(ids: string[], id: string) {
-  return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];
-}
 
 function isInteractiveSelectionTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("button,a,input,textarea,select,[role='menuitem'],[data-selection-ignore]"));
-}
-
-function mergeRangeSelection(ids: string[], visibleIds: string[], anchorId: string, targetId: string) {
-  const anchorIndex = visibleIds.indexOf(anchorId);
-  const targetIndex = visibleIds.indexOf(targetId);
-  if (anchorIndex === -1 || targetIndex === -1) {
-    return ids.includes(targetId) ? ids : [...ids, targetId];
-  }
-  const start = Math.min(anchorIndex, targetIndex);
-  const end = Math.max(anchorIndex, targetIndex);
-  return [...new Set([...ids, ...visibleIds.slice(start, end + 1)])];
-}
-
-function formatBulkActionLabel(action: BulkOperationAction) {
-  switch (action) {
-    case "run-now":
-      return "run now";
-    case "bootstrap-retry":
-      return "bootstrap retry";
-    default:
-      return action;
-  }
 }
 
 function createBackgroundJobsPanelModel(props: BackgroundJobsPanelProps) {
@@ -207,6 +192,7 @@ function createBackgroundJobsPanelModel(props: BackgroundJobsPanelProps) {
       .filter((run) => selectedRunIdSet().has(run.id))
   );
   const selectedRunItem = createMemo(() => {
+    if (activeSegment() !== "inbox") return undefined;
     const explicitRunId = selectedRunId();
     if (explicitRunId) {
       const backgroundRun = state.backgroundJobs.runs.find((run) => run.id === explicitRunId);
@@ -286,6 +272,7 @@ function createBackgroundJobsPanelModel(props: BackgroundJobsPanelProps) {
 
 
   return {
+    onNavigate: usePaneNavigation(),
     runtime, state, sendCommand, executionPaused, executionPauseReason, runFilter, variant,
     healthRefreshThrottleMs, showLeft, showDetail, jobsPane, activeSegment, activeSearch,
     healthWindowDays, setHealthWindowDays, headerTitle, headerHelp, selectedRunId,
@@ -310,39 +297,54 @@ type BackgroundJobsPanelViewProps = {
   allowSegmentSwitch: boolean;
 };
 
+const BackgroundJobsPanelContext = createContext<BackgroundJobsPanelViewProps>();
+function useBackgroundJobsPanel() {
+  const panel = useContext(BackgroundJobsPanelContext);
+  if (!panel) throw new Error("Background jobs require their panel provider.");
+  return panel;
+}
+
 export function BackgroundJobsPanel(props: BackgroundJobsPanelProps) {
   const model = createBackgroundJobsPanelModel(props);
   const controller = createBackgroundJobsPanelController(model);
-  return <BackgroundJobsPanelView model={model} controller={controller} allowSegmentSwitch={!props.segment} />;
+  return <BackgroundJobsPanelContext.Provider value={{ model, controller, get allowSegmentSwitch() { return !props.segment; } }}><BackgroundJobsPanelView /></BackgroundJobsPanelContext.Provider>;
 }
 
-function BackgroundJobsPanelView(props: BackgroundJobsPanelViewProps) {
-  const { activeSegment, showLeft, showDetail } = props.model;
+function BackgroundJobsPanelView() {
+  const panel = useBackgroundJobsPanel();
+  const { activeSegment, showLeft, showDetail } = panel.model;
   return (
     <LeftPaneShell data-test-background-jobs-panel="" kind={activeSegment() === "jobs" ? "jobs" : activeSegment() === "inbox" ? "runs" : "health"} padding="comfortable">
-      <BackgroundJobsPanelHeader {...props} />
+      <BackgroundJobsPanelHeader />
+      <LeftPaneBody>
       <div
-        class={[
-          stylex.attrs(styles.panelLayout).class,
-          showLeft() && showDetail() && activeSegment() !== "health" ? stylex.attrs(styles.panelLayoutSplit).class : ""
-        ].filter(Boolean).join(" ")}
+        class={stylex.attrs(styles.panelLayout, showLeft() && showDetail() && activeSegment() !== "health" && styles.panelLayoutSplit).class}
       >
-        <BackgroundJobsListPane {...props} />
-        <BackgroundJobsDetailPane {...props} />
+        <BackgroundJobsListPane />
+        <BackgroundJobsDetailPane />
       </div>
-      <BackgroundJobsPanelOverlays {...props} />
+      </LeftPaneBody>
+      <BackgroundJobsPanelOverlays />
     </LeftPaneShell>
   );
 }
 
-function BackgroundJobsPanelHeader(props: BackgroundJobsPanelViewProps) {
-  const { state, showLeft, activeSegment, activeSearch, headerTitle, headerHelp } = props.model;
-  const { handleCreateJob, handleToggleNotifications, retryScheduler } = props.controller;
+function BackgroundJobsPanelHeader() {
+  const panel = useBackgroundJobsPanel();
+  const { state, showLeft, showDetail, activeSegment, activeSearch, headerTitle, headerHelp } = panel.model;
+  const { handleCreateJob, handleToggleNotifications, requestDiagnostics } = panel.controller;
+  const [healthOpen, setHealthOpen] = createSignal(false);
   return (
     <>
+      <Show when={showDetail()}>
+        <ActionButton class={stylex.attrs(jobStyles.utilities).class} tooltip="Inspect scheduler health and recent run reliability" variant="secondary" onClick={() => { setHealthOpen(true); requestDiagnostics(); }}>Health</ActionButton>
+        <Dialog open={healthOpen()} onClose={() => setHealthOpen(false)} title="Scheduler health" description="Inspect recent run reliability and failure patterns.">
+          <HealthView />
+        </Dialog>
+      </Show>
       <Show when={showLeft()}>
         <>
-          <LeftPaneHeader
+          <Show when={activeSegment() === "jobs"} fallback={<>          <LeftPaneHeader
             title={headerTitle()}
             help={headerHelp()}
             actions={
@@ -379,10 +381,22 @@ function BackgroundJobsPanelHeader(props: BackgroundJobsPanelViewProps) {
               </Show>
             }
           />
+</>}>
+            <header {...stylex.attrs(jobStyles.header)}>
+              <h2 {...stylex.attrs(typography.section, jobStyles.title)}>Scheduled jobs</h2>
+              <div {...stylex.attrs(jobStyles.actions)}>
+                <UiButton tooltip="Create scheduled AI routine" aria-label="Create scheduled AI routine" onClick={() => handleCreateJob("ai-routine")}>New job</UiButton>
+                <ActionMenu ariaLabel="Job options" trigger={menu => <UiButton variant="ghost" tooltip="Job options" aria-label="Job options" aria-haspopup="menu" aria-expanded={menu.open()} aria-controls={menu.menuId} onClick={menu.toggle}>More</UiButton>}>
+                  <MenuItem onSelect={() => handleCreateJob("shell")}>Create shell task</MenuItem>
+                  <MenuItem onSelect={handleToggleNotifications}>{state.backgroundJobNotificationsEnabled ? "Disable desktop notifications" : "Enable desktop notifications"}</MenuItem>
+                </ActionMenu>
+              </div>
+            </header>
+          </Show>
           <Show when={formatSchedulerHeartbeatWarning(state.backgroundJobs.schedulerHeartbeatAt)}>
             {(warning) => (
               <div class={stylex.attrs(styles.warningBanner).class}>
-                <SchedulerWarningContent text={warning()} onRetryScheduler={retryScheduler} />
+                <SchedulerWarningContent text={warning()} />
               </div>
             )}
           </Show>
@@ -401,7 +415,7 @@ function BackgroundJobsPanelHeader(props: BackgroundJobsPanelViewProps) {
                   ariaLabel={activeSegment() === "jobs" ? "Filter and sort jobs" : "Filter and sort runs"}
                   tooltip={activeSegment() === "jobs" ? "Filter and sort jobs" : "Filter and sort runs"}
                   activeFilterCount={activeJobsPaneFilterCount(state, activeSegment())}
-                  items={jobsPaneMenuItems(state, activeSegment(), props.allowSegmentSwitch)}
+                  items={jobsPaneMenuItems(state, activeSegment(), panel.allowSegmentSwitch)}
                 />
               }
               onInput={(event) =>
@@ -419,201 +433,82 @@ function BackgroundJobsPanelHeader(props: BackgroundJobsPanelViewProps) {
   );
 }
 
-function BackgroundJobsListPane(props: BackgroundJobsPanelViewProps) {
-  const { showLeft, activeSegment, diagnostics, healthWindowDays, setHealthWindowDays } = props.model;
-  const { requestDiagnostics } = props.controller;
+function BackgroundJobsListPane() {
+  const panel = useBackgroundJobsPanel();
+  const { showLeft, activeSegment } = panel.model;
   return (
     <Show when={showLeft()}>
       <div class={stylex.attrs(styles.paneGrid).class}>
         <Show when={activeSegment() === "health"}>
-          <HealthView
-            diagnostics={diagnostics}
-            healthWindowDays={healthWindowDays()}
-            onSelectWindow={(windowDays) => {
-              setHealthWindowDays(windowDays);
-              requestDiagnostics(windowDays);
-            }}
-            onRefresh={() => requestDiagnostics()}
-          />
+          <HealthView />
         </Show>
-        <BackgroundJobsJobsList {...props} />
-        <BackgroundJobsRunsList {...props} />
+        <BackgroundJobsJobsList />
+        <BackgroundJobsRunsList />
       </div>
     </Show>
   );
 }
 
-function BackgroundJobsJobsList(props: BackgroundJobsPanelViewProps) {
-  const {
-    state, sendCommand, activeSegment, jobs, selectedJobs, executionPaused, executionPauseReason,
-    setSelectedJobIds, setSelectedRunIds, selectedJob, selectedJobIdSet,
-    setJobSelectionAnchorId, getBackgroundRunFileLinks,
-  } = props.model;
-  const {
-    sendBulkOperation, jobBulkTarget, handleCreateJob, scheduleDelayedSelection,
-    clearPendingSelectionTimer, handleJobCardClick, openJobBulkContextMenu,
-    openAssistantDetails, handleEditJob, retryScheduler,
-  } = props.controller;
-  return (
-            <Show when={activeSegment() === "jobs"}>
-              <LeftPaneListSection title="Jobs" count={`${jobs().length} total`} class={stylex.attrs(styles.listSection).class}>
-                <CapacityBar jobs={jobs()} />
-                <Show when={selectedJobs().length > 0}>
-                  <div class={stylex.attrs(styles.selectionToolbar).class}>
-                    <span class={stylex.attrs(styles.selectionCount).class}>{selectedJobs().length} selected</span>
-                    <ActionButton tooltip="Run selected jobs now" disabled={executionPaused()} disabledReason={executionPauseReason} size="sm" icon={<Play class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("run-now", selectedJobs().map(jobBulkTarget))}>
-                      Run now
-                    </ActionButton>
-                    <ActionButton tooltip="Pause selected jobs" size="sm" variant="secondary" icon={<Pause class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("pause", selectedJobs().map(jobBulkTarget))}>
-                      Pause
-                    </ActionButton>
-                    <ActionButton tooltip="Resume selected jobs" size="sm" variant="secondary" icon={<Play class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("resume", selectedJobs().map(jobBulkTarget))}>
-                      Resume
-                    </ActionButton>
-                    <ActionButton tooltip="Delete selected jobs" size="sm" variant="secondary" icon={<Trash2 class={stylex.attrs(styles.iconSm).class} />} onClick={() => sendBulkOperation("delete", selectedJobs().map(jobBulkTarget))}>
-                      Delete
-                    </ActionButton>
-                    <ActionButton tooltip="Clear selection" size="sm" variant="ghost" icon={<CircleX class={stylex.attrs(styles.iconSm).class} />} onClick={() => setSelectedJobIds([])}>
-                      Clear
-                    </ActionButton>
-                  </div>
-                </Show>
-                <VirtualList
-                  class={stylex.attrs(styles.virtualViewport).class}
-                  contentClass={stylex.attrs(styles.virtualContent).class}
-                  itemClass={stylex.attrs(styles.virtualItem).class}
-                  items={jobs()}
-                  getKey={(job) => job.id}
-                  estimateSize={210}
-                  pagination={{ kind: "forward", initialCount: 60, batchSize: 60 }}
-                      empty={
-                    <EmptyFilteredState
-                      message="No scheduled tasks match current search or filters."
-                      onClear={() => harnessStore.setJobsPanePreferences({ jobSearch: "", kind: undefined, status: undefined, jobState: "all", risk: undefined })}
-                      actions={
-                        <>
-                          <ActionButton
-                            tooltip={tooltipWithPrimaryHotkey(
-                              "Schedule AI job",
-                              normalizeAppHotkeyPreferences(state.appHotkeyPreferences).createBackgroundJob[0]
-                            )}
-                            ariaLabel="Schedule job"
-                            size="sm"
-                            icon={<Bot class={stylex.attrs(styles.iconSm).class} />}
-                            onClick={() => handleCreateJob("ai-routine")}
-                          >
-                            Schedule job
-                          </ActionButton>
-                          <ActionButton tooltip="Run shell job" size="sm" variant="secondary" icon={<Terminal class={stylex.attrs(styles.iconSm).class} />} onClick={() => handleCreateJob("shell")}>
-                            Run shell job
-                          </ActionButton>
-                        </>
-                      }
-                    />
-                  }
-                >
-                  {(job) => (
-                    <article
-                      class={stylex.attrs(
-                        styles.denseCard,
-                        styles.selectableCard,
-                        selectedJob()?.id === job.id || selectedJobIdSet().has(job.id)
-                          ? styles.selectedCard
-                          : job.status === "enabled"
-                            ? styles.borderSuccess
-                            : styles.borderNeutral
-                      ).class}
-                      onPointerDown={(event) => scheduleDelayedSelection("job", job.id, event)}
-                      onPointerUp={clearPendingSelectionTimer}
-                      onPointerCancel={clearPendingSelectionTimer}
-                      onPointerLeave={clearPendingSelectionTimer}
-                      onClick={(event) => handleJobCardClick(job, event)}
-                      onContextMenu={(event) => openJobBulkContextMenu(job, event)}
-                    >
-                      <div class={stylex.attrs(styles.cardHeader).class}>
-                        <button type="button" class={stylex.attrs(styles.cardTitleButton).class} aria-label={`Select ${job.name}`} onClick={(event) => { event.stopPropagation(); handleJobCardClick(job, event); }}>
-                          <span class={stylex.attrs(styles.cardTitle).class}>{job.name}</span>
-                        </button>
-                        <StatusChip tone={jobStatusTone(job.status)} class={stylex.attrs(styles.statusChip).class}>
-                          {job.status}
-                        </StatusChip>
-                      </div>
-                      <div class={stylex.attrs(styles.cardActions).class}>
-                        <ActionButton
-                          tooltip={selectedJobIdSet().has(job.id) ? "Remove from bulk selection" : "Add to bulk selection"}
-                          icon={selectedJobIdSet().has(job.id) ? <CheckSquare2 class={stylex.attrs(styles.iconXs).class} /> : <Square class={stylex.attrs(styles.iconXs).class} />}
-                          size="icon"
-                          variant="ghost"
-                          ariaLabel={selectedJobIdSet().has(job.id) ? `Remove ${job.name} from bulk selection` : `Add ${job.name} to bulk selection`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedRunIds([]);
-                            setSelectedJobIds((ids) => toggleId(ids, job.id));
-                            setJobSelectionAnchorId(job.id);
-                          }}
-                        />
-                        <Show when={job.assistantId}>
-                          {(assistantId) => (
-                            <ActionButton
-                              tooltip="Open owning assistant"
-                              icon={<Bot class={stylex.attrs(styles.iconXs).class} />}
-                              size="icon"
-                              variant="ghost"
-                              ariaLabel={`Open assistant for ${job.name}`}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openAssistantDetails(assistantId());
-                              }}
-                            />
-                          )}
-                        </Show>
-                        <ActionButton tooltip="Run task now" disabled={executionPaused()} disabledReason={executionPauseReason} icon={<Play class={stylex.attrs(styles.iconXs).class} />} size="icon" variant="ghost" ariaLabel={`Run ${job.name} now`} onClick={(event) => { event.stopPropagation(); sendCommand({ type: "background-job.run-now", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } }); }} />
-                        <ActionButton tooltip={job.status === "enabled" ? "Pause task" : "Resume task"} icon={job.status === "enabled" ? <Pause class={stylex.attrs(styles.iconXs).class} /> : <Play class={stylex.attrs(styles.iconXs).class} />} size="icon" variant="ghost" ariaLabel={job.status === "enabled" ? `Pause ${job.name}` : `Resume ${job.name}`} onClick={(event) => { event.stopPropagation(); sendCommand({ type: job.status === "enabled" ? "background-job.pause" : "background-job.resume", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } }); }} />
-                        <ActionButton tooltip="Edit task" icon={<RefreshCcw class={stylex.attrs(styles.iconXs).class} />} size="icon" variant="ghost" ariaLabel={`Edit ${job.name}`} onClick={(event) => { event.stopPropagation(); handleEditJob(job); }} />
-                        <ActionButton tooltip="Delete task" icon={<Trash2 class={stylex.attrs(styles.iconXs).class} />} size="icon" variant="ghost" ariaLabel={`Delete ${job.name}`} onClick={(event) => { event.stopPropagation(); sendCommand({ type: "background-job.delete", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } }); }} />
-                      </div>
-                      <div class={stylex.attrs(styles.cardBody).class}>
-                        <div class={stylex.attrs(styles.chipRow).class}>
-                          <StatusChip tone={jobKindTone(job.kind)}>{job.kind}</StatusChip>
-                          <StatusChip tone={riskTone(job.riskLevel)}>{job.riskLevel}</StatusChip>
-                          <StatusChip tone="neutral">{job.lane ?? "exclusive"}</StatusChip>
-                        </div>
-                        <div>
-                          <FileLinkedText text={job.description ?? job.scheduleInput} fileLinks={getBackgroundRunFileLinks(job.projectId)} />
-                        </div>
-                        <div class={stylex.attrs(styles.marginTopXs).class}>
-                          Next: <NextRunContent text={formatJobNextRun(job, state.backgroundJobs.runs, state.backgroundJobs.schedulerHeartbeatAt)} onRetryScheduler={retryScheduler} />
-                        </div>
-                        <Show when={formatFailureTrackingLine(job)}>{(line) => <div><FileLinkedText text={line()} fileLinks={getBackgroundRunFileLinks(job.projectId)} /></div>}</Show>
-                        <For each={formatJobSchedulerLines(job, state.backgroundJobs.runs, state.backgroundJobs.schedulerHeartbeatAt)}>
-                          {(line) => (
-                            <div>
-                              <SchedulerWarningContent text={line} fileLinks={getBackgroundRunFileLinks(job.projectId)} onRetryScheduler={retryScheduler} />
-                            </div>
-                          )}
-                        </For>
-                        <div>Project: {state.workspace.projects.find((project) => project.id === job.projectId)?.name ?? job.projectId}</div>
-                        <div>Owner: {formatJobOwner(job, state)}</div>
-                      </div>
-                    </article>
-                  )}
-                </VirtualList>
-              </LeftPaneListSection>
-            </Show>
-  );
+function BackgroundJobsJobsList() {
+  const panel = useBackgroundJobsPanel();
+  const { state, sendCommand, activeSegment, jobs, selectedJobs, executionPaused, executionPauseReason,
+    setSelectedJobIds, setSelectedRunIds, selectedJob, selectedJobIdSet, setJobSelectionAnchorId } = panel.model;
+  const { sendBulkOperation, jobBulkTarget, handleCreateJob, scheduleDelayedSelection,
+    clearPendingSelectionTimer, handleJobCardClick, openJobBulkContextMenu, openAssistantDetails, handleEditJob } = panel.controller;
+  return <Show when={activeSegment() === "jobs"}>
+    <section {...stylex.attrs(jobStyles.section)} aria-label="Job roster" data-test-job-roster="">
+      <p {...stylex.attrs(typography.metadata, jobStyles.copy)}>{jobs().length} of {state.backgroundJobs.jobs.length} jobs</p>
+      <Show when={executionPaused()}><p {...stylex.attrs(typography.caption, jobStyles.warning)}>{executionPauseReason}</p></Show>
+      <Show when={state.backgroundJobs.jobs.some(job => (job.schedulerCongestionRatio ?? 0) >= 0.8)}><CapacityBar jobs={state.backgroundJobs.jobs} /></Show>
+      <Show when={selectedJobs().length > 0}>
+        <div {...stylex.attrs(jobStyles.header)}>
+          <span {...stylex.attrs(typography.control)}>{selectedJobs().length} selected</span>
+          <UiButton size="small" tooltip={executionPaused() ? executionPauseReason : "Run selected jobs now"} aria-label="Run selected jobs now" disabled={executionPaused()} onClick={() => sendBulkOperation("run-now", selectedJobs().map(jobBulkTarget))}>Run now</UiButton>
+          <ActionMenu ariaLabel="Selection actions" trigger={menu => <UiButton size="small" variant="secondary" tooltip="Selection actions" aria-haspopup="menu" aria-expanded={menu.open()} aria-controls={menu.menuId} onClick={menu.toggle}>More</UiButton>}>
+            <MenuItem onSelect={() => sendBulkOperation("pause", selectedJobs().map(jobBulkTarget))}>Pause selected</MenuItem>
+            <MenuItem onSelect={() => sendBulkOperation("resume", selectedJobs().map(jobBulkTarget))}>Resume selected</MenuItem>
+            <MenuItem tone="danger" onSelect={() => sendBulkOperation("delete", selectedJobs().map(jobBulkTarget))}>Delete selected</MenuItem>
+            <MenuItem onSelect={() => setSelectedJobIds([])}>Clear selection</MenuItem>
+          </ActionMenu>
+        </div>
+      </Show>
+      <VirtualList class={stylex.attrs(jobStyles.viewport).class} contentClass={stylex.attrs(styles.virtualContent).class}
+        items={jobs()} getKey={job => job.id} estimateSize={160} pagination={{ kind: "forward", initialCount: 60, batchSize: 60 }}
+        empty={<div {...stylex.attrs(jobStyles.empty)} data-test-jobs-empty="">
+          <p {...stylex.attrs(typography.body, jobStyles.copy)}>{state.backgroundJobs.jobs.length ? "No jobs match your search or filters." : "No scheduled jobs yet. Create a routine to run work on a schedule."}</p>
+          <Show when={state.backgroundJobs.jobs.length} fallback={<UiButton tooltip="Create scheduled AI routine" onClick={() => handleCreateJob("ai-routine")}>New job</UiButton>}>
+            <UiButton variant="secondary" tooltip="Clear search and filters" onClick={() => harnessStore.setJobsPanePreferences({ jobSearch: "", kind: undefined, status: undefined, jobState: "all", risk: undefined })}>Clear search and filters</UiButton>
+          </Show>
+        </div>}
+      >{job => <JobRosterRow job={job} selected={selectedJob()?.id === job.id} bulkSelected={selectedJobIdSet().has(job.id)}
+        projectName={state.workspace.projects.find(project => project.id === job.projectId)?.name ?? job.projectId}
+        nextRun={formatJobNextRun(job, state.backgroundJobs.runs, state.backgroundJobs.schedulerHeartbeatAt)}
+        warning={formatFailureTracking(job)}
+        runDisabledReason={executionPaused() ? executionPauseReason : findActiveJobRun(job, state.backgroundJobs.runs) ? "Stop the active run before starting another" : undefined}
+        onSelect={event => handleJobCardClick(job, event)} onPointerDown={event => scheduleDelayedSelection("job", job.id, event)}
+        onClearPointer={clearPendingSelectionTimer} onContextMenu={event => openJobBulkContextMenu(job, event)}
+        onToggleBulk={() => { setSelectedRunIds([]); setSelectedJobIds(ids => toggleId(ids, job.id)); setJobSelectionAnchorId(job.id); }}
+        onRun={() => sendCommand({ type: "background-job.run-now", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } })}
+        onPauseResume={() => sendCommand({ type: job.status === "enabled" ? "background-job.pause" : "background-job.resume", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } })}
+        onEdit={() => handleEditJob(job)} onDelete={() => sendCommand({ type: "background-job.delete", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } })}
+        onOpenAssistant={() => { if (job.assistantId) openAssistantDetails(job.assistantId); }}
+      />}</VirtualList>
+    </section>
+  </Show>;
 }
 
-function BackgroundJobsRunsList(props: BackgroundJobsPanelViewProps) {
+function BackgroundJobsRunsList() {
+  const panel = useBackgroundJobsPanel();
   const {
     activeSegment, runListItems, selectedBackgroundRuns, executionPaused,
     executionPauseReason, setSelectedRunIds, selectedRun, selectedRunIdSet,
     runListItemFileLinks, setSelectedJobIds, setRunSelectionAnchorId,
-  } = props.model;
+  } = panel.model;
   const {
     sendBulkOperation, runBulkTarget, openRunDetails, openProjectChatRun,
     openRunSource, handleRunListClick, scheduleDelayedSelection,
     clearPendingSelectionTimer, openRunBulkContextMenu,
-  } = props.controller;
+  } = panel.controller;
   return (
             <Show when={activeSegment() === "inbox"}>
               <LeftPaneListSection title="Runs" count={`${runListItems().length} total`} class={stylex.attrs(styles.listSection).class}>
@@ -677,33 +572,15 @@ function BackgroundJobsRunsList(props: BackgroundJobsPanelViewProps) {
   );
 }
 
-function BackgroundJobsDetailPane(props: BackgroundJobsPanelViewProps) {
-  const {
-    runtime, state, sendCommand, showDetail, activeSegment, selectedRun,
-    selectedJob, selectedJobRuns, selectedJobFileLinks, executionPaused,
-    executionPauseReason, selectedRunTitle, selectedBackgroundRun,
-    selectedRunItem, selectedRunItemFileLinks,
-  } = props.model;
-  const {
-    handleEditJob, openAssistantDetails, retryScheduler, scrollRunDetailToBottom,
-  } = props.controller;
+function BackgroundJobsDetailPane() {
+  const panel = useBackgroundJobsPanel();
+  const { runtime, showDetail, activeSegment, selectedRun, selectedJob, executionPaused, executionPauseReason, selectedRunTitle, selectedBackgroundRun, selectedRunItem, selectedRunItemFileLinks } = panel.model;
+  const { openAssistantDetails, scrollRunDetailToBottom } = panel.controller;
   return (
         <Show when={showDetail() && activeSegment() !== "health"}>
           <section class={stylex.attrs(styles.detailPane).class}>
             <Show when={activeSegment() === "jobs" && !selectedRun()}>
-              <JobDetail
-                job={selectedJob()}
-                runs={selectedJobRuns()}
-                fileLinks={selectedJobFileLinks()}
-                executionPaused={executionPaused()}
-                executionPauseReason={executionPauseReason}
-                onRunNow={(job) => sendCommand({ type: "background-job.run-now", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } })}
-                onStopRun={(run) => sendCommand({ type: "background-job.stop-run", requestId: createRequestId(), payload: { projectId: run.projectId, runId: run.id } })}
-                onEdit={handleEditJob}
-                onOpenAssistant={openAssistantDetails}
-                onRetryScheduler={retryScheduler}
-                schedulerHeartbeatAt={state.backgroundJobs.schedulerHeartbeatAt}
-              />
+              <JobDetail />
             </Show>
             <Show when={activeSegment() !== "jobs" || selectedRun()} fallback={null}>
               <Show when={selectedRun()} fallback={<DetailEmptyState>Select background run or job to inspect details.</DetailEmptyState>}>
@@ -807,11 +684,12 @@ function BackgroundJobsDetailPane(props: BackgroundJobsPanelViewProps) {
   );
 }
 
-function BackgroundJobsPanelOverlays(props: BackgroundJobsPanelViewProps) {
+function BackgroundJobsPanelOverlays() {
+  const panel = useBackgroundJobsPanel();
   const {
     detailsRunId, detailsRun, detailsJob, detailsRunFileLinks,
     detailsLogEntries, contextMenu, setContextMenu,
-  } = props.model;
+  } = panel.model;
   return (
     <>
       <Show when={detailsRunId() && detailsRun()}>
@@ -895,15 +773,16 @@ function RunFact(props: { label: string; children: JSX.Element }) {
 
 const SCHEDULER_HEARTBEAT_WARNING_PREFIX = "Stale: scheduler has not checked since";
 
-function NextRunContent(props: { text: string; onRetryScheduler: () => void }) {
+function NextRunContent(props: { text: string }) {
   return (
     <Show when={props.text.startsWith(SCHEDULER_HEARTBEAT_WARNING_PREFIX)} fallback={props.text}>
-      <SchedulerWarningContent text={props.text} onRetryScheduler={props.onRetryScheduler} />
+      <SchedulerWarningContent text={props.text} />
     </Show>
   );
 }
 
-function SchedulerWarningContent(props: { text: string; fileLinks?: FileLinkConfig; onRetryScheduler: () => void }) {
+function SchedulerWarningContent(props: { text: string; fileLinks?: FileLinkConfig }) {
+  const { controller } = useBackgroundJobsPanel();
   return (
     <span class={stylex.attrs(styles.schedulerContent).class}>
       <FileLinkedText text={props.text} fileLinks={props.fileLinks} class={stylex.attrs(styles.runFact).class} />
@@ -916,7 +795,7 @@ function SchedulerWarningContent(props: { text: string; fileLinks?: FileLinkConf
           icon={<RefreshCcw class={stylex.attrs(styles.iconSm).class} />}
           onClick={(event) => {
             event.stopPropagation();
-            props.onRetryScheduler();
+            controller.retryScheduler();
           }}
         >
           Retry scheduler
@@ -1020,12 +899,13 @@ function RunListButton(props: {
   );
 }
 
-function HealthView(props: {
-  diagnostics: () => RunDiagnosticsViewState;
-  healthWindowDays: RunDiagnosticsWindowDays;
-  onSelectWindow: (windowDays: RunDiagnosticsWindowDays) => void;
-  onRefresh: () => void;
-}) {
+function HealthView() {
+  const { model, controller } = useBackgroundJobsPanel();
+  const selectWindow = (days: RunDiagnosticsWindowDays) => {
+    model.setHealthWindowDays(days);
+    controller.requestDiagnostics(days);
+  };
+  const refresh = () => controller.requestDiagnostics();
   const assistantLabel = (assistantId?: string) => {
     if (!assistantId) {
       return "Unowned";
@@ -1042,11 +922,12 @@ function HealthView(props: {
               <Tooltip content={`Inspect the last ${windowDays === 1 ? "24 hours" : `${windowDays} days`}`}>
                 <button
                   type="button"
+                  aria-pressed={model.healthWindowDays() === windowDays}
                   class={stylex.attrs(
                     styles.healthWindowButton,
-                    props.healthWindowDays === windowDays ? styles.healthWindowSelected : styles.healthWindowIdle
+                    model.healthWindowDays() === windowDays ? styles.healthWindowSelected : styles.healthWindowIdle
                   ).class}
-                  onClick={() => props.onSelectWindow(windowDays)}
+                  onClick={() => selectWindow(windowDays)}
                 >
                   {windowDays === 1 ? "24h" : `${windowDays}d`}
                 </button>
@@ -1055,38 +936,42 @@ function HealthView(props: {
           </For>
         </div>
         <ActionButton
-          tooltip={props.diagnostics().loading ? "Refreshing diagnostics" : "Refresh diagnostics"}
-          disabled={props.diagnostics().loading}
-          disabledReason={props.diagnostics().loading ? "Diagnostics request already in flight" : undefined}
+          tooltip={model.diagnostics().loading ? "Refreshing diagnostics" : "Refresh diagnostics"}
+          disabled={model.diagnostics().loading}
+          disabledReason={model.diagnostics().loading ? "Diagnostics request already in flight" : undefined}
           icon={<RefreshCcw class={stylex.attrs(styles.iconMd).class} />}
           variant="secondary"
-          onClick={props.onRefresh}
+          onClick={refresh}
         >
           Refresh
         </ActionButton>
       </div>
 
       <Show
-        when={props.diagnostics().report}
+        when={model.diagnostics().report}
         fallback={
           <div class={stylex.attrs(styles.emptyHealth).class}>
-            {props.diagnostics().loading ? "Loading diagnostics..." : "Open Health to inspect recent reliability."}
+            {model.diagnostics().loading ? "Loading diagnostics..." : "Open Health to inspect recent reliability."}
           </div>
         }
       >
         {(report) => (
           <ScrollArea class={stylex.attrs(styles.virtualViewport).class}>
             <div class={stylex.attrs(styles.healthSections).class}>
-              <div class={stylex.attrs(styles.summaryGrid).class}>
+              <div class={stylex.attrs(styles.healthDiagnosis).class}>
+                <div class={stylex.attrs(styles.summaryLabel).class}>Dominant background failure</div>
+                <strong class={stylex.attrs(styles.summaryValue).class}>{formatFailureCategory(report().summary.dominantBackgroundFailureCategory ?? "No background failure category recorded")}</strong>
+              </div>
+              <dl class={stylex.attrs(styles.summaryGrid).class} aria-label="Scheduler metrics">
                 <For each={buildHealthSummaryRows(report())}>
                   {(row) => (
-                    <div class={stylex.attrs(styles.denseCard, styles.summaryCard).class}>
-                      <div class={stylex.attrs(styles.summaryLabel).class}>{row.label}</div>
-                      <div class={stylex.attrs(styles.summaryValue, rightAlignedNumbersEnabled() && styles.numeric).class}>{row.value}</div>
+                    <div class={stylex.attrs(styles.summaryCard).class}>
+                      <dt class={stylex.attrs(styles.summaryLabel).class}>{row.label}</dt>
+                      <dd class={stylex.attrs(styles.summaryValue, rightAlignedNumbersEnabled() && styles.numeric).class}>{row.value}</dd>
                     </div>
                   )}
                 </For>
-              </div>
+              </dl>
 
               <HealthTable
                 title="Backoff"
@@ -1161,37 +1046,6 @@ function HealthView(props: {
   );
 }
 
-function HealthTable(props: {
-  title: string;
-  headers: string[];
-  rows: string[][];
-  emptyMessage: string;
-}) {
-  return (
-    <section>
-      <div class={stylex.attrs(styles.healthTableTitle).class}>{props.title}</div>
-      <Show
-        when={props.rows.length > 0}
-        fallback={<div class={stylex.attrs(styles.healthTableEmpty).class}>{props.emptyMessage}</div>}
-      >
-        <div class={stylex.attrs(styles.healthTable).class}>
-          <div class={[stylex.attrs(styles.healthTableHeader).class, healthTableColumnClass(props.headers.length)].join(" ")}>
-            <For each={props.headers}>{(header) => <div class={stylex.attrs(rightAlignedNumbersEnabled() && isRightAlignedHealthHeader(header) && styles.numeric).class}>{header}</div>}</For>
-          </div>
-          <div class={stylex.attrs(styles.healthTableBody).class}>
-            <For each={props.rows}>
-              {(row) => (
-                <div class={[stylex.attrs(styles.healthTableRow).class, healthTableColumnClass(row.length)].join(" ")}>
-                  <For each={row}>{(cell, index) => <div class={stylex.attrs(styles.truncate, rightAlignedNumbersEnabled() && isRightAlignedHealthHeader(props.headers[index()]) && styles.numeric).class}>{cell}</div>}</For>
-                </div>
-              )}
-            </For>
-          </div>
-        </div>
-      </Show>
-    </section>
-  );
-}
 
 function jobsPaneMenuItems(
   state: typeof harnessStore.state,
@@ -1446,36 +1300,10 @@ function buildHealthSummaryRows(report: NonNullable<RunDiagnosticsViewState["rep
     { label: "Background failures", value: String(report.summary.backgroundFailureCount) },
     { label: "Lifecycle-failure share", value: formatShare(report.summary.lifecycleFailureShare) },
     { label: "Agent empty responses", value: String(report.summary.agentEmptyResponseCount) },
-    { label: "Question conflicts", value: String(report.summary.questionPersistConflictCount) },
-    {
-      label: "Dominant background failure",
-      value: report.summary.dominantBackgroundFailureCategory ? formatFailureCategory(report.summary.dominantBackgroundFailureCategory) : "n/a"
-    }
+    { label: "Question conflicts", value: String(report.summary.questionPersistConflictCount) }
   ];
 }
 
-function healthTableColumnClass(columnCount: number) {
-  switch (columnCount) {
-    case 3:
-      return stylex.attrs(styles.columnsThree).class;
-    case 4:
-      return stylex.attrs(styles.columnsFour).class;
-    case 5:
-      return stylex.attrs(styles.columnsFive).class;
-    case 6:
-      return stylex.attrs(styles.columnsSix).class;
-    default:
-      return stylex.attrs(styles.columnsThree).class;
-  }
-}
-
-function isRightAlignedHealthHeader(header: string) {
-  return ["Count", "Share", "Runs", "Avg chars", "Streak"].includes(header);
-}
-
-function formatShare(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
 
 function matchesRunFilter(run: BackgroundJobRun, filter: JobsRunFilter) {
   switch (filter) {
@@ -1654,18 +1482,6 @@ function riskRank(risk: BackgroundJob["riskLevel"]) {
   }
 }
 
-function compareOptionalIsoAsc(left?: string, right?: string) {
-  if (!left && !right) {
-    return 0;
-  }
-  if (!left) {
-    return 1;
-  }
-  if (!right) {
-    return -1;
-  }
-  return left.localeCompare(right);
-}
 
 function resolveJobNextRunAt(job: BackgroundJob) {
   if (job.nextRunAt) {
@@ -1785,13 +1601,6 @@ function isJobStale(job: BackgroundJob, schedulerHeartbeatAt?: string) {
   return isSchedulerHeartbeatStale(schedulerHeartbeatAt) && Boolean(job.lastSchedulerCheckAt) && isJobDueByClock(job);
 }
 
-function isSchedulerHeartbeatStale(schedulerHeartbeatAt?: string) {
-  if (!schedulerHeartbeatAt) {
-    return false;
-  }
-  const timestamp = Date.parse(schedulerHeartbeatAt);
-  return Number.isFinite(timestamp) && Date.now() - timestamp > 60_000;
-}
 
 function isJobDueByClock(job: BackgroundJob) {
   const nextRunAt = resolveJobNextRunAt(job);
@@ -1837,17 +1646,6 @@ function fuzzyMatches(haystack: string, query: string) {
   return tokens.every((token) => normalized.includes(token) || fuzzyTokenMatch(normalized, token));
 }
 
-function fuzzyTokenMatch(haystack: string, token: string) {
-  let cursor = 0;
-  for (const char of token) {
-    cursor = haystack.indexOf(char, cursor);
-    if (cursor < 0) {
-      return false;
-    }
-    cursor += 1;
-  }
-  return true;
-}
 
 function jobSearchHaystack(job: BackgroundJob, state: typeof harnessStore.state) {
   const project = state.workspace.projects.find((entry) => entry.id === job.projectId);
@@ -1956,10 +1754,6 @@ function formatRunProgress(run: BackgroundJobRun) {
   return undefined;
 }
 
-function formatFailureCategory(value: string) {
-  return value.replace(/-/g, " ");
-}
-
 function jobStatusTone(status: BackgroundJob["status"]): StatusChipTone {
   return status === "enabled" ? "success" : "neutral";
 }
@@ -1994,20 +1788,6 @@ function runStatusTone(status: BackgroundJobRun["status"] | AgentRunState["statu
 
 function runListItemTone(item: RunListItem): StatusChipTone {
   return item.kind === "background" ? runStatusTone(item.run.status) : runStatusTone(item.entry.run.status);
-}
-
-function jobKindTone(kind: BackgroundJob["kind"]): StatusChipTone {
-  return kind === "shell" ? "info" : "accent";
-}
-
-function riskTone(risk: BackgroundJob["riskLevel"]): StatusChipTone {
-  if (risk === "unsafe") {
-    return "danger";
-  }
-  if (risk === "slightly-unsafe") {
-    return "warning";
-  }
-  return "success";
 }
 
 function runStatusBorderClass(status: BackgroundJobRun["status"]) {
@@ -2081,41 +1861,16 @@ function formatPromptStats(promptStats: BackgroundJobRun["promptStats"] | undefi
   return `${promptStats.promptChars} chars, hash ${promptStats.promptHash}${transcript}${latestTask}`;
 }
 
-function formatFailureTrackingLine(job: BackgroundJob) {
-  const streak = job.consecutiveFailureCount ?? 0;
-  const lastCategory = job.lastFailureCategory ? formatFailureCategory(job.lastFailureCategory) : undefined;
-  const backoffUntil = job.backoffUntil ? formatShortTimestamp(job.backoffUntil) : undefined;
-  if (streak <= 0 && !lastCategory && !backoffUntil) {
-    return undefined;
-  }
-  return [
-    streak > 0 ? `Failure streak ${streak}` : undefined,
-    lastCategory ? `last ${lastCategory}` : undefined,
-    backoffUntil ? `backoff until ${backoffUntil}` : undefined
-  ]
-    .filter(Boolean)
-    .join(" | ");
-}
-
 function latestRunEventDetail(run: BackgroundJobRun) {
   return [...run.events].reverse().find((event) => event.detail || event.message)?.detail ?? [...run.events].reverse().find((event) => event.message)?.message;
 }
 
-function JobDetail(props: {
-  job?: BackgroundJob;
-  runs: BackgroundJobRun[];
-  fileLinks?: FileLinkConfig;
-  executionPaused: boolean;
-  executionPauseReason: string;
-  onRunNow: (job: BackgroundJob) => void;
-  onStopRun: (run: BackgroundJobRun) => void;
-  onEdit: (job: BackgroundJob) => void;
-  onOpenAssistant: (assistantId: string) => void;
-  onRetryScheduler: () => void;
-  schedulerHeartbeatAt?: string;
-}) {
-  const latestRun = createMemo(() => props.runs[0]);
-  const activeRun = createMemo(() => (props.job ? findActiveJobRun(props.job, props.runs) : undefined));
+function JobDetail() {
+  const { model, controller } = useBackgroundJobsPanel();
+  const onRunNow = (job: BackgroundJob) => model.sendCommand({ type: "background-job.run-now", requestId: createRequestId(), payload: { projectId: job.projectId, jobId: job.id } });
+  const onStopRun = (run: BackgroundJobRun) => model.sendCommand({ type: "background-job.stop-run", requestId: createRequestId(), payload: { projectId: run.projectId, runId: run.id } });
+  const latestRun = createMemo(() => model.selectedJobRuns()[0]);
+  const activeRun = createMemo(() => { const job = model.selectedJob(); return job ? findActiveJobRun(job, model.selectedJobRuns()) : undefined; });
   const latestRunEvents = createMemo(() =>
     (latestRun()?.events ?? []).map((event) => ({
       id: event.id,
@@ -2128,7 +1883,7 @@ function JobDetail(props: {
 
   return (
     <Show
-      when={props.job}
+      when={model.selectedJob()}
       fallback={
         <div class={stylex.attrs(styles.detailEmpty).class}>
           Select background job to inspect schedule and actions.
@@ -2136,44 +1891,47 @@ function JobDetail(props: {
       }
     >
       {(job) => (
-        <div class={stylex.attrs(styles.jobDetail).class}>
-          <div class={stylex.attrs(styles.jobDetailHeader).class}>
+        <div class={stylex.attrs(jobStyles.detail).class} data-test-job-detail-id={job().id}>
+          <div class={stylex.attrs(jobStyles.detailHeader).class}>
             <div class={stylex.attrs(styles.jobDetailTop).class}>
               <div>
                 <div class={stylex.attrs(styles.inlineChips).class}>
-                  <div class={stylex.attrs(styles.eyebrow).class}>Job detail</div>
+                  <div class={stylex.attrs(typography.control, jobStyles.copy).class}>Job detail</div>
                   <StatusChip tone={jobStatusTone(job().status)}>
                     {job().status}
                   </StatusChip>
                 </div>
-                <h2 class={stylex.attrs(styles.detailTitle).class}>{job().name}</h2>
-                <div class={stylex.attrs(styles.factGrid).class}>
+                <h2 class={stylex.attrs(typography.page, jobStyles.title).class}>{job().name}</h2>
+                <div class={stylex.attrs(jobStyles.copy).class}>Next: {" "}
+                  <NextRunContent text={formatJobNextRun(job(), model.selectedJobRuns(), model.state.backgroundJobs.schedulerHeartbeatAt)} />
+                </div>
+                <details>
+                <summary class={stylex.attrs(styles.advancedSummary).class}>Schedule and job details</summary>
+                <div class={stylex.attrs(jobStyles.facts).class}>
+                  <RunFact label="Project">{harnessStore.state.workspace.projects.find(project => project.id === job().projectId)?.name ?? job().projectId}</RunFact>
                   <RunFact label="Kind">{job().kind === "ai-routine" ? "AI routine" : "Shell command"}</RunFact>
                   <RunFact label="Risk">{job().riskLevel === "safe" ? "Safe: no elevated approval expected" : "Needs safety review"}</RunFact>
                   <RunFact label="Lane">{job().lane === "concurrent" ? "Can overlap" : "One at a time"}</RunFact>
                   <RunFact label="Owner">{formatJobOwner(job(), harnessStore.state)}</RunFact>
                   <RunFact label="Schedule">{job().scheduleInput}</RunFact>
-                  <RunFact label="Next">
-                    <NextRunContent text={formatJobNextRun(job(), props.runs, props.schedulerHeartbeatAt)} onRetryScheduler={props.onRetryScheduler} />
-                  </RunFact>
                   <Show when={job().schedulerStatus}>
                     {(status) => (
                       <RunFact label="Scheduler">
-                        <FileLinkedText text={formatJobStatusText(status(), job().schedulerDetail)} fileLinks={props.fileLinks} />
+                        <FileLinkedText text={formatJobStatusText(status(), job().schedulerDetail)} fileLinks={model.selectedJobFileLinks()} />
                       </RunFact>
                     )}
                   </Show>
-                  <Show when={formatFailureTrackingLine(job())}>
+                  <Show when={formatFailureTracking(job())}>
                     {(line) => (
                       <RunFact label="Failure">
-                        <FileLinkedText text={line()} fileLinks={props.fileLinks} />
+                        <FileLinkedText text={line()} fileLinks={model.selectedJobFileLinks()} />
                       </RunFact>
                     )}
                   </Show>
-                  <For each={formatJobSchedulerLines(job(), props.runs, props.schedulerHeartbeatAt)}>
+                  <For each={formatJobSchedulerLines(job(), model.selectedJobRuns(), model.state.backgroundJobs.schedulerHeartbeatAt)}>
                     {(line) => (
                       <RunFact label="Scheduler">
-                        <SchedulerWarningContent text={line} fileLinks={props.fileLinks} onRetryScheduler={props.onRetryScheduler} />
+                        <SchedulerWarningContent text={line} fileLinks={model.selectedJobFileLinks()} />
                       </RunFact>
                     )}
                   </For>
@@ -2183,45 +1941,47 @@ function JobDetail(props: {
                   <Show when={job().description}>
                     {(description) => (
                       <RunFact label="Description">
-                        <FileLinkedText text={description()} fileLinks={props.fileLinks} />
+                        <FileLinkedText text={description()} fileLinks={model.selectedJobFileLinks()} />
                       </RunFact>
                     )}
                   </Show>
                 </div>
+                </details>
               </div>
               <div class={stylex.attrs(styles.actionRow).class}>
                 <Show when={job().assistantId}>
                   {(assistantId) => (
-                    <ActionButton tooltip="Open owning assistant" variant="secondary" icon={<Bot class={stylex.attrs(styles.iconMd).class} />} onClick={() => props.onOpenAssistant(assistantId())}>
+                    <ActionButton tooltip="Open owning assistant" variant="secondary" icon={<Bot class={stylex.attrs(styles.iconMd).class} />} onClick={() => controller.openAssistantDetails(assistantId())}>
                       Assistant
                     </ActionButton>
                   )}
                 </Show>
                 <ActionButton
                   tooltip="Run task now"
-                  disabled={props.executionPaused || Boolean(activeRun())}
-                  disabledReason={props.executionPaused ? props.executionPauseReason : activeRun() ? "Stop the active run before starting another" : undefined}
+                  disabled={model.executionPaused() || Boolean(activeRun())}
+                  disabledReason={model.executionPaused() ? model.executionPauseReason : activeRun() ? "Stop the active run before starting another" : undefined}
                   icon={<Play class={stylex.attrs(styles.iconMd).class} />}
-                  onClick={() => props.onRunNow(job())}
+                  onClick={() => onRunNow(job())}
                 >
                   Run now
                 </ActionButton>
                 <Show when={activeRun()}>
                   {(run) => (
-                    <ActionButton tooltip="Stop active background run" variant="secondary" icon={<Pause class={stylex.attrs(styles.iconMd).class} />} onClick={() => props.onStopRun(run())}>
+                    <ActionButton tooltip="Stop active background run" variant="secondary" icon={<Pause class={stylex.attrs(styles.iconMd).class} />} onClick={() => onStopRun(run())}>
                       Stop run
                     </ActionButton>
                   )}
                 </Show>
-                <ActionButton tooltip="Edit task" variant="secondary" icon={<RefreshCcw class={stylex.attrs(styles.iconMd).class} />} onClick={() => props.onEdit(job())}>
+                <ActionButton tooltip="Edit task" variant="secondary" icon={<RefreshCcw class={stylex.attrs(styles.iconMd).class} />} onClick={() => controller.handleEditJob(job())}>
                   Edit
                 </ActionButton>
               </div>
             </div>
           </div>
-          <section class={stylex.attrs(styles.executionSection).class}>
+          <JobOutcome run={latestRun()} tone={runStatusTone(latestRun()?.status ?? "queued")} pauseReason={model.executionPaused() ? model.executionPauseReason : undefined} />
+          <section class={stylex.attrs(jobStyles.log).class}>
             <div class={stylex.attrs(styles.executionHeader).class}>
-              <div class={stylex.attrs(styles.eyebrow).class}>Execution log</div>
+              <div class={stylex.attrs(typography.control, jobStyles.copy).class}>Execution log</div>
               <Show when={latestRun()}>
                 {(run) => <div class={stylex.attrs(styles.executionStatus).class}>{run().status}</div>}
               </Show>
@@ -2230,7 +1990,7 @@ function JobDetail(props: {
               when={latestRun()?.events.length}
               fallback={<div class={stylex.attrs(styles.executionEmpty).class}>No execution log yet.</div>}
             >
-              <ExecutionLog entries={latestRunEvents()} emptyMessage="No execution log yet." rowVariant="flat" fileLinks={props.fileLinks} />
+              <ExecutionLog entries={latestRunEvents()} emptyMessage="No execution log yet." rowVariant="flat" fileLinks={model.selectedJobFileLinks()} />
             </Show>
           </section>
         </div>

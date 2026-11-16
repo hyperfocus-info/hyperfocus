@@ -433,7 +433,9 @@ export function createWorkspaceBackgroundOperations4(context: WorkspaceRepositor
           now
         );
       operations.touchProject(jobToSave.projectId, now);
-      return loadBackgroundJobsState();
+      const savedJob = getBackgroundJob(jobToSave.id);
+      if (!savedJob) throw new Error(`Background job was not persisted: ${jobToSave.id}`);
+      return savedJob;
     }
   function setBackgroundJobStatus(projectId: ProjectId, jobId: string, status: BackgroundJob["status"]) {
       const now = new Date().toISOString();

@@ -1,0 +1,16 @@
+{
+  "name": "@hyperfocus/branding",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./config": "./src/config.ts",
+    ".": "./src/index.ts",
+    "./build": "./src/build.ts"
+  },
+  "dependencies": {
+    "zod": "3.25.76",
+    "@resvg/resvg-wasm": "2.6.2"
+  }
+}

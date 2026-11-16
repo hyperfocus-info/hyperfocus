@@ -65,7 +65,7 @@ export function resolveTracePanelEntity(state: HarnessViewState): TracePanelEnti
   }
 
   if (state.activeLeftTab === "jobs" || state.activeLeftTab === "runs") {
-    const selectedRun = state.jobsPanePreferences.selectedRunId
+    const selectedRun = state.activeLeftTab === "runs" && state.jobsPanePreferences.selectedRunId
       ? state.backgroundJobs.runs.find((run) => run.id === state.jobsPanePreferences.selectedRunId)
       : undefined;
     if (selectedRun) {
@@ -93,8 +93,7 @@ export function resolveTracePanelEntity(state: HarnessViewState): TracePanelEnti
     const selectedJob = state.jobsPanePreferences.selectedJobId
       ? state.backgroundJobs.jobs.find((job) => job.id === state.jobsPanePreferences.selectedJobId)
       : undefined;
-    const fallbackJob = selectedJob ?? getVisibleJobs(state)[0];
-    return fallbackJob ? { type: "job", jobId: fallbackJob.id } : undefined;
+    return selectedJob ? { type: "job", jobId: selectedJob.id } : undefined;
   }
 
   const activeProject = state.workspace.projects.find((project) => project.id === state.workspace.activeProjectId);
@@ -489,29 +488,6 @@ function getThreadLiveTranscript(project: ViewProjectState, threadId: string): T
     runSummaries: project.activeThreadId === threadId ? project.runSummaries : [],
     lastError: project.activeThreadId === threadId ? project.lastError : undefined
   };
-}
-
-function getVisibleJobs(state: HarnessViewState) {
-  return state.backgroundJobs.jobs.filter((job) => {
-    const preferences = state.jobsPanePreferences;
-    if (preferences.kind && job.kind !== preferences.kind) {
-      return false;
-    }
-    if (preferences.status && job.status !== preferences.status) {
-      return false;
-    }
-    if (preferences.risk && job.riskLevel !== preferences.risk) {
-      return false;
-    }
-    if (!preferences.search.trim()) {
-      return true;
-    }
-    return [job.name, job.description, job.scheduleInput, job.kind, job.status, job.riskLevel]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(preferences.search.trim().toLowerCase());
-  });
 }
 
 function formatSubtaskDetail(task: AgentRunState["subtasks"][number]) {

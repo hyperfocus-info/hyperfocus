@@ -40,6 +40,21 @@ The target is an engine-owned high-performance runtime rather than a permanent d
 
 The first-party path now includes dependency-free matrix/camera/transform/culling primitives, bounded scene registries and command buffers, a WebGL2 backend, direct-light metallic-roughness/emissive materials, lit RGBA textures, instancing, deterministic distance-band mesh LOD rebinding, one directional shadow map, bounded position morph targets/static glTF morph cooking, integrated terrain chunk streaming, hardware-bounded matrix skinning, quaternion/angular rigid state, bounded distance constraints, vendor-neutral static and skin/animation glTF cookers, and a two-file `3d-action` author-to-build path. Three.js remains an optional compatibility subpath rather than a requirement of the portable runtime. Environment/texture PBR channels, compression, HLOD, exact oriented-box/angular collision response, general rigid joints, morph-weight animation, and WebGPU remain explicit next layers.
 
+### P2b: source illustration and geometry studio
+
+Treat source media generation as a major product epic, not another catalog checkbox. The target is a magical brief-to-editable-scene workflow that can generate or derive original illustration, layered backgrounds, texture sets, meshes, UVs, rigs, animation starting points, and LODs while keeping every result portable and replaceable.
+
+Completion requires all of the following:
+
+- a provider-neutral generation request and provenance record containing prompt, references, seed/model/version when exposed, license, source size, compatibility, project impact, and user approval;
+- non-destructive versions plus component-level regeneration for masks, layers, line art, color, depth, normals, roughness, metalness, geometry, topology, UVs, rigging, and animation rather than one flattened irreversible result;
+- browser-local workers with transferable buffers and WASM SIMD as the baseline conversion lane, an optional threaded lane after cross-origin-isolation compatibility proof, a trusted desktop-host fallback for native-only or oversized jobs, and explicit opt-in remote conversion;
+- one-click staging into both gameplay and video timelines, followed by the same material/texture/UV/shader recipe controls and exact-frame effects available to imported assets;
+- quality gates covering original anime energy combat, painted-cel adventure, graphic ink, luminous storybook, stylized 3D, and photoreal scenes without shipping or imitating copyrighted characters or source art;
+- an end-to-end acceptance journey from a short creative brief to two editable fighters, a layered environment, lighting/material variants, an energy clash, one-frame impact art, camera coverage, music synchronization, and an exportable clip in minutes, with every generated choice still inspectable and replaceable.
+
+The current executable conversion routing spike lives in the [engine editor conversion note (temporary; prune after findings are promoted)](../../../apps/engine-editor/.local/asset-conversion-spike.tmp.md). It is architecture evidence, not a claim that source generation or full conversion is shipped.
+
 ### P3: production online operation
 
 The first-party product path around authoritative rooms, protocol, replication, AOI, operations, persistence, and load-test foundations now includes:
@@ -55,11 +70,16 @@ No readiness claim should describe a shard proof as a complete MMO platform or i
 
 ## Score gates
 
+These scores describe the earlier baseline, not a current adversarial signoff.
+The [2026-09-09 editor and engine audit](editor-engine-adversarial-audit.md) records
+open capacity/identity, input replay, editor lifecycle and export defects that
+qualify runtime correctness and editor delivery claims until repaired and verified.
+
 | Category | Score | Repository evidence and remaining friction |
 | --- | ---: | --- |
 | 2D top-down and grid | **9/10** | Six exact-pair starters share collision, camera, input, rendering, audio, saves, navigation, story, and one-file builds. Specialized inspectors and touch/rebinding authoring remain. |
 | Intermediate TypeScript DX | **9/10** | Typed subpaths, ordinary authored source, source-aware one-file builds, last-good live reload, exact diagnostics, neutral export, and Bundler/NodeNext external-consumer proofs work without editor-only knowledge. Arbitrary source execution inside browser Editor Play remains. |
-| Runtime correctness/performance | **9/10** | Deterministic replay/parity, fixed-capacity byte gates, package byte budgets, browser/system acceptance, atomic artifact swaps, WASM parity/benchmark gates, and representative render/server tests pass. Machine-specific timing claims remain scoped to documented runners. |
+| Runtime correctness/performance | **9/10 historical; revalidation open** | Existing replay, package and representative runtime checks remain useful, but the adversarial audit records uncovered correctness failures. Uncalibrated millisecond gates still run in ordinary tests (EEA-18). |
 | Authoritative room/zone | **8/10** | Signed one-use admission, authenticated shared replay/persistence/key/region/capacity control-plane adapters, protocol compatibility, AOI replication, reconnect-safe handoffs, drain/health/metrics, encrypted backup envelopes, workload evidence, and 1,000 players across rooms form a deployable reference. Provider resources and live operations remain deployment choices. |
 | General 3D action | **8/10** | The exact-pair `3d-action` project cooks neutral glTF/RGBA assets, runs first-party direct-light PBR WebGL2 with authored mesh LOD, optional directional shadows, bounded morphs/terrain streaming, rigid quaternion/distance-constraint primitives, input/follow camera, WAV audio, deterministic animation, IndexedDB saves, and an offline build in clean Chromium. Fuller PBR, exact oriented collision/general joints, HLOD, and representative game integration remain. |
 | Beginner creation | **9/10** | The documented journey creates, plays, edits, live-reloads, survives a broken edit, rebuilds, browser-drives, and removes a temporary project without integration glue or file proliferation. Specialized genre tools remain. |

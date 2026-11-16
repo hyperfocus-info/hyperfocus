@@ -1,37 +1,27 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX, type Setter } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowUp, ArrowUpRight, Brain, Bot, Calendar, Check, CheckSquare2, CircleAlert, CirclePause,
-  CircleHelp, CirclePlay, ClipboardList, CopyPlus, Cpu, FlaskConical, Folder, Gauge, Globe, ListFilter, ListChecks,
-  Logs, MessageSquare, Plus, RefreshCcw, Save, Split, Square, SquarePen, Trash2 } from "lucide-solid";
 import {
-  createAssistantTodoId,
-  type BackgroundJob,
-  type BackgroundJobRun,
-  createRequestId,
-  type Assistant,
-  type AssistantLearning,
-  type AssistantQuestion,
-  type AssistantTodo,
-  type BulkOperationAction,
-  type BulkOperationTarget,
-  type ComposerReasoningStrength,
+type AssistantTodo
 } from "@hyperfocus/ai-core/protocol";
-import { formatShortTimestamp, resolveBrowserTimezone } from "../../lib/time-format";
+import * as stylex from "@stylexjs/stylex";
+import { ArrowDown,Brain,Cpu,Gauge,MessageSquare,Split } from "lucide-solid";
+import { For,Show,type JSX } from "solid-js";
+import { formatShortTimestamp } from "../../lib/time-format";
 import { ActionButton } from "../action-button";
-import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
+import { assistantUtilityStyles } from "../assistants-panel.styles";
+import { FileLinkedText } from "../file-linked-text";
 import { MarkdownContent } from "../markdown-content";
-import { ChatComposer } from "../primitives/chat-composer";
+import { ModelSelect } from "../models/model-select";
+import { ProjectChatComposer as ChatComposer } from "@hyperfocus/ui/composer";
 import { CopyTextButton } from "../primitives/copy-text-button";
 import { DropdownControl } from "../primitives/dropdown";
 import { VirtualList } from "../primitives/virtual-list";
-import { assistantPanelStyles, assistantUtilityStyles } from "../assistants-panel.styles";
-import { createAssistantsPanelController, type AssistantsPanelController, type AssistantsPanelProps } from "./assistant-panel-controller";
+import { detailStyles } from "./assistant-detail.styles";
+import { isComposerReasoningStrength } from "./assistant-panel-model";
+import { useAssistantsPanel } from "./state/panel-context";
 
 function isActiveTodo(state: AssistantTodo["state"]) {
   return state === "pending" || state === "in-progress" || state === "blocked";
 }
 
-function isComposerReasoningStrength(value: string): value is ComposerReasoningStrength { return value === "low" || value === "medium" || value === "high" || value === "extra-high"; }
 
 function renderMessageActionRow(
   timestamp: string | number | Date | undefined,
@@ -67,23 +57,9 @@ function renderMessageActionRow(
   );
 }
 
-export function AssistantChatTab(props: { controller: AssistantsPanelController }) {
-  const {
-    activeTab, assistantChatExecutionModelId, assistantChatFastMode,
-    assistantChatFastModeOptions, assistantChatFileLinks, assistantChatModeId,
-    assistantChatModeOptions, assistantChatModelOptions, assistantChatReasoningOptions,
-    assistantChatReasoningStrength, assistantChatRows, assistantStickToBottom,
-    chatDraft, executionPauseReason, executionPaused, handleAssistantComposerClick,
-    handleSendChat, refs, scrollAssistantChatToBottom, selectedAssistant, selectedThread,
-    setAssistantChatExecutionModelId, setAssistantChatFastMode,
-    setAssistantChatModeId, setAssistantChatReasoningStrength, setChatDraft,
-    state, updateAssistantScrollLock, variant, visibleTodos,
-  } = props.controller;
-  const assistant = () => {
-    const current = selectedAssistant();
-    if (!current) throw new Error("Assistant chat requires a selected assistant.");
-    return current;
-  };
+export function AssistantChatTab() {
+  const controller = useAssistantsPanel();
+  const { activeTab } = controller;
   return (
     <Show when={activeTab() === "chat"}>
       <div
@@ -96,29 +72,24 @@ export function AssistantChatTab(props: { controller: AssistantsPanelController 
             assistantUtilityStyles.gap4,
             assistantUtilityStyles.overflowHidden,
             assistantUtilityStyles.pr1,
+            detailStyles.chat,
           ).class
         }
       >
-      <AssistantChatMain controller={props.controller} />
+      <AssistantChatMain />
     
-      <AssistantChatContext controller={props.controller} />
+      <AssistantChatContext />
       </div>
     </Show>
   );
 }
 
-function AssistantChatMain(props: { controller: AssistantsPanelController }) {
+function AssistantChatMain() {
+  const controller = useAssistantsPanel();
   const {
-    assistantChatExecutionModelId, assistantChatFastMode,
-    assistantChatFastModeOptions, assistantChatFileLinks, assistantChatModeId,
-    assistantChatModeOptions, assistantChatModelOptions, assistantChatReasoningOptions,
-    assistantChatReasoningStrength, assistantChatRows, assistantStickToBottom,
-    chatDraft, executionPauseReason, executionPaused, handleAssistantComposerClick,
-    handleSendChat, refs, scrollAssistantChatToBottom, selectedAssistant,
-    setAssistantChatExecutionModelId, setAssistantChatFastMode,
-    setAssistantChatModeId, setAssistantChatReasoningStrength, setChatDraft,
-    updateAssistantScrollLock, variant,
-  } = props.controller;
+    chatDraft, executionPauseReason, executionPaused, handleAssistantComposerClick, handleSendChat,
+    refs, selectedAssistant, setChatDraft,
+  } = controller;
   const assistant = () => {
     const current = selectedAssistant();
     if (!current) throw new Error("Assistant chat requires a selected assistant.");
@@ -153,7 +124,7 @@ function AssistantChatMain(props: { controller: AssistantsPanelController }) {
               >
                 Assistant chat
               </div>
-      <AssistantChatTranscript controller={props.controller} />
+      <AssistantChatTranscript />
               <ChatComposer
                 class={stylex.attrs(assistantUtilityStyles.mt4).class}
                 textareaRef={(element) => {
@@ -173,7 +144,7 @@ function AssistantChatMain(props: { controller: AssistantsPanelController }) {
                 onSubmit={handleSendChat}
                 onClick={handleAssistantComposerClick}
                 leftControls={
-      <AssistantChatRoutingControls controller={props.controller} />
+      <AssistantChatRoutingControls />
                 }
                 rightActions={
                   <ActionButton
@@ -209,18 +180,19 @@ function AssistantChatMain(props: { controller: AssistantsPanelController }) {
   );
 }
 
-function AssistantChatTranscript(props: { controller: AssistantsPanelController }) {
+function AssistantChatTranscript() {
+  const controller = useAssistantsPanel();
   const {
     assistantChatFileLinks, assistantChatRows, assistantStickToBottom, refs,
-    scrollAssistantChatToBottom, updateAssistantScrollLock, variant,
-  } = props.controller;
+    scrollAssistantChatToBottom, updateAssistantScrollLock,
+  } = controller;
   return (
     <div
                     class={
                       stylex.attrs(
                         assistantUtilityStyles.relative,
                         assistantUtilityStyles.flex,
-                        assistantUtilityStyles.minH72,
+                        assistantUtilityStyles.minH0,
                         assistantUtilityStyles.flex1,
                         assistantUtilityStyles.flexCol,
                       ).class
@@ -406,7 +378,8 @@ function AssistantChatTranscript(props: { controller: AssistantsPanelController 
   );
 }
 
-function AssistantChatRoutingControls(props: { controller: AssistantsPanelController }) {
+function AssistantChatRoutingControls() {
+  const controller = useAssistantsPanel();
   const {
     assistantChatExecutionModelId, assistantChatFastMode,
     assistantChatFastModeOptions, assistantChatModeId, assistantChatModeOptions,
@@ -414,7 +387,7 @@ function AssistantChatRoutingControls(props: { controller: AssistantsPanelContro
     assistantChatReasoningStrength, setAssistantChatExecutionModelId,
     setAssistantChatFastMode, setAssistantChatModeId,
     setAssistantChatReasoningStrength,
-  } = props.controller;
+  } = controller;
   return (
     <div
                         class={
@@ -444,8 +417,7 @@ function AssistantChatRoutingControls(props: { controller: AssistantsPanelContro
                           options={assistantChatModeOptions()}
                           onChange={setAssistantChatModeId}
                         />
-                        <DropdownControl
-                          kind="select"
+                        <ModelSelect
                           ariaLabel="Select assistant chat model"
                           icon={
                             <Cpu
@@ -505,20 +477,19 @@ function AssistantChatRoutingControls(props: { controller: AssistantsPanelContro
   );
 }
 
-function AssistantChatContext(props: { controller: AssistantsPanelController }) {
-  const {
-    assistantChatFileLinks, selectedThread, state, visibleTodos,
-  } = props.controller;
+function AssistantChatContext() {
+  const controller = useAssistantsPanel();
+  const { assistantChatFileLinks, selectedThread, visibleTodos } = controller;
   return (
-    <section
+    <details
               class={
                 stylex.attrs(assistantUtilityStyles.shrink0).class
               }
             >
-              <div
+              <summary
                 class={
                   stylex.attrs(
-                    assistantUtilityStyles.text0585,
+                    detailStyles.disclosureTrigger,
                     assistantUtilityStyles.fontSemibold,
                     assistantUtilityStyles.uppercase,
                     assistantUtilityStyles.tracking018,
@@ -527,7 +498,7 @@ function AssistantChatContext(props: { controller: AssistantsPanelController }) 
                 }
               >
                 Working memory
-              </div>
+              </summary>
               <div
                 class={
                   stylex.attrs(
@@ -619,6 +590,6 @@ function AssistantChatContext(props: { controller: AssistantsPanelController }) 
                   </ul>
                 </div>
               </div>
-            </section>
+            </details>
   );
 }

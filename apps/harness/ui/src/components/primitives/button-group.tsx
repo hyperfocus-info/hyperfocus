@@ -1,9 +1,11 @@
-import { For, createEffect, createSignal, onCleanup, type JSX } from "solid-js";
-import { Menu } from "lucide-solid";
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
+import { Menu } from "lucide-solid";
+import { For,createEffect,createSignal,onCleanup,type JSX } from "solid-js";
 import { cn } from "../../lib/utils";
 import { ActionButton } from "../action-button";
 import { Button } from "./button";
+import { resolveCollapseWidth } from "./button-group/collapse-width";
 import { Popover } from "./popover";
 import { Tooltip } from "./tooltip";
 
@@ -29,7 +31,7 @@ type ButtonGroupProps = {
 const styles = stylex.create({
   root: { gap: "0.125rem", display: "flex", flexShrink: 0, },
   popoverContent: { padding: "0.375rem", width: "11rem" },
-  menu: { gap: "0.25rem", display: "flex", flexDirection: "column", fontSize: "0.675rem", },
+  menu: { gap: "0.25rem", display: "flex", flexDirection: "column", fontSize: tokens.fontCaption, },
   menuItem: {
     borderRadius: "0.5rem",
     borderWidth: 0,
@@ -38,14 +40,14 @@ const styles = stylex.create({
     alignItems: "center",
     backgroundColor: { default: "transparent", ":hover": "rgb(0 0 0 / 0.05)" },
     color: "var(--foreground)",
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    cursor: "pointer",
     display: "flex",
     fontWeight: 600,
     opacity: { default: 1, ":disabled": 0.45 },
     textAlign: "left",
     transitionDuration: "150ms",
     transitionProperty: "background-color, color",
-    minHeight: "2rem",
+    minHeight: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch },
     width: "100%",
   },
   itemIcon: { alignItems: "center", display: "flex", justifyContent: "center", height: "1rem", width: "1rem", },
@@ -154,27 +156,4 @@ export function ButtonGroup(props: ButtonGroupProps) {
       )}
     </div>
   );
-}
-
-
-function resolveCollapseWidth(width: number | string | undefined) {
-  if (typeof width === "number") {
-    return width;
-  }
-  if (typeof width !== "string") {
-    return 22 * 16;
-  }
-
-  const trimmed = width.trim();
-  if (trimmed.endsWith("rem")) {
-    const rem = Number(trimmed.slice(0, -3));
-    return Number.isFinite(rem) ? rem * 16 : 22 * 16;
-  }
-  if (trimmed.endsWith("px")) {
-    const px = Number(trimmed.slice(0, -2));
-    return Number.isFinite(px) ? px : 22 * 16;
-  }
-
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : 22 * 16;
 }

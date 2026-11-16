@@ -66,3 +66,5 @@ export {
   type CapabilityGatedCullingResult3D,
   type GpuInstanceCullingBackend3D
 } from "./gpu-instance-culling.ts";
+export { createBufferedFrames } from './buffered-frames.ts';
+export { createRenderFramePacket3D } from './frame-packet-3d.ts';

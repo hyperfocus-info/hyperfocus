@@ -24,6 +24,7 @@ export type HarnessConnection = {
   connectionId?: string;
   clientKind: "browser" | "native";
   kind: "control" | "pty" | "terminal";
+  encoding?: "protobuf" | "json";
   sessionId?: string;
   attachOwnerId?: string;
 };

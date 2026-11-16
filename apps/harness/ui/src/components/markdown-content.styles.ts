@@ -1,3 +1,4 @@
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 /** Build-time presentation for rendered Markdown and standalone file references. */
@@ -8,7 +9,7 @@ export const markdownStyles = stylex.create({
     "--markdown-code-padding": "0.8rem 0.85rem 0.9rem",
     "--markdown-h1-size": "1.05rem",
     "--markdown-h2-size": "0.95rem",
-    fontSize: "0.675rem",
+    fontSize: tokens.fontCaption,
     lineHeight: 1.55,
   },
   toneDefault: { color: "var(--foreground)" },
@@ -116,6 +117,7 @@ export const markdownStyles = stylex.create({
     alignItems: "center",
     backgroundColor: "#f7f8f314",
     display: "flex",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     borderBottomColor: "#ffffff14",
     borderBottomStyle: "solid",
@@ -123,10 +125,10 @@ export const markdownStyles = stylex.create({
   },
   codeLanguage: {
     color: "#f7f8f3d1",
-    fontSize: "0.58rem",
+    fontSize: tokens.fontCaption,
     fontWeight: 700,
-    letterSpacing: "0.14em",
-    textTransform: "uppercase",
+    letterSpacing: "normal",
+    textTransform: "none",
   },
   codePre: {
     margin: 0,
@@ -164,10 +166,10 @@ export const markdownStyles = stylex.create({
   },
   tableHeader: {
     backgroundColor: "color-mix(in srgb, var(--accent) 11%, var(--panel) 89%)",
-    fontSize: "0.62rem",
+    fontSize: tokens.fontCaption,
     fontWeight: 700,
-    letterSpacing: "0.14em",
-    textTransform: "uppercase",
+    letterSpacing: "normal",
+    textTransform: "none",
   },
   tableRow: {
     backgroundColor: {

@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { expect, test } from "bun:test";
 import net from "node:net";
 
@@ -44,12 +45,12 @@ async function tcpReady(port: number) {
 test("MMO Skill Demo server exposes only its intended browser surface", async () => {
   const websocketPort = await findOpenPort();
   const staticPort = await findOpenPort(websocketPort);
-  const processHandle = Bun.spawn([process.execPath, "run", "./examples/mmo-skill-demo/server.ts"], {
+  const processHandle = spawnBackgroundProcess({ cmd: [process.execPath, "run", "./examples/mmo-skill-demo/server.ts"], ...{
     cwd: process.cwd(),
     env: { ...process.env, PORT: String(websocketPort), STATIC_PORT: String(staticPort) },
     stdout: "ignore",
     stderr: "pipe"
-  });
+  } });
 
   try {
     await waitUntil(() => tcpReady(websocketPort), `authoritative server on ${websocketPort}`);

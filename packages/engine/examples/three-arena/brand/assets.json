@@ -1,0 +1,59 @@
+{
+  "schema": "hyperfocus-brand-assets-v1",
+  "name": "Three Arena",
+  "source": "symbol:orbit",
+  "sourceSha256": "fd0edc211c4c2c7b7edf85e955b1d20cb2f09713880535820270fe5968b69e7d",
+  "customization": "Replace the source logo in brand.json, then regenerate this directory. Do not edit renditions.",
+  "files": [
+    {
+      "path": "logo.svg",
+      "sha256": "fd0edc211c4c2c7b7edf85e955b1d20cb2f09713880535820270fe5968b69e7d",
+      "bytes": 279
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "6faced31ea9d8f3eb46b1848db11eca57a0c1403b759a22bb63d948789fa04ee",
+      "bytes": 546
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "4072ff7a35689de92682f820c0ea9947e676e18f8e2cdf6ebc20207678941a87",
+      "bytes": 870
+    },
+    {
+      "path": "favicon-32.png",
+      "sha256": "a05a078e7d19e330c1c61a7156aafbed5d559850e4267a5a799a1cd806cc0c61",
+      "bytes": 848
+    },
+    {
+      "path": "icon-192.png",
+      "sha256": "0840923a94850123f43399f7d0c323de5693655a6748d09942827e06441456b5",
+      "bytes": 4360
+    },
+    {
+      "path": "icon-512.png",
+      "sha256": "8265079bf69f31579ac67ae9e3bb67a4de7c836524ebd1deae4659afa1be67c9",
+      "bytes": 12207
+    },
+    {
+      "path": "maskable-512.png",
+      "sha256": "ec2ff6b2508a35e97241e795040c76ec3c7194bfef45e3aaaf9081da5b7245df",
+      "bytes": 8625
+    },
+    {
+      "path": "apple-touch-icon.png",
+      "sha256": "e078a3500453aca7985701bf4e89fbb56e389258c66433965af78593dbbf3939",
+      "bytes": 3328
+    },
+    {
+      "path": "social.png",
+      "sha256": "7aba282d5cc706f2113ea780b4f77d022352b94e8dcc6b5623834feb7160b75e",
+      "bytes": 13014
+    },
+    {
+      "path": "site.webmanifest",
+      "sha256": "06943c8712df429f014ab3ed467d462da65b02248253dd946d1773df5ecc7e9c",
+      "bytes": 498
+    }
+  ]
+}

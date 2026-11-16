@@ -1,9 +1,11 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { DEFAULT_BRANCHFS_RETENTION, pruneBranchfsRoots } from "../../branchfs-cleanup";
 import type { BranchfsExperimentLease } from "../../branchfs-manager";
 import type { WorkspaceRepository } from "../../workspace-repository";
 import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
 import type { AgentRunState } from "@hyperfocus/ai-core/protocol";
-import { createHash } from "node:crypto";
+import { realpath } from "node:fs/promises";
+import { computeDirtyFingerprint as hashDirtyEntries, readDirtyStatus } from "../../branchfs/dirty-state";
 import path from "node:path";
 
 export function createExperimentLease(projectRoot: string, experiment: NonNullable<AgentRunState["experiment"]>): BranchfsExperimentLease {
@@ -28,7 +30,7 @@ export function createExperimentLease(projectRoot: string, experiment: NonNullab
 }
 
 export async function resolveGitRepoRoot(cwd: string) {
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: ["git", "rev-parse", "--show-toplevel"],
     cwd,
     stdout: "pipe",
@@ -46,7 +48,7 @@ export async function resolveGitRepoRoot(cwd: string) {
 }
 
 export async function resolveGitHead(cwd: string) {
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: ["git", "rev-parse", "--verify", "HEAD"],
     cwd,
     stdout: "pipe",
@@ -95,23 +97,10 @@ export function scheduleBranchfsRetentionPrune(projectRoot: string) {
 }
 
 export async function computeDirtyFingerprint(cwd: string) {
-  const proc = Bun.spawn({
-    cmd: ["git", "status", "--porcelain", "-z", "--untracked-files=all", "--", "."],
-    cwd,
-    stdout: "pipe",
-    stderr: "ignore"
-  });
-  const [stdout] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-  const hash = createHash("sha256");
-  for (const part of stdout.split("\0").filter(Boolean).sort()) {
-    const filePath = part.length >= 4 ? part.slice(3).trim() : part.trim();
-    hash.update(part.slice(0, 2));
-    hash.update(filePath);
-    const absolutePath = path.join(cwd, filePath);
-    const bytes = await Bun.file(absolutePath).bytes().catch(() => undefined);
-    hash.update(bytes ?? Buffer.from("<deleted>"));
-  }
-  return hash.digest("hex");
+  const repoRoot = await realpath(await resolveGitRepoRoot(cwd));
+  const projectRoot = await realpath(cwd);
+  const status = await readDirtyStatus(repoRoot, path.relative(repoRoot, projectRoot));
+  return hashDirtyEntries(repoRoot, status.entries);
 }
 
 export async function assertExperimentPromotionPreconditions(
@@ -130,7 +119,7 @@ export async function assertExperimentPromotionPreconditions(
 }
 
 export async function createExperimentCommit(projectRoot: string, runId: string) {
-  const addProc = Bun.spawn({
+  const addProc = spawnBackgroundProcess({
     cmd: ["git", "add", "-A", "--", "."],
     cwd: projectRoot,
     stdout: "ignore",
@@ -142,7 +131,7 @@ export async function createExperimentCommit(projectRoot: string, runId: string)
     throw new Error(detail.trim() || "git add failed");
   }
 
-  const commitProc = Bun.spawn({
+  const commitProc = spawnBackgroundProcess({
     cmd: ["git", "-c", "user.name=Pi Harness", "-c", "user.email=pi-harness@local", "commit", "-m", `chore: experiment ${runId}`],
     cwd: projectRoot,
     stdout: "pipe",

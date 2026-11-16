@@ -71,31 +71,31 @@ export const chatUtilityStyles = stylex.create({
     "backgroundColor": "#f0f9ffcc"
   },
   bgWhite38: {
-    "backgroundColor": "#ffffff61"
+    "backgroundColor": "color-mix(in srgb, var(--panel) 38%, transparent)"
   },
   bgWhite40: {
-    "backgroundColor": "#fff6"
+    "backgroundColor": "color-mix(in srgb, var(--panel) 40%, transparent)"
   },
   bgWhite45: {
-    "backgroundColor": "#ffffff73"
+    "backgroundColor": "color-mix(in srgb, var(--panel) 45%, transparent)"
   },
   bgWhite55: {
-    "backgroundColor": "#ffffff8c"
+    "backgroundColor": "color-mix(in srgb, var(--panel) 55%, transparent)"
   },
   bgWhite60: {
-    "backgroundColor": "#fff9"
+    "backgroundColor": "color-mix(in srgb, var(--panel) 60%, transparent)"
   },
   bgWhite65: {
-    "backgroundColor": "#ffffffa6"
+    "backgroundColor": "color-mix(in srgb, var(--panel) 65%, transparent)"
   },
   bgWhite70: {
-    "backgroundColor": "#ffffffb3"
+    "backgroundColor": "color-mix(in srgb, var(--panel) 70%, transparent)"
   },
   bgWhite75: {
-    "backgroundColor": "#ffffffbf"
+    "backgroundColor": "color-mix(in srgb, var(--panel) 75%, transparent)"
   },
   bgWhite85: {
-    "backgroundColor": "#ffffffd9"
+    "backgroundColor": "color-mix(in srgb, var(--panel) 85%, transparent)"
   },
   block: {
     "display": "block"
@@ -614,48 +614,6 @@ export const chatUtilityStyles = stylex.create({
   },
   textVariableWarningStrong: {
     "color": "var(--warning-strong)"
-  },
-  text0375rem: {
-    "fontSize": ".375rem"
-  },
-  text045rem: {
-    "fontSize": ".45rem"
-  },
-  text0525rem: {
-    "fontSize": ".525rem"
-  },
-  text052rem: {
-    "fontSize": ".52rem"
-  },
-  text055rem: {
-    "fontSize": ".55rem"
-  },
-  text05625rem: {
-    "fontSize": ".5625rem"
-  },
-  text0575rem: {
-    "fontSize": ".575rem"
-  },
-  text0585rem: {
-    "fontSize": ".585rem"
-  },
-  text05rem: {
-    "fontSize": ".5rem"
-  },
-  text0625rem: {
-    "fontSize": ".625rem"
-  },
-  text0675rem: {
-    "fontSize": ".675rem"
-  },
-  text06rem: {
-    "fontSize": ".6rem"
-  },
-  text075rem: {
-    "fontSize": ".75rem"
-  },
-  text07rem: {
-    "fontSize": ".7rem"
   },
   text135rem: {
     "fontSize": "1.35rem"

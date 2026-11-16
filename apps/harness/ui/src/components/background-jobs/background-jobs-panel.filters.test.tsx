@@ -1,11 +1,11 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
-import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { createProjectThreadSummary, type Assistant, type BackgroundJob, type BackgroundJobRun, type RunDiagnosticsReport } from "@hyperfocus/ai-core/protocol";
-import { createInitialViewState, harnessStore, readBrowserUiSession } from "../../harness-store";
-import { createUiTest, requireElement } from "../../utils/tests/test-harness";
-import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../../utils/tests/store-test-utils";
-import { createHarnessStateFixture, createRunFixture, createViewProjectFixture } from "../../utils/tests/test-fixtures";
+import {  fireEvent, render, screen } from "@solidjs/testing-library";
+import {   type BackgroundJob } from "@hyperfocus/ai-core/protocol";
+import {  harnessStore } from "../../harness-store";
+import { createUiTest } from "../../utils/tests/test-harness";
+import {  clearBrowserStateForTests, seedHarnessStoreForTests } from "../../utils/tests/store-test-utils";
+import { createHarnessStateFixture, createViewProjectFixture } from "../../utils/tests/test-fixtures";
 import { BackgroundJobsPanel } from "../background-jobs-panel";
 
 createUiTest("BackgroundJobsPanel filters", () => {
@@ -29,9 +29,10 @@ createUiTest("BackgroundJobsPanel filters", () => {
     render(() => <BackgroundJobsPanel variant="left" segment="jobs" />);
 
     expect(document.querySelector("[data-test-left-pane-shell][data-left-pane-kind='jobs']")).not.toBeNull();
-    expect(screen.getByText("No scheduled tasks match current search or filters.").closest("[data-test-left-pane-empty-state]")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Schedule job" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Run shell job" })).not.toBeNull();
+    expect(screen.getByText("No scheduled jobs yet. Create a routine to run work on a schedule.").closest("[data-test-jobs-empty]")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Create scheduled AI routine" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Job options" }));
+    expect(screen.getByRole("menuitem", { name: "Create shell task" })).not.toBeNull();
   });
 
   it("uses shared empty-state hooks for run details", () => {

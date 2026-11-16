@@ -1,6 +1,7 @@
 /** @jsxImportSource solid-js */
 import { afterEach, beforeEach, expect, it, mock } from "bun:test";
-import { fireEvent, render, screen } from "@solidjs/testing-library";
+import { fireEvent, render, screen, within } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import { createUiTest, requireButton } from "../utils/tests/test-harness";
 import { clearBrowserStateForTests } from "../utils/tests/store-test-utils";
 import { dismissTutorialFromEscape, isTutorialStepAdvanceAllowed, TutorialOverlay } from "./tutorial-overlay";
@@ -75,6 +76,38 @@ createUiTest("TutorialOverlay", () => {
     expect(finish.disabled).toBe(false);
     fireEvent.click(finish);
     expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps scopes isolated and reads live progress and commands after step changes", async () => {
+    const [step, setStep] = createSignal(0);
+    const [satisfied, setSatisfied] = createSignal(false);
+    const [next, setNext] = createSignal(() => firstNext());
+    const firstNext = mock(() => undefined);
+    const secondNext = mock(() => undefined);
+    const otherNext = mock(() => undefined);
+    const result = render(() => <>
+      <button data-tour-id="open-project">Open target</button>
+      <section data-test-tutorial-first=""><TutorialOverlay tutorialId="open-project" stepIndex={step()}
+        completionSatisfied={satisfied()} onBack={() => setStep(0)} onNext={() => next()()} onClose={() => {}} /></section>
+      <section data-test-tutorial-second=""><TutorialOverlay tutorialId="open-project" stepIndex={1}
+        completionSatisfied={false} onBack={() => {}} onNext={otherNext} onClose={() => {}} /></section>
+    </>);
+    const first = result.container.querySelector("[data-test-tutorial-first]");
+    const second = result.container.querySelector("[data-test-tutorial-second]");
+    if (!(first instanceof HTMLElement) || !(second instanceof HTMLElement)) throw new Error("Missing tutorial scopes");
+    const controls = within(first);
+    fireEvent.click(screen.getByRole("button", { name: "Open target" }));
+    expect(requireButton(controls.getByRole("button", { name: "Next" })).disabled).toBe(false);
+    fireEvent.click(controls.getByRole("button", { name: "Next" }));
+    expect(firstNext).toHaveBeenCalledTimes(1);
+    setStep(1); setSatisfied(true); setNext(() => secondNext);
+    fireEvent.click(await controls.findByRole("button", { name: "Finish" }));
+    expect(secondNext).toHaveBeenCalledTimes(1);
+    expect(requireButton(within(second).getByRole("button", { name: "Finish" })).disabled).toBe(true);
+    expect(otherNext).not.toHaveBeenCalled();
+    fireEvent.click(controls.getByRole("button", { name: "Back" }));
+    expect(requireButton(await controls.findByRole("button", { name: "Next" })).disabled).toBe(true);
+    result.unmount();
   });
 
   it("dismisses the active tutorial from Escape", () => {

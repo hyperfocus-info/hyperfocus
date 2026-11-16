@@ -149,7 +149,7 @@ test("resident circle rect batches retain inputs and masks inside module memory 
   };
   const resident = kernel.createResidentCircleRectBatch?.(input);
   expect(resident).toBeDefined();
-  expect(resident!.byteLength).toBe(3 * 29);
+  expect(resident!.byteLength).toBe(87);
   expect(resident!.run()).toBe(2);
   const mask = new Uint8Array(3);
   resident!.copyMask(mask);
@@ -382,7 +382,7 @@ test("WASM bridge rejects scratch byte overflow before accessing synthetic batch
   })).toThrow(/too large for WASM linear memory/);
 });
 
-test("fixed WASM scratch is reserved at startup and guards the allocation-free batch path", async () => {
+test("fixed WASM scratch is reserved at startup and prevents batch-time module allocation", async () => {
   const kernel = await createWasmKernel(64);
   const first = {
     x: new Float32Array([0, 10, -2, 8]),

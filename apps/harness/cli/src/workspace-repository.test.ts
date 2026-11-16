@@ -144,7 +144,7 @@ describe("workspace repository", () => {
       inputTokens: 10,
       outputTokens: 5,
       cachedInputTokens: 2,
-      totalTokensIncludingCached: 17,
+      totalTokensIncludingCached: 15,
       events: 1
     });
 
@@ -446,7 +446,7 @@ describe("workspace repository", () => {
       nextRunAt: now,
       createdAt: now,
       updatedAt: now
-    }).jobs[0]!;
+    });
     const run = repository.createBackgroundJobRun({
       jobId: job.id,
       projectId: project.id,
@@ -516,7 +516,7 @@ describe("workspace repository", () => {
       nextRunAt: now,
       createdAt: now,
       updatedAt: now
-    }).jobs[0]!;
+    });
     const run = repository.createBackgroundJobRun({
       jobId: job.id,
       projectId: project.id,
@@ -571,7 +571,7 @@ describe("workspace repository", () => {
       nextRunAt: now,
       createdAt: now,
       updatedAt: now
-    }).jobs[0]!;
+    });
     const run = repository.createBackgroundJobRun({
       jobId: job.id,
       projectId: project.id,
@@ -624,7 +624,7 @@ describe("workspace repository", () => {
       nextRunAt: now,
       createdAt: now,
       updatedAt: now
-    }).jobs[0]!;
+    });
     repository.createAgentRun(project.id, "linked work", "openai/gpt-5.4", job.automationThreadId);
     const linkedRunId = repository.getLatestThreadRun(project.id, job.automationThreadId)!.id;
     repository.setAgentRunStatus(project.id, linkedRunId, "partial-complete", "Background run partial complete");
@@ -2153,7 +2153,7 @@ describe("workspace repository", () => {
       nextRunAt: now,
       createdAt: now,
       updatedAt: now
-    }).jobs[0]!;
+    });
     repository.createAgentRun(project.id, "background", "openai/gpt-5.4", job.automationThreadId);
     const backgroundAgentRunId = repository.getLatestThreadRun(project.id, job.automationThreadId)?.id;
     expect(backgroundAgentRunId).toBeDefined();
@@ -2667,7 +2667,7 @@ describe("workspace repository", () => {
       nextRunAt: now,
       createdAt: now,
       updatedAt: now
-    }).jobs[0]!;
+    });
     const firstJobRun = repository.createBackgroundJobRun({
       jobId: savedJob.id,
       projectId: project.id,
@@ -2744,7 +2744,7 @@ describe("workspace repository", () => {
       scheduleInput: "10m",
       createdAt: now,
       updatedAt: now
-    }).jobs[0]!;
+    });
     const run = repository.createBackgroundJobRun({
       jobId: job.id,
       projectId: project.id,
@@ -2817,7 +2817,7 @@ describe("workspace repository", () => {
       scheduleInput: "10m",
       createdAt: now,
       updatedAt: now
-    }).jobs[0]!;
+    });
     const run = repository.createBackgroundJobRun({
       jobId: job.id,
       projectId: project.id,

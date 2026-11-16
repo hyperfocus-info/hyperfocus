@@ -76,8 +76,8 @@ export function isHighCombatPressure(): boolean {
   for (const enemy of candidates) {
     if (enemy.hp <= 0) continue;
     const distanceSq = worldDistanceSquared(state.player.x, state.player.z, enemy.x, enemy.z);
-    if (distanceSq <= 18 ** 2) close += 1;
-    if (distanceSq <= 32 ** 2) near += 1;
+    if (distanceSq <= 324) close += 1;
+    if (distanceSq <= 1024) near += 1;
     if (close >= 3 || near >= 10) return true;
   }
   return false;

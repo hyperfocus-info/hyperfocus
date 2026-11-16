@@ -1,65 +1,24 @@
 ---
 name: db-data-harnessing
-description: >
-  Investigate harness SQLite data for `/lookup-thread` requests and nearby
-  persistence questions. Use when Codex needs to trace a project or assistant
-  thread through `~/.ai-harness-template/harness.db` (or `HARNESS_DB_PATH`), explain which
-  tables and records belong to a thread id, debug missing history, runs,
-  notifications, automation jobs, or memory, or refresh this skill after schema
-  changes or new DB lookup patterns are discovered.
+description: Investigate saved Harness thread history, ownership, runs, and related SQLite records for a thread id or missing-history question. Read-only forensics; assistant maintenance uses assistant-actions.
 ---
 
-Use this skill for DB-backed thread forensics in the local harness database.
+# Harness thread lookup
 
-## Quick Start
+Run the bundled helper before writing SQL. Resolve `<skill>` from this file's
+directory; it need not be inside the current project.
 
-Run the bundled lookup first, then load the references only as needed:
-
-```powershell
-bun.cmd .agents/skills/db-data-harnessing/scripts/lookup-thread.ts <thread-id>
+```text
+bun "<skill>/scripts/lookup-thread.ts" "<thread-id>"
 ```
 
-If `bun.ps1` is blocked by PowerShell execution policy, keep using `bun.cmd`.
+The default database is `~/.ai-harness-template/harness.db`; `HARNESS_DB_PATH` or
+`--db <path>` overrides it. Use `--json` for machine-readable output. This is a
+read-only investigation, and `/lookup-thread` is a conversational workflow rather
+than a built-in Harness command.
 
-## What This Skill Can Investigate
-
-- Which project or assistant owns a thread id.
-- Full or recent transcript rows for that thread.
-- Thread title, kind, archive state, fork lineage, and active-thread wiring.
-- Agent run lifecycle, planning questions, subtasks, experiments, and failures tied to the thread.
-- Memory entries and retrievals tied to the thread or its runs.
-- Notifications pointing at the thread or its runs.
-- Background job state when the thread is an automation thread.
-- Assistant-side todos, learnings, questions, logs, and assets when the id belongs to `assistant_threads`.
-- Missing-data cases caused by reading the wrong DB file, BranchFS fresh state, or recovery fallback DBs.
-
-## Workflow
-
-1. Resolve the DB path. Default is `~/.ai-harness-template/harness.db`; `HARNESS_DB_PATH` overrides it.
-2. Treat `/lookup-thread <id>` as a lookup workflow, not a built-in harness command.
-3. Run `scripts/lookup-thread.ts` for a first pass before writing ad hoc SQL.
-4. Read [lookup-thread.md](references/lookup-thread.md) for investigation order and interpretation hints.
-5. Read [table-map.md](references/table-map.md) when you need table scope or adjacent entities.
-6. Summarize findings in terms of user-visible behavior, not just raw rows.
-
-## Maintenance
-
-Update this skill whenever any of these change:
-
-- The schema or migration logic for the harness SQLite database.
-- A new thread-adjacent table, column, status, or relationship appears.
-- A better `/lookup-thread` usage pattern is discovered during debugging.
-- Assistant, notification, memory, or background-job flows start attaching to threads in a new way.
-
-When updating:
-
-1. Refresh `references/table-map.md`.
-2. Refresh `references/lookup-thread.md`.
-3. Refresh `scripts/lookup-thread.ts` if output shape or joins changed.
-4. Re-run the skill validator and the helper script.
-
-## Source Of Truth
-
-- In a Hyperfocus source checkout, schema and migrations live in
-  `apps/harness/cli/src/workspace-repository.ts`; DB recovery lives in
-  `apps/harness/cli/src/dev-db-recovery.ts`.
+Read [lookup interpretation](references/lookup-thread.md) when ownership,
+missing rows, or environment identity is unclear. Use [the table map](references/table-map.md)
+only for adjacent entities or joins. Distinguish no saved data from a wrong database
+or unsupported schema. Explain findings in terms of the visible history or failure;
+do not repair or mutate records as part of a lookup.

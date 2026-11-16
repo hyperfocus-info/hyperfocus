@@ -1,8 +1,9 @@
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import { Check, ChevronRight, CircleHelp, Search, SlidersHorizontal } from "lucide-solid";
-import { For, Show, createSignal, splitProps, type JSX } from "solid-js";
+import { For, Show, createEffect, createSignal, createUniqueId, splitProps, type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
-import { Input } from "./input";
+import { Input } from "@hyperfocus/ui";
 import { Popover } from "./popover";
 import { Tooltip } from "./tooltip";
 
@@ -14,30 +15,31 @@ type LeftPaneShellProps = {
 } & JSX.HTMLAttributes<HTMLElement>;
 
 const styles = stylex.create({
-  shell: { borderColor: "var(--border)", borderRadius: "1rem", borderStyle: "solid", borderWidth: "1px", gap: "1rem", backgroundColor: "var(--panel)", containerType: "inline-size", display: "flex", flexDirection: "column", height: "100%", minHeight: 0, minWidth: 0, width: "100%", },
+  shell: { borderColor: tokens.border, borderRadius: tokens.radius, borderStyle: "solid", borderWidth: "1px", gap: tokens.space3, overflow: "auto", backgroundColor: tokens.panel, containerType: "inline-size", display: "flex", flexDirection: "column", height: "100%", minHeight: 0, minWidth: 0, width: "100%", },
+  body: { display: "flex", flexBasis: "16rem", flexDirection: "column", flexGrow: 1, flexShrink: 0, minHeight: "min(16rem,45dvh)", minWidth: 0, },
   compact: { padding: "0.8rem" },
   comfortable: { padding: "1rem" },
-  header: { padding: "0.25rem" },
-  headerRow: { gap: "0.75rem", alignItems: "center", display: "flex", justifyContent: "space-between", },
-  headerTitle: { gap: "0.5rem", alignItems: "center", color: "var(--muted)", display: "flex", fontSize: "0.585rem", fontWeight: 600, letterSpacing: "0.2em", minWidth: 0, },
+  header: { padding: "0.25rem", flexShrink: 0 },
+  headerRow: { gap: "0.75rem", alignItems: "center", display: "flex", flexWrap: "wrap", justifyContent: "space-between", },
+  headerTitle: { gap: "0.5rem", alignItems: "center", color: "var(--muted)", display: "flex", fontSize: tokens.fontCaption, fontWeight: 600, letterSpacing: "normal", minWidth: 0, },
   truncate: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   help: { display: "inline-flex", flexShrink: 0 },
   smallIcon: { color: "var(--muted)", height: "0.875rem", width: "0.875rem" },
   headerActions: { gap: "0.5rem", alignItems: "center", display: "flex", flexShrink: 0, },
-  filterBlock: { gap: "0.5rem", display: "grid", },
+  filterBlock: { gap: tokens.space2, display: "grid", flexShrink: 0, minWidth: 0, },
   search: { display: "block", position: "relative" },
   searchIcon: { color: "var(--muted)", pointerEvents: "none", position: "absolute", transform: "translateY(-50%)", height: "1rem", left: "0.75rem", top: "50%", width: "1rem", },
   searchInput: { height: "2.5rem", paddingLeft: "2.25rem" },
   searchInputWithMenu: { paddingRight: "3rem" },
   searchMenu: { position: "absolute", transform: "translateY(-50%)", right: "0.375rem", top: "50%", },
-  menuItem: { borderRadius: "0.5rem", borderWidth: 0, gap: "0.5rem", paddingInline: "0.5rem", alignItems: "center", backgroundColor: { default: "transparent", ":hover": "rgb(0 0 0 / 0.05)" }, color: "var(--foreground)", cursor: { default: "pointer", ":disabled": "not-allowed" }, display: "flex", opacity: { default: 1, ":disabled": 0.5 }, textAlign: "left", transitionDuration: "150ms", transitionProperty: "background-color, color", minHeight: "2rem", width: "100%", },
+  menuItem: { borderRadius: "0.5rem", borderWidth: 0, gap: "0.5rem", paddingInline: "0.5rem", alignItems: "center", backgroundColor: { default: "transparent", ":hover": "rgb(0 0 0 / 0.05)" }, color: "var(--foreground)", cursor: "pointer", display: "flex", opacity: { default: 1, ":disabled": 0.5 }, textAlign: "left", transitionDuration: "150ms", transitionProperty: "background-color, color", minHeight: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch }, width: "100%", },
   activeText: { color: "var(--accent-strong)" },
   menuItemIcon: { alignItems: "center", color: "var(--muted)", display: "flex", flexShrink: 0, justifyContent: "center", height: "1rem", width: "1rem", },
   activeIcon: { color: "var(--accent)" },
-  menuItemLabel: { flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, },
+  menuItemLabel: { flex: "1", overflowWrap: "anywhere", minWidth: 0, },
   check: { color: "var(--foreground)", flexShrink: 0, height: "0.875rem", width: "0.875rem" },
-  menuContent: { gap: "0.25rem", display: "flex", flexDirection: "column", fontSize: "0.675rem", },
-  popoverContent: { padding: "0.5rem", width: "15rem" },
+  menuContent: { gap: "0.25rem", display: "flex", flexDirection: "column", fontSize: tokens.fontCaption, },
+  popoverContent: { padding: tokens.space2, maxHeight: "min(32rem,70dvh)", maxWidth: "calc(100vw - 1rem)", overflowY: "auto", width: "18rem", },
   separator: { borderColor: "var(--border)",
  borderStyle: "solid",
  marginBlock: "0.25rem",
@@ -46,19 +48,19 @@ const styles = stylex.create({
  borderRightWidth: '0',
  borderTopWidth: '1px', },
   menuSection: { paddingBlock: '0.25rem',
- paddingInline: '0.5rem', color: "var(--muted)", fontSize: "0.625rem", },
+ paddingInline: '0.5rem', color: "var(--muted)", fontSize: tokens.fontCaption, },
   submenuRoot: { position: "relative" },
-  submenuValue: { overflow: "hidden", color: "var(--muted)", fontSize: "0.625rem", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "5rem", },
+  submenuValue: { overflow: "hidden", color: "var(--muted)", fontSize: tokens.fontCaption, textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "5rem", },
   chevron: { color: "var(--muted)", flexShrink: 0, height: "0.875rem", width: "0.875rem" },
-  submenu: { padding: "0.5rem", borderColor: "var(--border)", borderRadius: "1rem", borderStyle: "solid", borderWidth: "1px", gap: "0.25rem", backgroundColor: "var(--panel)", boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)", display: "flex", flexDirection: "column", position: "absolute", zIndex: 131, left: "100%", marginLeft: "0.5rem", top: 0, width: "13rem", },
-  filterButton: { borderRadius: "0.5rem", borderWidth: 0, outline: { default: null, ":focus-visible": "none" }, alignItems: "center", backgroundColor: { default: "transparent", ":hover": "rgb(0 0 0 / 0.05)" }, boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, color: { default: "var(--muted)", ":hover": "var(--foreground)" }, cursor: "pointer", display: "inline-flex", justifyContent: "center", position: "relative", transitionDuration: "150ms", transitionProperty: "background-color, color", height: "1.75rem", width: "1.75rem", },
-  badge: { borderRadius: "9999px", paddingInline: "0.25rem", alignItems: "center", backgroundColor: "var(--accent)", color: "white", display: "flex", fontSize: "0.55rem", fontWeight: 600, justifyContent: "center", lineHeight: 1, position: "absolute", height: "1rem", minWidth: "1rem", right: "-0.25rem", top: "-0.25rem", },
+  submenu: { gap: tokens.space1, display: "flex", flexDirection: "column", borderLeftColor: tokens.border, borderLeftStyle: "solid", borderLeftWidth: "1px", minWidth: 0, paddingLeft: tokens.space3, },
+  filterButton: { borderRadius: "0.5rem", borderWidth: 0, outline: { default: null, ":focus-visible": "none" }, alignItems: "center", backgroundColor: { default: "transparent", ":hover": "rgb(0 0 0 / 0.05)" }, boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, color: { default: "var(--muted)", ":hover": "var(--foreground)" }, cursor: "pointer", display: "inline-flex", justifyContent: "center", position: "relative", transitionDuration: "150ms", transitionProperty: "background-color, color", height: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch }, width: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch }, },
+  badge: { borderRadius: "9999px", paddingInline: "0.25rem", alignItems: "center", backgroundColor: "var(--accent)", color: "var(--accent-foreground)", display: "flex", fontSize: tokens.fontCaption, fontWeight: 600, justifyContent: "center", lineHeight: 1, position: "absolute", height: "1rem", minWidth: "1rem", right: "-0.25rem", top: "-0.25rem", },
   listSection: { padding: { default: "1rem", "@container (max-width: 17rem)": "0.7rem" }, borderColor: "var(--border)", borderRadius: "1.35rem", borderStyle: "solid", borderWidth: "1px", flex: "1", backgroundColor: "var(--panel-strong)", display: "flex", flexDirection: "column", minHeight: 0, },
   listHeader: { gap: "0.75rem", alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: "0.75rem", },
-  listTitle: { color: "var(--muted)", fontSize: "0.585rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase" },
-  count: { color: "var(--muted)", fontSize: "0.625rem" },
-  empty: { padding: "1rem", borderColor: "var(--border)", borderRadius: "1.2rem", borderStyle: "dashed", borderWidth: "1px", backgroundColor: "rgb(255 255 255 / 0.45)", color: "var(--muted)", fontSize: "0.675rem", lineHeight: "1.25rem", },
-  detailEmpty: { padding: "1.5rem", borderColor: "var(--border)", borderRadius: "1.2rem", borderStyle: "dashed", borderWidth: "1px", alignItems: "center", backgroundColor: "rgb(255 255 255 / 0.45)", color: "var(--muted)", display: "flex", fontSize: "0.675rem", justifyContent: "center", textAlign: "center", height: "100%", minHeight: "20rem", }
+  listTitle: { color: "var(--muted)", fontSize: tokens.fontCaption, fontWeight: 600, letterSpacing: "normal", textTransform: "none" },
+  count: { color: "var(--muted)", fontSize: tokens.fontCaption },
+  empty: { padding: "1rem", borderColor: "var(--border)", borderRadius: "1.2rem", borderStyle: "dashed", borderWidth: "1px", backgroundColor: "var(--panel-strong)", color: "var(--muted)", fontSize: "0.75rem", lineHeight: "1.25rem", },
+  detailEmpty: { padding: "1.5rem", borderColor: "var(--border)", borderRadius: "1.2rem", borderStyle: "dashed", borderWidth: "1px", alignItems: "center", backgroundColor: "var(--panel)", color: "var(--muted)", display: "flex", fontSize: "0.75rem", justifyContent: "center", textAlign: "center", height: "100%", minHeight: "20rem", }
 });
 
 export function LeftPaneShell(props: LeftPaneShellProps) {
@@ -104,7 +106,12 @@ export function LeftPaneFilterBlock(props: { children: JSX.Element; class?: stri
   return <div class={cn(stylex.attrs(styles.filterBlock).class, props.class)}>{props.children}</div>;
 }
 
-type LeftPaneSearchInputProps = JSX.IntrinsicElements["input"] & {
+/** Reserves a usable list viewport; the shell scrolls if fixed controls need more room. */
+export function LeftPaneBody(props: { children: JSX.Element }) {
+  return <div data-test-left-pane-body="" {...stylex.attrs(styles.body)}>{props.children}</div>;
+}
+
+type LeftPaneSearchInputProps = Omit<JSX.IntrinsicElements["input"], "size"> & {
   wrapperClass?: string;
   menu?: JSX.Element;
 };
@@ -152,17 +159,30 @@ export function LeftPaneSearchMenu(props: {
 }) {
   const [open, setOpen] = createSignal(false);
   const [openSubmenuIndex, setOpenSubmenuIndex] = createSignal<number>();
+  const id = createUniqueId();
+  let trigger: HTMLButtonElement | undefined;
+  let content: HTMLDivElement | undefined;
+  const close = () => { setOpen(false); trigger?.focus(); };
+  const dismissOnFocusLeave = (event: FocusEvent) => {
+    const next = event.relatedTarget;
+    if (!(next instanceof Node) || (!content?.contains(next) && next !== trigger)) setOpen(false);
+  };
+  createEffect(() => {
+    if (open()) queueMicrotask(() => { if (open()) content?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(); });
+    else setOpenSubmenuIndex(undefined);
+  });
   const renderOption = (item: Extract<LeftPaneSearchMenuItem, { kind: "option" }>) => (
     <button
       type="button"
       {...stylex.attrs(styles.menuItem, item.active && styles.activeText)}
       disabled={item.disabled}
+      aria-pressed={item.selected}
       onClick={() => {
         if (item.disabled) {
           return;
         }
         item.onSelect();
-        setOpen(false);
+        close();
       }}
     >
       <span {...stylex.attrs(styles.menuItemIcon, item.active && styles.activeIcon)}>
@@ -179,12 +199,12 @@ export function LeftPaneSearchMenu(props: {
     <Tooltip content={props.tooltip} disabled={open()}>
       <Popover
         open={open()}
-        onClose={() => setOpen(false)}
+        onClose={close}
         align="end"
         side="bottom"
         contentClass={stylex.attrs(styles.popoverContent).class}
         content={
-          <div {...stylex.attrs(styles.menuContent)}>
+          <div ref={content} {...stylex.attrs(styles.menuContent)} onFocusOut={dismissOnFocusLeave}>
             <For each={props.items}>
               {(item, index) => {
                 if (item.kind === "separator") {
@@ -197,9 +217,13 @@ export function LeftPaneSearchMenu(props: {
                   const active = () => openSubmenuIndex() === index();
                   const hasActiveFilter = () => item.active ?? item.items.some((subitem) => subitem.active);
                   return (
-                    <div {...stylex.attrs(styles.submenuRoot)} onMouseEnter={() => setOpenSubmenuIndex(index())} onFocusIn={() => setOpenSubmenuIndex(index())}>
+                    <div {...stylex.attrs(styles.submenuRoot)}>
                       <button
                         type="button"
+                        aria-expanded={active()}
+                        aria-controls={`${id}-${index()}`}
+                        onClick={() => setOpenSubmenuIndex(active() ? undefined : index())}
+                        onKeyDown={event => { if (event.key === "ArrowRight" || event.key === "ArrowLeft") { event.preventDefault(); setOpenSubmenuIndex(event.key === "ArrowRight" ? index() : undefined); } }}
                         {...stylex.attrs(styles.menuItem, hasActiveFilter() && styles.activeText)}
                       >
                         <span {...stylex.attrs(styles.menuItemIcon, hasActiveFilter() && styles.activeIcon)}>
@@ -214,7 +238,7 @@ export function LeftPaneSearchMenu(props: {
                         <ChevronRight {...stylex.attrs(styles.chevron)} />
                       </button>
                       <Show when={active()}>
-                        <div {...stylex.attrs(styles.submenu)}>
+                        <div id={`${id}-${index()}`} {...stylex.attrs(styles.submenu)}>
                           <For each={item.items}>{(subitem) => renderOption(subitem)}</For>
                         </div>
                       </Show>
@@ -228,6 +252,8 @@ export function LeftPaneSearchMenu(props: {
         }
       >
         <button
+          ref={trigger}
+          onFocusOut={dismissOnFocusLeave}
           type="button"
           {...stylex.attrs(styles.filterButton)}
           aria-label={props.ariaLabel}

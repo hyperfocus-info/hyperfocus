@@ -296,7 +296,7 @@ export function createSharedCellReplicator<TKind extends string = string>(
 }
 
 export function createEntityReplicator<TState>(options: EntityReplicatorOptions<TState>): EntityReplicator<TState> {
-  const maxBytes = options.maxBytesPerClientPerSecond ?? 32 * 1024;
+  const maxBytes = options.maxBytesPerClientPerSecond ?? 32768;
   const telemetryEnabled = options.telemetry ?? false;
   assertIntegerInRange("maxBytesPerClientPerSecond", maxBytes, Number.MAX_SAFE_INTEGER);
   if (options.snapshotRate !== undefined && (!Number.isFinite(options.snapshotRate) || options.snapshotRate <= 0)) {

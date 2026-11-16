@@ -49,7 +49,7 @@ type ResultMessage = {
 export function createTextureTranscodeScheduler(options: TextureTranscodeSchedulerOptions) {
   const maxInFlight = positiveInteger(options.maxInFlight ?? 2, "maxInFlight");
   const maxQueuedJobs = positiveInteger(options.maxQueuedJobs ?? 32, "maxQueuedJobs");
-  const maxQueuedBytes = nonNegativeInteger(options.maxQueuedBytes ?? 64 * 1024 * 1024, "maxQueuedBytes");
+  const maxQueuedBytes = nonNegativeInteger(options.maxQueuedBytes ?? 67108864, "maxQueuedBytes");
   const queued: PendingJob[] = [];
   const running = new Map<number, PendingJob>();
   let head = 0;

@@ -56,6 +56,7 @@ export function createWorkspaceSchemaOperations(context: WorkspaceRepositoryCont
       operations.addColumnIfMissing("agent_runs", "tool_activities_json", "TEXT NULL"); operations.addColumnIfMissing("agent_runs", "thread_run_sequence", "INTEGER NOT NULL DEFAULT 0");
       operations.addColumnIfMissing("agent_runs", "failure_category", "TEXT NULL");
       operations.addColumnIfMissing("agent_runs", "max_turns", "INTEGER NULL");
+      operations.addColumnIfMissing("agent_runs", "launch_profile_json", "TEXT NULL");
       operations.addColumnIfMissing("agent_runs", "turns_used", "INTEGER NOT NULL DEFAULT 0");
       operations.addColumnIfMissing("project_threads", "pinned", "INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0, 1))");
       operations.addColumnIfMissing("memory_entries", "priority", "INTEGER NOT NULL DEFAULT 50000");

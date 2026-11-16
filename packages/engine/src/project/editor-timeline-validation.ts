@@ -1,9 +1,12 @@
+import { isObject } from "@hyperfocus/utilities/records";
 import type { EditorProject } from "./editor.ts";
+import { validateTimelineEffectPlacement2D } from "./metadata/index.ts";
+import { isParticlePresetId2D, isTransitionPresetId2D } from "../effects/creative-presets.ts";
 
 const TIMELINE_PROPERTIES = ["x", "y", "scale", "rotation", "opacity", "camera"] as const;
-const KEYFRAME_EASINGS = ["linear", "ease-in", "ease-out", "ease-in-out", "bounce"] as const;
+const KEYFRAME_EASINGS = ["linear", "ease-in", "ease-out", "ease-in-out", "bounce", "hold"] as const;
 const TIMELINE_EVENT_KINDS = ["audio", "logic", "camera", "marker"] as const;
-const TIMELINE_EFFECT_KINDS = ["camera-shake", "particle-burst", "hit-flash"] as const;
+const TIMELINE_EFFECT_KINDS = ["camera-shake", "particle-burst", "hit-flash", "screen-transition"] as const;
 const MAX_TIMELINE_TRACKS = 2_048;
 
 export function validateEditorAtlas(project: EditorProject) {
@@ -42,6 +45,7 @@ export function validateEditorTimeline(project: EditorProject) {
   assertInteger(timeline.durationFrames, "Timeline duration", 1, 1_000_000);
   assertFinite(timeline.bpm, "Timeline BPM", 20, 400);
   assertInteger(timeline.beatsPerBar, "Timeline beats per bar", 1, 32);
+  if (timeline.rhythm !== undefined) validateRhythmMap(timeline.rhythm, timeline.durationFrames, new Set(project.assets.map((asset) => asset.id)));
   assertInteger(timeline.loopStart, "Timeline loop start", 0, timeline.durationFrames);
   assertInteger(timeline.loopEnd, "Timeline loop end", timeline.loopStart, timeline.durationFrames);
   assertFinite(timeline.playbackSpeed, "Timeline playback speed", 0.05, 8);
@@ -86,6 +90,9 @@ export function validateEditorTimeline(project: EditorProject) {
     if (!isObject(audio)) throw new Error("Timeline audio track data is invalid.");
     assertText(audio.id, "Audio track id", 128); assertText(audio.name, "Audio track name", 512);
     for (const key of ["startFrame", "durationFrames", "trimStart", "trimEnd", "fadeIn", "fadeOut", "loopStart", "loopEnd"] as const) assertFinite(audio[key], `Audio track ${audio.id} ${key}`, 0, timeline.durationFrames);
+    if (audio.sourceInSeconds !== undefined) assertFinite(audio.sourceInSeconds, `Audio track ${audio.id} source in`, 0, 86_400);
+    if (audio.sourceOutSeconds !== undefined) assertFinite(audio.sourceOutSeconds, `Audio track ${audio.id} source out`, 0, 86_400);
+    if (audio.sourceOutSeconds !== undefined && audio.sourceOutSeconds <= (audio.sourceInSeconds ?? 0)) throw new Error(`Audio track ${audio.id} source out must be after source in.`);
     assertFinite(audio.volume, `Audio track ${audio.id} volume`, 0, 2); assertFinite(audio.pan, `Audio track ${audio.id} pan`, -1, 1);
     if (typeof audio.muted !== "boolean" || typeof audio.solo !== "boolean") throw new Error(`Audio track ${audio.id} mixer state is invalid.`);
   }
@@ -97,23 +104,57 @@ export function validateEditorTimeline(project: EditorProject) {
   const effectIds = new Set<string>();
   for (const effect of timeline.effects ?? []) {
     if (!isObject(effect)) throw new Error("Timeline effect data is invalid.");
+    validateTimelineEffectPlacement2D(effect);
     assertText(effect.id, "Timeline effect id", 128); assertText(effect.label, "Timeline effect label", 256);
     assertInteger(effect.frame, `Timeline effect ${effect.id} frame`, 0, timeline.durationFrames);
     assertInteger(effect.durationFrames, `Timeline effect ${effect.id} duration`, 1, timeline.durationFrames);
     assertFinite(effect.intensity, `Timeline effect ${effect.id} intensity`, 0, 100);
     if (!isOneOf(effect.kind, TIMELINE_EFFECT_KINDS)) throw new Error(`Timeline effect ${effect.id} has an invalid kind.`);
     if (effect.targetId !== undefined) assertText(effect.targetId, `Timeline effect ${effect.id} target`, 128);
-    if (effect.kind !== "camera-shake" && !effect.targetId) throw new Error(`Timeline effect ${effect.id} requires a target.`);
+    if (effect.kind === "hit-flash" && !effect.targetId) throw new Error(`Timeline effect ${effect.id} requires a target.`);
     if (effect.targetId && !entityIds.has(effect.targetId)) throw new Error(`Timeline effect ${effect.id} targets a missing entity.`);
     if (effect.color !== undefined) assertColor(effect.color, `Timeline effect ${effect.id} color`);
     if (effect.particleCount !== undefined) assertInteger(effect.particleCount, `Timeline effect ${effect.id} particle count`, 1, 128);
+    if (effect.preset !== undefined) assertText(effect.preset, `Timeline effect ${effect.id} preset`, 64);
+    if (effect.preset !== undefined && effect.kind === "particle-burst" && !isParticlePresetId2D(effect.preset)) throw new Error(`Timeline effect ${effect.id} has an invalid particle preset.`);
+    if (effect.preset !== undefined && effect.kind === "screen-transition" && !isTransitionPresetId2D(effect.preset)) throw new Error(`Timeline effect ${effect.id} has an invalid transition preset.`);
+    if (effect.preset !== undefined && effect.kind !== "particle-burst" && effect.kind !== "screen-transition") throw new Error(`Timeline effect ${effect.id} cannot use a preset.`);
     if (effectIds.has(effect.id)) throw new Error(`Duplicate timeline effect id: ${effect.id}`);
     effectIds.add(effect.id);
   }
 }
 
-function isObject(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null; }
-function isOneOf<T extends string>(value: unknown, options: readonly T[]): value is T { return typeof value === "string" && options.includes(value as T); }
+function validateRhythmMap(value: NonNullable<EditorProject["timeline"]["rhythm"]>, durationFrames: number, assetIds: ReadonlySet<string>) {
+  if (!isObject(value)) throw new Error("Timeline rhythm map is invalid.");
+  if (value.sourceAssetId !== undefined && !assetIds.has(value.sourceAssetId)) throw new Error(`Timeline rhythm map references missing asset ${value.sourceAssetId}.`);
+  assertFinite(value.bpmConfidence, "Timeline BPM confidence", 0, 1);
+  assertInteger(value.downbeatFrame, "Timeline downbeat frame", 0, durationFrames);
+  if (!Array.isArray(value.transientFrames) || value.transientFrames.length > 100_000) throw new Error("Timeline transient frames are invalid or too large.");
+  let previousTransient = -1;
+  for (const frame of value.transientFrames) {
+    assertInteger(frame, "Timeline transient frame", 0, durationFrames);
+    if (frame <= previousTransient) throw new Error("Timeline transient frames must be unique and sorted.");
+    previousTransient = frame;
+  }
+  if (!Array.isArray(value.waveform) || value.waveform.length > 4_096) throw new Error("Timeline waveform summary is invalid or too large.");
+  for (const sample of value.waveform) assertFinite(sample, "Timeline waveform sample", 0, 1);
+  if (!Array.isArray(value.sections) || value.sections.length > 1_000) throw new Error("Timeline rhythm sections are invalid or too large.");
+  const ids = new Set<string>();
+  let previousSection = -1;
+  for (const section of value.sections) {
+    if (!isObject(section)) throw new Error("Timeline rhythm section is invalid.");
+    assertText(section.id, "Timeline rhythm section id", 128);
+    assertText(section.label, "Timeline rhythm section label", 160);
+    assertInteger(section.frame, `Timeline rhythm section ${section.id} frame`, 0, durationFrames);
+    if (!isOneOf(section.kind, ["intro", "verse", "chorus", "bridge", "drop", "outro", "custom"] as const)) throw new Error(`Timeline rhythm section ${section.id} kind is invalid.`);
+    if (section.frame < previousSection) throw new Error("Timeline rhythm sections must be sorted by frame.");
+    if (ids.has(section.id)) throw new Error(`Duplicate timeline rhythm section id: ${section.id}`);
+    ids.add(section.id); previousSection = section.frame;
+  }
+}
+
+
+function isOneOf<T extends string>(value: unknown, options: readonly T[]): value is T { return typeof value === "string" && options.some(option => option === value); }
 function assertText(value: unknown, label: string, maxLength: number): asserts value is string {
   if (typeof value !== "string" || value.length === 0 || value.length > maxLength) throw new Error(`${label} must be 1-${maxLength} characters.`);
 }

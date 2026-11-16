@@ -1,53 +1,23 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type JSX } from "solid-js";
+import { typography } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
-import { ActionButton, ActionStatus } from "../action-button";
 import {
-  Activity,
-  AlertTriangle,
-  Brain,
-  Bot,
-  Briefcase,
-  CalendarClock,
-  ClipboardList,
-  Clipboard,
-  Cpu,
-  Edit3,
-  FolderOpen,
-  Folder,
-  Gauge,
-  LoaderCircle,
-  MessageSquareMore,
-  Orbit,
-  Paperclip,
-  Pause,
-  Play,
-  RefreshCcw,
-  Plus,
-  ArrowDown,
-  Check,
-  File,
-  FileCode,
-  FileJson,
-  FileText,
-  Image,
-  SendHorizontal,
-  Settings,
-  Terminal,
-  WandSparkles,
-  X,
-  Split
+Pause,
+Play
 } from "lucide-solid";
+import { Show } from "solid-js";
+import { ActionButton } from "../action-button";
 import { chatUtilityStyles } from "../chat-panel.utilities";
-import type { ChatPanelController } from "../chat-panel";
+import { useChatPanel } from "./state/panel-context";
 
-export function ChatProjectSetupNotice(props: { controller: ChatPanelController }) {
+export function ChatProjectSetupNotice() {
+  const controller = useChatPanel();
   const {
     countdownPaused, countdownReadyRun, countdownRemainingMs, currentExecutionPlan, executionPauseReason,
     executionPaused, handlePauseAutoRun, handleResumeAutoRun,
-  } = props.controller;
+  } = controller;
   return <Show when={countdownReadyRun()}>
               <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded125rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite65, chatUtilityStyles.p3).class}>
-                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
+                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3, typography.body, chatUtilityStyles.textVariableMuted).class}>
                   <span>
                     Auto-run {countdownPaused() ? "paused" : "in progress"} for {currentExecutionPlan()?.gating.delaySeconds}s gate.
                   </span>
@@ -89,4 +59,3 @@ export function ChatProjectSetupNotice(props: { controller: ChatPanelController 
               </div>
             </Show>;
 }
-

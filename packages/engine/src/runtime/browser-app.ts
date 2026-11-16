@@ -35,7 +35,7 @@ function isFrameMetrics(value: FrameMetrics | FrameMetricsOptions): value is Fra
 }
 
 export function createBrowserApp(options: BrowserAppOptions): BrowserApp {
-  const step = options.step ?? 1 / 60;
+  const step = options.step ?? 0.016666666666666666;
   const maxFrame = options.maxFrame ?? 0.05;
   const autoStart = options.autoStart ?? false;
   const now = options.now ?? (() => performance.now());
@@ -58,8 +58,9 @@ export function createBrowserApp(options: BrowserAppOptions): BrowserApp {
     : isFrameMetrics(metricsOptions) ? metricsOptions : createFrameMetrics({ ...metricsOptions, now });
   let simulationTime = 0;
   let updateWorkMs = 0;
+  let beforeUpdateWorkMs = 0;
   let updatesThisFrame = 0;
-  let lastRenderAt = 0;
+  let lastRenderAt: number | undefined;
   let destroyed = false;
   const context = { app, input, metrics, simulationTime };
 
@@ -68,34 +69,44 @@ export function createBrowserApp(options: BrowserAppOptions): BrowserApp {
     maxFrame,
     now,
     beforeUpdate(currentStep) {
-      beforeUpdate?.(context, currentStep);
+      const startedAt = metrics ? now() : 0;
+      try { beforeUpdate?.(context, currentStep); }
+      finally { if (metrics) beforeUpdateWorkMs += Math.max(0, now() - startedAt); }
     },
     update(currentStep) {
-      const startedAt = now();
+      const startedAt = metrics ? now() : 0;
       try {
         simulationTime += currentStep;
         context.simulationTime = simulationTime;
         update(context, currentStep);
       } finally {
         input?.update();
-        updateWorkMs += Math.max(0, now() - startedAt);
-        updatesThisFrame += 1;
+        if (metrics) {
+          updateWorkMs += Math.max(0, now() - startedAt);
+          updatesThisFrame += 1;
+        }
       }
     },
     render(alpha) {
-      const startedAt = now();
-      if (lastRenderAt > 0) metrics?.record("frame.gap.ms", Math.max(0, startedAt - lastRenderAt));
-      lastRenderAt = startedAt;
+      const startedAt = metrics ? now() : 0;
+      if (metrics) {
+        if (lastRenderAt !== undefined) metrics.record("frame.gap.ms", Math.max(0, startedAt - lastRenderAt));
+        lastRenderAt = startedAt;
+      }
       try {
         render(context, alpha);
       } finally {
-        const renderMs = Math.max(0, now() - startedAt);
-        metrics?.record("update.ms", updateWorkMs);
-        metrics?.record("render.ms", renderMs);
-        metrics?.record("frame.ms", updateWorkMs + renderMs);
-        metrics?.record("updates.per-frame", updatesThisFrame);
-        updateWorkMs = 0;
-        updatesThisFrame = 0;
+        if (metrics) {
+          const renderMs = Math.max(0, now() - startedAt);
+          metrics.record("update.ms", updateWorkMs);
+          metrics.record("before-update.ms", beforeUpdateWorkMs);
+          metrics.record("render.ms", renderMs);
+          metrics.record("frame.ms", beforeUpdateWorkMs + updateWorkMs + renderMs);
+          metrics.record("updates.per-frame", updatesThisFrame);
+          updateWorkMs = 0;
+          beforeUpdateWorkMs = 0;
+          updatesThisFrame = 0;
+        }
       }
     }
   });
@@ -109,6 +120,9 @@ export function createBrowserApp(options: BrowserAppOptions): BrowserApp {
     },
     start() {
       if (destroyed) throw new Error("Cannot start a destroyed browser app");
+      if (loop.isRunning()) return;
+      lastRenderAt = undefined;
+      updateWorkMs = beforeUpdateWorkMs = updatesThisFrame = 0;
       loop.start();
     },
     stop: loop.stop,

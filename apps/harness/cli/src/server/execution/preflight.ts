@@ -1,5 +1,5 @@
 import type { ManagedExecutionState } from "../../execution-runtime";
-import type { HarnessConnection, HarnessServerOsAdapters, ProjectLike } from "../core/contracts";
+import type {  HarnessServerOsAdapters, ProjectLike } from "../core/contracts";
 import { sendEvent } from "../transport/events";
 import { appendSystemStatus } from "./transcript-state";
 import type { WorkspaceRepository } from "../../workspace-repository";
@@ -11,7 +11,7 @@ export function isExecutionBusy(state: ManagedExecutionState) {
 }
 
 export async function enforceExecutionPreflight(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -51,7 +51,7 @@ export async function enforceExecutionPreflight(
       });
       throw createPreflightDecisionRequiredError(result.preflight.message);
     }
-    throw new Error(`Git dirty: ${result.changedFileCount} changed files. Refusing run above ${maxDirtyFileCount} files.`);
+    throw new Error(result.preflight.message);
   }
 }
 

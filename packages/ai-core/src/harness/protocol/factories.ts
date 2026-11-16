@@ -161,6 +161,7 @@ export function createProjectThreadSummary(
         | "lastUserMessageAt"
         | "archivedAt"
         | "forkedFromThreadId"
+        | "lineage"
         | "pinned"
       >
     >
@@ -179,7 +180,8 @@ export function createProjectThreadSummary(
     lastUserMessageAt: input.lastUserMessageAt,
     archivedAt: input.archivedAt,
     updatedAt: input.updatedAt,
-    forkedFromThreadId: input.forkedFromThreadId
+    forkedFromThreadId: input.forkedFromThreadId,
+    lineage: input.lineage
   };
 }
 

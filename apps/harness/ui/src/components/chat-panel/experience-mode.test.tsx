@@ -1,15 +1,79 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
-import { createChatMessage, createEmptySession } from "@hyperfocus/ai-core/protocol";
+import { createChatMessage, createEmptySession, type ClientCommand } from "@hyperfocus/ai-core/protocol";
 import { createUiTest } from "../../utils/tests/test-harness";
-import { clearBrowserStateForTests, seedHarnessStoreForTests } from "../../utils/tests/store-test-utils";
-import { createHarnessStateFixture, createRunFixture, createViewProjectFixture } from "../../utils/tests/test-fixtures";
+import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../../utils/tests/store-test-utils";
+import { createExecutionPlanFixture, createHarnessStateFixture, createRunFixture, createViewProjectFixture } from "../../utils/tests/test-fixtures";
 import { harnessStore } from "../../harness-store";
 import { ChatPanel } from "../chat-panel";
 
 createUiTest("ChatPanel experience modes", () => {
   beforeEach(clearBrowserStateForTests);
+
+  it("does not render a transcript plan card when the backend suppresses ask-mode summaries", () => {
+    const commands: ClientCommand[] = [];
+    const plan = createExecutionPlanFixture({
+      gating: {
+        mode: "immediate",
+        delaySeconds: 0
+      },
+      route: "main",
+      targetSubagentCount: 0,
+      actualSubagentCount: 0
+    });
+    const readyProject = createViewProjectFixture({
+      id: "project-immediate",
+      session: {
+        ...createViewProjectFixture().session,
+        messages: []
+      },
+      activeRun: createRunFixture({
+        id: "run-immediate",
+        threadId: "thread-1",
+        status: "ready",
+        plan
+      }),
+      latestPlan: {
+        sessionId: "session-1",
+        agentId: "pi",
+        planningModelId: "openai/gpt-5.4",
+        difficultyScore: 20,
+        usesSubagents: false,
+        executionModelId: "openai/gpt-5.4",
+        subtaskCount: 0,
+        executionPlan: plan
+      }
+    });
+    seedHarnessStoreForTests(
+      createHarnessStateFixture({
+        workspace: {
+          activeProjectId: readyProject.id,
+          projects: [readyProject]
+        }
+      })
+    );
+
+    captureDispatchedCommands(commands);
+    render(() => <ChatPanel />);
+    const automaticExecution = commands.find(command => command.type === "run.execute");
+    expect(automaticExecution?.payload).toMatchObject({ runId: "run-immediate" });
+    expect(automaticExecution?.payload).not.toHaveProperty("reasoningStrength");
+    expect(automaticExecution?.payload).not.toHaveProperty("fastMode");
+    expect(screen.queryByText("Plan summary")).toBeNull();
+    expect(screen.queryByText(plan.summary)).toBeNull();
+  });
+
+  it("shows the persisted run status before detail hydration or streaming reconnect", () => {
+    for (const [status, label] of [["running-main", "Working"], ["awaiting-user-input", "Needs your input"],
+      ["stopped", "Stopped"], ["failed", "Failed"], ["ready", "Plan ready"], ["completed", "Completed"]] as const) {
+      const project = createViewProjectFixture({ id: "status-recovery", activeRun: createRunFixture({ status, detailState: "summary" }) });
+      seedHarnessStoreForTests(createHarnessStateFixture({ workspace: { activeProjectId: project.id, projects: [project] } }));
+      render(() => <ChatPanel />);
+      expect(document.querySelector("[data-test-thread-run-status]")?.textContent).toBe(label);
+      cleanup();
+    }
+  });
 
   it("keeps simple mode focused while preserving run details on demand", async () => {
     const now = new Date().toISOString();

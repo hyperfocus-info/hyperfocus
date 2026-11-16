@@ -1,3 +1,6 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+import { text as stringField } from "@hyperfocus/utilities/text";
+
 import { attachMmoEntityViews } from "../shared-entity-registry.ts";
 import { type MmoSkillDemoState, type NpcEntity, type PlayerEntity } from "../shared-contracts.ts";
 
@@ -72,9 +75,7 @@ const DEFAULT_SELF_SNAP_DISTANCE_PX = 96;
 const DEFAULT_SELF_HALF_LIFE_MS = 36;
 const DEFAULT_MAX_BUFFERED_FRAMES = 12;
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+
 
 function modeWith(current: MmoInterpolationMode, next: MmoInterpolationMode): MmoInterpolationMode {
   if (current === "snap" || next === "snap") return "snap";
@@ -86,9 +87,7 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function stringField(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
+
 
 function numberField(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;

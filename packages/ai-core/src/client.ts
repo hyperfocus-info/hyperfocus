@@ -1,3 +1,4 @@
+import { encodeValue, readValueFrame } from "@hyperfocus/serialization";
 import { parseClientCommand, type ClientCommand } from "./harness/protocol/client-command";
 import type { AgentOption } from "./harness/protocol/conversation";
 import { createRequestId } from "./harness/protocol/factories";
@@ -22,13 +23,15 @@ export type HarnessReconnectOptions = {
 
 export type HarnessWebSocket = {
   readonly readyState: number;
-  send(data: string): void;
+  send(data: string | Uint8Array<ArrayBuffer>): void;
   close(code?: number, reason?: string): void;
   addEventListener(type: "message" | "close" | "error", listener: (event: { data?: unknown }) => void): void;
 };
 
 export type HarnessClientOptions = {
   endpoint: string;
+  /** Explicit A/B or legacy compatibility mode; JSON remains the measured baseline. */
+  encoding?: "protobuf" | "json";
   sessionToken?: string;
   WebSocket?: typeof globalThis.WebSocket;
   createWebSocket?: (endpoint: string) => HarnessWebSocket;
@@ -77,7 +80,7 @@ const DEFAULT_HEARTBEAT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_QUEUED_COMMANDS = 256;
 
 /** Converts an HTTP origin or websocket URL to the harness control endpoint. */
-export function normalizeHarnessEndpoint(input: string, sessionToken?: string) {
+export function normalizeHarnessEndpoint(input: string, sessionToken?: string, encoding?: "protobuf" | "json") {
   const value = input.trim();
   if (!value) throw new Error("Harness endpoint is required");
   const withProtocol = /^[a-z]+:\/\//i.test(value) ? value : `http://${value}`;
@@ -88,6 +91,7 @@ export function normalizeHarnessEndpoint(input: string, sessionToken?: string) {
   url.pathname = "/ws";
   url.search = "";
   if (sessionToken) url.searchParams.set("harnessSession", sessionToken);
+  if (encoding === "protobuf") url.searchParams.set("encoding", encoding);
   url.hash = "";
   return url.toString();
 }
@@ -243,7 +247,7 @@ export function createHarnessClient(options: HarnessClientOptions) {
   const rawSend = (command: ClientCommand) => {
     if (!socket || socket.readyState !== openReadyState) return false;
     try {
-      socket.send(JSON.stringify(command));
+      socket.send(options.encoding === "protobuf" ? encodeValue(command, { maxBytes: SERVER_EVENT_FRAME_MAX_BYTES }) : JSON.stringify(command));
       return true;
     } catch {
       return false;
@@ -309,9 +313,8 @@ export function createHarnessClient(options: HarnessClientOptions) {
 
   const handleFrame = async (data: unknown, currentGeneration: number) => {
     try {
-      const text = await decodeFrame(data, maxEventFrameBytes);
+      const frame = await decodeFrame(data, maxEventFrameBytes);
       if (currentGeneration !== generation) return;
-      const frame: unknown = JSON.parse(text);
       for (const event of parseServerEventFrame(frame)) acceptEvent(event, currentGeneration);
     } catch (error) {
       if (currentGeneration !== generation) return;
@@ -328,7 +331,7 @@ export function createHarnessClient(options: HarnessClientOptions) {
     const currentGeneration = ++generation;
     publish({ ...snapshot, state: hasConnected ? "recovering" : "connecting", error: undefined });
     try {
-      socket = createSocket(normalizeHarnessEndpoint(options.endpoint, options.sessionToken));
+      socket = createSocket(normalizeHarnessEndpoint(options.endpoint, options.sessionToken, options.encoding));
     } catch (error) {
       scheduleReconnect(error instanceof Error ? error.message : "Could not create the harness connection");
       return;
@@ -436,19 +439,19 @@ function createReadyWaiter(): ReadyWaiter {
 async function decodeFrame(data: unknown, maximumBytes: number) {
   if (typeof data === "string") {
     assertFrameSize(getUtf8ByteLength(data), maximumBytes);
-    return data;
+    return JSON.parse(data);
   }
   if (data instanceof ArrayBuffer) {
     assertFrameSize(data.byteLength, maximumBytes);
-    return new TextDecoder("utf-8", { fatal: true }).decode(data);
+    return readValueFrame(data, { maxBytes: maximumBytes });
   }
   if (ArrayBuffer.isView(data)) {
     assertFrameSize(data.byteLength, maximumBytes);
-    return new TextDecoder("utf-8", { fatal: true }).decode(data);
+    return readValueFrame(data, { maxBytes: maximumBytes });
   }
   if (typeof Blob !== "undefined" && data instanceof Blob) {
     assertFrameSize(data.size, maximumBytes);
-    return data.text();
+    return readValueFrame(await data.arrayBuffer(), { maxBytes: maximumBytes });
   }
   throw new Error("Harness event frames must be text or UTF-8 binary data");
 }

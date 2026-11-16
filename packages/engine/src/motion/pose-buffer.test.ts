@@ -14,8 +14,8 @@ test("pose buffers expose one contiguous injectable transform layout", () => {
   expect(pose.buffer).toBe(buffer);
   expect(pose.byteOffset).toBe(16);
   expect(pose.rotations.byteOffset).toBe(16);
-  expect(pose.translations.byteOffset).toBe(16 + 5 * 4 * 4);
-  expect(pose.scales?.byteOffset).toBe(16 + (5 * 4 + 5 * 3) * 4);
+  expect(pose.translations.byteOffset).toBe(96);
+  expect(pose.scales?.byteOffset).toBe(156);
   expect(pose.deformCount).toBe(3);
   expect(pose.totalCount).toBe(5);
   expect(validatePoseBuffer(pose)).toEqual([]);

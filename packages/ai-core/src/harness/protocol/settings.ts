@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sharedAiPreferencesSchema } from "../../runtime/user-preferences";
 
 import {
   agentRuntimeCapabilitySchema,
@@ -56,6 +57,7 @@ export const assistantMaxCongestionDefaultSchema = z.number().min(0.25).max(3);
 export const maxBackgroundJobsDefaultSchema = z.number().int().min(5).max(100);
 
 export const preferencesStateSchema = z.object({
+  sharedAiPreferences: sharedAiPreferencesSchema.optional(),
   hasUsableApiKey: z.boolean(),
   hasStoredApiKey: z.boolean(),
   hasUsableOpenAiApiKey: z.boolean(),

@@ -12,6 +12,7 @@ Solid UI source for harness frontend.
 - Assistants, Jobs, and Runs expose browser-session search and filters so dense rosters, schedules, and run history stay inspectable without backend ownership changes.
 - The Background Jobs surface now includes a Health segment with recent reliability diagnostics, active backoff visibility, dominant failure categories, and prompt repetition signals, while keeping the selected segment browser-local.
 - Job details expose active-run recovery actions so blocked scheduled work can be stopped without switching to the run inbox.
+- Jobs use a compact virtual roster with separate detail and bulk selection, shared command menus, and one filtered selection for detail and trace. Narrow navigation names the current pane; see the [visual handoff](../../../../docs/design-system/jobs-roster.md).
 - Run notifications open the Runs tab on the matching status bucket so selected execution details stay visible.
 - Partial-complete background runs render as warning/completed outcomes instead of hard failures, keeping failed filters focused on true failures.
 - Assistant-owned job notifications route to the owning assistant log so scheduled work evidence stays near assistant history, with compact row summaries and full details in dialogs.

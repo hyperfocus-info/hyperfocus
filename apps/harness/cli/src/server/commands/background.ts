@@ -31,7 +31,7 @@ async function handleBackgroundPrimary(command: ClientCommand, context: Backgrou
 case "background-jobs.page.list": {
       const collections = [command.payload.jobs && "jobs", command.payload.runs && "runs"].filter(
         (item): item is "jobs" | "runs" => !!item);
-      const budget = Math.floor((SERVER_EVENT_EMIT_MAX_BYTES - 16 * 1024) / collections.length);
+      const budget = Math.floor((SERVER_EVENT_EMIT_MAX_BYTES - 16384) / collections.length);
       const jobs = command.payload.jobs ? fitBoundedPage((limit) => repository.listBackgroundJobsPage(
         command.payload.jobs!.cursor, limit), command.payload.jobs.limit ?? 128, (page) => ({ jobs: page }), budget) : undefined;
       const runs = command.payload.runs ? fitBoundedPage((limit) => repository.listBackgroundJobRunsPage(
@@ -66,13 +66,13 @@ case "background-job.save": {
         assertAssistantOwnsProjectOrGlobal(repository, command.payload.job.assistantId, command.payload.job.projectId);
       }
       const riskLevel = computeBackgroundJobRiskLevel(command.payload.job, project, runtime);
-      const savedState = repository.saveBackgroundJob({
+      repository.saveBackgroundJob({
         ...command.payload.job,
         riskLevel,
         nextRunAt: resolveBackgroundJobNextRunAt(command.payload.job.schedule),
         updatedAt: new Date().toISOString()
       });
-      emitBackgroundJobsUpdatedToAll(connections, savedState);
+      emitBackgroundJobsUpdatedToAll(connections, repository.loadBackgroundJobsState(), command.requestId);
       return;
     }
 case "background-job.delete": {

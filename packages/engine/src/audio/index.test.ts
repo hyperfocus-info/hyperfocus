@@ -89,6 +89,7 @@ function createFakeContext() {
     createBufferSource() { const value = createFakeSource(); sources.push(value); return value; },
     async decodeAudioData() { if (decodeError) throw decodeError; return decoded; },
     async resume() { if (resumeError) throw resumeError; state = "running"; },
+    async suspend() { state = "suspended"; for (const listener of stateListeners) listener(); },
     async close() { closed = true; state = "closed"; },
     addEventListener(_type: "statechange", listener: () => void) { stateListeners.add(listener); },
     removeEventListener(_type: "statechange", listener: () => void) { stateListeners.delete(listener); },
@@ -109,7 +110,7 @@ function buffer(length: number, channels = 1): AudioBufferLike {
 describe("DOM-free audio decisions", () => {
   test("computes deterministic attenuation and listener-relative pan", () => {
     expect(computeSpatialAudio({ x: 0, y: 0 }, { x: 5, y: 0 }, { minDistance: 1, maxDistance: 9, panDistance: 10 })).toEqual({ distance: 5, gain: 0.5, pan: 0.5 });
-    expect(computeSpatialAudio({ x: 0, y: 0, forwardX: 1, forwardY: 0 }, { x: 0, y: 5 }, { maxDistance: 10, panDistance: 5 })).toEqual({ distance: 5, gain: 5 / 9, pan: 1 });
+    expect(computeSpatialAudio({ x: 0, y: 0, forwardX: 1, forwardY: 0 }, { x: 0, y: 5 }, { maxDistance: 10, panDistance: 5 })).toEqual({ distance: 5, gain: 0.5555555555555556, pan: 1 });
     expect(computeSpatialAudio({ x: 0, y: 0 }, { x: 100, y: 0 }, { maxDistance: 10 })).toEqual({ distance: 100, gain: 0, pan: 1 });
     expect(() => computeSpatialAudio({ x: 0, y: 0 }, { x: 1, y: 1 }, { minDistance: 2, maxDistance: 2 })).toThrow("greater than");
   });
@@ -123,6 +124,59 @@ describe("DOM-free audio decisions", () => {
 });
 
 describe("first-party Web Audio engine", () => {
+  test('low-priority incoming sounds preserve music and critical voices at capacity', async () => {
+    const context = createFakeContext(), audio = createAudioEngine({ context, maxVoices: 2 });
+    for (const id of ['music', 'critical', 'step']) audio.cacheBuffer(id, buffer(8));
+    await audio.unlock();const music = audio.playBuffer('music', { priority: 4, bus: 'music', loop: true }), critical = audio.playBuffer('critical', { priority: 8 });
+    expect(audio.playBuffer('step', { priority: 1 })).toMatchObject({ ok: false, code: 'voice-capacity' });
+    expect(music.ok && music.voice.active).toBe(true);expect(critical.ok && critical.voice.active).toBe(true);expect(context.sources).toHaveLength(2);
+    expect(audio.diagnostics()).toEqual([]);await audio.dispose();
+  });
+  test('the final limiter routes summed buses, rebuilds, and disposes its owned node', async () => {
+    const base = createFakeContext(), limiters: Array<ReturnType<typeof createFakeLimiter>> = [];
+    function createFakeLimiter() { return Object.assign(createFakeNode(), { threshold: createFakeParam(), knee: createFakeParam(), ratio: createFakeParam(), attack: createFakeParam(), release: createFakeParam() }); }
+    const context = Object.assign(base, { createDynamicsCompressor() { const node = createFakeLimiter();limiters.push(node);return node; } });
+    const audio = createAudioEngine({ context });await audio.unlock();
+    const limiter = limiters[0]!;expect(base.gains[0]!.connections).toEqual([limiter]);expect(limiter.connections).toEqual([base.destination]);
+    expect([limiter.threshold.value, limiter.knee.value, limiter.ratio.value, limiter.attack.value, limiter.release.value]).toEqual([-3, 3, 20, .003, .12]);
+    await audio.recover();expect(limiter.disconnects).toBe(1);expect(limiters).toHaveLength(2);await audio.dispose();expect(limiters[1]!.disconnects).toBe(1);
+  });
+  test('compressor creation failure falls back to a connected ordinary graph', async () => {
+    const base = createFakeContext(), context = Object.assign(base, { createDynamicsCompressor() { throw new Error('unsupported'); } });
+    const audio = createAudioEngine({ context });await audio.unlock();expect(base.gains[0]!.connections).toEqual([base.destination]);
+    audio.cacheBuffer('hit', buffer(8));expect(audio.playBuffer('hit').ok).toBe(true);expect(audio.diagnostics()[0]?.level).toBe('warning');await audio.dispose();
+  });
+  test('transient peak guard preserves quiet samples and owns cleanup across recovery', async () => {
+    const base = createFakeContext(), guards: Array<ReturnType<typeof createGuard>> = [], limiters: Array<ReturnType<typeof createLimiter>> = [];
+    function createGuard(): ReturnType<typeof createFakeNode> & { curve: Float32Array | null; oversample: 'none' | '2x' | '4x' } { return Object.assign(createFakeNode(), { curve: null, oversample: 'none' as const }); }
+    function createLimiter() { return Object.assign(createFakeNode(), { threshold: createFakeParam(), knee: createFakeParam(), ratio: createFakeParam(), attack: createFakeParam(), release: createFakeParam() }); }
+    const context = Object.assign(base, { createDynamicsCompressor() { const node = createLimiter();limiters.push(node);return node; }, createWaveShaper() { const node = createGuard();guards.push(node);return node; } });
+    const audio = createAudioEngine({ context });await audio.unlock();
+    const guard = guards[0]!, curve = guard.curve!;
+    expect(base.gains[0]!.connections).toEqual([limiters[0]]);expect(limiters[0]!.connections).toEqual([guard]);expect(guard.connections).toEqual([base.destination]);
+    expect(guard.oversample).toBe('4x');expect(curve[2048]).toBe(0);expect(curve[2560]).toBe(.25);expect(curve[1024]).toBe(-.5);
+    expect(Math.max(...curve)).toBeCloseTo(0.7079457843841379, 6);expect(Math.min(...curve)).toBeCloseTo(-(0.7079457843841379), 6);
+    await audio.recover();expect(guard.disconnects).toBe(1);expect(limiters[0]!.disconnects).toBe(1);
+    await audio.dispose();expect(guards[1]!.disconnects).toBe(1);expect(limiters[1]!.disconnects).toBe(1);
+  });
+  test("intentional pause preserves voices and does not trigger interruption recovery", async () => {
+    const context = createFakeContext(), audio = createAudioEngine({ context });
+    await audio.unlock(); audio.cacheBuffer("narration", buffer(480_000));
+    expect(audio.playBuffer("narration").ok).toBe(true);
+    const source = context.sources[0]!;
+    await audio.setPaused({ paused: true });
+    await audio.unlock();
+    expect(context.state).toBe("suspended");
+    expect(source.stops).toEqual([]);
+    expect(audio.activeVoiceCount()).toBe(1);
+    expect(audio.diagnostics().some((entry) => entry.code === "context-interrupted")).toBe(false);
+    await audio.setPaused({ paused: false });
+    expect(context.state).toBe("running");
+    expect(context.sources).toHaveLength(1);
+    expect(source.starts).toHaveLength(1);
+    expect(source.stops).toEqual([]);
+    await audio.dispose();
+  });
   test("requires explicit unlock and reports playback failures", async () => {
     const context = createFakeContext();
     const diagnostics: string[] = [];
@@ -159,6 +213,22 @@ describe("first-party Web Audio engine", () => {
     expect(fakeParamEvents(music.node.gain)).toContainEqual(["set", 0, 16]);
     expect(fakeParamEvents(music.node.gain)).toContainEqual(["set", 0.5, 17]);
     expect(() => audio.fadeBus("missing", 1, 1)).toThrow("Audio bus does not exist: missing");
+  });
+
+  test("fades hold in-flight automation and capture fallback gain before cancellation", async () => {
+    const context = createFakeContext(), audio = createAudioEngine({ context, outputLimiter: false });
+    const held = audio.createBus("held"), fallback = audio.createBus("fallback");
+    const holdEvents: number[] = [];
+    held.node.gain.cancelAndHoldAtTime = at => { holdEvents.push(at);held.node.gain.value = .6; };
+    held.node.gain.cancelScheduledValues = () => { throw new Error("Hold-capable parameter must hold automation."); };
+    audio.fadeBus("held", 0, 2, 11);
+    expect(holdEvents).toEqual([11]);
+    expect(fakeParamEvents(held.node.gain)).toEqual([["ramp", 0, 13]]);
+    fallback.node.gain.value = .4;
+    fallback.node.gain.cancelScheduledValues = () => { fallback.node.gain.value = 1; };
+    audio.fadeBus("fallback", 0, 2, 12);
+    expect(fakeParamEvents(fallback.node.gain)).toEqual([["set", .4, 12], ["ramp", 0, 14]]);
+    await audio.dispose();
   });
 
   test("bounds voices and deterministically steals lowest-priority oldest voice", async () => {

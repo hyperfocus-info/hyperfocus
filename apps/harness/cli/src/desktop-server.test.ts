@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import { HARNESS_APP_VERSION } from "@hyperfocus/ai-core/app-version";
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
+import { afterEach,describe,expect,test } from "bun:test";
+import { mkdirSync,rmSync,writeFileSync } from "node:fs";
+import path from "node:path";
+import { startServerForTest,stopServerForTest } from "./server-tests/support/server-test-client";
 import { createFakePiAgentAdapter } from "./test-support/fake-pi-agent-adapter";
-import { startServerForTest, stopServerForTest } from "./server-tests/support/server-test-client";
 import { createHarnessTestTempPath } from "./test-support/test-temp-root";
 import { createWorkspaceRepository } from "./workspace-repository";
 
@@ -103,8 +104,4 @@ async function openTarget(serverUrl: string, target: string) {
   if (!isRecord(value) || typeof value.url !== "string" || typeof value.projectId !== "string" ||
     (value.kind !== "file" && value.kind !== "folder")) throw new TypeError("Desktop open response was malformed");
   return { url: value.url, projectId: value.projectId, kind: value.kind };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

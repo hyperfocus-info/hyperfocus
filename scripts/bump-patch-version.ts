@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { bumpPatchVersion, VERSIONED_MANIFESTS } from "./release-readiness";
+import { bumpPatchVersion, readVersionedManifestVersions } from "./release-readiness";
 
 async function readJson(filePath: string) {
   const value = JSON.parse(await readFile(filePath, "utf8"));
@@ -14,8 +14,10 @@ async function main() {
   const rootManifest = await readJson(rootManifestPath);
   if (typeof rootManifest.version !== "string") throw new Error("package.json needs a version before it can be bumped");
   const nextVersion = explicitVersion ?? bumpPatchVersion(rootManifest.version);
+  if (!/^\d+\.\d+\.\d+$/.test(nextVersion)) throw new Error(`Expected a plain x.y.z SemVer version, got ${nextVersion}`);
+  const manifests = await readVersionedManifestVersions();
 
-  for (const manifestPath of VERSIONED_MANIFESTS) {
+  for (const { path: manifestPath } of manifests) {
     const absolutePath = path.resolve(manifestPath);
     const manifest = await readJson(absolutePath);
     if (typeof manifest.version !== "string") throw new Error(`${manifestPath} needs a version before it can be bumped`);
@@ -23,11 +25,9 @@ async function main() {
     await writeFile(absolutePath, `${JSON.stringify(manifest, null, 2)}\n`);
   }
 
-  console.log(`Bumped ${VERSIONED_MANIFESTS.length} manifests to ${nextVersion}.`);
+  console.log(`Bumped ${manifests.length} manifests to ${nextVersion}.`);
 }
 
 if (import.meta.main) await main();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import { isRecord } from '@hyperfocus/utilities/records';

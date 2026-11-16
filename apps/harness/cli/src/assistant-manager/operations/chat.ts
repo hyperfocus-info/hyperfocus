@@ -262,7 +262,7 @@ function createAssistantJobOutcomeOperations(context: AssistantManagerContext, o
         operations.saveBlockingQuestion(input.assistantId, message, { forceBlocking: true });
       }
       const questionPrompt = extractQuestionPrompt(message);
-      if (input.status === "awaiting-user-input" || questionPrompt) {
+      if (input.status === "awaiting-user-input") {
         const questionResult = operations.saveBlockingQuestion(input.assistantId, questionPrompt ?? message);
         if (questionResult.kind === "policy-resolved") {
           operations.appendLog({

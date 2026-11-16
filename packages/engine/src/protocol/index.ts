@@ -1,3 +1,4 @@
+export { SESSION_SUPERSEDED_CLOSE_CODE } from './messages.ts';
 export {
   defineSchema,
   defineSchemaFor,

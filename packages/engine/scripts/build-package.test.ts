@@ -22,6 +22,8 @@ function expectArtifactSet(root: string, marker: string) {
 
 function expectNoBuildBackups(root: string) {
   expect(readdirSync(root).filter((entry) => entry.startsWith(".package-build-backup-"))).toEqual([]);
+  const localRoot = join(root, ".local");
+  if (existsSync(localRoot)) expect(readdirSync(localRoot).filter((entry) => entry.startsWith("package-build-backup-"))).toEqual([]);
 }
 
 describe("atomic package artifact swap", () => {
@@ -33,7 +35,10 @@ describe("atomic package artifact swap", () => {
       writeArtifactSet(root, "old");
       writeArtifactSet(staging, "new");
 
-      swapPackageArtifactDirectories(root, staging, { nonce: "commit" });
+      swapPackageArtifactDirectories(root, staging, { nonce: "commit", beforeInstall() {
+        expect(existsSync(join(root, ".local", "package-build-backup-commit"))).toBe(true);
+        expect(existsSync(join(root, ".package-build-backup-commit"))).toBe(false);
+      } });
 
       expectArtifactSet(root, "new");
       expectNoBuildBackups(root);

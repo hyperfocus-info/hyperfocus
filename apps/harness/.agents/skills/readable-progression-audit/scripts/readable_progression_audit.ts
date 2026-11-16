@@ -1,4 +1,5 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { isProgressionObservation, type Observation } from "./observation-input";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   buildStarterGuardrailSection,
@@ -14,24 +15,13 @@ type CliOptions = {
   out?: string;
 };
 
-type Observation = {
-  game?: string;
-  title?: string;
-  notes?: string[];
-  proximalGoalVisible?: boolean;
-  prerequisiteVisible?: boolean;
-  evaluativeReadback?: boolean;
-  nextStepGuidance?: boolean;
-  reminderRecovery?: boolean;
-  evidence?: string[];
-  starter?: StarterGuardrailCarrier;
-};
+
 
 const HELP = `readable_progression_audit.ts
 
 Usage:
-  bun.cmd .agents/skills/readable-progression-audit/scripts/readable_progression_audit.ts --template
-  bun.cmd .agents/skills/readable-progression-audit/scripts/readable_progression_audit.ts --observations <json> [--out <md>]
+  bun "<skill>/scripts/readable_progression_audit.ts" --template
+  bun "<skill>/scripts/readable_progression_audit.ts" --observations <json> [--out <md>]
 
 Options:
   --template        Print the observation template
@@ -40,32 +30,34 @@ Options:
   --help            Show this help
 `;
 
-try {
-  const options = parseArgs(Bun.argv.slice(2));
-  if (options.template) {
-    console.log(renderTemplate());
-    process.exit(0);
-  }
-  if (!options.observations) {
-    throw new Error("--observations is required unless --template is used");
-  }
-  const raw = readFile(options.observations);
-  const observations = normalizeObservations(raw);
-  const report = buildAudit(observations, options.observations);
-  const markdown = renderAudit(report);
+export function runProgressionAudit(options: {
+  observations: string;
+  out?: string;
+}) {
+  const observations = normalizeObservations(readFile(options.observations));
+  const markdown = renderAudit(buildAudit(observations, options.observations));
   if (options.out) {
     ensureDir(path.dirname(options.out));
     writeFileSync(options.out, markdown, "utf8");
-  } else {
-    console.log(markdown);
   }
-  appendLearning(report);
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  console.error("");
-  console.error(HELP);
-  process.exit(1);
+  return markdown;
+}
+
+if (import.meta.main) {
+  try {
+    const options = parseArgs(Bun.argv.slice(2));
+    if (options.template) {
+      console.log(renderTemplate());
+    } else {
+      if (!options.observations) throw new Error("--observations is required unless --template is used");
+      const markdown = runProgressionAudit({ observations: options.observations, out: options.out });
+      if (!options.out) console.log(markdown);
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    console.error(HELP);
+    process.exitCode = 1;
+  }
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -108,7 +100,11 @@ function readFile(filePath: string): unknown {
 
 function normalizeObservations(input: unknown): Observation[] {
   const payload = Array.isArray(input) ? input : [input];
-  return payload.map((item) => (typeof item === "object" && item ? item : {})) as Observation[];
+  return payload.map((item: unknown) => {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return {};
+    if (!isProgressionObservation(item)) throw new Error("Observation contains invalid progression fields.");
+    return item;
+  });
 }
 
 function buildAudit(observations: Observation[], sourcePath: string) {
@@ -136,7 +132,7 @@ function buildClaimGuardrails(observation: Observation): ClaimGuardrail[] {
     ["Reminder recovery", observation.reminderRecovery, "goal is easy to reopen after a pause", ["capture reopen path or reminder affordance"]]
   ];
 
-  return rules.map(([claim, present, summary, nextEvidence]) => {
+  return rules.map(([claim, present, , nextEvidence]) => {
     const observed = present === undefined ? [] : [present ? "yes" : "no"];
     const sufficiency = getStarterCoverageStatus({ observed, required: ["yes"] });
     return {
@@ -179,26 +175,6 @@ function renderAudit(report: { sourcePath: string; entries: Array<{ id: number; 
     lines.push("", buildStarterGuardrailSection(entry.starter));
   }
   return lines.join("\n");
-}
-
-function appendLearning(report: { entries: Array<{ claims: ClaimGuardrail[] }> }) {
-  const learning = report.entries.find((entry) => entry.claims.some((claim) => claim.sufficiency !== "sufficient"));
-  if (!learning) return;
-  const line = `- Progression audit: keep one reachable goal and one concrete next step visible when claim coverage is weak.\n`;
-  const repoRoot = path.resolve(import.meta.dir, "../../../..");
-  const learningsPath = path.join(repoRoot, ".agents", "skills", "readable-progression-audit", "LEARNINGS.md");
-  appendUniqueLine(learningsPath, line);
-  const localLearningPath = path.join(repoRoot, ".local", "kojima", "learnings.md");
-  if (existsSync(localLearningPath)) {
-    appendUniqueLine(localLearningPath, line);
-  }
-}
-
-function appendUniqueLine(filePath: string, line: string) {
-  const existing = existsSync(filePath) ? readFileSync(filePath, "utf8") : "";
-  if (!existing.includes(line.trim())) {
-    appendFileSync(filePath, line, "utf8");
-  }
 }
 
 function renderTemplate() {

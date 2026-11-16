@@ -86,11 +86,13 @@ createUiTest("ChatPanel attachment guardrails", () => {
       expect(uploadInvocationCount).toBe(1);
     });
 
-    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
-
-    expect(commands).toHaveLength(0);
-    expect(toastStore.toasts[0]?.description).toBe("Wait for attachments to finish uploading before sending.");
-    finishUpload();
+    try {
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+      expect(commands).toHaveLength(0);
+      expect(toastStore.toasts[0]?.description).toBe("Attachment upload in progress");
+    } finally {
+      finishUpload();
+    }
   });
 
   it("allows image uploads for Codex CLI even when model tags omit vision", async () => {

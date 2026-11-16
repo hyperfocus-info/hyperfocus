@@ -7,19 +7,17 @@
     <meta name="description" content="Isolated procedural-motion laboratory for Catalog Engine humanoid rigs.">
     <title>Motion Laboratory</title>
     <link rel="stylesheet" href="./styles.css">
-  </head>
+  <!-- app-brand:start --><link rel="icon" type="image/svg+xml" href="./brand/favicon.svg"><link rel="icon" type="image/png" sizes="32x32" href="./brand/favicon-32.png"><link rel="apple-touch-icon" href="./brand/apple-touch-icon.png"><link rel="manifest" href="./brand/site.webmanifest"><meta property="og:type" content="website"><meta property="og:site_name" content="Motion Lab"><meta property="og:title" content="Motion Lab"><meta property="og:description" content="Motion Lab interactive example."><meta property="og:locale" content="en_US"><meta property="og:image:alt" content="Motion Lab logo"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="Motion Lab"><meta name="twitter:description" content="Motion Lab interactive example."><meta name="twitter:image:alt" content="Motion Lab logo"><!-- app-brand:end --></head>
   <body>
     <main class="lab-shell">
-      <header class="lab-header">
+      <header class="lab-header" data-ui-navbar>
         <div>
-          <p class="eyebrow">Catalog Engine / isolated laboratory</p>
-          <h1>Motion Laboratory</h1>
-          <p class="subtitle">One zero-clip rig. Three synchronized views. Every compromise made visible.</p>
+          <h1><a href="./" aria-label="Motion Laboratory home">Motion Laboratory</a></h1>
         </div>
         <div class="header-actions">
           <span id="labStatus" class="status-pill" role="status" aria-live="polite">Loading fixtures...</span>
-          <button id="pauseButton" class="button button-secondary" type="button" disabled>Pause</button>
-          <button id="resetButton" class="button" type="button" disabled>Reset pose</button>
+          <button id="pauseButton" class="button" type="button" disabled>Pause</button>
+          <button id="resetButton" class="button button-secondary" type="button" disabled>Reset pose</button>
         </div>
       </header>
 

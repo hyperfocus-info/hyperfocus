@@ -1,3 +1,4 @@
+import { clamp01 } from "@hyperfocus/utilities/math";
 import { createObjectPool } from "@hyperfocus/engine";
 import { pruneExpiredTimedEffectQueue, pushBoundedEffect, renderablePathCommand, renderableRecord, renderArray, renderRecord, type PathCommand, type PooledRenderCommand, type PooledRenderRecord, type Renderable, type RenderFramePool } from "@hyperfocus/engine/render";
 import { type PlayerEntity } from "../../shared-contracts.ts";
@@ -313,9 +314,7 @@ function appendEffectRenderCall(frame: Renderable[], effect: VisualEffect, timeM
   pushGroup(frame, `effect-${effect.id}`, effect.x, effect.y, effect.y, Math.max(0, alpha), calls);
 }
 
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
+
 
 function easeOutCubic(t: number) {
   return 1 - (1 - t) ** 3;

@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { isJsonWireSafe } from "../protocol/messages.ts";
 import { normalizePeerGroupLimits, type PeerChannel, type PeerGroup, type PeerGroupLimits, type PeerGroupPayload, type PeerGroupPeer } from "./peer-group.ts";
 
@@ -34,9 +35,7 @@ function roomFor(lobbyId: string) {
   return room;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function copyPayload(payload: PeerGroupPayload): PeerGroupPayload {
   if (typeof payload === "object" && !(payload instanceof Uint8Array) && !(payload instanceof ArrayBuffer) && !isJsonWireSafe(payload)) {

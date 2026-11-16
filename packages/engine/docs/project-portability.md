@@ -15,11 +15,72 @@ my-game/
 
 `project.json` is deterministic, UTF-8 JSON. `assets.hfp` is a deterministic, content-addressed ZIP archive with a project-specific extension. Ordinary TypeScript, tests, shaders, server code, and other human-authored source stay outside `.hyperfocus`. Hyperfocus must not copy source into generated wrappers or expand one authored object into a forest of generated files.
 
+Editor project validation checks an authored `extensions.hyperfocus3D` declaration
+with the portable reader's structural/budget rules before committing changes.
+This requires no archive bytes; asset cooking remains a separate boundary.
+Malformed declarations cannot silently replace the last valid scene through a
+generic patch, section edit, or project replacement.
+
+### Reference geometry
+
+Optional `extensions.hyperfocusReference3D` binds a static scene to a source image
+asset/hash/dimensions and a calibrated camera. `readReference3D`,
+`inspectReference3D` and `assertReferenceProject3D` from `project/runtime-3d` own
+the strict contract. Observed pixel landmarks bind entity-local mesh points with
+explicit uncertainty/tolerance and optional X/Y-only extrema; ratios bind named
+landmark pairs. Volume entries bind mesh SHA-256, calibrated local depth, minimum
+scaled depth, and a rationale for designed unseen geometry.
+
+Project history and persistence validation reject malformed/missing bindings,
+projected drift, changed catalog identities and depth collapse before committing.
+Runtime startup verifies actual image/mesh bytes and cooked depth; frame compilation
+checks current world matrices against the fixed source camera. Viewer orbit does
+not change that reference. Generated reference art cannot silently drop its contract.
+Current calibrated meshes must be self-contained, static, primitive zero, without
+skins or variants. Unsupported inputs fail instead of losing the guard.
+
+These checks establish geometric constraints, not reconstructed hidden surfaces,
+occlusion, materials, acting or an image-similarity percentage. Source evidence stays
+in `assets.hfp`; no local source paths or GPU caches are required after packaging.
+Unknown consumers should preserve the extension and report unsupported enforcement,
+not claim that a successful render proves reference fidelity.
+
+### Portable observations
+
+The `project/runtime-3d` entry exposes canonical readers for foreign observations
+and worker data. Resolved appearance and the poses/styles/reducedMotion projection
+are detached data; optional absence and explicit undefined remain distinct, and no
+defaults are supplied. Portable asset readers return fresh descriptors with borrowed
+validated Uint8Array storage: callers own the byte lifetime and transfer. Decoding
+and authored resource references remain runtime/compiler responsibilities.
+
+Scene resource closure includes appearance targets composed from actor IDs and
+catalog suffixes. Replaceable print placeholders remain available before a user
+binds an image; unrelated textures remain outside the active delivery closure.
+
 The two-file reader/writer and editor save/open path are implemented. `@hyperfocus/engine/project` creates deterministic project JSON, packs and opens the standard ZIP archive, verifies CRC-32 and SHA-256, rejects unsafe or orphaned entries, and exposes a programmatic generic exchange-file export. The editor writes or opens the pair through a directory picker, falls back to exactly two downloads or a two-file selection, reads legacy `.engine-project.json`, packs cached legacy imports, and restores validated pack contents to its disposable IndexedDB cache.
 
-The editor now has an executable built-in/data-driven lane: Play and standalone HTML use the first-party `@hyperfocus/engine/project/runtime-2d` simulation, and the build embeds this exact validated pair with verified assets and an offline renderer. The lane supports input movement, built-in patrols, explicit solid tile values, swept AABB collision, scenes/snapshots, images/atlas frames, camera follow, start-triggered audio, touch/gamepad input, and the supported post stack. The browser button hard-blocks arbitrary TypeScript paths because it does not own those source files. The source-aware `bun run build:game -- --project <directory>` lane resolves those paths, statically bundles them in memory, and emits the same single HTML form without intermediate wrappers. `dev:game` watches the exact pair and authored bundle inputs, keeps the last good in-memory snapshot on errors, and live-reloads successful builds. Filesystem-capable writers now have staged directory-swap persistence and explicit recovery, Editor v2 has a machine-readable schema, and an independent fixture proves extraction without the project codec. Live custom-source execution inside the editor process remains release work.
+Browser editor exports select a complete 2D or 3D startup bundle from the existing
+3D declaration; no project schema or author setting changes. Both entries use the
+same canonical reader, migration and asset checks. A dedicated entry rejects a
+project of the other dimension. Explicit runtime sources and the generic packaged
+build entry remain supported; this selection does not remove runtime features
+within either dimension.
+
+The editor Play and exported games share the first-party 2D/3D runtime. Default builds use the [streaming web delivery format](project-delivery.md); `--offline` embeds this exact complete pair in a single HTML download. Both preserve canonical assets and gameplay. The browser compiler accepts explicitly supplied source; the CLI also resolves authored filesystem and package modules. `dev:game` retains the last good preview when source rebuilds fail. Filesystem-capable writers use staged directory-swap persistence and explicit recovery; an independent fixture proves extraction without the project codec.
+
+Successful dev builds reuse their own bundled source inputs for exact-file
+watching; they do not rebundle just to discover dependencies. A rebuild burst
+retains at most one pending build behind the active build. Waiting callers finish
+after that pending build; stopping discards queued work and awaits active cleanup.
+Live reload still restarts the page; it does not migrate arbitrary script state.
 
 ## Design invariants
+
+Timeline keyframes support `hold` easing. As with the other interpolation modes,
+the destination key owns the interval: the previous value persists until that
+key's exact frame. This includes fractional samples during higher-rate exports.
+Older readers that do not implement `hold` must reject it rather than smooth it.
 
 - Exactly two canonical files live under `.hyperfocus` for a saved project.
 - Deleting editor caches must not lose a saved project.
@@ -49,6 +110,16 @@ The JSON document is the human-reviewable source of truth for project structure.
 
 It does not contain asset bytes, generated runtime code, local editor layout unless the author elects to share it, secrets, caches, or absolute paths.
 
+Audio asset records may include `audioMetadata: { bpm?, bpmConfidence, bpmSource,
+bpmStatus }`. Estimated BPM is a finite value from 30 to 300 with confidence from
+zero to one and a bounded source label; an `undetected` status has no BPM and zero
+confidence. Uncertain estimates remain portable evidence rather than being
+invented or silently promoted to timing authority. The editor shows them in
+Asset inspector → File details. Replacing different source bytes clears stale
+tempo metadata; renaming or reopening preserves it. Validated `project.patch`
+commands author the same portable field. The pair roundtrip and validation route
+is `bun test packages/engine/src/project/metadata/assets.test.ts`.
+
 The generic JSON and ZIP encoding APIs are published on `@hyperfocus/engine/project`. The Editor v2 document shape is published as [JSON Schema draft 2020-12](./schema/editor-project-v2.schema.json). It covers required records, field types, numeric and collection bounds, enumerations, colors, digest syntax, and the rule that saved imported assets carry a SHA-256 reference. JSON Schema cannot express every graph invariant used by the editor: unique IDs across arrays, parent/reference existence, parenting cycles, atlas sequence references, the equality of `values.length` and `columns * rows`, and `allocationMs <= frameBudgetMs` remain semantic validation requirements. Consumers must run those checks in addition to schema validation before executing a project.
 
 ## `assets.hfp`
@@ -69,7 +140,15 @@ ZIP is chosen for escapeability and broad tooling support. The `.hfp` suffix all
 
 Human-authored code stays human-authored. A behavior record such as `{ "module": "./src/player.ts", "export": "updatePlayer" }` is metadata pointing out of `.hyperfocus`; it does not cause the editor to generate `PlayerBehavior.ts`, component wrappers, scene classes, or serialization glue. Relative source-module paths resolve from the project root that contains `.hyperfocus`, not from inside `.hyperfocus` itself. The standalone editor build executes documented `builtin:` behaviors and data-driven input. Unknown built-ins and source-module paths fail its browser-only preflight rather than being ignored. The CLI source lane statically imports relative modules that remain inside the project root, rejects missing/non-function exports and unresolved/external chunks, and produces one IIFE HTML artifact.
 
-A custom behavior export receives a `PlayableBehaviorContext2D` and returns `void` or `{ velocityX, velocityY }`. The context contains a read-only entity/component snapshot, sorted active actions, fixed delta, tick, and simulation time. The portable runtime applies returned velocity through the same collision path as built-in input. Registry keys are the explicit `module#export` pair; `playableBehaviorKey` and `PlayableBehaviorRegistry2D` are public on `@hyperfocus/engine/project/runtime-2d`.
+A custom behavior export receives a `PlayableBehaviorContext2D` and returns `void` or `{ velocityX, velocityY, commands }`, with each result field optional. The context contains a read-only entity/component snapshot, sorted active actions, fixed delta, tick, and simulation time. The portable runtime applies returned velocity through the same collision path as built-in input. Registry keys are the explicit `module#export` pair; `playableBehaviorKey` and `PlayableBehaviorRegistry2D` are public on `@hyperfocus/engine/project/runtime-2d`.
+
+The `set-transform` behavior command accepts an optional `entityId` (default: the behavior's entity) and at least one of `x`, `y`, `rotation`, or `scale`. Positions are absolute scene pixels, rotation is clockwise radians, and scale is positive and uniform. Omitted fields stay unchanged; values must be finite with magnitude at most 1e9. The entire command batch validates before any command applies. Transforms apply after that tick's velocity movement and deliberately teleport without a collision sweep; use velocity for collision-constrained movement. Translation carries descendants by the same offset. Rotation and scale apply only to the target, with rotation remaining visual and scale affecting the existing axis-aligned collision bounds. The world snapshot/save includes these values, and reloading the scene restores authored transforms. Editor Play and standalone exports consume the same command and snapshots. See `src/project/runtime-transform-2d.test.ts` for malformed-input, ordered-entity, collision, and recovery coverage.
+
+A scene controller's `switch-scene` request is deferred until every entity's commands for the current tick have applied to the old scene. This lets a controller compose with later actors' transform, UI or state commands without depending on entity order. More than one scene-switch request in a tick rejects the command batch as ambiguous; invalid later commands also prevent the switch. New-scene entities keep their authored transforms.
+
+The 2D `stop-audio` behavior command stops the current scene's audio without rebuilding its entities or resetting its state. An optional `bus` limits the stop to `music`, `sfx`, `voice`, or `ambient`; omission stops every bus in that scene. Audio components expose `stopAction`, an optional project input action that stops the component's scene and bus on its rising edge. A simultaneous play/stop action on the same component favors stopping. The Editor's **Stop action** field and `project.patch` author the same portable value. Native Play and offline playback cancel queued starts, active voices and matching in-flight decoding, so a stopped narration cannot begin after its decode finishes. New play commands after a stop remain valid.
+
+A restored world does not resume arbitrary Web Audio playheads. Behavior context `restored` is true for every behavior in the first successful fixed tick after `world.restore`, including restoration on boot; it stays pending through advances that perform no fixed step. Use it to clear transient `playing`/timer state or deliberately issue a fresh play command. Completed progress can remain intact. The flag is not persisted in the snapshot and is false during ordinary creation and subsequent ticks.
 
 Runtime integration should use a small explicit loader boundary. Projects may bypass the loader and consume the JSON and asset pack directly. No game rule should depend on an editor process, global registry, cloud account, or undocumented binary object.
 
@@ -132,3 +211,14 @@ The persistence migration is implemented for the first four items below. The com
 - Filesystem/CLI writes stage, sync, atomically swap, validate, and recover the pair without exposing mixed generations. **Implemented and fault-injection tested at each transaction boundary.**
 - Editor project schema v2 is available as machine-readable JSON Schema, with semantic-only invariants explicitly identified. **Implemented.**
 - An independent reader recovers fixture bytes with JSON, standard ZIP, deflate, and SHA-256 implementations while importing no Hyperfocus project codec. **Implemented and verified.**
+
+
+Network-enabled standalone combat exports include a bounded Clerk development
+sign-in resource policy; ordinary offline exports do not. Only the official
+Clerk development FAPI, image and protection hosts and Cloudflare challenges are
+permitted alongside existing same-origin requests and combat WebSockets. No
+blanket HTTPS-script permission or eval is enabled. Standalone files do not
+authorize arbitrary custom FAPI origins. A configured host may amend only its
+served CSP to permit the exact production frontend selected by its public key;
+the portable project and exported file remain unchanged. See the [host account policy](../examples/touch-of-death/host/guest-session/README.md#export-policy-for-clerk)
+and standalone playable CSP regressions.

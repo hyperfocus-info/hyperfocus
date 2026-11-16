@@ -10,7 +10,7 @@ import type { WorkspaceRepository } from "./workspace-repository";
 
 export function createRunBudgetAgentAdapter(
   inner: PiAgentAdapter,
-  repository: WorkspaceRepository,
+  repository: Pick<WorkspaceRepository, "reserveAgentRunTurn">,
   projectId: ProjectId,
   runId: string,
 ): PiAgentAdapter {
@@ -38,7 +38,7 @@ export function createRunBudgetAgentAdapter(
 
 function createRunBudgetExecutionController(
   inner: PiAgentExecutionController,
-  repository: WorkspaceRepository,
+  repository: Pick<WorkspaceRepository, "reserveAgentRunTurn">,
   projectId: ProjectId,
   runId: string,
 ): PiAgentExecutionController {
@@ -55,7 +55,7 @@ function createRunBudgetExecutionController(
     inner.dispose();
   }
 
-  return { result: inner.result, continueWithPrompt, abort, dispose };
+  return { result: inner.result, continueWithPrompt, abort, dispose, steer: inner.steer ? message => inner.steer!(message) : undefined };
 }
 
 function withRuntimeBudgetPrompt(request: PiAgentPromptRequest, budget: RunRuntimeBudget | undefined): PiAgentPromptRequest {

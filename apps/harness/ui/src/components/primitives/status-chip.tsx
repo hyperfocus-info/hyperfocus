@@ -1,3 +1,4 @@
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import { splitProps, type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
@@ -21,7 +22,7 @@ const styles = stylex.create({
     paddingInline: "0.55rem",
     alignItems: "center",
     display: "inline-flex",
-    fontSize: "0.65rem",
+    fontSize: tokens.fontCaption,
     fontWeight: 700,
     lineHeight: 1,
     whiteSpace: "nowrap",

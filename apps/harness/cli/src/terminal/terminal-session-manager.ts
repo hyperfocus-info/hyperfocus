@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess, terminateProcessTree } from "@hyperfocus/desktop-runtime/process";
 import path from "node:path";
 import {
   createRequestId,
@@ -29,9 +30,9 @@ const ATTACH_TOKEN_TTL_MS = 30_000;
 const TERMINAL_HEARTBEAT_INTERVAL_MS = 15_000;
 const TERMINAL_STALE_TIMEOUT_MS = 30_000;
 const TERMINAL_STREAM_FLUSH_MS = 16;
-const TERMINAL_STREAM_MAX_BUFFERED_BYTES = 16 * 1024;
-const TERMINAL_SEND_QUEUE_CAP_BYTES = 512 * 1024;
-const TERMINAL_REPLAY_FRAME_BYTES = 64 * 1024;
+const TERMINAL_STREAM_MAX_BUFFERED_BYTES = 16384;
+const TERMINAL_SEND_QUEUE_CAP_BYTES = 524288;
+const TERMINAL_REPLAY_FRAME_BYTES = 65536;
 const TERMINAL_STATE_PERSIST_THROTTLE_MS = 500;
 const MAX_SCROLLBACK_CHARS = 2_000_000;
 const TERMINAL_UTF8_DECODER = new TextDecoder();
@@ -797,7 +798,7 @@ async function startTerminalProcess(input: {
     };
   }
 
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: input.cmd,
     cwd: input.cwd,
     env,
@@ -816,8 +817,7 @@ async function startTerminalProcess(input: {
     },
     resize: () => undefined,
     stop: async () => {
-      proc.kill();
-      await proc.exited.catch(() => undefined);
+      await terminateProcessTree({ process: proc });
     }
   };
 }

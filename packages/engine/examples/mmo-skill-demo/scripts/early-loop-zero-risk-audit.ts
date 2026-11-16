@@ -1,3 +1,4 @@
+import { formatPercent as pct } from "@hyperfocus/utilities/text";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { earlyLoopAction, earlyLoopBlockers, type EarlyLoopBand } from "../src/client/early-loop.ts";
@@ -58,9 +59,7 @@ function formatArg(): Format {
   throw new Error(`Unknown format: ${value}`);
 }
 
-function pct(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
+
 
 function basePlayer(overrides: Partial<PlayerEntity>): PlayerEntity {
   const base: PlayerEntity = {

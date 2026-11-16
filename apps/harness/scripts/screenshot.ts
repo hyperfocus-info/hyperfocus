@@ -1,8 +1,9 @@
-import path from "node:path";
+import { spawnBackgroundProcess,terminateProcessTree } from "@hyperfocus/desktop-runtime/process";
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 import { mkdir } from "node:fs/promises";
-import { spawn as spawnNodeProcess } from "node:child_process";
+import path from "node:path";
 import { createBoundedOutputBuffer } from "../cli/src/bounded-output-buffer";
-import { createBranchfsManager, type BranchfsExperimentLease } from "../cli/src/branchfs-manager";
+import { createBranchfsManager,type BranchfsExperimentLease } from "../cli/src/branchfs-manager";
 
 export type Viewport = {
   name: string;
@@ -62,7 +63,7 @@ const DEFAULT_VIEWPORT_NAMES = ["desktop", "mobile"];
 const DEFAULT_WAIT_UNTIL: ScreenshotWaitUntil = "domcontentloaded";
 const LISTENING_REGEX = /Harness(?:\s+\S+)? server listening on (http:\/\/localhost:\d+)/;
 const DEV_SERVER_READY_TIMEOUT_MS = 60_000;
-export const SCREENSHOT_SERVER_OUTPUT_CAP_BYTES = 256 * 1024;
+export const SCREENSHOT_SERVER_OUTPUT_CAP_BYTES = 262144;
 const PAGE_NAVIGATION_TIMEOUT_MS = 30_000;
 const PAGE_SETTLE_DELAY_MS = 350;
 export type ScreenshotWaitUntil = "domcontentloaded" | "load" | "networkidle";
@@ -226,7 +227,7 @@ export async function runScreenshotCapture(opts: ScreenshotOptions, deps: Captur
 }
 
 async function startDevServerInMount(mountPath: string): Promise<DevServerHandle> {
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: [process.execPath, "apps/harness/cli/src/index.ts", "--no-open"],
     cwd: mountPath,
     env: { ...process.env, HARNESS_PORT: "0" },
@@ -258,6 +259,7 @@ async function startDevServerInMount(mountPath: string): Promise<DevServerHandle
   drainStderr();
 
   const baseUrl = await new Promise<string>((resolve, reject) => {
+    let ready = false;
     const timer = setTimeout(() => {
       reject(new Error(`dev server did not report listening within ${DEV_SERVER_READY_TIMEOUT_MS}ms. stderr tail:\n${stderrBuffer.text().slice(-2000)}`));
     }, DEV_SERVER_READY_TIMEOUT_MS);
@@ -274,53 +276,33 @@ async function startDevServerInMount(mountPath: string): Promise<DevServerHandle
           }
           stdoutBuffer.append(decoder.decode(value, { stream: true }));
           const match = LISTENING_REGEX.exec(stdoutBuffer.text());
-          if (match) {
+          if (match && !ready) {
+            ready = true;
             clearTimeout(timer);
             resolve(match[1]);
-            return;
           }
         }
       } catch (error) {
         clearTimeout(timer);
         reject(error);
+      } finally {
+        reader.releaseLock();
       }
     };
 
-    pump();
-  });
+    void pump();
+  }).catch(async (error) => { await terminateProcessTree({ process: proc }); throw error; });
 
-  const stop = async () => {
-    if (process.platform === "win32" && proc.pid) {
-      const killer = spawnNodeProcess("taskkill", ["/PID", String(proc.pid), "/T", "/F"], {
-        stdio: "ignore",
-        windowsHide: true
-      });
-      await new Promise<number | null>((resolve, reject) => {
-        killer.once("error", reject);
-        killer.once("exit", resolve);
-      });
-    } else {
-      proc.kill();
-    }
-    const exited = await Promise.race([
-      proc.exited.then(() => true, () => true),
-      Bun.sleep(5_000).then(() => false)
-    ]);
-    if (!exited) {
-      proc.kill();
-      if (!(await Promise.race([proc.exited.then(() => true, () => true), Bun.sleep(2_000).then(() => false)]))) {
-        throw new Error(`Screenshot server process tree ${proc.pid} did not exit`);
-      }
-    }
-  };
+  const stop = () => terminateProcessTree({ process: proc });
 
   return { baseUrl, stop };
 }
 
 async function runScreenshotRunner(runnerName: string, baseUrl: string, opts: ScreenshotOptions) {
   const runnerPath = path.join(import.meta.dir, runnerName);
-  const proc = Bun.spawn({
-    cmd: ["node", runnerPath],
+  const proc = spawnBackgroundProcess({
+    cmd: [process.execPath, runnerPath],
+    timeout: 30_000 + opts.viewports.length * opts.routes.length * (2 * PAGE_NAVIGATION_TIMEOUT_MS + PAGE_SETTLE_DELAY_MS),
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -365,17 +347,14 @@ function isScreenshotArtifact(value: unknown): value is ScreenshotArtifact {
     typeof value.width === "number" && typeof value.height === "number" && typeof value.path === "string";
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 async function capturePagesWithCdp(baseUrl: string, opts: ScreenshotOptions) {
   try {
-    return await runScreenshotRunner("screenshot-cdp-runner.mjs", baseUrl, opts);
+    return await runScreenshotRunner("screenshot-cdp-runner.ts", baseUrl, opts);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.warn(`[screenshot] CDP runner failed; retrying with Playwright.\n${detail}`);
-    return await runScreenshotRunner("screenshot-playwright-runner.mjs", baseUrl, opts);
+    return await runScreenshotRunner("screenshot-playwright-runner.ts", baseUrl, opts);
   }
 }
 

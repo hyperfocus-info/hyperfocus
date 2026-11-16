@@ -127,7 +127,7 @@ export function createMmo1000Preset(options: Mmo1000PresetOptions): MmoScalePres
     replication: {
       snapshotRate: 1,
       deltaRate: 10,
-      maxBytesPerClientPerSecond: 24 * 1024,
+      maxBytesPerClientPerSecond: 24576,
       binary: true,
       maxClientsPerTick: playersPerRoom,
       spread: "round-robin",

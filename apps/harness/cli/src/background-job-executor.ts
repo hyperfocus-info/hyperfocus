@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import path from "node:path";
 import { createProjectNoteSearch } from "./server/execution/project-note-search";
 import {
@@ -17,7 +18,7 @@ import {
   type ModeDefinition,
   type ComposerReasoningStrength
 } from "@hyperfocus/ai-core/protocol";
-import { executeReadyRun, runPlannerTurn } from "./pi-orchestrator";
+import { executePlanPrerequisites, executeReadyRun, runPlannerTurn } from "./pi-orchestrator";
 import { createBoundedOutputBuffer, formatOutputCapExceeded } from "./bounded-output-buffer";
 import { terminateProcessTree } from "./agent-runtimes/cli-process-manager";
 import type { PiAgentAdapter } from "./pi-agent-adapter";
@@ -58,9 +59,9 @@ type BackgroundJobExecutorOptions = {
 // against stale DB rows or migration drift that could otherwise schedule a
 // zero/negative/NaN timeout and instantly kill a proc (or never time out).
 export const MIN_SHELL_TIMEOUT_SECONDS = 1;
-export const MAX_SHELL_TIMEOUT_SECONDS = 24 * 60 * 60;
+export const MAX_SHELL_TIMEOUT_SECONDS = 86400;
 export const DEFAULT_SHELL_TIMEOUT_SECONDS = 60;
-export const SHELL_OUTPUT_CAP_BYTES = 2 * 1024 * 1024;
+export const SHELL_OUTPUT_CAP_BYTES = 2097152;
 export const MAX_BACKGROUND_AUTO_QUESTION_ROUNDS = 1;
 export const DEFAULT_BACKGROUND_RUN_LIVENESS_HEARTBEAT_MS = 60_000;
 
@@ -294,7 +295,7 @@ async function finalizeBackgroundAiRun(
   const { repository, adapter, providerBrand, debugEnabled, abortSignal } = options;
   const project = repository.getProject(job.projectId);
   const threadId = job.automationThreadId;
-  const plan = executionPlan ?? activeRun.plan;
+  let plan = executionPlan ?? activeRun.plan;
   const promptCacheIdentity = buildBackgroundPromptCacheIdentity(options, {
     projectRootPath: project.rootPath,
     mode: plan?.mode,
@@ -317,7 +318,24 @@ async function finalizeBackgroundAiRun(
     promptChars: readyPlan.finalExecutionBrief.length
   });
   let outcome: Awaited<ReturnType<typeof executeReadyRun>>;
+  const callbacks = createBackgroundExecutionCallbacks(options, job.projectId, options.run.id, activeRun.id);
   try {
+    if (plan) {
+      plan = await executePlanPrerequisites(adapter, {
+        cwd: project.rootPath, runId: activeRun.id, sessionId: threadId, messages: plannerMessages,
+        executionPlan: plan, executionModelId: readyPlan.executionModelId, agentId: options.agentId,
+        reasoningStrength, fastMode, promptCacheIdentity, geminiCachedAttachmentContext, abortSignal, callbacks,
+        onPrerequisiteComplete(completedPlan) {
+          abortSignal?.throwIfAborted();
+          if (getStoppedBackgroundExecutionRun(options, options.run.id, activeRun.id, "prerequisite-complete")) {
+            throw new Error("Background execution stopped during prerequisites.");
+          }
+          repository.setAgentRunExecutionPlan(job.projectId, activeRun.id, completedPlan);
+        }
+      });
+      const stoppedAfterPrerequisites = getStoppedBackgroundExecutionRun(options, options.run.id, activeRun.id, "prerequisites");
+      if (stoppedAfterPrerequisites) return stoppedAfterPrerequisites;
+    }
     outcome = await executeReadyRun(adapter, {
       cwd: project.rootPath,
       runId: activeRun.id,
@@ -330,8 +348,8 @@ async function finalizeBackgroundAiRun(
       reasoningStrength,
       fastMode,
       abortSignal,
-      callbacks: createBackgroundExecutionCallbacks(options, job.projectId, options.run.id, activeRun.id),
-      executionPlan: executionPlan ?? undefined,
+      callbacks,
+      executionPlan: plan ?? undefined,
       promptCacheIdentity,
       geminiCachedAttachmentContext,
       singleAgentModelPreference: repository.getSingleAgentModelPreferenceDefault(),
@@ -346,17 +364,12 @@ async function finalizeBackgroundAiRun(
     return stoppedBeforeFinalize;
   }
 
-  if (!assistantOwned) {
-    repository.appendMessage(job.projectId, "assistant", outcome.assistantMessage.content, {
-      threadId
-    });
-  }
-  repository.setAgentRunStatus(
-    job.projectId,
-    activeRun.id,
-    outcome.partial ? "partial-complete" : "completed",
-    outcome.partial ? "Background run partial complete" : undefined
-  );
+  repository.completeAgentRun({
+    projectId: job.projectId, threadId, runId: activeRun.id,
+    status: outcome.partial ? "partial-complete" : "completed",
+    reason: outcome.partial ? "Background run partial complete" : "Background run completed",
+    assistantMessageContent: assistantOwned ? undefined : outcome.assistantMessage.content
+  });
   appendBackgroundJobRunEvent(
     options,
     options.run.id,
@@ -430,7 +443,7 @@ async function executeShellJob(options: BackgroundJobExecutorOptions) {
   setBackgroundJobRunStatus(options, run.id, "running");
   appendBackgroundJobRunEvent(options, run.id, "spawned", `Running ${definition.executable}`);
 
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: [definition.executable, ...definition.args],
     cwd,
     env: resolveEnvironmentRefs(definition.envRefs),

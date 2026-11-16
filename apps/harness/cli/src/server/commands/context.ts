@@ -1,3 +1,4 @@
+import type { ControlEventSocket } from "../transport/events";
 import type { CliSessionManager } from "../../agent-runtimes/cli-session-manager";
 import type { AgentRuntimeRegistry } from "../../agent-runtimes/runtime-registry";
 import type { AssistantManager } from "../../assistant-manager";
@@ -8,10 +9,11 @@ import type { BackgroundRunControl, HarnessConnection, HarnessServerOsAdapters, 
 import type { TerminalSessionManager } from "../../terminal/terminal-session-manager";
 import type { WorkspaceRepository } from "../../workspace-repository";
 import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
-import type { PreferencesState, SetupState, TokenUsageTotals } from "@hyperfocus/ai-core/protocol";
+import type { PreferencesState, SetupLaunchMode, SetupState, TokenUsageTotals } from "@hyperfocus/ai-core/protocol";
 
 export type ServerCommandContext = {
-  ws: Bun.ServerWebSocket<HarnessConnection>;
+  launchMode: SetupLaunchMode;
+  ws: ControlEventSocket;
   runtime: WorkspaceRuntimeStore;
   repository: WorkspaceRepository;
   adapter: PiAgentAdapter;

@@ -66,6 +66,7 @@ export function resolveBundledCodexExecutablePath(input: {
   arch?: string;
   resolvePackageJson?: ResolvePackageJson;
   pathExists?: (candidate: string) => boolean;
+  executablePath?: string;
 } = {}) {
   const targetTriple = resolveBundledCodexTargetTriple(input.platform, input.arch);
   if (!targetTriple) {
@@ -75,6 +76,17 @@ export function resolveBundledCodexExecutablePath(input: {
   const platformPackage = PLATFORM_PACKAGE_BY_TARGET[targetTriple];
   if (!platformPackage) {
     throw new Error(`Unsupported Codex target triple: ${targetTriple}`);
+  }
+
+  const binaryName = (input.platform ?? process.platform) === "win32" ? "codex.exe" : "codex";
+  const pathExists = input.pathExists ?? existsSync;
+  // Compiled launchers have no source node_modules tree. Resolve their owned assets first.
+  if (!input.resolvePackageJson || input.executablePath) {
+    const bundled = path.join(path.dirname(input.executablePath ?? process.execPath), "bin", "codex", targetTriple);
+    for (const folder of ["bin", "codex"]) {
+      const executable = path.join(bundled, folder, binaryName);
+      if (pathExists(executable)) return executable;
+    }
   }
 
   const resolvePackageJson =
@@ -88,8 +100,6 @@ export function resolveBundledCodexExecutablePath(input: {
 
   const platformPackageJsonPath = resolvePackageJson(`${platformPackage}/package.json`);
   const vendorRoot = path.join(path.dirname(platformPackageJsonPath), "vendor");
-  const binaryName = (input.platform ?? process.platform) === "win32" ? "codex.exe" : "codex";
-  const pathExists = input.pathExists ?? existsSync;
   const executablePaths = [
     path.join(vendorRoot, targetTriple, "bin", binaryName),
     path.join(vendorRoot, targetTriple, "codex", binaryName)
@@ -107,6 +117,7 @@ export function getBundledCodexInstallation(input: {
   arch?: string;
   resolvePackageJson?: ResolvePackageJson;
   pathExists?: (candidate: string) => boolean;
+  executablePath?: string;
 } = {}): CodexInstallation {
   try {
     return {

@@ -1,35 +1,40 @@
-import { beforeEach, expect, it } from "bun:test";
 import {
-  SERVER_EVENT_FRAME_MAX_BYTES,
-  type BackgroundJob,
-  type BackgroundJobRun,
-  type CliSession,
-  type ClientCommand,
-  type ServerEvent
+SERVER_EVENT_FRAME_MAX_BYTES,
+type BackgroundJob,
+type BackgroundJobRun,
+type CliSession,
+type ClientCommand,
+type ServerEvent
 } from "@hyperfocus/ai-core/protocol";
-import { createEmptyBackgroundJobsState, harnessStore, reduceServerEvent } from "./harness-store";
+import { beforeEach,expect,it } from "bun:test";
+import { createControlCommandQueue,restoreQueuedControlCommandOwnership } from "./control-command-queue";
+import { createEmptyBackgroundJobsState,harnessStore,reduceServerEvent } from "./harness-store";
 import {
-  acceptsControlPong,
-  hasLocalServerPreferenceOverride,
-  authorizeTerminalEvent,
-  getDemandedRunDetailScopes,
-  getRuntimeResyncReconnectDelay,
-  notifyBackgroundRun,
-  ownsControlHeartbeat,
-  parseServerEventData
+acceptsControlPong,
+authorizeTerminalEvent,
+getDemandedRunDetailScopes,
+getRuntimeResyncReconnectDelay,
+hasLocalServerPreferenceOverride,
+notifyBackgroundRun,
+ownsControlHeartbeat,
+parseServerEventData
 } from "./harness-websocket";
-import { createControlCommandQueue, restoreQueuedControlCommandOwnership } from "./control-command-queue";
-import { openAgentRunSource, openBackgroundRunSource } from "./source-navigation";
-import { toastStore } from "./toast-store";
-import { acceptCliAttachRequest, acceptTerminalAttachRequest, claimTerminalReplayRetry, ownCliAttachRequest,
-  ownCliStartingRequest, ownTerminalAttachRequest, ownTerminalCreatingAttachRequest, ownsSessionSocket, rejectCliAttachRequest,
-  rejectTerminalAttachRequest, requestCliAttach, requestTerminalAttach, resetCliAttachRequests, resetTerminalAttachRequests,
-  resetTerminalReplayRetry, revokeCliAttachRequest, revokeTerminalAttachRequest } from "./terminal/terminal-transport";
+import { openAgentRunSource,openBackgroundRunSource } from "./source-navigation";
 import { terminalStore } from "./terminal/terminal-store";
-import { createAssistantFixture, createBackgroundJobFixture, createBackgroundJobRunFixture, createHarnessStateFixture, createRunFixture,
-  createViewProjectFixture, defaultPreferencesFixture } from "./utils/tests/test-fixtures";
+import {
+acceptCliAttachRequest,acceptTerminalAttachRequest,claimTerminalReplayRetry,ownCliAttachRequest,
+ownCliStartingRequest,ownTerminalAttachRequest,ownTerminalCreatingAttachRequest,ownsSessionSocket,rejectCliAttachRequest,
+rejectTerminalAttachRequest,requestCliAttach,requestTerminalAttach,resetCliAttachRequests,resetTerminalAttachRequests,
+resetTerminalReplayRetry,revokeCliAttachRequest,revokeTerminalAttachRequest
+} from "./terminal/terminal-transport";
+import { toastStore } from "./toast-store";
+import { captureDispatchedCommands,clearBrowserStateForTests,seedHarnessStoreForTests } from "./utils/tests/store-test-utils";
+import {
+createAssistantFixture,createBackgroundJobFixture,createBackgroundJobRunFixture,createHarnessStateFixture,createRunFixture,
+createViewProjectFixture,defaultPreferencesFixture
+} from "./utils/tests/test-fixtures";
 import { createUiTest } from "./utils/tests/test-harness";
-import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "./utils/tests/store-test-utils";
+import { command } from "./utils/tests/transport-fixtures";
 
 function isoNow() {
   return new Date().toISOString();
@@ -420,7 +425,7 @@ createUiTest("connectHarnessWebSocket reconnect queue", () => {
 
   it("refuses the 101st command without dropping the configured 100 accepted commands", () => {
     const queue = createControlCommandQueue(100);
-    const command = (requestId: string): ClientCommand => ({ type: "notifications.mark-all-read", requestId });
+
     for (let index = 0; index < 100; index += 1) expect(queue.enqueue(command(`accepted-${index}`))).toBe(true);
     expect(queue.enqueue(command("overflow"))).toBe(false);
     const sent: string[] = [];

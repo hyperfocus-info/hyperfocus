@@ -12,6 +12,8 @@ export type StyleXSolidPluginOptions = {
   hydratable?: boolean;
   importSources?: string[];
   useCSSLayers?: boolean | { before?: readonly string[]; after?: readonly string[]; prefix?: string };
+  /** Collect emitted CSS and StyleX rules in the host's linked stylesheet. */
+  cssOutputFile?: string;
 };
 
 /**
@@ -67,12 +69,24 @@ export function stylexSolidPlugin(options: StyleXSolidPluginOptions = {}): Bun.B
       });
 
       build.onEnd(async (result) => {
-        if (rules.length === 0) {
+        if (!result.success || (rules.length === 0 && !options.cssOutputFile)) {
           return;
         }
         const css = stylexBabelPlugin.processStylexRules(rules, { useLayers: options.useCSSLayers ?? false });
         const cssOutput = result.outputs.find((output) => output.path.endsWith(".css"));
         const outputDirectory = build.config.outdir;
+        if (options.cssOutputFile) {
+          if (!outputDirectory || path.basename(options.cssOutputFile) !== options.cssOutputFile || !options.cssOutputFile.endsWith(".css")) {
+            throw new Error("StyleX cssOutputFile requires outdir and a stylesheet filename");
+          }
+          // JS entry builds do not link a dynamic import's separate CSS bundle.
+          // Keep styles globally available while optional JavaScript stays lazy.
+          const emittedCss = await Promise.all(result.outputs.filter(output => output.path.endsWith(".css"))
+            .map(output => Bun.file(output.path).text()));
+          await mkdir(outputDirectory, { recursive: true });
+          await writeFile(path.join(outputDirectory, options.cssOutputFile), [...new Set(emittedCss), css].join("\n"));
+          return;
+        }
         const cssPath = cssOutput?.path ?? (outputDirectory ? path.join(outputDirectory, "main.css") : undefined);
         if (!cssPath) {
           throw new Error("StyleX requires Bun.build to specify outdir");

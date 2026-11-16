@@ -1,8 +1,10 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { IdeFileRead, IdeFileTreeEntry, IdeGitChange, IdeSearchResult } from "@hyperfocus/ai-core/protocol";
 import { resolveBundledRipgrepPath } from "./agent-runtimes/toolchain";
 import { resolveGlobalSkillsRoot } from "./harness-paths";
+import { isInsideProjectPath, resolveTrustedProjectPath } from "./project-filesystem/trust";
 
 const DEFAULT_TREE_ENTRY_LIMIT = 5_000;
 const DEFAULT_FILE_READ_LIMIT = 1_000_000;
@@ -18,11 +20,11 @@ type FileSystemAdapter = {
 };
 
 type ProcessAdapter = {
-  spawn: typeof Bun.spawn;
+  spawn: typeof spawnBackgroundProcess;
 };
 
 const defaultFs: FileSystemAdapter = { readdir, readFile, stat, writeFile };
-const defaultProcess: ProcessAdapter = { spawn: Bun.spawn };
+const defaultProcess: ProcessAdapter = { spawn: spawnBackgroundProcess };
 
 export type IdeProjectServiceOptions = {
   fs?: Partial<FileSystemAdapter>;
@@ -75,13 +77,14 @@ export function createIdeProjectService(options: IdeProjectServiceOptions = {}) 
   async function listFileTree(listOptions: ListFileTreeOptions): Promise<{ rootPath: string; entries: IdeFileTreeEntry[]; truncated: boolean }> {
     const projectRoot = resolveProjectRoot(listOptions.projectRoot);
     const startPath = resolveProjectPath(projectRoot, listOptions.rootPath ?? ".");
+    const trustedStartPath = await resolveTrustedProjectPath(projectRoot, startPath);
     const maxEntries = listOptions.maxEntries ?? DEFAULT_TREE_ENTRY_LIMIT;
     const entries: IdeFileTreeEntry[] = [];
     let truncated = false;
 
     let children: Array<{ name: string; isDirectory: () => boolean }>;
     try {
-      children = await fs.readdir(startPath, { withFileTypes: true });
+      children = await fs.readdir(trustedStartPath, { withFileTypes: true });
     } catch {
       children = [];
     }
@@ -116,7 +119,7 @@ export function createIdeProjectService(options: IdeProjectServiceOptions = {}) 
 
   async function readIdeFile(readOptions: ReadIdeFileOptions): Promise<IdeFileRead> {
     const projectRoot = resolveProjectRoot(readOptions.projectRoot);
-    const absolutePath = resolveProjectPath(projectRoot, readOptions.filePath, externalFileRoots);
+    const absolutePath = await resolveTrustedIdePath(projectRoot, readOptions.filePath);
     const stats = await fs.stat(absolutePath);
     if (!stats.isFile()) {
       throw new Error("IDE file read target is not a file");
@@ -127,7 +130,7 @@ export function createIdeProjectService(options: IdeProjectServiceOptions = {}) 
     const isBinary = isLikelyBinary(buffer);
     const tooLarge = buffer.byteLength > maxBytes;
     const content = isBinary || tooLarge ? undefined : buffer.toString("utf8");
-    const normalizedPath = toProtocolFilePath(projectRoot, absolutePath);
+    const normalizedPath = toProtocolFilePath(projectRoot, resolveProjectPath(projectRoot, readOptions.filePath, externalFileRoots));
 
     return {
       projectId: readOptions.projectId,
@@ -145,8 +148,11 @@ export function createIdeProjectService(options: IdeProjectServiceOptions = {}) 
 
   async function writeIdeFile(writeOptions: WriteIdeFileOptions): Promise<IdeFileRead> {
     const projectRoot = resolveProjectRoot(writeOptions.projectRoot);
-    const absolutePath = resolveProjectPath(projectRoot, writeOptions.filePath, externalFileRoots);
-    const stats = await fs.stat(absolutePath).catch(() => undefined);
+    const absolutePath = await resolveTrustedIdePath(projectRoot, writeOptions.filePath, true);
+    const stats = await fs.stat(absolutePath).catch((error: unknown) => {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return undefined;
+      throw error;
+    });
     if (stats && !stats.isFile()) {
       throw new Error("IDE file write target is not a file");
     }
@@ -191,7 +197,7 @@ export function createIdeProjectService(options: IdeProjectServiceOptions = {}) 
     }
     args.push(searchOptions.query, ".");
 
-    const process = processAdapter.spawn([rgPath, ...args], {
+    const process = processAdapter.spawn({ cmd: [rgPath, ...args],
       cwd: projectRoot,
       stdout: "pipe",
       stderr: "pipe",
@@ -209,7 +215,7 @@ export function createIdeProjectService(options: IdeProjectServiceOptions = {}) 
     if (!repoRoot) {
       return { isRepository: false, changes: [] };
     }
-    const process = processAdapter.spawn(["git", "-C", projectRoot, "status", "--porcelain=v1", "--branch", "-z", "--", "."], {
+    const process = processAdapter.spawn({ cmd: ["git", "-C", projectRoot, "status", "--porcelain=v1", "--branch", "-z", "--", "."],
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore"
@@ -223,7 +229,7 @@ export function createIdeProjectService(options: IdeProjectServiceOptions = {}) 
   }
 
   async function resolveGitRepoRoot(projectRoot: string) {
-    const process = processAdapter.spawn(["git", "-C", projectRoot, "rev-parse", "--show-toplevel"], {
+    const process = processAdapter.spawn({ cmd: ["git", "-C", projectRoot, "rev-parse", "--show-toplevel"],
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore"
@@ -231,6 +237,13 @@ export function createIdeProjectService(options: IdeProjectServiceOptions = {}) 
     const output = await new Response(process.stdout).text();
     const exitCode = await process.exited;
     return exitCode === 0 ? path.resolve(output.trim()) : undefined;
+  }
+
+  async function resolveTrustedIdePath(projectRoot: string, inputPath: string, allowMissing = false) {
+    const candidate = resolveProjectPath(projectRoot, inputPath, externalFileRoots);
+    const root = [projectRoot, ...externalFileRoots].find(root => isInsideProjectPath(path.resolve(root), candidate));
+    if (!root) throw new Error("IDE path is outside the active project");
+    return resolveTrustedProjectPath(root, candidate, { allowMissing });
   }
 
   return { listFileTree, readFile: readIdeFile, writeFile: writeIdeFile, searchProject, gitStatus };
@@ -256,8 +269,7 @@ function toProtocolFilePath(projectRoot: string, absolutePath: string) {
 }
 
 function isInsideResolvedPath(candidatePath: string, rootPath: string) {
-  const relative = path.relative(rootPath, candidatePath);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return isInsideProjectPath(rootPath, candidatePath);
 }
 
 function resolveProjectRoot(projectRoot: string) {
@@ -266,7 +278,7 @@ function resolveProjectRoot(projectRoot: string) {
 
 async function resolveRealProjectRoot(projectRoot: string) {
   const resolved = resolveProjectRoot(projectRoot);
-  return realpath(resolved).catch(() => resolved);
+  return realpath(resolved);
 }
 
 function toProtocolPath(value: string) {

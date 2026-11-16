@@ -3,7 +3,7 @@ import type { BackgroundJobsState, ExecutionControlState, NotificationInboxState
 
 export type RunDiagnosticsViewState = { loading: boolean; windowDays: RunDiagnosticsWindowDays;
   report?: RunDiagnosticsReport };
-export type MainPanelSizes = { left: number; center: number; right: number };
+export type MainPanelSizes = { left: number; center: number; right: number; leftCollapsed?: boolean };
 
 export function createEmptyBackgroundJobsState(): BackgroundJobsState {
   return { jobs: [], runs: [], templates: [] };

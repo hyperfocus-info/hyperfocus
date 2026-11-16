@@ -195,7 +195,7 @@ describe("assistant manager atomic ownership", () => {
     expect(repository.findAssistantByIntentIdentity(stale.projectId!, "ångström recovery", "project")?.id).toBe(stale.id);
     const manager = createManager(repository, createDeferredAdapter()); manager.recoverStaleBootstrapRuns(0);
     expect(manager.cleanupStaleAssistantQuestions()).toBe(1);
-    manager.recoverIdleJobBootstrapChecks(new Date(Date.now() + 20 * 60 * 1000));
+    manager.recoverIdleJobBootstrapChecks(new Date(Date.now() + 1200000));
     expect(repository.getAssistant(stale.id)?.bootstrapState).toBe("failed");
     expect(repository.getAssistantQuestions(idle.id).some((question) => question.id.startsWith("assistant-job-bootstrap:"))).toBe(true);
     expect(repository.getAssistantQuestion(duplicate.id)?.status).toBe("dismissed");

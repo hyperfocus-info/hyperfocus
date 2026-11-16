@@ -1,29 +1,26 @@
+import { formatReasoningStrengthLabel } from "./assistant-panel-model";
+import { useAssistantsPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
-import { For, Show, type JSX } from "solid-js";
+import { Input } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
-import { Bot, ClipboardList, FlaskConical, ListChecks, Logs, MessageSquare, SquarePen } from "lucide-solid";
+import { Bot,ClipboardList,FlaskConical,ListChecks,Logs,MessageSquare,SquarePen } from "lucide-solid";
+import { For,Show,type JSX } from "solid-js";
+import { DEFAULT_COMPOSER_REASONING_STRENGTH,harnessStore,type AssistantDetailTab } from "../../harness-store";
 import { ActionButton } from "../action-button";
-import { Button } from "../primitives/button";
-import { Input } from "../primitives/input";
-import { DEFAULT_COMPOSER_REASONING_STRENGTH, harnessStore, type AssistantDetailTab } from "../../harness-store";
+import { assistantPanelStyles,assistantUtilityStyles } from "../assistants-panel.styles";
 import { FileLinkedText } from "../file-linked-text";
+import { Button } from "../primitives/button";
 import { ExecutionLog } from "../primitives/execution-log";
-import type { AssistantsPanelController } from "./assistant-panel-controller";
-import { assistantPanelStyles, assistantUtilityStyles } from "../assistants-panel.styles";
+import { detailStyles } from "./assistant-detail.styles";
 import { QuestionColumn } from "./question-column";
 
-function formatReasoningStrengthLabel(strength: "low" | "medium" | "high" | "extra-high") {
-  if (strength === "extra-high") return "Extra High";
-  if (strength === "medium") return "Medium";
-  if (strength === "low") return "Low";
-  return "High";
-}
 
-export function AssistantQuestionsTab(props: { controller: AssistantsPanelController }) {
+export function AssistantQuestionsTab() {
+  const controller = useAssistantsPanel();
   const {
     activeTab, answerQuestion, assistantChatFileLinks, executionPauseReason,
     executionPaused, questionAnswers, setQuestionAnswers, visibleQuestions,
-  } = props.controller;
+  } = controller;
   return (
     <Show when={activeTab() === "questions"}>
       <section
@@ -33,7 +30,7 @@ export function AssistantQuestionsTab(props: { controller: AssistantsPanelContro
             assistantUtilityStyles.minH0,
             assistantUtilityStyles.flex1,
             assistantUtilityStyles.gap4,
-            assistantUtilityStyles.lgGridCols2,
+            detailStyles.columns,
           ).class
         }
       >
@@ -73,11 +70,12 @@ export function AssistantQuestionsTab(props: { controller: AssistantsPanelContro
   );
 }
 
-export function AssistantLogTab(props: { controller: AssistantsPanelController }) {
+export function AssistantLogTab() {
+  const controller = useAssistantsPanel();
   const {
     activeTab, assistantChatFileLinks, openAssistantLogSource,
     selectedExecutionLogs, state,
-  } = props.controller;
+  } = controller;
   return (
     <Show when={activeTab() === "log"}>
       <section
@@ -121,10 +119,11 @@ export function AssistantLogTab(props: { controller: AssistantsPanelController }
   );
 }
 
-export function AssistantConfigTab(props: { controller: AssistantsPanelController }) {
+export function AssistantConfigTab() {
+  const controller = useAssistantsPanel();
   const {
     activeTab, assistantChatFileLinks, selectedAssetRefs, selectedAssistant,
-  } = props.controller;
+  } = controller;
   const assistant = () => {
     const current = selectedAssistant();
     if (!current) throw new Error("Assistant configuration requires a selected assistant.");
@@ -139,7 +138,7 @@ export function AssistantConfigTab(props: { controller: AssistantsPanelControlle
             assistantUtilityStyles.minH0,
             assistantUtilityStyles.flex1,
             assistantUtilityStyles.gap4,
-            assistantUtilityStyles.lgGridCols2,
+            detailStyles.columns,
           ).class
         }
       >
@@ -273,6 +272,7 @@ function ConfigCard(props: { title: string; children: JSX.Element }) {
     <section
       class={
         stylex.attrs(
+          detailStyles.readable,
           assistantUtilityStyles.text0675,
           assistantUtilityStyles.leading6,
           assistantUtilityStyles.textMuted,
@@ -298,8 +298,9 @@ function ConfigCard(props: { title: string; children: JSX.Element }) {
   );
 }
 
-export function AssistantDetailNavigation(props: { controller: AssistantsPanelController }) {
-  const { activateJobsTab, activeTab, state } = props.controller;
+export function AssistantDetailNavigation() {
+  const controller = useAssistantsPanel();
+  const { activateJobsTab, activeTab, state } = controller;
   return (
     <>
     <div
@@ -310,6 +311,7 @@ export function AssistantDetailNavigation(props: { controller: AssistantsPanelCo
           assistantUtilityStyles.flex,
           assistantUtilityStyles.gap1,
           assistantUtilityStyles.overflowXAuto,
+          assistantUtilityStyles.shrink0,
           assistantUtilityStyles.borderB,
           assistantUtilityStyles.borderBorder,
         ).class

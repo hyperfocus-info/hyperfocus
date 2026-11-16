@@ -1,4 +1,6 @@
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { createFakeColor } from "../test-support/color.ts";
+import { isRecord } from "@hyperfocus/utilities/records";
+import { registerTestDom } from "../test-support/register-dom.ts";
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import {
@@ -27,7 +29,7 @@ import {
   type ThreeModuleLike
 } from "./3d.ts";
 
-if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
+registerTestDom();
 
 type FakeVector3 = ReturnType<typeof createFakeVector3>;
 type FakeScale = ReturnType<typeof createFakeScale>;
@@ -442,15 +444,6 @@ function createTestConstructor<T extends object>(factory: (args: readonly unknow
   });
 }
 
-function createFakeColor(value: unknown) {
-  const color = { r: 1, g: 1, b: 1 };
-  if (typeof value !== "string" || !/^#[0-9a-f]{6}$/i.test(value)) return color;
-  color.r = Number.parseInt(value.slice(1, 3), 16) / 255;
-  color.g = Number.parseInt(value.slice(3, 5), 16) / 255;
-  color.b = Number.parseInt(value.slice(5, 7), 16) / 255;
-  return color;
-}
-
 function createFakeThree(): ThreeModuleLike {
   return {
     WebGLRenderer: createTestConstructor(() => createFakeRenderer()),
@@ -518,10 +511,6 @@ function readNumberArgument(args: readonly unknown[], index: number, fallback: n
 function readRecordArgument(args: readonly unknown[], index: number): Record<string, unknown> {
   const value = args[index];
   return isRecord(value) ? value : {};
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function requireObject(value: unknown): object {
@@ -867,7 +856,7 @@ test("simplifyThreeBufferGeometry bakes lower-index Three BufferGeometry", async
 });
 
 test("splitThreeInstanceBatchByLod groups matrices by selected LOD mesh", () => {
-  const matrices = new Float32Array(16 * 3);
+  const matrices = new Float32Array(48);
   for (let index = 0; index < 3; index += 1) {
     matrices[index * 16] = 1;
     matrices[index * 16 + 5] = 1;
@@ -927,7 +916,7 @@ test("createThreeBspTree3D rejects unsafe recursion limits", () => {
 test("createThreeRender3D keeps instance batches stable under capacity", async () => {
   const view = await createThreeRender3D({ three: createFakeThree() });
   view.registerMesh("spark", { geometry: createFakeGeometry(), material: createFakeMaterial("spark") });
-  const matrices = new Float32Array(16 * 4);
+  const matrices = new Float32Array(64);
   for (let index = 0; index < 4; index += 1) {
     matrices[index * 16] = 1;
     matrices[index * 16 + 5] = 1;

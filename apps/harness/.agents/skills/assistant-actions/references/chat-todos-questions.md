@@ -1,48 +1,18 @@
-# Chat, Todos, Questions
+# Chat, todos, and questions
 
-Use for direct assistant chat, todo management, question answers, and learnings.
+Use [operation handoffs](operation-handoffs.md) for exact actions and required fields.
 
-## Direct Chat
+Direct chat uses the live `assistant.chat.send` path, which observes global pause,
+assistant pause, deletion, and circuit breakers. Do not bypass these gates through
+SQLite. Use [recovery](recovery.md) if the requested work includes recovery.
 
-Flow:
+Resolve a todo or question by id or unambiguous title/prompt. Todo updates support
+pending, in-progress, blocked, completed, failed, and cancelled; reorder only when
+requested. Verify the saved state and any reprioritization outcome.
 
-1. Resolve assistant.
-2. Check global execution pause, assistant pause, deletion, and circuit breaker.
-3. Use `assistant.chat.send` or the project-chat `chat` handoff from [operation-handoffs.md](operation-handoffs.md).
-4. Stream response into assistant-owned chat state.
-5. Summarize only the user-visible result in project chat when requested.
+Question answers use `assistant.question.answer`; linked work can unblock and
+reprioritize unless globally paused. Do not promise completion of the linked task
+merely because the answer was accepted.
 
-If the assistant is paused or tripped, use [recovery.md](recovery.md).
-
-## Todos
-
-Supported actions:
-
-- Add todo.
-- Mark todo pending, in-progress, blocked, completed, failed, or cancelled.
-- Reorder todos when user gives an explicit priority.
-- Ask for blockers or active todos.
-
-Ask clarification when a todo title matches multiple rows.
-
-Handoff:
-
-- For completion from project chat, use `mark <assistant> todo "<title>" done`.
-- For other states, use `assistant.todo.update`.
-- Verify the todo row state and reprioritize log.
-
-## Questions
-
-Flow:
-
-1. Resolve assistant.
-2. Match pending question by id or prompt text.
-3. Use `assistant.question.answer` or `answer <assistant>'s question: <answer>`.
-4. Unblock linked todos.
-5. Reprioritize assistant after answer unless globally paused.
-
-Ask clarification if multiple pending questions match.
-
-## Learnings
-
-For "what has X learned", use [state-reporting.md](state-reporting.md). For "remember this for X", use `ask <assistant> remember this: <guidance>`; that is a chat handoff, and durable learning is only confirmed when reprioritize writes a new learning. Verify with the state script.
+"Remember this" is a chat handoff. Durable learning is confirmed only when
+reprioritization writes a learning; check [saved state](state-reporting.md).

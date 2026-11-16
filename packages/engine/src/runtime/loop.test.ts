@@ -1,6 +1,26 @@
 import { expect, test } from "bun:test";
 import { createFixedStepDriver, createFixedStepLoop } from "./loop.ts";
 
+test("interrupted backlog drains in bounded advances without discarding time", () => {
+  let updates = 0, renders = 0;
+  const driver = createFixedStepDriver({ step: 0.001, maxFrame: 0.05,
+    update: () => { updates++; }, render: () => { renders++; } });
+  for (let index = 0; index < 300; index++) driver.advanceBy(600, { shouldContinue: () => false });
+  const first = driver.advanceBy(0);
+  expect(first.updates).toBe(10_000);
+  expect(first.interrupted).toBe(true);
+  expect(first.pendingSeconds).toBeCloseTo(5, 8);
+  expect(renders).toBe(0);
+  const second = driver.advanceBy(0);
+  expect(second.updates).toBe(5_000);
+  expect(second.interrupted).toBe(false);
+  expect(second.pendingSeconds).toBeLessThan(0.001);
+  expect(updates).toBe(15_000);
+  expect(renders).toBe(1);
+  driver.reset();
+  expect(driver.snapshot().accumulator).toBe(0);
+});
+
 test("fixed step driver supports timestamp and deterministic delta advancement", () => {
   const calls: string[] = [];
   const driver = createFixedStepDriver({
@@ -13,11 +33,11 @@ test("fixed step driver supports timestamp and deterministic delta advancement",
   });
 
   driver.reset(1000);
-  expect(driver.advance(1250)).toEqual({ rawDelta: 0.25, delta: 0.25, updates: 2, alpha: 0, interrupted: false });
+  expect(driver.advance(1250)).toEqual({ rawDelta: 0.25, delta: 0.25, updates: 2, alpha: 0, interrupted: false, pendingSeconds: 0 });
   expect(calls).toEqual(["before", "update", "after", "before", "update", "after", "render:0.0"]);
 
   calls.length = 0;
-  expect(driver.advanceBy(1)).toEqual({ rawDelta: 1, delta: 0.25, updates: 2, alpha: 0, interrupted: false });
+  expect(driver.advanceBy(1)).toEqual({ rawDelta: 1, delta: 0.25, updates: 2, alpha: 0, interrupted: false, pendingSeconds: 0 });
   expect(calls.at(-1)).toBe("render:0.0");
 });
 
@@ -33,7 +53,35 @@ test("fixed step driver can be interrupted between callbacks", () => {
 
   const result = driver.advanceBy(0.05, { shouldContinue: () => active });
   expect(result.interrupted).toBe(true);
-  expect(result.updates).toBe(0);
+  expect(result.updates).toBe(1);
+  expect(result.alpha).toBe(0);
+  expect(driver.advanceBy(0).updates).toBe(0);
+  expect(renders).toBe(1);
+});
+
+test("fixed step interruption consumes only updates that reached the update boundary", () => {
+  for (const phase of ["before", "update", "after"] as const) {
+    let active = true;
+    let updates = 0;
+    const driver = createFixedStepDriver({ step: 0.125, maxFrame: 0.25,
+      beforeUpdate() { if (phase === "before") active = false; },
+      update() { updates += 1; if (phase === "update") active = false; },
+      afterUpdate() { if (phase === "after") active = false; },
+      render() {} });
+    const result = driver.advanceBy(0.25, { shouldContinue: () => active });
+    expect(result.updates).toBe(phase === "before" ? 0 : 1);
+    expect(result.alpha).toBe(phase === "before" ? 2 : 1);
+    driver.advanceBy(0);
+    expect(updates).toBe(2);
+  }
+});
+
+test("reset during an update remains authoritative", () => {
+  let renders = 0;
+  const driver = createFixedStepDriver({ step: 0.125, maxFrame: 0.25,
+    update() { driver.reset(); }, render() { renders += 1; } });
+  expect(driver.advanceBy(0.25, { shouldContinue: () => driver.snapshot().accumulator > 0 }))
+    .toMatchObject({ updates: 1, alpha: 0, interrupted: true });
   expect(renders).toBe(0);
 });
 

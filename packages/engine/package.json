@@ -19,6 +19,8 @@
     "dist/core.js",
     "dist/wasm-runtime.js",
     "dist/experimental.js",
+    "dist/experimental-simulation-mailbox.js",
+    "dist/experimental-target-rays.js",
     "dist/net.js",
     "dist/protocol.js",
     "dist/server.js",
@@ -27,14 +29,20 @@
     "dist/render-3d.js",
     "dist/render-3d-core.js",
     "dist/render-3d-scene.js",
+    "dist/render-3d-material-presets.js",
     "dist/render-3d-webgl2.js",
     "dist/physics-3d.js",
     "dist/physics-2d.js",
     "dist/physics-rigid-3d.js",
+    "dist/physics-ragdoll-3d.js",
+    "dist/physics-physical-performance-3d.js",
     "dist/motion.js",
+    "dist/motion-pose-safety.js",
     "dist/motion-three.js",
     "dist/migrations.js",
     "dist/project.js",
+    "dist/project-delivery.js",
+    "dist/project-metadata.js",
     "dist/project-runtime-2d.js",
     "dist/project-runtime-timeline-2d.js",
     "dist/project-runtime-navigation-2d.js",
@@ -44,6 +52,9 @@
     "dist/project-filesystem.js",
     "dist/project-neutral-export.js",
     "dist/navigation.js",
+    "dist/combat.js",
+    "dist/combat-net.js",
+    "dist/progression.js",
     "dist/content.js",
     "dist/save.js",
     "dist/save-browser.js",
@@ -58,6 +69,7 @@
     "dist/post-processing-prototype.js",
     "dist/src/",
     "docs/README.md",
+    "docs/project-delivery.md",
     "docs/architectural-resilience-matrix.md",
     "docs/schema/editor-project-v2.schema.json",
     "docs/compatibility-policy.md",
@@ -70,13 +82,29 @@
     "wasm/collision-kernel.scalar.wasm",
     "wasm/collision-kernel.simd.wasm",
     "tooling/cdp-client.ts",
-    "tooling/create-project.ts",
+    "dist/tooling/",
+    "dist/scripts/",
+    "tooling/project-cli.ts",
     "tooling/example-build.ts",
     "tooling/server.ts",
     "readme.md",
-    "third-party-notices.md"
+    "third-party-notices.md",
+    "tooling/create-project.ts",
+    "dist/assets/model-cooking.js"
   ],
   "exports": {
+    "./combat": {
+      "types": "./dist/src/combat/index.d.ts",
+      "import": "./dist/combat.js"
+    },
+    "./combat/net": {
+      "types": "./dist/src/combat/net/protocol.d.ts",
+      "import": "./dist/combat-net.js"
+    },
+    "./progression": {
+      "types": "./dist/src/progression/index.d.ts",
+      "import": "./dist/progression.js"
+    },
     ".": {
       "types": "./dist/src/index.d.ts",
       "import": "./browser/engine.js"
@@ -92,6 +120,14 @@
     "./experimental": {
       "types": "./dist/src/experimental/index.d.ts",
       "import": "./dist/experimental.js"
+    },
+    "./experimental/simulation-mailbox": {
+      "types": "./dist/src/experimental/simulation/mailbox.d.ts",
+      "import": "./dist/experimental-simulation-mailbox.js"
+    },
+    "./experimental/target-rays": {
+      "types": "./dist/src/physics/target-rays.d.ts",
+      "import": "./dist/experimental-target-rays.js"
     },
     "./browser": {
       "types": "./dist/src/index.d.ts",
@@ -121,6 +157,14 @@
       "types": "./tooling/create-project.ts",
       "import": "./tooling/create-project.ts"
     },
+    "./tooling/build-project": {
+      "types": "./dist/tooling/build-project.d.ts",
+      "import": "./dist/tooling/build-project.js"
+    },
+    "./tooling/dev-project": {
+      "types": "./dist/scripts/dev-project.d.ts",
+      "import": "./dist/tooling/dev-project.js"
+    },
     "./tooling/server": {
       "types": "./tooling/server.ts",
       "import": "./tooling/server.ts"
@@ -145,6 +189,10 @@
       "types": "./dist/src/render/3d-scene.d.ts",
       "import": "./dist/render-3d-scene.js"
     },
+    "./render/3d-material-presets": {
+      "types": "./dist/src/render/materials/3d-presets.d.ts",
+      "import": "./dist/render-3d-material-presets.js"
+    },
     "./render/3d-webgl2": {
       "types": "./dist/src/render/3d-webgl2.d.ts",
       "import": "./dist/render-3d-webgl2.js"
@@ -161,6 +209,14 @@
       "types": "./dist/src/physics/rigid-3d.d.ts",
       "import": "./dist/physics-rigid-3d.js"
     },
+    "./physics/ragdoll-3d": {
+      "types": "./dist/src/physics/ragdoll-3d.d.ts",
+      "import": "./dist/physics-ragdoll-3d.js"
+    },
+    "./physics/physical-performance-3d": {
+      "types": "./dist/src/physics/physical-performance-3d.d.ts",
+      "import": "./dist/physics-physical-performance-3d.js"
+    },
     "./motion": {
       "types": "./dist/src/motion/index.d.ts",
       "import": "./dist/motion.js"
@@ -169,6 +225,10 @@
       "types": "./dist/src/motion/three.d.ts",
       "import": "./dist/motion-three.js"
     },
+    "./motion/solvers/pose-safety": {
+      "types": "./dist/src/motion/solvers/pose-safety.d.ts",
+      "import": "./dist/motion-pose-safety.js"
+    },
     "./migrations": {
       "types": "./dist/src/migrations/index.d.ts",
       "import": "./dist/migrations.js"
@@ -176,6 +236,14 @@
     "./project": {
       "types": "./dist/src/project/index.d.ts",
       "import": "./dist/project.js"
+    },
+    "./project/metadata": {
+      "types": "./dist/src/project/metadata/index.d.ts",
+      "import": "./dist/project-metadata.js"
+    },
+    "./project/delivery": {
+      "types": "./dist/src/project/delivery/index.d.ts",
+      "import": "./dist/project-delivery.js"
     },
     "./project/runtime-2d": {
       "types": "./dist/src/project/runtime-2d.d.ts",
@@ -287,6 +355,10 @@
     "./wasm/collision-kernel.simd.wasm?url": {
       "types": "./wasm/collision-kernel.wasm.d.ts",
       "default": "./wasm/collision-kernel.simd.wasm"
+    },
+    "./assets/model-cooking": {
+      "types": "./dist/src/assets/model-cooking.d.ts",
+      "import": "./dist/assets/model-cooking.js"
     }
   },
   "scripts": {
@@ -303,10 +375,13 @@
     "build:render-3d": "esbuild ./src/render/3d.ts --bundle --minify --format=esm --external:three --outfile=./dist/render-3d.js",
     "build:render-3d-core": "esbuild ./src/render/3d-core.ts --bundle --minify --format=esm --outfile=./dist/render-3d-core.js",
     "build:render-3d-scene": "esbuild ./src/render/3d-scene.ts --bundle --minify --format=esm --outfile=./dist/render-3d-scene.js",
+    "build:render-3d-material-presets": "esbuild ./src/render/materials/3d-presets.ts --bundle --minify --format=esm --outfile=./dist/render-3d-material-presets.js",
     "build:render-3d-webgl2": "esbuild ./src/render/3d-webgl2.ts --bundle --minify --format=esm --outfile=./dist/render-3d-webgl2.js",
     "build:physics-3d": "esbuild ./src/physics/3d.ts --bundle --minify --format=esm --outfile=./dist/physics-3d.js",
     "build:physics-2d": "esbuild ./src/physics/2d.ts --bundle --minify --format=esm --outfile=./dist/physics-2d.js",
     "build:physics-rigid-3d": "esbuild ./src/physics/rigid-3d.ts --bundle --minify --format=esm --outfile=./dist/physics-rigid-3d.js",
+    "build:physics-ragdoll-3d": "esbuild ./src/physics/ragdoll-3d.ts --bundle --minify --format=esm --outfile=./dist/physics-ragdoll-3d.js",
+    "build:physics-physical-performance-3d": "esbuild ./src/physics/physical-performance-3d.ts --bundle --minify --format=esm --outfile=./dist/physics-physical-performance-3d.js",
     "build:motion": "esbuild ./src/motion/index.ts --bundle --minify --format=esm --outfile=./dist/motion.js",
     "build:motion-three": "esbuild ./src/motion/three.ts --bundle --minify --format=esm --external:three --outfile=./dist/motion-three.js",
     "build:migrations": "esbuild ./src/migrations/index.ts --bundle --minify --format=esm --outfile=./dist/migrations.js",
@@ -319,9 +394,9 @@
     "build:project-runtime-3d": "esbuild ./src/project/runtime-3d.ts --bundle --minify --format=esm --outfile=./dist/project-runtime-3d.js",
     "build:project-filesystem": "esbuild ./src/project/filesystem.ts --bundle --minify --format=esm --platform=node --outfile=./dist/project-filesystem.js",
     "build:project-neutral-export": "esbuild ./src/project/neutral-export.ts --bundle --minify --format=esm --outfile=./dist/project-neutral-export.js",
-    "create:project": "bun ./scripts/create-project.ts",
+    "create:project": "bun ./tooling/project-cli.ts create",
     "export:project": "bun ./scripts/export-project.ts",
-    "dev:game": "bun ./scripts/dev-project.ts",
+    "dev:game": "bun ./tooling/project-cli.ts dev",
     "edit:project": "bun ./scripts/edit-project.ts",
     "verify:beginner": "bun ./scripts/beginner-journey.ts",
     "verify:3d-action": "bun test ./scripts/3d-action-acceptance.test.ts",
@@ -329,8 +404,9 @@
     "verify:incident": "bun ./scripts/production-incident-drill.ts",
     "soak:production": "bun ./scripts/authoritative-soak.ts",
     "certify:package": "bun ./scripts/production-readiness.ts --claim=package",
+    "prepublishOnly": "bun run certify:package",
     "certify:mmo": "bun ./scripts/production-readiness.ts --claim=mmo",
-    "build:game": "bun ./scripts/build-project.ts",
+    "build:game": "bun ./tooling/project-cli.ts build",
     "build:navigation": "esbuild ./src/navigation/index.ts --bundle --minify --format=esm --outfile=./dist/navigation.js",
     "build:content": "esbuild ./src/content/index.ts --bundle --minify --format=esm --outfile=./dist/content.js",
     "build:save": "esbuild ./src/save/index.ts --bundle --minify --format=esm --outfile=./dist/save.js",
@@ -406,13 +482,17 @@
     "bench:example:three-arena:network": "bun run ./examples/three-arena/network-bench.ts",
     "bench:example:three-arena:stress500": "bun run ./examples/three-arena/bench.ts --stress-enemies 500 --stress-pickups 500 --stress-effects 1000 --stress-all-props --duration-ms 10000 --assert-enemies 500 --assert-pickups 500 --assert-particles 1000 --assert-animated-enemies-max 4 --assert-frame-p95-ms 16.7 --assert-update-p95-ms 8 --assert-render-p95-ms 10 --assert-triangles-max 45000 --assert-programs-max 48 --assert-mesh-delta-max 8 --assert-material-delta-max 8"
   },
+  "dependencies": {
+    "esbuild": "0.28.1",
+    "@hyperfocus/utilities": "0.0.1"
+  },
   "devDependencies": {
+    "@hyperfocus/desktop-runtime": "workspace:*",
     "@hyperfocus/performance": "workspace:*",
     "@happy-dom/global-registrator": "20.11.6",
     "@types/bun": "1.4.0",
     "@types/three": "0.163.0",
     "assemblyscript": "0.28.17",
-    "esbuild": "0.28.1",
     "flatbush": "^4.6.0",
     "kdbush": "^4.1.0",
     "meshoptimizer": "0.18.1",
@@ -420,7 +500,8 @@
     "puppeteer-core": "^25.8.0",
     "rbush": "^4.0.1",
     "three": "^0.163.0",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "@hyperfocus/branding": "workspace:*"
   },
   "peerDependencies": {
     "@types/three": "^0.163.0",
@@ -432,6 +513,12 @@
     },
     "three": {
       "optional": true
+    }
+  },
+  "imports": {
+    "#project-starter": {
+      "types": "./dist/tooling/create-project-runtime.d.ts",
+      "default": "./dist/tooling/create-project.js"
     }
   }
 }

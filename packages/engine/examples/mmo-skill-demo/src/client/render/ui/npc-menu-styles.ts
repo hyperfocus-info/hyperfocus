@@ -129,7 +129,7 @@ const NPC_MENU_STYLES = `
 }
 .mmo-dialog-topic-meta {
   color: #b8c9cf;
-  font-size: 11px;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
 .mmo-npc-menu-close {
@@ -151,7 +151,7 @@ const NPC_MENU_STYLES = `
 }
 .mmo-npc-menu-prompt {
   color: #d9e7e9;
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0;
   opacity: 0.86;
@@ -257,7 +257,7 @@ const NPC_MENU_STYLES = `
 .mmo-market-count,
 .mmo-market-price {
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 0.75rem;
   font-weight: 900;
   line-height: 1;
   padding: 3px 5px;

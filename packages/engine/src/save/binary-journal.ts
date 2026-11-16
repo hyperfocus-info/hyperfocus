@@ -21,7 +21,7 @@ const VERSION = 1;
 const KIND_SNAPSHOT = 0;
 const KIND_DELTA = 1;
 const HEADER_BYTES = 40;
-const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
+const DEFAULT_MAX_BYTES = 4194304;
 const DEFAULT_MAX_OPERATIONS = 65_535;
 
 function u32(value: number, label: string) {

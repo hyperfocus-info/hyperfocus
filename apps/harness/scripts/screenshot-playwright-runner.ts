@@ -1,3 +1,4 @@
+import { connectHeadlessBrowser } from "@hyperfocus/desktop-runtime/automation";
 import path from "node:path";
 
 type ScreenshotViewport = { name: string; width: number; height: number };
@@ -19,7 +20,11 @@ if (!baseUrl || !opts) {
 }
 
 const playwright = await import("playwright");
-const browser = await playwright.chromium.launch();
+const ownedBrowser = await connectHeadlessBrowser({
+  executable: playwright.chromium.executablePath(),
+  connect: (endpoint) => playwright.chromium.connectOverCDP(endpoint, { timeout: 10_000 }),
+});
+const browser = ownedBrowser.browser;
 
 function slugifyRoute(route: string) {
   const trimmed = route.replace(/^\/+|\/+$/g, "");
@@ -71,5 +76,5 @@ try {
   }
   console.log(JSON.stringify({ artifacts }));
 } finally {
-  await browser.close().catch(() => undefined);
+  try { await browser.close(); } finally { await ownedBrowser.close(); }
 }

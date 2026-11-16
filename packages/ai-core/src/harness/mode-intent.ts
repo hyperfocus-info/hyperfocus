@@ -1,3 +1,4 @@
+import { clamp01 } from "@hyperfocus/utilities/math";
 import type { ModeDefinition } from "./protocol/conversation";
 
 /**
@@ -427,9 +428,7 @@ function hasGlobalMatch(input: string, pattern: RegExp) {
   return !iterator.next().done;
 }
 
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
+
 
 function exactKeywordShortcut(normalized: string) {
   for (const id of builtinAutoModeIds) {

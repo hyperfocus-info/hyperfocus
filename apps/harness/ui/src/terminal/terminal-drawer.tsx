@@ -1,26 +1,30 @@
-import { Match, Show, Switch, createEffect, createMemo, createSignal, onMount } from "solid-js";
+import { createRequestId,type CliSession,type TerminalSession } from "@hyperfocus/ai-core/protocol";
+import { Input } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
-import { ClipboardCheck, ChevronDown, Copy, Plus, RotateCw, Search, Settings2, Square, TerminalSquare } from "lucide-solid";
-import { createRequestId, type CliSession, type TerminalEnvVar, type TerminalSession } from "@hyperfocus/ai-core/protocol";
-import { harnessStore, getActiveProject, type ViewProjectState } from "../harness-store";
-import { sendCliSessionInput } from "../harness-websocket";
+import { ChevronDown,ClipboardCheck,Copy,Plus,RotateCw,Search,Settings2,Square,TerminalSquare } from "lucide-solid";
+import { Match,Show,Switch,createEffect,createMemo,createSignal,onMount } from "solid-js";
+import { lazySurface } from "../app/lazy-surface";
 import { ActionButton } from "../components/action-button";
-import { DropdownControl } from "../components/primitives/dropdown";
-import { Input } from "../components/primitives/input";
-import { Textarea } from "../components/primitives/textarea";
 import { Dialog } from "../components/primitives/dialog";
-import { terminalStore } from "./terminal-store";
-import { TerminalTabs, type TerminalTabItem } from "./terminal-tabs";
-import { TerminalSplitLayout, createDefaultTerminalLayout } from "./terminal-split-layout";
-import { TerminalSearch } from "./terminal-search";
-import { XtermRenderer, type XtermRendererHandle } from "./renderers/xterm-renderer";
+import { DropdownControl } from "../components/primitives/dropdown";
+import { Textarea } from "../components/primitives/textarea";
+import { getActiveProject,harnessStore,type ViewProjectState } from "../harness-store";
+import { sendCliSessionInput } from "../harness-websocket";
+import { parseEnvText } from "./environment-fields";
 import { SolidTerminalRendererPrototype } from "./renderers/solid-renderer-prototype";
+import type { XtermRendererHandle } from "./renderers/xterm-renderer";
+import { resolveTerminalKeyboardAction } from "./terminal-keybindings";
 import { normalizeTerminalGlyphSpacing } from "./terminal-output-format";
 import { shouldUseSolidTerminalRenderer } from "./terminal-renderer-mode";
-import { closeTerminalSearch, openTerminalSearch, toggleTerminalSearch } from "./terminal-search-actions";
-import { resolveTerminalKeyboardAction } from "./terminal-keybindings";
-import { ownTerminalCreatingAttachRequest, prepareManualTerminalReconnect, requestCliAttach, requestTerminalAttach } from "./terminal-transport";
-import { terminalStyles as styles, terminalUtilities as utilities } from "./terminal.styles";
+import { TerminalSearch } from "./terminal-search";
+import { closeTerminalSearch,openTerminalSearch,toggleTerminalSearch } from "./terminal-search-actions";
+import { TerminalSplitLayout,createDefaultTerminalLayout } from "./terminal-split-layout";
+import { terminalStore } from "./terminal-store";
+import { TerminalTabs,type TerminalTabItem } from "./terminal-tabs";
+import { ownTerminalCreatingAttachRequest,prepareManualTerminalReconnect,requestCliAttach,requestTerminalAttach } from "./terminal-transport";
+import { terminalStyles as styles,terminalUtilities as utilities } from "./terminal.styles";
+
+const XtermRenderer = lazySurface("terminal renderer", async () => ({ default: (await import("./renderers/xterm-renderer")).XtermRenderer }));
 
 type DrawerSession =
   | {
@@ -462,94 +466,101 @@ function EmptyTerminalState(props: { onCreate: () => void }) {
   );
 }
 
+// A tab slot can select a different CLI session without unmounting the drawer.
 function CliSessionDrawerPane(props: { session: CliSession; name: string }) {
-  const [renderer, setRenderer] = createSignal<XtermRendererHandle>();
-  const activeProject = () => getActiveProject(harnessStore.state);
-  const terminalState = () => harnessStore.state.cliSessionTerminal[props.session.id];
-  const output = () => normalizeTerminalGlyphSpacing(`${terminalState()?.stdout ?? ""}${terminalState()?.stderr ?? ""}`);
-  const connectionState = () => (terminalState()?.connected ? "attached" : "detached");
+  const identity = createMemo(() => JSON.stringify([props.session.projectId, props.session.id]));
+  return <Show keyed when={identity()}>{(key) => key && renderSession()}</Show>;
 
-  const stopSession = () => {
-    harnessStore.actions.sendCommand({
-      type: "cli-session.stop",
-      requestId: createRequestId(),
-      payload: {
-        projectId: props.session.projectId,
-        threadId: props.session.threadId,
-        sessionId: props.session.id
+  function renderSession() {
+    const [renderer, setRenderer] = createSignal<XtermRendererHandle>();
+    const activeProject = () => getActiveProject(harnessStore.state);
+    const terminalState = () => harnessStore.state.cliSessionTerminal[props.session.id];
+    const output = () => normalizeTerminalGlyphSpacing(`${terminalState()?.stdout ?? ""}${terminalState()?.stderr ?? ""}`);
+    const connectionState = () => (terminalState()?.connected ? "attached" : "detached");
+
+    const stopSession = () => {
+      harnessStore.actions.sendCommand({
+        type: "cli-session.stop",
+        requestId: createRequestId(),
+        payload: {
+          projectId: props.session.projectId,
+          threadId: props.session.threadId,
+          sessionId: props.session.id
+        }
+      });
+    };
+
+    const attachSession = () => {
+      requestCliAttach(harnessStore.actions.sendCommand, { requestId: createRequestId(), projectId: props.session.projectId,
+        threadId: props.session.threadId, sessionId: props.session.id });
+    };
+
+    const captureVisibleState = () => {
+      const terminal = terminalState();
+      if (!terminal) {
+        return;
       }
-    });
-  };
+      harnessStore.actions.sendCommand({
+        type: "cli-session.capture-visible-buffer",
+        requestId: createRequestId(),
+        payload: {
+          projectId: props.session.projectId,
+          threadId: props.session.threadId,
+          sessionId: props.session.id,
+          visibleBuffer: terminal.stdout.slice(-64_000),
+          stderrTail: terminal.stderr.slice(-32_000)
+        }
+      });
+    };
 
-  const attachSession = () => {
-    requestCliAttach(harnessStore.actions.sendCommand, { requestId: createRequestId(), projectId: props.session.projectId,
-      threadId: props.session.threadId, sessionId: props.session.id });
-  };
-
-  const captureVisibleState = () => {
-    const terminal = terminalState();
-    if (!terminal) {
-      return;
-    }
-    harnessStore.actions.sendCommand({
-      type: "cli-session.capture-visible-buffer",
-      requestId: createRequestId(),
-      payload: {
-        projectId: props.session.projectId,
-        threadId: props.session.threadId,
-        sessionId: props.session.id,
-        visibleBuffer: terminal.stdout.slice(-64_000),
-        stderrTail: terminal.stderr.slice(-32_000)
-      }
-    });
-  };
-
-  return (
-    <section class={stylex.attrs(styles.surface, utilities.flex, utilities.hFull, utilities.minH0, utilities.minW0, utilities.flex1, utilities.flexCol, utilities.border).class} data-test-cli-terminal-pane={props.session.id}>
-      <div class={stylex.attrs(utilities.flex, utilities.minH11, utilities.shrink0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2, utilities.borderB, utilities.borderDefault, utilities.px3, utilities.py15).class}>
-        <div class={stylex.attrs(utilities.minW0).class}>
-          <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flexWrap, utilities.itemsCenter, utilities.gapX2, utilities.gapY05, utilities.fontMono, utilities.text072, utilities.leading4, styles.muted).class}>
-            <span class={stylex.attrs(utilities.truncate, utilities.fontSemibold, styles.foreground).class}>{props.name}</span>
-            <span>{"\u2022"}</span>
-            <span>{connectionState()}</span>
-            <span>{"\u2022"}</span>
-            <span>{props.session.cols}x{props.session.rows}</span>
+    return (
+      <section class={stylex.attrs(styles.surface, utilities.flex, utilities.hFull, utilities.minH0, utilities.minW0, utilities.flex1, utilities.flexCol, utilities.border).class} data-test-cli-terminal-pane={props.session.id}>
+        <div class={stylex.attrs(utilities.flex, utilities.minH11, utilities.shrink0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2, utilities.borderB, utilities.borderDefault, utilities.px3, utilities.py15).class}>
+          <div class={stylex.attrs(utilities.minW0).class}>
+            <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flexWrap, utilities.itemsCenter, utilities.gapX2, utilities.gapY05, utilities.fontMono, utilities.text072, utilities.leading4, styles.muted).class}>
+              <span class={stylex.attrs(utilities.truncate, utilities.fontSemibold, styles.foreground).class}>{props.name}</span>
+              <span>{"\u2022"}</span>
+              <span>{connectionState()}</span>
+              <span>{"\u2022"}</span>
+              <span>{props.session.cols}x{props.session.rows}</span>
+            </div>
+            <div class={stylex.attrs(utilities.text062, utilities.leading4, styles.muted).class}>Spawned agent/CLI-created session</div>
           </div>
-          <div class={stylex.attrs(utilities.text062, utilities.leading4, styles.muted).class}>Spawned agent/CLI-created session</div>
+          <div class={stylex.attrs(utilities.flex, utilities.shrink0, utilities.itemsCenter, utilities.gap1).class}>
+            {terminalStore.state.searchOpen && (
+              <TerminalSearch
+                onNext={() => renderer()?.findNext(terminalStore.state.searchQuery)}
+                onPrevious={() => renderer()?.findPrevious(terminalStore.state.searchQuery)}
+              />
+            )}
+            <ActionButton tooltip="Search terminal" ariaLabel="Search terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Search class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={openTerminalSearch} />
+            <ActionButton tooltip="Reconnect CLI terminal" ariaLabel="Reconnect CLI terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<RotateCw class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={attachSession} />
+            <ActionButton tooltip="Capture current terminal state for follow-up" ariaLabel="Capture CLI terminal state" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<ClipboardCheck class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={captureVisibleState} />
+            <ActionButton tooltip="Stop CLI terminal" ariaLabel="Stop CLI terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Square class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={stopSession} />
+          </div>
         </div>
-        <div class={stylex.attrs(utilities.flex, utilities.shrink0, utilities.itemsCenter, utilities.gap1).class}>
-          {terminalStore.state.searchOpen && (
-            <TerminalSearch
-              onNext={() => renderer()?.findNext(terminalStore.state.searchQuery)}
-              onPrevious={() => renderer()?.findPrevious(terminalStore.state.searchQuery)}
+        <div class={stylex.attrs(styles.surface, utilities.minH0, utilities.flex1).class}>
+          {shouldUseSolidTerminalRenderer(terminalStore.state.preferences.rendererMode) ? (
+            <SolidTerminalRendererPrototype output={output()} onInput={(input) => sendCliSessionInput(props.session.id, input)} />
+          ) : (
+            <XtermRenderer
+              sessionId={props.session.id}
+              projectId={props.session.projectId}
+              output={output()}
+              searchQuery={terminalStore.state.searchQuery}
+              copyOnSelect={terminalStore.state.preferences.copyOnSelect}
+              ctrlCMode={terminalStore.state.preferences.ctrlCMode}
+              sessionCwd={props.session.cwd}
+              projectRoot={activeProject()?.rootPath ?? props.session.cwd}
+              onOpenFile={(path, line, column) => harnessStore.openIdeFile(path, line, column)}
+              onInput={(input) => sendCliSessionInput(props.session.id, input)}
+              onReady={setRenderer}
             />
           )}
-          <ActionButton tooltip="Search terminal" ariaLabel="Search terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Search class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={openTerminalSearch} />
-          <ActionButton tooltip="Reconnect CLI terminal" ariaLabel="Reconnect CLI terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<RotateCw class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={attachSession} />
-          <ActionButton tooltip="Capture current terminal state for follow-up" ariaLabel="Capture CLI terminal state" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<ClipboardCheck class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={captureVisibleState} />
-          <ActionButton tooltip="Stop CLI terminal" ariaLabel="Stop CLI terminal" variant="ghost" size="icon" class={stylex.attrs(styles.action, utilities.h7, utilities.w7, utilities.roundedLg).class} icon={<Square class={stylex.attrs(utilities.h35, utilities.w35).class} />} onClick={stopSession} />
         </div>
-      </div>
-      <div class={stylex.attrs(styles.surface, utilities.minH0, utilities.flex1).class}>
-        {shouldUseSolidTerminalRenderer(terminalStore.state.preferences.rendererMode) ? (
-          <SolidTerminalRendererPrototype output={output()} onInput={(input) => sendCliSessionInput(props.session.id, input)} />
-        ) : (
-          <XtermRenderer
-            sessionId={props.session.id}
-            output={output()}
-            searchQuery={terminalStore.state.searchQuery}
-            copyOnSelect={terminalStore.state.preferences.copyOnSelect}
-            ctrlCMode={terminalStore.state.preferences.ctrlCMode}
-            sessionCwd={props.session.cwd}
-            projectRoot={activeProject()?.rootPath ?? props.session.cwd}
-            onOpenFile={(path, line, column) => harnessStore.openIdeFile(path, line, column)}
-            onInput={(input) => sendCliSessionInput(props.session.id, input)}
-            onReady={setRenderer}
-          />
-        )}
-      </div>
-    </section>
-  );
+      </section>
+    );
+  }
 }
 
 function formatCliSessionName(session: CliSession, project: ViewProjectState) {
@@ -557,21 +568,4 @@ function formatCliSessionName(session: CliSession, project: ViewProjectState) {
   const threadTitle = project.threads.find((thread) => thread.id === session.threadId)?.title;
   const suffix = threadTitle ?? session.runId ?? session.threadId;
   return `${agentLabel} - ${suffix}`.slice(0, 128);
-}
-
-function parseEnvText(input: string): TerminalEnvVar[] {
-  return input
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 64)
-    .map((line) => {
-      const [name, ...valueParts] = line.split("=");
-      return {
-        name,
-        value: valueParts.join("="),
-        secret: /\b(secret|token|key|password)\b/i.test(name)
-      };
-    })
-    .filter((entry) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(entry.name));
 }

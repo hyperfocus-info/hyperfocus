@@ -1,4 +1,13 @@
-import type { PlayableEntitySnapshot, PlayableWorldSnapshot } from "./runtime-2d-contracts.ts";
+import { assertIntegerRange, assertText } from "./timeline/validation.ts";
+
+import { modulo } from "@hyperfocus/utilities/math";
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
+import type { PlayableEntitySnapshot, PlayableWorldSnapshot } from "./runtime2d/runtime-2d-contracts.ts";
+import { validateTimelineEffectPlacement2D } from './metadata/index.ts';
+import { assertTimelineFinite as assertFinite, assertTimelineRange as assertRange } from './metadata/numeric.ts';
+export { validateTimelineEffectPlacement2D } from './metadata/index.ts';
+import { PARTICLE_PRESETS_2D, isParticlePresetId2D, isTransitionPresetId2D } from "../effects/creative-presets.ts";
 
 const MAX_TRACKS = 2_048;
 const MAX_KEYFRAMES_PER_TRACK = 100_000;
@@ -9,7 +18,7 @@ const MAX_EVENT_OCCURRENCES_PER_ADVANCE = 4_096;
 const MAX_ADVANCE_SECONDS = 60;
 const EPSILON = 1e-9;
 
-export type TimelineEasing2D = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "bounce";
+export type TimelineEasing2D = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "bounce" | "hold";
 export type TimelineProperty2D = "x" | "y" | "scale" | "rotation" | "opacity" | "camera";
 export type TimelineEventKind2D = "audio" | "logic" | "camera" | "marker";
 
@@ -70,7 +79,7 @@ export type TimelineEvent2D = {
   kind: TimelineEventKind2D;
 };
 
-export type TimelineEffectKind2D = "camera-shake" | "particle-burst" | "hit-flash";
+export type TimelineEffectKind2D = "camera-shake" | "particle-burst" | "hit-flash" | "screen-transition";
 
 export type TimelineEffect2D = {
   id: string;
@@ -82,6 +91,13 @@ export type TimelineEffect2D = {
   intensity: number;
   color?: string;
   particleCount?: number;
+  preset?: string;
+  /** Foreground is the default; background particles sit behind scene subjects. */
+  layer?: "foreground" | "background";
+  /** Weather defaults to screen space, even when older cues carry a target. */
+  space?: "screen" | "target";
+  /** Normalized viewport coverage, with each start strictly before its end. */
+  region?: { fromX: number; fromY: number; toX: number; toY: number };
 };
 
 export type SampledTimelineEffect2D = TimelineEffect2D & {
@@ -143,6 +159,8 @@ export type TimelineClipOverride2D = {
   trackId: string;
   targetId: string;
   clipId: string;
+  /** The selected cue's timeline frame; clip playback begins at zero here. */
+  startFrame?: number;
 };
 
 export type TimelineEventOccurrence2D = {
@@ -203,7 +221,7 @@ export function auditPlayableTimeline2D(project: PlayableTimelineProject2D): Tim
       diagnostics.push({ severity: "warning", code: "timeline-camera-track-unsupported", trackId: track.id, targetId: track.targetId, message: `Timeline camera track ${track.label} (${track.id}) is authored but the 2D standalone runtime does not execute camera blends.` });
       continue;
     }
-    if (entityIds.size && !entityIds.has(track.targetId)) {
+    if (entityIds.size && !entityIds.has(track.targetId) && track.targetId !== TIMELINE_CAMERA_TARGET_2D) {
       diagnostics.push({ severity: "warning", code: "timeline-track-target-missing", trackId: track.id, targetId: track.targetId, message: `Timeline track ${track.label} (${track.id}) targets missing 2D entity ${track.targetId}.` });
     }
     const key = `${track.targetId}\u0000${track.property}`;
@@ -249,7 +267,7 @@ export function auditPlayableTimeline2D(project: PlayableTimelineProject2D): Tim
     });
   }
   for (const effect of timeline.effects ?? []) {
-    if (effect.kind === "camera-shake") continue;
+    if (effect.kind !== "hit-flash") continue;
     if (!effect.targetId || entityIds.size && !entityIds.has(effect.targetId)) diagnostics.push({
       severity: "warning",
       code: "timeline-effect-target-missing",
@@ -271,7 +289,7 @@ export function evaluateTimelineTrack2D(track: TimelineTrack2D, frame: number): 
   if (!first || !last) return undefined;
   if (frame <= first.frame) return first.value;
   if (frame >= last.frame) return last.value;
-  const rightIndex = upperBoundKeyframe(keys, frame);
+  const rightIndex = upperBoundFrame(keys, frame);
   const right = keys[rightIndex];
   const left = keys[rightIndex - 1];
   if (!right || !left) throw new Error("timeline keyframe search produced an invalid interval");
@@ -280,17 +298,43 @@ export function evaluateTimelineTrack2D(track: TimelineTrack2D, frame: number): 
   return left.value + (right.value - left.value) * progress;
 }
 
+/** Reserved target for portable scene-camera x/y/zoom tracks; it is not a world entity. */
+export const TIMELINE_CAMERA_TARGET_2D = "@scene-camera";
+
+export function sampleTimelineCamera2D(options: { timeline: { tracks: readonly TimelineTrack2D[] } | undefined; frame: number; viewport?: { width: number; height: number } }) {
+  if (options.viewport && (!Number.isFinite(options.viewport.width) || options.viewport.width <= 0 || !Number.isFinite(options.viewport.height) || options.viewport.height <= 0)) throw new Error("Camera viewport dimensions must be positive finite numbers.");
+  let active = false;
+  const camera = { x: (options.viewport?.width ?? 760) / 2, y: (options.viewport?.height ?? 480) / 2, zoom: 1 };
+  for (const track of options.timeline?.tracks ?? []) {
+    if (track.targetId !== TIMELINE_CAMERA_TARGET_2D || track.muted || !track.keyframes.length) continue;
+    if (track.property !== "x" && track.property !== "y" && track.property !== "scale") continue;
+    const value = evaluateTimelineTrack2D(track, options.frame);
+    if (value === undefined) continue;
+    active = true;
+    if (track.property === "scale") camera.zoom = Math.max(.01, value);
+    else camera[track.property] = value;
+  }
+  return active ? camera : undefined;
+}
+
 /** Samples a stepped animation state. Before the first cue, the sprite component's default clip remains active. */
 export function evaluateTimelineClipTrack2D(track: TimelineClipTrack2D, frame: number): string | undefined {
+  return evaluateTimelineClipCue2D({ track, frame })?.clipId;
+}
+
+/** Samples the winning cue and its start time, so late non-looping clips start at their first pose. */
+export function evaluateTimelineClipCue2D(options: { track: TimelineClipTrack2D; frame: number }): TimelineClipKeyframe2D | undefined {
+  const { track, frame } = options;
   if (track.muted) return undefined;
   assertFinite(frame, "timeline clip evaluation frame");
   const keys = normalizeClipKeyframes(track.keyframes);
   if (!keys.length || frame < keys[0]!.frame) return undefined;
-  return keys[Math.max(0, upperBoundClipKeyframe(keys, frame) - 1)]?.clipId;
+  return keys[Math.max(0, upperBoundFrame(keys, frame) - 1)];
 }
 
 export function applyTimelineEasing2D(value: number, easing: TimelineEasing2D) {
   const progress = clamp(value, 0, 1);
+  if (easing === "hold") return progress < 1 ? 0 : 1;
   if (easing === "ease-in") return progress * progress;
   if (easing === "ease-out") return 1 - (1 - progress) * (1 - progress);
   if (easing === "ease-in-out") return progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
@@ -308,23 +352,17 @@ export function sampleTimelineEffects2D(timeline: TimelineDeclaration2D | undefi
   return timeline.effects.flatMap((effect) => {
     const progress = (frame - effect.frame) / effect.durationFrames;
     if (progress < 0 || progress > 1) return [];
-    const envelope = effect.kind === "particle-burst"
-      ? 1 - progress
-      : Math.sin(Math.PI * Math.pow(progress, effect.kind === "camera-shake" ? 0.42 : 0.7));
+    const envelope = effect.kind === "screen-transition" && effect.durationFrames === 1
+      ? frame === effect.frame ? 1 : 0
+      : effect.kind === "particle-burst"
+        ? isParticlePresetId2D(effect.preset) && PARTICLE_PRESETS_2D[effect.preset].placement !== "burst" ? 1 : 1 - progress
+        : Math.sin(Math.PI * Math.pow(progress, effect.kind === "camera-shake" ? 0.42 : 0.7));
     return [{ ...effect, progress: clamp(progress, 0, 1), envelope: clamp(envelope, 0, 1) }];
   });
 }
 
-/** Stable pseudo-random sample for camera offsets and particle directions. */
-export function timelineEffectNoise2D(effectId: string, sample: number) {
-  let hash = 2_166_136_261;
-  const source = `${effectId}:${Math.floor(sample)}`;
-  for (let index = 0; index < source.length; index += 1) {
-    hash ^= source.charCodeAt(index);
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return ((hash >>> 0) / 0xffff_ffff) * 2 - 1;
-}
+
+
 
 /**
  * Applies evaluated values to a transient world snapshot. The source snapshot, world, and canonical project remain untouched.
@@ -401,9 +439,9 @@ export function createPlayableTimeline2D(project: PlayableTimelineProject2D): Pl
     const winners = new Map<string, TimelineClipOverride2D>();
     for (const track of clipTracks) {
       if (track.muted) continue;
-      const clipId = evaluateNormalizedClipTrack(track, frame);
-      if (clipId === undefined) continue;
-      winners.set(track.targetId, { trackId: track.id, targetId: track.targetId, clipId });
+      const cue = evaluateNormalizedClipTrack(track, frame);
+      if (cue === undefined) continue;
+      winners.set(track.targetId, { trackId: track.id, targetId: track.targetId, clipId: cue.clipId, startFrame: cue.frame });
     }
     return [...winners.values()];
   };
@@ -411,8 +449,8 @@ export function createPlayableTimeline2D(project: PlayableTimelineProject2D): Pl
   const appendEvents = (
     target: TimelineEventOccurrence2D[], start: number, end: number, includeStart: boolean, includeEnd: boolean
   ): number => {
-    const first = includeStart ? lowerBoundEvent(events, start) : upperBoundEvent(events, start);
-    const last = includeEnd ? upperBoundEvent(events, end) : lowerBoundEvent(events, end);
+    const first = includeStart ? lowerBoundEvent(events, start) : upperBoundFrame(events, start);
+    const last = includeEnd ? upperBoundFrame(events, end) : lowerBoundEvent(events, end);
     const count = Math.max(0, last - first);
     const available = Math.max(0, MAX_EVENT_OCCURRENCES_PER_ADVANCE - target.length);
     const appended = Math.min(count, available);
@@ -511,7 +549,7 @@ function evaluateNormalizedTrack(track: NormalizedTrack, frame: number) {
   if (!first || !last) return undefined;
   if (frame <= first.frame) return first.value;
   if (frame >= last.frame) return last.value;
-  const rightIndex = upperBoundKeyframe(keys, frame);
+  const rightIndex = upperBoundFrame(keys, frame);
   const right = keys[rightIndex];
   const left = keys[rightIndex - 1];
   if (!right || !left) throw new Error("timeline keyframe search produced an invalid interval");
@@ -531,7 +569,7 @@ function normalizeKeyframes(source: readonly TimelineKeyframe2D[]) {
 
 function evaluateNormalizedClipTrack(track: NormalizedClipTrack, frame: number) {
   if (!track.keyframes.length || frame < track.keyframes[0]!.frame) return undefined;
-  return track.keyframes[Math.max(0, upperBoundClipKeyframe(track.keyframes, frame) - 1)]?.clipId;
+  return track.keyframes[Math.max(0, upperBoundFrame(track.keyframes, frame) - 1)];
 }
 
 function normalizeClipKeyframes(source: readonly TimelineClipKeyframe2D[]) {
@@ -569,7 +607,7 @@ function validateTimelineDeclaration(timeline: TimelineDeclaration2D) {
       assertText(key.id, `timeline track ${track.id} keyframe id`);
       assertIntegerRange(key.frame, `timeline keyframe ${key.id} frame`, 0, timeline.durationFrames);
       assertFinite(key.value, `timeline keyframe ${key.id} value`);
-      if (!["linear", "ease-in", "ease-out", "ease-in-out", "bounce"].includes(key.easing)) throw new Error(`timeline keyframe ${key.id} easing is unsupported`);
+      if (!["linear", "ease-in", "ease-out", "ease-in-out", "bounce", "hold"].includes(key.easing)) throw new Error(`timeline keyframe ${key.id} easing is unsupported`);
     }
   }
   for (const track of timeline.clipTracks ?? []) {
@@ -607,15 +645,19 @@ function validateTimelineDeclaration(timeline: TimelineDeclaration2D) {
     if (!Array.isArray(timeline.effects) || timeline.effects.length > MAX_EVENTS) throw new RangeError(`timeline effects must contain at most ${MAX_EVENTS} entries`);
     const effectIds = new Set<string>();
     for (const effect of timeline.effects) {
+      validateTimelineEffectPlacement2D(effect);
       assertText(effect.id, "timeline effect id");
       assertText(effect.label, `timeline effect ${effect.id} label`);
       assertIntegerRange(effect.frame, `timeline effect ${effect.id} frame`, 0, timeline.durationFrames);
       assertIntegerRange(effect.durationFrames, `timeline effect ${effect.id} durationFrames`, 1, timeline.durationFrames);
       assertRange(effect.intensity, `timeline effect ${effect.id} intensity`, 0, 100);
-      if (!(["camera-shake", "particle-burst", "hit-flash"] as const).includes(effect.kind)) throw new Error(`timeline effect ${effect.id} kind is unsupported`);
+      if (!(["camera-shake", "particle-burst", "hit-flash", "screen-transition"] as const).includes(effect.kind)) throw new Error(`timeline effect ${effect.id} kind is unsupported`);
       if (effect.targetId !== undefined) assertText(effect.targetId, `timeline effect ${effect.id} targetId`);
       if (effect.color !== undefined && !/^#[0-9a-f]{6}$/i.test(effect.color)) throw new Error(`timeline effect ${effect.id} color is unsupported`);
       if (effect.particleCount !== undefined) assertIntegerRange(effect.particleCount, `timeline effect ${effect.id} particleCount`, 1, 128);
+      if (effect.preset !== undefined) assertText(effect.preset, `timeline effect ${effect.id} preset`);
+      if (effect.preset !== undefined && effect.kind === "particle-burst" && !isParticlePresetId2D(effect.preset)) throw new Error(`timeline effect ${effect.id} particle preset is unsupported`);
+      if (effect.preset !== undefined && effect.kind === "screen-transition" && !isTransitionPresetId2D(effect.preset)) throw new Error(`timeline effect ${effect.id} transition preset is unsupported`);
       if (effectIds.has(effect.id)) throw new Error(`duplicate timeline effect id ${effect.id}`);
       effectIds.add(effect.id);
     }
@@ -632,45 +674,18 @@ function lowerBoundEvent(events: readonly IndexedEvent[], frame: number) {
   return low;
 }
 
-function upperBoundEvent(events: readonly IndexedEvent[], frame: number) {
+function upperBoundFrame(events: ReadonlyArray<{ frame: number }>, frame: number) {
   let low = 0, high = events.length;
   while (low < high) { const middle = (low + high) >>> 1; if (events[middle]!.frame <= frame) low = middle + 1; else high = middle; }
   return low;
 }
 
-function upperBoundKeyframe(keys: readonly TimelineKeyframe2D[], frame: number) {
-  let low = 0, high = keys.length;
-  while (low < high) { const middle = (low + high) >>> 1; if (keys[middle]!.frame <= frame) low = middle + 1; else high = middle; }
-  return low;
-}
 
-function upperBoundClipKeyframe(keys: readonly TimelineClipKeyframe2D[], frame: number) {
-  let low = 0, high = keys.length;
-  while (low < high) { const middle = (low + high) >>> 1; if (keys[middle]!.frame <= frame) low = middle + 1; else high = middle; }
-  return low;
-}
 
-function assertFinite(value: number, label: string) {
-  if (!Number.isFinite(value)) throw new TypeError(`${label} must be finite`);
-}
 
-function assertRange(value: number, label: string, minimum: number, maximum: number) {
-  assertFinite(value, label);
-  if (value < minimum || value > maximum) throw new RangeError(`${label} must be between ${minimum} and ${maximum}`);
-}
 
-function assertIntegerRange(value: number, label: string, minimum: number, maximum: number) {
-  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new RangeError(`${label} must be an integer between ${minimum} and ${maximum}`);
-}
 
-function assertText(value: string, label: string) {
-  if (typeof value !== "string" || !value || value.length > 512) throw new TypeError(`${label} must be a non-empty string no longer than 512 characters`);
-}
 
-function modulo(value: number, divisor: number) {
-  return ((value % divisor) + divisor) % divisor;
-}
 
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
+
+export { timelineEffectNoise2D } from "./timeline/effect-noise.ts";

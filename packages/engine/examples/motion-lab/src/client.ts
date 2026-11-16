@@ -47,7 +47,7 @@ import {
   type LabTerrainKind,
 } from "./scenarios.ts";
 
-const FIXED_STEP_SECONDS = 1 / 60;
+const FIXED_STEP_SECONDS = 0.016666666666666666;
 const MAX_FRAME_DELTA_SECONDS = 0.1;
 const TELEMETRY_INTERVAL_SECONDS = 0.1;
 const SLOPE_RADIANS = Math.PI / 12;
@@ -595,6 +595,7 @@ aimPitchInput.addEventListener("input", () => setControls({ aimPitchDegrees: Num
 aimYawInput.addEventListener("input", () => setControls({ aimYawDegrees: Number(aimYawInput.value) }));
 
 window.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented) return;
   const target = event.target;
   if (target instanceof HTMLElement && target.matches("input, select, textarea, button")) return;
   if (event.code === "Space") {

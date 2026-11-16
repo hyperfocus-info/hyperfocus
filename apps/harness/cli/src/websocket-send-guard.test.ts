@@ -53,7 +53,7 @@ describe("guarded websocket send", () => {
   test("keeps large state snapshots open when they fit the queue cap", () => {
     const socket = createFakeGuardedSocket([-1]);
 
-    expect(guardedWebsocketSend(socket, "x".repeat(512 * 1024), { maxQueuedBytes: 64 * 1024 * 1024 })).toBe(false);
+    expect(guardedWebsocketSend(socket, "x".repeat(524288), { maxQueuedBytes: 67108864 })).toBe(false);
     expect(socket.closeCalls).toHaveLength(0);
   });
 });

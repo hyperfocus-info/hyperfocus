@@ -10,9 +10,19 @@ Bun, including helpers shipped with root repository skills. Keep packaged Harnes
 and user-project automation self-contained; this repository convention is not a
 requirement for people operating projects through the Harness.
 
+Maintain nontrivial generated browser behavior as checked source and bundle it
+into the artifact. JavaScript buried in an HTML string bypasses code lint/type
+analysis. Keep `.local` output excluded; promote repeated producers into their
+owning tool and register meaningful regressions in its actual test gate.
+
 Prefer concise variable names when they remain unambiguous in their local scope.
 Length is not clarity: keep domain terms that distinguish similar values, but avoid
 repeating context already supplied by the function, module, or type.
+
+Public or user-facing entry functions accept one plain options object with named
+fields and defaults. Leaf functions do the work with a small positional argument
+list; avoid allocating options objects in hot inner paths. Keep domain objects
+intact when splitting them would obscure the call.
 
 ## Imports and module boundaries
 
@@ -53,6 +63,117 @@ repeating context already supplied by the function, module, or type.
   function input. Keep that contract beside its implementation rather than in a
   parallel interface file for a local-first structure.
 
+## Utility ownership
+
+Utility functions belong in focused utility modules, never beside another
+feature's implementation. A useful filename names the operation or domain; a
+`utils` suffix is neither required nor sufficient. Keep project-only operations
+local. Books `src/documents/credits.ts` is an approved example: its accounting
+operations are specific to that project. A callback that closes over its owner's
+state or resource lifecycle is part of that implementation, not automatically a
+portable utility.
+
+Portable operations belong in a low-level dependency with one canonical
+implementation. Search existing owners and common patterns before adding text
+coercion/validation, decimal/currency conversion, record guards, debounce/throttle,
+clamp/rounding, escaping, CSV, dates, collection or error helpers. Migrate real
+consumers; do not leave copied implementations behind. Configure differences in
+consumer requirements explicitly, preserving validation, precision, units,
+fallback/throw semantics, cancellation and disposal. Do not force unrelated domain
+policies into one abstraction. Framework-neutral utilities must not acquire Solid,
+DOM, host persistence or app preferences; follow [dependency direction](architecture.md).
+
+## Performance-aware primitives
+
+Derive abstractions from real operations and repeated caller burdens. Keep a
+convenient operation and its useful lower-level pieces on the same implementation
+owner; a caller should not need a second framework to avoid an unnecessary copy,
+snapshot or scheduler. Document borrowed data, capacity and invalidation at that
+boundary. Do not expose mutable authority merely to remove an allocation.
+
+Use the [improvement loop](../packages/performance/README.md#improvement-loop) for
+work accounting, experiments and promotion. Source-size limits remain maintenance
+constraints, not evidence that splitting a sequential operation improves it.
+Enforce reproducible contracts in tests/lint; performance and abstraction quality
+require consumer evidence rather than blanket syntax bans.
+
+## State ownership and props
+
+No prop drilling. Features consume shared state and actions from a scoped context
+or store at the point of use. Do not relay workspace, selection, report scope,
+refresh/navigation actions or a renamed controller through intermediate components,
+including aliases, spreads or wrapper objects. Create providers at the owning
+application/book/editor lifetime and expose narrow accessors and commands. Context
+must not become a process-global mutable singleton or one broadly subscribed blob.
+
+Reusable leaf controls retain explicit value/event and presentation APIs; list
+rows may receive their row, and identity is supplied at an actual editor boundary.
+Those contracts are not permission to transport feature state through a control.
+Passing a workspace directly from an app to every feature is also prohibited:
+the provider owns that dependency. The user's examples
+`workspace={workspace}`, `selection={selection()}`,
+`currentScope={reportScope()}` and `refresh={openReport}` all belong in scoped
+feature state/actions.
+
+Prefer independent signals for independent local fields. Use stores or atomic
+object signals for genuinely structured/atomic state, not to shorten declarations.
+Keep derived state derived. Memoize expensive or multiply-read calculations and
+minimize each memo's dependencies; keep query filtering separate from book-wide
+derivations. Do not add memos to cheap one-off reads.
+
+For large lists, replace repeated linear membership/lookups with shared Set/Map
+indexes at the appropriate owner and invalidation lifetime. Use Solid `<For>` for
+dynamic identity lists; `<Index>` needs an explicit positional lifetime. Measure
+filtering/rendering before changing state primitives. Evaluate work caused by one
+keystroke and one shared-book update, including dependency invalidation and repeated
+collection searches. Optimize observed hot paths, not source-code token count.
+
+## Editor identity and command invariants
+
+Each editor declares its identity tuple and lifetime beside its owner: book/project,
+entity, mode where relevant, and the mount/reset and async cleanup behavior.
+Prop-derived initial state and one-time branches are safe only while that identity
+is fixed. Key/remount the owner or explicitly reset all dependent draft state when
+identity changes. Specify how same-identity shared updates preserve drafts or
+surface conflicts. An asynchronous result or completion action must not update a
+different identity; cancel or reject stale work and dispose owned resources.
+
+Enforce financial invariants at the command boundary for every caller, including
+imports, assistants and APIs. JSX validation and disabled controls only explain
+constraints; they are not the authority. Validate exact amounts, entity/account
+roles, balancing, dates, capacity, revisions and atomic failure as applicable to
+the domain. Exercise invalid commands directly and verify failed batches leave
+original state intact. Use lifecycle/command tests and running flows to prove
+these rules; lint alone cannot establish them.
+
+These rulings were requested by the user on 2026-10-26. Existing gaps and migration
+acceptance live in the [code standards audit](audits/code-standards.md).
+
+## Resource and state boundaries
+
+Prefer direct data and operations whose ownership and costs can be explained.
+An additional abstraction needs a real consumer or recurring problem; a lower
+allocation count alone does not establish a better complete workflow.
+
+- Validate inputs and derived values before consuming capacity or publishing IDs,
+  counters or state. A rejected operation must leave the next valid operation usable.
+- Distinguish absence from value. Generic state can be `0`, `false`, empty text,
+  `null` or `undefined`; use `Map.has` when entry presence is the question.
+- Separate reusable storage slots from public identities. Reject stale identities
+  and retire exhausted generations instead of wrapping them into valid handles.
+- A borrowed buffer needs an owner, invalidation boundary and release semantics.
+  Releasing one lifetime must not release a later owner; shared WASM memory can
+  invalidate views when another allocator grows it.
+- Define ordering for overlapping async commands. Recheck lifetime/request
+  ownership after suspension and before commit; dispose losing candidates.
+- Bound work actually executed, including retained backlog. Expose retained or
+  dropped work. Distinguish elapsed presentation gaps from measured callback CPU
+  time, and avoid summing overlapping metrics.
+
+Use the sequence-based oracles in [adversarial boundary testing](adversarial-testing.md)
+for enforcement. Lint can detect particular syntax hazards; it cannot prove
+lifetime ownership, atomicity, performance or game quality.
+
 ## Assertions and narrowing
 
 - Prefer validation, control-flow narrowing, and type guards over type assertions.
@@ -91,7 +212,104 @@ repeating context already supplied by the function, module, or type.
   geometry, sizes, or custom properties. Global reset, theme, fixed-canvas, and vendor
   boundaries follow [the StyleX integration policy](stylex.md).
 
+## Numeric values
+
+Write the final numeric value when arithmetic contains only numeric literals.
+For example, use `0.1` instead of `10 / 100`, and `180` instead of `60 * 3`.
+This includes literal-only subexpressions inside runtime formulas: write
+`speed * 15` instead of `speed * (3 * 5)`. Preserve the actual JavaScript value
+when folding existing expressions; round only when the domain calls for rounding.
+Use a nearby comment when the unit or reason for a constant needs explanation.
+
+Runtime arithmetic and formulas containing named values remain valid, including
+`stamina / maxStamina`, `Math.PI * 2`, and `5 * SECOND`. The checker does not
+evaluate variables, property access, calls, or string concatenation. Signed
+numeric literals such as `-0.5` are already final values. It covers numeric
+addition, subtraction, multiplication, division, remainder, exponentiation, and
+bitwise binary operators in authored JavaScript and TypeScript under `apps/`,
+`packages/`, and `scripts/`; generated output and declarations are excluded.
+
+`bun run check:code-style` and ESLint use the same TypeScript AST detector.
+All numeric-literal findings are errors. The migration allowances have been
+removed; the empty `numericLiterals` baseline remains locked against new entries.
+The obsolete baseline-initialization commands and occurrence-hashing path are gone.
+Run `bun test scripts/check-code-style.test.ts scripts/numeric-literals scripts/eslint-config.test.ts`
+when changing this policy.
+
 ## Enforcement
+
+The shared ESLint plugin enables these errors without automatic feature rewrites:
+
+- `hyperfocus/explicit-map-presence`: engine runtime, WASM and physics modules
+  must not use a locally constructed Map's lookup value or an unmodified alias
+  as an implicit boolean. Use `has` for presence, including stored `undefined`,
+  or an explicit value comparison for intentional truthiness semantics. The rule
+  respects lexical shadowing and offers no speculative autofix. Imported maps,
+  parameters and reassigned aliases still require boundary review.
+
+- `hyperfocus/utility-modules`: closed helpers with explicitly primitive inputs
+  inside component or executable entry modules. It leaves composed utility and
+  domain-only modules and domain-shaped fixture factories alone. Generic helpers
+  in tests still follow the rule. Other mixed modules, inferred,
+  imported-type, ambient-dependent and cross-file duplicate helpers still need
+  ownership review; passing this rule does not prove a single source of truth.
+- `hyperfocus/canonical-utilities`: exact AST copies of the established portable
+  record/object guards, raw text extraction and clamp formulas must import their
+  `@hyperfocus/utilities` owner, including copies inside utility files. Top-level
+  unambiguous definitions can be fixed to imports while preserving local/export
+  names and the two clamping policies. Nested/default/overloaded definitions need
+  deliberate migration; other contracts remain subject to ownership review.
+- `hyperfocus/no-prop-drilling`: known feature state/action props and direct
+  incoming prop relays/aliases/spreads to feature components. Native elements,
+  Solid control flow, context provider values and reusable control APIs are
+  boundaries. Arbitrary transformations, wrapper callbacks and cross-file
+  provenance still require review; renaming a dependency does not make it valid.
+  Reusable controls, row identities and provider injection have reviewed
+  module/symbol/attribute contracts in `scripts/code-standards/controls.ts`; this
+  does not exempt feature state carried into a control or row. A controlled
+  implementation may relay its API across a declared internal mount boundary.
+  Calls with arguments are transformations, not direct accessors; named row
+  render helpers are not inferred to be component prop sources.
+- `hyperfocus/solid-list-rendering`: dynamic `.map` callbacks returning JSX in
+  Solid modules. Literal/const static catalogs and data maps (including objects
+  carrying icons or render callbacks) remain valid.
+- `hyperfocus/no-derived-signal-effect`: an effect whose sole operation writes a
+  derivation into a local signal, including named/namespace Solid import aliases.
+  Conditional identity resets and external synchronization need semantic review.
+
+`bun run audit:code-standards --json` produces locations and review candidates;
+add `--check` for a failing exit status when findings exist. `--findings` omits
+the larger semantic-review queue when inspecting rule failures. The audit reads Git
+candidates (including untracked source and tests), excludes generated/output
+files, and does not honor ESLint suppression comments; `bun run lint` is the
+configured gate. Run `bun test scripts/code-standards scripts/eslint-config.test.ts`
+when changing these rules. Existing debt remains reported; no baseline allowances
+were added. Independent fields, memo cost, index invalidation, editor identity and
+financial semantics remain mandatory review/behavioral checks.
+
+Root skill scripts under `.agents/skills/*/scripts` receive the same ESLint and
+five-rule audit coverage as repository tooling. Retained Website release archives
+contain self-contained compiled entrypoints copied from Website dist and the
+exported Railway setup template. The exact
+entry filenames are classified in `scripts/source-artifacts.ts`; fix their authored
+Website source/templates and rebuild exports instead of rewriting historical
+outputs to import monorepo utilities. Neighboring custom source remains enforced.
+Release files still count toward repository size policy.
+
+Repository ESLint rejects unreachable statements, constant binary conditions,
+async Promise executors, unused suppression directives, and `@ts-ignore` or
+`@ts-nocheck`. Negative type tests may use `@ts-expect-error` with a description
+of the expected failure. Generated output and `.local/` run artifacts are excluded.
+
+Keep exceptions narrow, with a reason and removal condition. Retire file-level
+allowances once their findings are fixed; never add a directory-wide exemption
+for new code. Unused symbols and StyleX violations are errors across all app and package roots.
+Root and app lint commands share one configuration. Static and literal dynamic
+imports are checked in production, tests, build and verification scripts. Unit tests
+may exercise private implementations within their owner; consumer tests use public
+exports and their host's fixtures. Ambiguous aliases require an explicit choice.
+The separate code-style gate now covers every app root and reports existing
+class/assertion debt without granting new baseline allowances.
 
 Keep no more than 25 authored source files directly in one directory. When a domain
 approaches that limit, group files by cohesive responsibility and keep internal
@@ -113,12 +331,13 @@ Before repository context is sent to another model or subagent:
 
 - exclude generated output, lockfiles, and fixtures unless the task directly targets
   one of them and a small excerpt is necessary;
-- remove trailing whitespace from every included line; and
-- collapse consecutive newline characters to one newline in machine-composed context.
+- trim redundant whitespace in generated prose summaries, while preserving
+  paragraph boundaries when they distinguish requirements.
 
-Apply this normalization to delegated context and handoff messages, not to repository
-files or user-authored content. Prefer file paths and focused excerpts over copying
-whole files.
+Preserve code, patches, Markdown structure, quoted evidence, and user-authored content
+exactly; whitespace can carry meaning. Prefer file paths and focused excerpts over
+copying whole files. Give a delegate its objective, constraints, owned paths, and
+acceptance criteria rather than unrelated conversation history.
 
 Related: [repository guidance](../AGENTS.md), [architecture](architecture.md), and
 [application design](../DESIGN.md).

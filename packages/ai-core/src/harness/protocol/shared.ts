@@ -3,12 +3,12 @@ import { z } from "zod";
 export const requestIdSchema = z.string().min(1).max(128);
 export const commandRejectionCodeSchema = z.enum(["invalid-cursor"]);
 export const BACKGROUND_JOB_DELETION_CHUNK_LIMIT = 512;
-export const STREAM_DELTA_MAX_BYTES = 8 * 1024;
+export const STREAM_DELTA_MAX_BYTES = 8192;
 export const SERVER_EVENT_BATCH_MAX_ITEMS = 256;
 // Ready snapshots can legitimately exceed a batched stream payload. Keep a
 // finite pre-parse ceiling with enough headroom for those bounded snapshots.
-export const SERVER_EVENT_FRAME_MAX_BYTES = 32 * 1024 * 1024;
-export const SERVER_EVENT_EMIT_MAX_BYTES = 24 * 1024 * 1024;
+export const SERVER_EVENT_FRAME_MAX_BYTES = 33554432;
+export const SERVER_EVENT_EMIT_MAX_BYTES = 25165824;
 export const WORKSPACE_PROJECT_PAGE_LIMIT = 128;
 export const WORKSPACE_BOOTSTRAP_PROJECT_LIMIT = WORKSPACE_PROJECT_PAGE_LIMIT + 1;
 export const WORKSPACE_THREAD_PAGE_LIMIT = 256;

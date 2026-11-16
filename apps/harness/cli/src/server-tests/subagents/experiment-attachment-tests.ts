@@ -30,7 +30,10 @@ export function registerExperimentAttachmentTests(serverTest: ServerTestRegistra
                 target: "ephemeral-experiment"
             }
         }));
-        const runUpdated = await runUpdatedPromise;
+        const runUpdated = await runUpdatedPromise.catch(error => {
+          const run = fixture.repository.getRun(projectId, ready.payload.run.id);
+          throw new Error(`${error instanceof Error ? error.message : "Experiment did not finish"}; status=${run?.status}; failure=${run?.failureMessage ?? "none"}`);
+        });
         await completePromise;
         expect(runUpdated.payload.run.executionTarget).toBe("ephemeral-experiment");
         expect(runUpdated.payload.run.experiment?.virtualBranchName).toContain(ready.payload.run.id);

@@ -46,7 +46,7 @@ export function registerThreadMutationTests(serverTest: ServerTestRegistrar, fix
         const completed = await completePromise;
         expect(completed.payload.threadId).toBe(threadId);
         expect(repository.getProject(projectId).threads.find((thread) => thread.id === threadId)?.title).toBe("Renamed during stream");
-        expect(repository.getThreadMessages(projectId, threadId).at(-1)?.content).toBe("main execution result");
+        expect(repository.getThreadMessages(projectId, threadId).at(-1)?.content).toBe("main execution result\n\nVerification unverified: no task-specific checks were established.");
         socket.close();
     }, 10000);
     serverTest("starts a second thread run while another thread is still working", async () => {

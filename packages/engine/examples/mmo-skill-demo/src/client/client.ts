@@ -1,3 +1,5 @@
+import { actionForKeyCode } from "./input.ts";
+import { errorMessage } from "./diagnostics/error-text.ts";
 import { canvasPointFromClient } from "@hyperfocus/engine";
 import { connectAuthoritative, type AuthoritativeClient } from "@hyperfocus/engine/net";
 import { applyEngineUiTheme, showHtmlDialog } from "@hyperfocus/engine/ui";
@@ -35,6 +37,18 @@ function requiredElement<T extends Element>(selector: string): T {
 }
 
 const canvas = requiredElement<HTMLCanvasElement>("#game");
+// Match the drawing coordinate space to the visible play area. A fixed 960px
+// backing store shrank every HUD label to a few pixels on narrow displays.
+const canvasSizeObserver = new ResizeObserver(([entry]) => {
+  if (!entry) return;
+  const width = Math.max(1, Math.round(entry.contentRect.width));
+  const height = Math.max(1, Math.round(entry.contentRect.height));
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+});
+canvasSizeObserver.observe(canvas);
+window.addEventListener("pagehide", () => canvasSizeObserver.disconnect());
+window.addEventListener("pageshow", () => canvasSizeObserver.observe(canvas));
 const main = document.querySelector<HTMLElement>("main");
 const status = requiredElement<HTMLElement>("#status");
 const login = requiredElement<HTMLElement>("#login");
@@ -117,15 +131,7 @@ function setControllerDeadzone(value: number) {
   inputDirty = true;
 }
 
-function errorMessage(error: unknown) {
-  if (error instanceof Error) return error.stack || error.message;
-  if (typeof error === "string") return error;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
+
 
 function logClientError(label: string, error: unknown) {
   const text = `[${new Date().toLocaleTimeString()}] ${label}: ${errorMessage(error)}`;
@@ -326,6 +332,7 @@ if (params.has("login")) {
 }
 
 window.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented) return;
   sfx.unlock();
   preferMouseInput();
   if (npcMenus.handleKeyboard(event)) {
@@ -550,17 +557,7 @@ const ACTION_SLOT: Partial<Record<NonNullable<MmoSkillDemoInput["action"]>, Comb
 
 
 
-function actionForKeyCode(code: string): MmoSkillDemoInput["action"] | "" {
-  if (code === "Mouse0") return "lmb";
-  if (code === "Mouse2") return "rmb";
-  if (code === "Digit1") return "lmb";
-  if (code === "Digit2") return "rmb";
-  if (code === "Space") return "space";
-  if (code === "KeyQ") return "q";
-  if (code === "KeyE") return "e";
-  if (code === "KeyR") return "r";
-  return "";
-}
+
 
 function currentWorldAim(player: PlayerEntity | undefined) {
   const controllerAim = controllerWorldAim(player);

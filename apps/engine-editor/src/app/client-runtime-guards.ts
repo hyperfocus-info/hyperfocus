@@ -30,16 +30,16 @@ export function requireEventCurrentTarget<TTarget extends EventTarget>(
   return event.currentTarget;
 }
 
-export function requireOneOf<TValue extends string>(value: unknown, allowed: readonly TValue[], label: string): TValue {
+export function requireOneOf<const TValue extends string>(value: unknown, allowed: readonly TValue[], label: string): TValue {
   for (const candidate of allowed) if (candidate === value) return candidate;
   throw new TypeError(`${label} has an unsupported value.`);
 }
 
-export function isOneOf<TValue extends string>(value: unknown, allowed: readonly TValue[]): value is TValue {
+export function isOneOf<const TValue extends string>(value: unknown, allowed: readonly TValue[]): value is TValue {
   return typeof value === "string" && allowed.some((candidate) => candidate === value);
 }
 
-export function optionalOneOf<TValue extends string>(value: unknown, allowed: readonly TValue[]): TValue | undefined {
+export function optionalOneOf<const TValue extends string>(value: unknown, allowed: readonly TValue[]): TValue | undefined {
   return isOneOf(value, allowed) ? value : undefined;
 }
 

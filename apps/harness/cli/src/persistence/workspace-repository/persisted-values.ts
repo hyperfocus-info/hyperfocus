@@ -1,6 +1,7 @@
+import type { ThreadTitleSource } from "@hyperfocus/ai-core/protocol";
+import { isRecord } from "@hyperfocus/utilities/records";
 import { stringifyAnsiFree } from "../../ansi-storage";
 import { debugLog } from "../../logging";
-import type { ThreadTitleSource } from "@hyperfocus/ai-core/protocol";
 import { ASSISTANT_LOG_DETAILS_JSON_MAX_CHARS } from "./contracts";
 
 export type PersistedSchema<T> = {
@@ -75,9 +76,6 @@ export function normalizeBooleanNumber(value: unknown) {
   return value === true || value === 1;
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export function normalizeComposerReasoningStrength(value: unknown) {
   return value === "low" || value === "medium" || value === "high" || value === "extra-high" ? value : undefined;
@@ -351,3 +349,5 @@ export function recordPersistenceRecovery(context: PersistedRecoveryContext, rea
     reason
   });
 }
+
+export { isRecord } from "@hyperfocus/utilities/records";

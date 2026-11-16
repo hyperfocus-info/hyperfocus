@@ -1,4 +1,5 @@
 import path from "node:path";
+import { createThreadCollaboration, installThreadCollaboration } from "./persistence/thread-collaboration";
 import type { WorkspaceRepositoryContext, WorkspaceRepositoryOptions } from "./persistence/workspace-repository/contracts";
 import { Database } from "bun:sqlite";
 import { createProviderCredentialStore } from "./provider-credential-store";
@@ -128,6 +129,7 @@ export function createWorkspaceRepository(
       }
       db.exec("PRAGMA busy_timeout = 5000;");
       workspaceOperations68.operations.migrate();
+      installThreadCollaboration(db);
       installWorkspaceMutationTriggers(db);
       reconcileTerminalBrowserApprovals(db);
       workspaceOperations22.operations.migrateLegacyProviderApiKeys();
@@ -137,6 +139,7 @@ export function createWorkspaceRepository(
     }
   return {
     dbPath,
+    ...createThreadCollaboration(db),
     ...workspaceOperations1.publicApi,
     ...workspaceOperations2.publicApi,
     ...workspaceOperations3.publicApi,

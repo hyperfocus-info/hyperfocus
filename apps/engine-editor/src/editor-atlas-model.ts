@@ -5,6 +5,17 @@ type EditorAtlasFrame = EditorProject["atlas"]["frames"][number];
 type AtlasPlaybackFrame = Pick<EditorAtlasFrame, "id" | "x" | "y" | "width" | "height">;
 type AtlasPlaybackClip = { id: string; sequence: readonly string[]; fps: number; loop: boolean };
 
+/** Pixel-aligned creation shared by pointer slicing and its visible coordinate form. */
+export function addEditorAtlasFrame(project: EditorProject, options: { x: number; y: number; width: number; height: number; imageWidth: number; imageHeight: number }): EditorAtlasFrame {
+  for (const key of ["x", "y", "width", "height"] as const) {
+    if (!Number.isSafeInteger(options[key]) || options[key] < (key === "x" || key === "y" ? 0 : 1)) throw new Error("Enter whole pixel coordinates and positive frame dimensions.");
+  }
+  if (options.x + options.width > options.imageWidth || options.y + options.height > options.imageHeight) throw new Error("Keep the rectangle inside the source image.");
+  const frame = { id: uniqueId("frame"), name: `Frame ${project.atlas.frames.length + 1}`, x: options.x, y: options.y, width: options.width, height: options.height, color: "#ffffff" };
+  project.atlas.frames.push(frame);
+  return frame;
+}
+
 /** Pure frame sampler shared by editor scrub/export and the standalone runtime. */
 export function sampleAtlasClipFrame(options: {
   frames: readonly AtlasPlaybackFrame[];

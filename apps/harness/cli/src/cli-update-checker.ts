@@ -1,5 +1,8 @@
+import type { AgentRuntimeCapability,CliUpdateTargetId,SetupLaunchMode } from "@hyperfocus/ai-core/protocol";
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 import { $ } from "bun";
-import type { AgentRuntimeCapability, CliUpdateTargetId } from "@hyperfocus/ai-core/protocol";
+import { detectSetupLaunchMode } from "./setup-health";
 
 const PI_PACKAGE_NAME = "@mariozechner/pi-coding-agent";
 const CODEX_PACKAGE_NAME = "@openai/codex";
@@ -25,7 +28,10 @@ export async function checkCliUpdates(agentRuntimes: AgentRuntimeCapability[]): 
   return updates.filter((update): update is CliUpdate => Boolean(update));
 }
 
-export async function installCliUpdate(agentId: CliUpdateTargetId) {
+export async function installCliUpdate(agentId: CliUpdateTargetId, launchMode: SetupLaunchMode = detectSetupLaunchMode()) {
+  if (launchMode === "portable-launcher" && (agentId === "pi" || agentId === "codex-cli")) {
+    throw new Error("This runtime is bundled into the portable Harness launcher. Download a new Harness release and restart with its launcher to update it.");
+  }
   switch (agentId) {
     case "pi": {
       assertInstalled(await readInstalledPackageVersion(PI_PACKAGE_NAME), "Pi");
@@ -169,7 +175,7 @@ async function readInstalledPackageVersion(packageName: string) {
 
 async function readCommandText(cmd: string[]) {
   try {
-    const process = Bun.spawn(cmd, {
+    const process = spawnBackgroundProcess({ cmd: cmd,
       stdout: "pipe",
       stderr: "pipe"
     });
@@ -231,9 +237,6 @@ function formatShellOutput(stdout: string, stderr: string) {
   return [stdout.trim(), stderr.trim()].filter(Boolean).join("\n").slice(-4000);
 }
 
-function isRecord(input: unknown): input is Record<string, unknown> {
-  return typeof input === "object" && input !== null;
-}
 
 export const testExports = {
   parseVersion,

@@ -1,3 +1,6 @@
+import { compareText, constantTimeTextEqual } from "@hyperfocus/utilities/text";
+import { errorMessage } from "@hyperfocus/utilities/text";
+import { isPlainRecord } from "@hyperfocus/utilities/records";
 export const SAVE_PROFILE_FORMAT = "hyperfocus-save-profile" as const;
 export const SAVE_ENVELOPE_FORMAT = "hyperfocus-save-envelope" as const;
 export const SAVE_PROFILE_FORMAT_VERSION = 1;
@@ -11,7 +14,7 @@ export {
   type EncodeBinaryJournalOptions
 } from "./binary-journal.ts";
 
-const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
+const DEFAULT_MAX_BYTES = 4194304;
 const DEFAULT_MAX_DEPTH = 32;
 const DEFAULT_MAX_NODES = 100_000;
 const DEFAULT_MAX_SLOTS = 128;
@@ -85,7 +88,7 @@ export function createSaveMigrationRegistry(): SaveMigrationRegistry {
         const migration = steps.get(version);
         if (!migration) throw new Error(`Missing save migration from version ${version} to ${version + 1}.`);
         try { current = normalizeJson(migration(current), resolved); }
-        catch (cause) { throw new Error(`Save migration from version ${version} to ${version + 1} failed: ${errorMessage(cause)}`, { cause }); }
+        catch (cause) { throw new Error(`Save migration from version ${version} to ${version + 1} failed: ${errorMessage(cause, { stringify: true })}`, { cause }); }
       }
       return current;
     },
@@ -232,7 +235,7 @@ export async function importSaveProfile(source: Uint8Array | string, limits: Sav
     const decoded: unknown = JSON.parse(decodeUtf8(bytes));
     parsed = decoded;
   } catch (cause) {
-    throw new Error(`Save envelope is not valid UTF-8 JSON: ${errorMessage(cause)}`, { cause });
+    throw new Error(`Save envelope is not valid UTF-8 JSON: ${errorMessage(cause, { stringify: true })}`, { cause });
   }
   const envelope = normalizeEnvelope(parsed, resolved);
   const expected = await sha256(utf8(canonicalSaveJson(envelope.profile, resolved)));
@@ -513,9 +516,7 @@ function compareSlots(a: SaveSlot, b: SaveSlot): number {
   return compareText(a.name, b.name);
 }
 
-function compareText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
+
 
 function resolveLimits(limits: SaveLimits | undefined): ResolvedSaveLimits {
   return {
@@ -567,11 +568,7 @@ function assertByteLength(value: string, maxBytes: number, label: string): void 
   if (utf8(value).byteLength > maxBytes) throw new Error(`${label} exceeds byte limit ${maxBytes}.`);
 }
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+
 
 function utf8(value: string): Uint8Array {
   return new TextEncoder().encode(value);
@@ -590,15 +587,4 @@ async function sha256(value: Uint8Array): Promise<string> {
   const owned = new Uint8Array(value);
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", owned.buffer));
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function constantTimeTextEqual(a: string, b: string): boolean {
-  let difference = a.length ^ b.length;
-  const length = Math.max(a.length, b.length);
-  for (let index = 0; index < length; index += 1) difference |= (a.charCodeAt(index) || 0) ^ (b.charCodeAt(index) || 0);
-  return difference === 0;
-}
-
-function errorMessage(value: unknown): string {
-  return value instanceof Error ? value.message : String(value);
 }

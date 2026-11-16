@@ -8,9 +8,10 @@ type DeletionTarget = Extract<ServerEvent, { type: "background-jobs.deleted" }>[
 
 export function emitBackgroundJobsUpdatedToAll(
   connections: ControlEventConnections,
-  backgroundJobs: BackgroundJobsState
+  backgroundJobs: BackgroundJobsState,
+  requestId = `bg:auto:${crypto.randomUUID()}`
 ) {
-  const requestId = `bg:auto:${crypto.randomUUID()}`; let bounded = backgroundJobs;
+  let bounded = backgroundJobs;
   const size = () => new TextEncoder().encode(JSON.stringify({ type: "background-jobs.updated", requestId,
     payload: { backgroundJobs: bounded } })).byteLength;
   if (size() > SERVER_EVENT_EMIT_MAX_BYTES) bounded = { ...bounded, jobs: [], jobsNextCursor: "__start__",

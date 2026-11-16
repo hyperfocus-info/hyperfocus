@@ -1,11 +1,11 @@
 import type { ProjectThreadSummary, WorkspaceProjectState } from "@hyperfocus/ai-core/protocol";
 
-const maxDurationMs = 520 * 7 * 24 * 60 * 60 * 1000;
+const maxDurationMs = 314496000000;
 const unitMs = {
-  m: 60 * 1000,
-  h: 60 * 60 * 1000,
-  d: 24 * 60 * 60 * 1000,
-  w: 7 * 24 * 60 * 60 * 1000
+  m: 60000,
+  h: 3600000,
+  d: 86400000,
+  w: 604800000
 } as const;
 
 export function parseThreadCleanupDuration(input: string): { ok: true; ms: number } | { ok: false; reason: string } {

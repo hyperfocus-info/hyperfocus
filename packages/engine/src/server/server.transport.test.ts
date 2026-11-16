@@ -562,7 +562,7 @@ test("MMO interest grid applies 1000-player defaults", () => {
 test("authoritative server streams binary snapshot then delta to joined socket", async () => {
   let now = 0;
   const sent: Array<string | Uint8Array> = [];
-  const socket = { send: (data: string | Uint8Array) => { sent.push(data); } };
+  const socket = { send: (data: string | Uint8Array) => { sent.push(data); }, close() {} };
   const roomType = createTestRoom();
   const server = createAuthoritativeServer({
     transport: "websocket",
@@ -591,7 +591,7 @@ test("authoritative server streams binary snapshot then delta to joined socket",
 test("authoritative server streams multipart frames when rooms supply segments", async () => {
   let now = 0;
   const sent: Array<string | Uint8Array> = [];
-  const socket = { send: (data: string | Uint8Array) => { sent.push(data); } };
+  const socket = { send: (data: string | Uint8Array) => { sent.push(data); }, close() {} };
   const schema = defineSchema<CounterState>({ ticks: "u16" });
   let replicationTelemetryCalls = 0;
   let lastAdaptiveTelemetry: { reduceStaticRecordsRecommended: boolean; staticDeferredCountThreshold: number } | undefined;
@@ -650,7 +650,7 @@ test("authoritative server streams multipart frames when rooms supply segments",
 test("replication telemetry recommends static throttling after sustained static deferrals", async () => {
   let now = 0;
   const sent: Array<string | Uint8Array> = [];
-  const socket = { send: (data: string | Uint8Array) => { sent.push(data); } };
+  const socket = { send: (data: string | Uint8Array) => { sent.push(data); }, close() {} };
   const schema = defineSchema<CounterState>({ ticks: "u16" });
   let lastReduceStaticRecordsRecommended = false;
   const staticPayload = new Uint8Array(512);
@@ -705,7 +705,7 @@ test("replication telemetry recommends static throttling after sustained static 
 test("replication telemetry stays off when disabled", async () => {
   let now = 0;
   const sent: Array<string | Uint8Array> = [];
-  const socket = { send: (data: string | Uint8Array) => { sent.push(data); } };
+  const socket = { send: (data: string | Uint8Array) => { sent.push(data); }, close() {} };
   const schema = defineSchema<CounterState>({ ticks: "u16" });
   let telemetryCalls = 0;
   let roomTelemetryCalls = 0;
@@ -741,6 +741,9 @@ test("replication telemetry stays off when disabled", async () => {
 
   expect((await server.joinRoom({ roomId: "telemetry-off-room", token: "dev:off", roomType: "telemetry-off", connection: socket })).ok).toBe(true);
   await server.tick();
+  const snapshot = sent.find((data): data is Uint8Array => data instanceof Uint8Array);
+  expect(snapshot).toBeDefined();
+  expect(decodeReplicationFrame(snapshot!).kind).toBe("multipart_snapshot");
 
   const telemetry = server.getStats().roomTelemetry[0];
   expect(telemetry.replication.enabled).toBe(false);

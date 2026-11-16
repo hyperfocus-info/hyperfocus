@@ -1,3 +1,5 @@
+import { encodeValue, readValueFrame } from "@hyperfocus/serialization";
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -69,7 +71,7 @@ export function waitForAdapterCall(
 }
 
 export async function executeReadyRunUntil(
-  socket: EventTarget & { send: (payload: string) => void },
+  socket: EventTarget & { send: (payload: string | Uint8Array<ArrayBuffer>) => void },
   input: { requestId: string; projectId: string; threadId: string; runId: string },
   waiters: Array<Promise<any>>,
   timeoutMs: number = DEFAULT_TEST_EVENT_TIMEOUT_MS,
@@ -86,7 +88,7 @@ export async function executeReadyRunUntil(
   const alternatePromises = waiters.map((waiter) => waiter.then((event) => ({ kind: "alternate", event })));
 
   socket.send(
-    JSON.stringify({
+    encodeValue({
       type: "run.execute",
       requestId: input.requestId,
       payload: {
@@ -110,7 +112,7 @@ export async function executeReadyRunUntil(
 export function openProject(socket: WebSocket, rootPath: string, requestId: string = `req-open-${crypto.randomUUID()}`) {
   const openedPromise = waitForEvent(socket, "project.opened");
   socket.send(
-    JSON.stringify({
+    encodeValue({
       type: "project.add",
       requestId,
       payload: {
@@ -190,7 +192,7 @@ export async function sendChatUntilReady(
     (event) => event.payload.message.kind === "plan-summary",
     timeoutMs
   ).catch((error) => error);
-  socket.send(JSON.stringify(createChatSendCommand(input)));
+  socket.send(encodeValue(createChatSendCommand(input)));
   const ready = await readyPromise;
   if (ready.payload.run.plan?.origin !== "quick-task") {
     const planMessage = await planMessagePromise;
@@ -208,7 +210,7 @@ export async function executeReadyRun(
 ) {
   const completePromise = waitForEvent(socket, "chat.complete", undefined, timeoutMs);
   socket.send(
-    JSON.stringify({
+    encodeValue({
       type: "run.execute",
       requestId: input.requestId,
       payload: {
@@ -257,7 +259,7 @@ export async function answerPlanningQuestionAndExecute(
     timeoutMs
   ).catch((error) => error);
   socket.send(
-    JSON.stringify({
+    encodeValue({
       type: "planning.answer",
       requestId: input.requestId,
       payload: {
@@ -291,13 +293,13 @@ export async function answerPlanningQuestionAndExecute(
 export function createSocket(port: number, sessionToken = TEST_HARNESS_SESSION_TOKEN) {
   const url = new URL(`ws://127.0.0.1:${port}/ws`);
   url.searchParams.set(HARNESS_SESSION_TOKEN_QUERY, sessionToken);
-  return new WebSocket(url);
+  const socket = new WebSocket(url); socket.binaryType = "arraybuffer"; return socket;
 }
 
 export async function pingServer(socket: WebSocket, requestId: string) {
   const pongPromise = waitForEvent(socket, "connection.pong", (event) => event.requestId === requestId);
   socket.send(
-    JSON.stringify({
+    encodeValue({
       type: "connection.ping",
       requestId,
       payload: {
@@ -373,11 +375,8 @@ export function waitForEvent(socket: EventTarget, type: string, predicate?: (pay
 }
 
 export function parseMessageEventPayloads(event: MessageEvent): any[] {
-  if (typeof event.data !== "string") {
-    return [];
-  }
 
-  const raw = JSON.parse(event.data);
+  const raw: unknown = readValueFrame(event.data);
   try {
     return parseServerEventFrame(raw);
   } catch {
@@ -410,11 +409,11 @@ function hydrateRunUpdatedEvent(socket: EventTarget, event: any) {
   } };
 }
 
-function isTestSocket(socket: EventTarget): socket is EventTarget & { send: (payload: string) => void } {
+function isTestSocket(socket: EventTarget): socket is EventTarget & { send: (payload: string | Uint8Array<ArrayBuffer>) => void } {
   return "send" in socket && typeof socket.send === "function";
 }
 
-async function loadRunDetail(socket: EventTarget & { send: (payload: string) => void },
+async function loadRunDetail(socket: EventTarget & { send: (payload: string | Uint8Array<ArrayBuffer>) => void },
   owner: { projectId: string; threadId: string; run: { id: string } }, signal: AbortSignal) {
   const chunks: string[] = [], seenCursors = new Set<string>();
   let totalBytes = 0, totalChunks = 0;
@@ -424,7 +423,7 @@ async function loadRunDetail(socket: EventTarget & { send: (payload: string) => 
     const requestId = `run-detail-${crypto.randomUUID()}`;
     const loaded = waitForEvent(socket, "run.detail.loaded", (event) => event.requestId === requestId,
       RUN_DETAIL_PAGE_TIMEOUT_MS);
-    socket.send(JSON.stringify({ type: "run.detail.get", requestId, payload: {
+    socket.send(encodeValue({ type: "run.detail.get", requestId, payload: {
       projectId: owner.projectId, threadId: owner.threadId, runId: owner.run.id, cursor, limit: 128
     } }));
     const page = await raceWithAbort(loaded, signal);
@@ -474,7 +473,7 @@ export function waitForCondition(predicate: () => boolean, timeoutMs: number = D
 }
 
 export async function runGitOutput(args: string[], cwd: string) {
-  const process = Bun.spawn({
+  const process = spawnBackgroundProcess({
     cmd: ["git", ...args],
     cwd,
     stdout: "pipe",

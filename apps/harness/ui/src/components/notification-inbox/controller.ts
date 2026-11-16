@@ -221,11 +221,13 @@ export function createNotificationInboxController(): NotificationInboxController
     }
     if (notification.kind === "cli-update") {
       openCliUpdateNotificationFromInbox();
-      sendCommand({
-        type: "cli-updates.install",
-        requestId: createRequestId(),
-        payload: { agentId: notification.agentId }
-      });
+      if (!requiresLauncherUpdate(notification)) {
+        sendCommand({
+          type: "cli-updates.install",
+          requestId: createRequestId(),
+          payload: { agentId: notification.agentId }
+        });
+      }
       close();
       return;
     }
@@ -255,4 +257,9 @@ export function createNotificationInboxController(): NotificationInboxController
     isBrowserApprovalTerminal: (notification) => isCachedBrowserApprovalTerminal(state, notification),
     ...responseActions
   };
+}
+
+export function requiresLauncherUpdate(notification: Extract<NotificationInboxItem, { kind: "cli-update" }>) {
+  return harnessStore.state.setup.launchMode === "portable-launcher" &&
+    (notification.agentId === "pi" || notification.agentId === "codex-cli");
 }

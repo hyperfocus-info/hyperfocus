@@ -1,5 +1,7 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import type { ReplicationEnvelopeSegment, ReplicationFrameMeta } from "../protocol/frames.ts";
 import {
+  SESSION_SUPERSEDED_CLOSE_CODE,
   createProtocolMessage,
   encodeBinaryInputMessage,
   encodeProtocolMessage,
@@ -74,6 +76,7 @@ type ConnectionState<TState> = {
   pendingAdmission?: PendingAdmission;
   reconnectTimer?: ReturnType<typeof setTimeout>;
   reconnectAttempts: number;
+  connectionGeneration: number;
   manuallyClosed: boolean;
 };
 
@@ -91,12 +94,12 @@ export function createAuthoritativeConnection<TState>(
     multipartCodec: options.multipartCodec,
     maxFrameBytes: readPositiveSafeInteger(
       options.maxReplicationFrameBytes,
-      16 * 1024 * 1024,
+      16777216,
       "authoritative maxReplicationFrameBytes"
     ),
     isCurrentSocket: (candidate) => state.socket === candidate,
     acknowledge: (sequence) => {
-      acknowledgeReplication(state, sequence);
+      acknowledgeReplication(runtime, sequence);
     },
     onError: (reason) => emitProtocolError(state, reason),
     onSnapshot: (next, meta) => emitReplication(state, "snapshot", next, meta),
@@ -134,6 +137,7 @@ function createConnectionState<TState>(options: AuthoritativeClientOptions<TStat
     receivedSnapshots: 0,
     receivedDeltas: 0,
     reconnectAttempts: 0,
+    connectionGeneration: 0,
     manuallyClosed: false
   };
 }
@@ -254,6 +258,7 @@ function handleAdmissionMessage<TState>(runtime: ConnectionState<TState>, messag
 }
 
 function failAdmission<TState>(runtime: ConnectionState<TState>, reason: string, closeCode: number) {
+  runtime.manuallyClosed = true;
   rejectAdmission(runtime, new Error(reason));
   publishState(runtime, { status: "failed", reason });
   runtime.socket?.close(closeCode, reason);
@@ -294,10 +299,11 @@ function emitProtocolError<TState>(runtime: ConnectionState<TState>, reason: str
 
 function scheduleReconnect<TState>(runtime: ConnectionRuntime<TState>, reason: string) {
   const reconnect = runtime.reconnect;
-  if (!reconnect || runtime.manuallyClosed || runtime.reconnectTimer) {
+  if (runtime.manuallyClosed || runtime.reconnectTimer) {
     return;
   }
-  if (runtime.reconnectAttempts >= reconnect.maxAttempts) {
+  if (!reconnect || runtime.reconnectAttempts >= reconnect.maxAttempts) {
+    runtime.manuallyClosed = true;
     publishState(runtime, { status: "failed", reason: `reconnect exhausted: ${reason}` });
     return;
   }
@@ -310,8 +316,9 @@ function scheduleReconnect<TState>(runtime: ConnectionRuntime<TState>, reason: s
   runtime.reconnectTimer = setTimeout(() => {
     runtime.reconnectTimer = undefined;
     runtime.reconnectAttempts = attempt;
-    void beginConnection(runtime, true).catch((error) => {
-      scheduleReconnect(runtime, error instanceof Error ? error.message : "reconnect failed");
+    const operation = beginConnection(runtime, true), generation = runtime.connectionGeneration;
+    void operation.catch((error) => {
+      if (generation === runtime.connectionGeneration) scheduleReconnect(runtime, error instanceof Error ? error.message : "reconnect failed");
     });
   }, delay);
 }
@@ -321,11 +328,12 @@ function beginConnection<TState>(runtime: ConnectionRuntime<TState>, recovering:
     return runtime.connectPromise;
   }
   const attempt = recovering ? runtime.reconnectAttempts : 0;
+  const generation = ++runtime.connectionGeneration;
   publishState(
     runtime,
     recovering ? { status: "recovering", attempt, reason: "opening connection" } : { status: "connecting", attempt }
   );
-  const operation = openConnection(runtime, attempt);
+  const operation = openConnection(runtime, attempt, generation);
   runtime.connectPromise = operation;
   const clear = () => {
     if (runtime.connectPromise === operation) {
@@ -336,21 +344,25 @@ function beginConnection<TState>(runtime: ConnectionRuntime<TState>, recovering:
   return operation;
 }
 
-async function openConnection<TState>(runtime: ConnectionRuntime<TState>, attempt: number): Promise<AuthoritativeSession> {
+async function openConnection<TState>(runtime: ConnectionRuntime<TState>, attempt: number, generation: number): Promise<AuthoritativeSession> {
   const token = runtime.options.getToken
     ? await runtime.options.getToken({ attempt, previousSession: runtime.previousSession })
     : runtime.options.token;
   if (typeof token !== "string" || token.length === 0) {
     throw new Error("authoritative token provider returned an empty token");
   }
-  if (runtime.manuallyClosed) {
+  if (runtime.manuallyClosed || generation !== runtime.connectionGeneration) {
     throw new Error("authoritative client closed before connecting");
   }
-  runtime.socket?.close();
+  const previousSocket = runtime.socket;
+  runtime.socket = undefined;
+  previousSocket?.close();
   resetSession(runtime);
   let currentSocket: AuthoritativeWebSocket;
   try {
     currentSocket = runtime.createSocket(runtime.options.url);
+    // Ordered replication must not queue behind asynchronous browser Blob IO.
+    if ("binaryType" in currentSocket) currentSocket.binaryType = "arraybuffer";
   } catch (error) {
     throw error instanceof Error
       ? error
@@ -393,9 +405,7 @@ function handleJoinTimeout<TState>(runtime: ConnectionRuntime<TState>, currentSo
     return;
   }
   const error = new Error(`timed out joining authoritative server after ${runtime.joinTimeoutMs}ms`);
-  rejectAdmission(runtime, error);
-  publishState(runtime, { status: "failed", reason: error.message });
-  currentSocket.close(4000, "join timeout");
+  loseTransport(runtime, currentSocket, error.message);
 }
 
 function handleSocketOpen<TState>(
@@ -407,7 +417,9 @@ function handleSocketOpen<TState>(
   if (runtime.socket !== currentSocket || runtime.pendingAdmission?.socket !== currentSocket) {
     return;
   }
-  publishState(runtime, { status: "admitting", attempt });
+  publishState(runtime, attempt > 0
+    ? { status: "recovering", attempt, reason: "restoring admission" }
+    : { status: "admitting", attempt });
   try {
     sendControl(runtime, createProtocolMessage("client_hello", {}));
     const joinPayload: Record<string, unknown> = { token };
@@ -419,9 +431,7 @@ function handleSocketOpen<TState>(
     }
   } catch (error) {
     const protocolError = error instanceof Error ? error : new Error("could not serialize authoritative join request");
-    rejectAdmission(runtime, protocolError);
-    publishState(runtime, { status: "failed", reason: protocolError.message });
-    currentSocket.close(4002, "join serialization failed");
+    loseTransport(runtime, currentSocket, protocolError.message);
   }
 }
 
@@ -448,30 +458,39 @@ function handleSocketClose<TState>(
   if (runtime.socket !== currentSocket) {
     return;
   }
-  const wasJoined = runtime.state.status === "joined";
-  runtime.socket = undefined;
-  resetSession(runtime);
-  const suffix = event.reason ? `: ${event.reason}` : "";
-  const reason = `socket closed ${event.code}${suffix}`;
-  rejectAdmission(runtime, new Error(reason));
-  if (runtime.manuallyClosed) {
-    publishState(runtime, { status: "closed" });
-  } else if (wasJoined) {
-    emitProtocolError(runtime, reason);
-    scheduleReconnect(runtime, reason);
-  } else if (runtime.state.status !== "failed") {
-    publishState(runtime, { status: "failed", reason });
+  const reason = `socket closed ${event.code}${event.reason ? `: ${event.reason}` : ""}`;
+  if (event.code === SESSION_SUPERSEDED_CLOSE_CODE) {
+    failAdmission(runtime, event.reason || "This account signed in elsewhere. Sign in again to continue.", 4003);
+    runtime.socket = undefined;
+    resetSession(runtime);
+  } else if (!runtime.manuallyClosed) {
+    loseTransport(runtime, currentSocket, reason);
   }
 }
 
 function handleSocketError<TState>(runtime: ConnectionRuntime<TState>, currentSocket: AuthoritativeWebSocket) {
-  if (runtime.socket !== currentSocket) {
-    return;
+  loseTransport(runtime, currentSocket, `could not connect to authoritative server: ${runtime.options.url}`);
+}
+
+function loseTransport<TState>(runtime: ConnectionRuntime<TState>, currentSocket: AuthoritativeWebSocket, reason: string) {
+  if (runtime.socket !== currentSocket || runtime.manuallyClosed) return;
+  const retry = runtime.state.status === "joined" || runtime.reconnectAttempts > 0;
+  runtime.socket = undefined;
+  resetSession(runtime);
+  rejectAdmission(runtime, new Error(reason));
+  // Fence callbacks before closing: some socket adapters dispatch close synchronously.
+  try { currentSocket.close(4002, "transport interrupted"); } catch { /* Already unavailable. */ }
+  if (retry) scheduleReconnect(runtime, reason);
+  else publishState(runtime, { status: "failed", reason });
+}
+
+function sendBytes<TState>(runtime: ConnectionRuntime<TState>, bytes: string | Uint8Array<ArrayBuffer>) {
+  const socket = runtime.socket;
+  if (!socket) throw new Error("authoritative socket unavailable");
+  try { socket.send(bytes); } catch (error) {
+    loseTransport(runtime, socket, "authoritative socket send failed");
+    throw error;
   }
-  const error = new Error(`could not connect to authoritative server: ${runtime.options.url}`);
-  rejectAdmission(runtime, error);
-  publishState(runtime, { status: "failed", reason: error.message });
-  currentSocket.close();
 }
 
 function resetSession<TState>(runtime: ConnectionRuntime<TState>) {
@@ -485,7 +504,7 @@ function resetSession<TState>(runtime: ConnectionRuntime<TState>) {
 function createAuthoritativeClientApi<TState>(runtime: ConnectionRuntime<TState>): AuthoritativeClient<TState> {
   return {
     connect: () => connectClient(runtime),
-    close: () => closeClient(runtime),
+    close: (options) => closeClient(runtime, options),
     sendInput: (input) => sendInput(runtime, input),
     sendEvent: (event) => sendEvent(runtime, event),
     onState: (listener) => subscribeState(runtime, listener),
@@ -524,7 +543,9 @@ function connectClient<TState>(runtime: ConnectionRuntime<TState>) {
   return beginConnection(runtime, false);
 }
 
-function closeClient<TState>(runtime: ConnectionRuntime<TState>) {
+function closeClient<TState>(runtime: ConnectionRuntime<TState>, options?: { mode?: 'leave' | 'suspend' }) {
+  const suspended = options?.mode === 'suspend';
+  runtime.connectionGeneration++;
   runtime.manuallyClosed = true;
   if (runtime.reconnectTimer) {
     clearTimeout(runtime.reconnectTimer);
@@ -534,9 +555,11 @@ function closeClient<TState>(runtime: ConnectionRuntime<TState>) {
   runtime.socket = undefined;
   rejectAdmission(runtime, new Error("authoritative client closed before admission"));
   runtime.connectPromise = undefined;
-  currentSocket?.close(1000, "client closed");
+  currentSocket?.close(suspended ? 4002 : 1000, suspended ? "transport suspended" : "client closed");
   resetSession(runtime);
-  publishState(runtime, { status: "closed" });
+  publishState(runtime, suspended
+    ? { status: "recovering", attempt: 0, reason: "Connection suspended." }
+    : { status: "closed" });
 }
 
 function sendInput<TState>(runtime: ConnectionRuntime<TState>, input: unknown): AuthoritativeSendResult {
@@ -546,9 +569,9 @@ function sendInput<TState>(runtime: ConnectionRuntime<TState>, input: unknown): 
   const nextSequence = (runtime.sequence + 1) >>> 0;
   try {
     if (runtime.options.inputCodec) {
-      runtime.socket.send(encodeBinaryInputMessage(input, runtime.options.inputCodec, { seq: nextSequence }));
+      sendBytes(runtime, encodeBinaryInputMessage(input, runtime.options.inputCodec, { seq: nextSequence }));
     } else {
-      runtime.socket.send(
+      sendBytes(runtime,
         encodeProtocolMessage(
           createProtocolMessage("input", input, {
             seq: nextSequence,
@@ -588,7 +611,7 @@ function sendSequenced<TState>(
     return { status: "rejected", reason: "not-joined" };
   }
   try {
-    runtime.socket.send(encodeProtocolMessage(message));
+    sendBytes(runtime, encodeProtocolMessage(message));
     runtime.sequence = nextSequence;
     return { status: "sent", sequence: nextSequence };
   } catch {
@@ -596,7 +619,7 @@ function sendSequenced<TState>(
   }
 }
 
-function acknowledgeReplication<TState>(runtime: ConnectionState<TState>, sequence: number): AuthoritativeSendResult {
+function acknowledgeReplication<TState>(runtime: ConnectionRuntime<TState>, sequence: number): AuthoritativeSendResult {
   if (runtime.state.status !== "joined") {
     return { status: "rejected", reason: "not-joined" };
   }
@@ -610,6 +633,7 @@ function acknowledgeReplication<TState>(runtime: ConnectionState<TState>, sequen
     );
     return sent ? { status: "sent", sequence } : { status: "rejected", reason: "not-joined" };
   } catch {
+    if (runtime.socket) loseTransport(runtime, runtime.socket, "authoritative acknowledgement send failed");
     return { status: "rejected", reason: "transport-error" };
   }
 }
@@ -638,8 +662,4 @@ function isJoined<TState>(
 ): runtime is ConnectionRuntime<TState> & { socket: AuthoritativeWebSocket; state: { status: "joined" } } {
   const socket = runtime.socket;
   return runtime.state.status === "joined" && socket !== undefined && socket.readyState === runtime.openReadyState;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

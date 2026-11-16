@@ -1,10 +1,10 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
-import net from "node:net";
+import { launchHeadlessBrowser } from "@hyperfocus/desktop-runtime/automation";
+import { spawnBackgroundProcess, terminateProcessTree } from "@hyperfocus/desktop-runtime/process";
 import { connectCdpSession, type CdpSession } from "@hyperfocus/engine/tooling/cdp-client";
 import { LAB_SCENARIO_IDS, type LabControls, type LabScenarioId } from "./src/scenarios.ts";
 import { MOTION_LAB_FIXTURE_IDS, type MotionLabFixtureId } from "./src/fixture-repository.ts";
@@ -115,25 +115,22 @@ async function runBrowserProof(options: BrowserProofOptions) {
   if (!options.skipBuild) await runCommand(process.execPath, [path.join(import.meta.dir, "build.ts")], "motion-lab build");
 
   const serverPort = await findOpenPort();
-  const cdpPort = await findOpenPort();
-  const userDataDir = await mkdtemp(path.join(tmpdir(), "motion-lab-proof-"));
-  let server: ChildProcess | undefined;
-  let chrome: ChildProcess | undefined;
+  let server: ReturnType<typeof spawnBackgroundProcess> | undefined;
+  let chrome: Awaited<ReturnType<typeof launchHeadlessBrowser>> | undefined;
   let session: CdpSession | undefined;
   let target: CdpTarget | undefined;
   const pageErrors: string[] = [];
   const consoleMessages: string[] = [];
 
   try {
-    server = spawn(process.execPath, [path.join(import.meta.dir, "server.ts")], {
+    server = spawnBackgroundProcess({ cmd: [process.execPath, path.join(import.meta.dir, "server.ts")],
       cwd: path.resolve(import.meta.dir, "..", ".."),
       env: { ...process.env, MOTION_LAB_HOST: "127.0.0.1", MOTION_LAB_PORT: String(serverPort) },
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
+      stdout: "ignore", stderr: "inherit",
     });
     await waitForLabServer(serverPort, server);
-    chrome = await launchChrome(cdpPort, userDataDir, options.chromePath);
-    target = await createCdpTarget(cdpPort);
+    chrome = await launchChrome(options.chromePath);
+    target = await createCdpTarget(chrome.port);
     session = await connectCdpSession(target.webSocketDebuggerUrl, "motion proof complete");
     await Promise.all([
       session.command("Page.enable"),
@@ -241,7 +238,7 @@ async function runBrowserProof(options: BrowserProofOptions) {
         plantedVerticalErrorMetersInclusive: PLANTED_VERTICAL_ERROR_LIMIT_METERS,
         nanCount: 0,
       },
-      fixedStepSeconds: 1 / 60,
+      fixedStepSeconds: 0.016666666666666666,
       stepsPerCase: options.steps,
       fixtures: MOTION_LAB_FIXTURE_IDS,
       scenarios: LAB_SCENARIO_IDS,
@@ -280,12 +277,10 @@ async function runBrowserProof(options: BrowserProofOptions) {
     if (failures.length > 0) throw new Error(`Motion-lab browser proof failed:\n${failures.join("\n")}`);
     return result;
   } finally {
-    if (target) await closeCdpTarget(cdpPort, target.id).catch(() => undefined);
+    if (target && chrome) await closeCdpTarget(chrome.port, target.id).catch(() => undefined);
     await session?.close().catch(() => undefined);
-    await killProcessTree(chrome);
-    await killChromeProfileProcesses(userDataDir);
-    await killProcessTree(server);
-    await removeTemporaryDirectory(userDataDir);
+    try { await chrome?.close(); }
+    finally { if (server) await terminateProcessTree({ process: server }); }
   }
 }
 
@@ -474,32 +469,26 @@ async function waitForRuntimeExpression(
 }
 
 async function runCommand(executable: string, args: readonly string[], label: string) {
-  const child = spawn(executable, [...args], {
+  const child = spawnBackgroundProcess({ cmd: [executable, ...args],
     cwd: path.resolve(import.meta.dir, "..", ".."),
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
+    timeout: 600000,
   });
-  const stdout: string[] = [];
-  const stderr: string[] = [];
-  child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk.toString()));
-  child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk.toString()));
-  await new Promise<void>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${label} exited with ${code ?? signal}: ${stderr.join("").trim() || stdout.join("").trim()}`));
-    });
-  });
+  try {
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited
+    ]);
+    if (code !== 0) throw new Error(`${label} exited with ${code}: ${stderr.trim() || stdout.trim()}`);
+  } finally { await terminateProcessTree({ process: child }); }
 }
 
-async function waitForLabServer(port: number, process: ChildProcess) {
+async function waitForLabServer(port: number, process: ReturnType<typeof spawnBackgroundProcess>) {
   const started = performance.now();
   while (performance.now() - started < 15_000) {
-    if (process.exitCode !== null || process.signalCode !== null) {
-      throw new Error(`Motion-lab server exited before readiness (${process.exitCode ?? process.signalCode})`);
+    if (process.exitCode !== null) {
+      throw new Error(`Motion-lab server exited before readiness (${process.exitCode})`);
     }
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/healthz`);
+      const response = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(1_000) });
       if (response.ok) return;
     } catch {
       // Server startup is asynchronous.
@@ -509,37 +498,21 @@ async function waitForLabServer(port: number, process: ChildProcess) {
   throw new Error("Motion-lab server did not become ready");
 }
 
-async function launchChrome(port: number, userDataDir: string, explicitPath?: string) {
+async function launchChrome(explicitPath?: string) {
   const args = [
-    "--headless=new",
-    "--disable-dev-shm-usage",
-    "--no-first-run",
-    "--no-default-browser-check",
     "--enable-webgl",
     "--ignore-gpu-blocklist",
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${userDataDir}`,
     `--window-size=${FIXED_CAPTURE_WIDTH},${FIXED_CAPTURE_HEIGHT}`,
-    "about:blank",
   ];
   const failures: string[] = [];
   for (const executable of chromeCandidates(explicitPath)) {
     if (path.isAbsolute(executable) && !existsSync(executable)) continue;
-    const child = spawn(executable, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
-    const stderr: string[] = [];
-    child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk.toString()));
-    const spawnFailure = new Promise<never>((_resolve, reject) => child.once("error", reject));
     try {
-      // Windows Chrome may hand headless startup to a profile-scoped child and
-      // let the original launcher exit with code zero before CDP is listening.
-      await Promise.race([waitForCdp(port), spawnFailure]);
-      return child;
+      return await launchHeadlessBrowser({ executable, args });
     } catch (error) {
       failures.push(
-        `${executable}: ${error instanceof Error ? error.message : String(error)}${stderr.length ? ` (${stderr.join("").trim()})` : ""}`,
+        `${executable}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      await killProcessTree(child);
-      await killChromeProfileProcesses(userDataDir);
     }
   }
   throw new Error(`No Chrome executable found. Set CHROME_PATH or pass --chrome.${failures.length ? ` Attempts: ${failures.join(" | ")}` : ""}`);
@@ -561,19 +534,6 @@ function chromeCandidates(explicitPath?: string) {
     "chromium-browser",
   ];
   return [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))];
-}
-
-async function waitForCdp(port: number) {
-  const started = performance.now();
-  while (performance.now() - started < 10_000) {
-    try {
-      await cdpFetch(port, "/json/version");
-      return;
-    } catch {
-      await delay(80);
-    }
-  }
-  throw new Error("Chrome DevTools endpoint did not start");
 }
 
 async function cdpFetch(port: number, route: string, init?: RequestInit): Promise<unknown> {
@@ -601,63 +561,12 @@ async function closeCdpTarget(port: number, id: string) {
   await cdpFetch(port, `/json/close/${encodeURIComponent(id)}`);
 }
 
-async function killProcessTree(process?: ChildProcess) {
-  if (!process?.pid || process.exitCode !== null || process.signalCode !== null) return;
-  if (globalThis.process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const killer = spawn("taskkill", ["/PID", String(process.pid), "/T", "/F"], {
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      killer.once("exit", () => resolve());
-      killer.once("error", () => resolve());
-    });
-    return;
-  }
-  const exited = new Promise<void>((resolve) => {
-    process.once("exit", () => resolve());
-    process.once("error", () => resolve());
-  });
-  if (process.kill("SIGTERM")) await Promise.race([exited, delay(2_000)]);
-  if (process.exitCode === null && process.signalCode === null) process.kill("SIGKILL");
-}
-
-async function killChromeProfileProcesses(userDataDir: string) {
-  if (process.platform !== "win32") return;
-  const marker = path.basename(userDataDir).replace(/'/g, "''");
-  await new Promise<void>((resolve) => {
-    const script = `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'chrome.exe' -or $_.Name -eq 'msedge.exe') -and $_.CommandLine -like '*${marker}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
-    const killer = spawn("powershell.exe", ["-NoProfile", "-Command", script], {
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    killer.once("exit", () => resolve());
-    killer.once("error", () => resolve());
-  });
-}
-
-async function removeTemporaryDirectory(directory: string) {
-  const temporaryRoot = path.resolve(tmpdir());
-  const resolved = path.resolve(directory);
-  const relative = path.relative(temporaryRoot, resolved);
-  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`)) {
-    throw new Error(`Refusing to remove non-temporary Chrome profile: ${resolved}`);
-  }
-  await rm(resolved, { force: true, recursive: true });
-}
-
 async function findOpenPort() {
-  return await new Promise<number>((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(() => {
-        if (typeof address === "object" && address?.port) resolve(address.port);
-        else reject(new Error("Could not allocate a local port"));
-      });
-    });
-  });
+  const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("probe") });
+  const port = probe.port;
+  probe.stop(true);
+  if (!port) throw new Error("Could not allocate a local port");
+  return port;
 }
 
 function delay(milliseconds: number) {
@@ -670,9 +579,7 @@ function positiveInteger(value: string | undefined, label: string) {
   return number;
 }
 
-function isRecord(value: unknown): value is UnknownRecord {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+
 
 function recordFrom(value: unknown): UnknownRecord {
   return isRecord(value) ? value : {};

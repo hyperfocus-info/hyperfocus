@@ -7,6 +7,19 @@ const environment = {
   timingFingerprint: "same-context"
 } as BenchmarkEnvironment;
 
+test("reports reject lossy JSON evidence at creation and comparison boundaries", () => {
+  const create = (structuralEvidence: unknown) => createPerformanceEvidenceReport({ benchmark: "queue", environment, config: {}, structuralEvidence, measurements: {} });
+  const cycle: Record<string, unknown> = {}; cycle.self = cycle;
+  for (const value of [NaN, Infinity, -Infinity, undefined, 1n, () => 1, Symbol("x"), new Date(), new Map(), cycle, new Array(2)]) {
+    expect(() => create({ value })).toThrow();
+  }
+  const valid = create({ value: null });
+  const imported = { ...valid, evidence: { ...valid.evidence, portable: { value: NaN } } };
+  expect(() => comparePerformanceEvidence({ baseline: valid, candidate: imported })).toThrow("finite");
+  const shared = { count: 1 };
+  expect(() => create({ left: shared, right: shared })).not.toThrow();
+});
+
 test("performance evidence keeps structural facts outside timing calibration", () => {
   const report = createPerformanceEvidenceReport({
     benchmark: "queue",

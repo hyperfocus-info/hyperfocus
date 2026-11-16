@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
+import { Database, type SQLQueryBindings } from "bun:sqlite";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { runAssistantMaintenance } from "./assistant-maintenance";
+import { parseArgs as parseMaintenanceArgs, runAssistantMaintenance } from "./assistant-maintenance";
 import { buildAssistantJobsReport } from "./assistant-jobs";
 import { buildAssistantStateReport } from "./assistant-state";
 import { validateRunbook } from "./runbook-check";
@@ -10,23 +11,31 @@ import { validateRunbook } from "./runbook-check";
 const skillRoot = path.resolve(import.meta.dir, "..");
 
 describe("assistant-actions runbook", () => {
-  test("master skill links all branch docs", () => {
+  test("portable runbook links resolve within its installed skill", () => {
     const result = validateRunbook(skillRoot);
 
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
-    expect(result.branchDocs).toContain("jobs.md");
+    expect(result.documents).toContain("references/jobs.md");
   });
 
-  test("every assistant story maps to a runbook branch", () => {
-    const result = validateRunbook(skillRoot);
+  test("runbook checker detects broken references and escaping installed boundaries", () => {
+    const installed = mkdtempSync(path.join(tmpdir(), "harness-runbook-"));
+    try {
+      cpSync(skillRoot, installed, { recursive: true });
+      writeFileSync(path.join(installed, "SKILL.md"), "[missing](references/missing.md)\n[outside](../private.md)\n");
+      const result = validateRunbook(installed);
+      expect(result.ok).toBe(false);
+      expect(result.errors.some((error) => error.includes("references/missing.md"))).toBe(true);
+      expect(result.errors.some((error) => error.includes("../private.md"))).toBe(true);
+    } finally {
+      rmSync(installed, { recursive: true, force: true });
+    }
+  });
 
-    expect(result.storyIds).toEqual([
-      "US-ASSISTANTS-001",
-      "US-ASSISTANTS-002",
-      "US-ASSISTANTS-003",
-      "US-ASSISTANTS-004"
-    ]);
+  test("maintenance rejects retired project-specific repairs", () => {
+    expect(() => parseMaintenanceArgs(["--action", "reconcile-orrn-todos", "--assistant", "Orrn", "--execute"]))
+      .toThrow("Unknown action");
   });
 
   test("job-state lookup covers queued assistant jobs", () => {
@@ -37,11 +46,7 @@ describe("assistant-actions runbook", () => {
       project: "Docs",
       json: true,
       limit: 10
-    }) as {
-      lookup: { status: string };
-      backgroundJobs: Array<{ name: string; status: string }>;
-      backgroundJobRuns: Array<{ status: string; job_id: string }>;
-    };
+    });
 
     expect(report.lookup.status).toBe("ok");
     expect(report.backgroundJobs).toEqual([
@@ -59,10 +64,7 @@ describe("assistant-actions runbook", () => {
       project: "Docs",
       json: true,
       limit: 5
-    }) as {
-      lookup: { status: string };
-      recentRuns: Array<{ status: string; job_id: string; assistant_name: string; project_name: string }>;
-    };
+    });
 
     expect(report.lookup.status).toBe("ok");
     expect(report.recentRuns).toEqual([
@@ -85,7 +87,7 @@ describe("assistant-actions runbook", () => {
       project: "Docs",
       execute: false,
       json: true
-    }) as { plan: { backgroundJobCount: number; activeRunCount: number }; applied: boolean };
+    });
 
     expect(dryRun.applied).toBe(false);
     expect(dryRun.plan.backgroundJobCount).toBe(1);
@@ -102,9 +104,9 @@ describe("assistant-actions runbook", () => {
 
     const db = new Database(dbPath);
     try {
-      expect((db.query(`SELECT COUNT(*) AS count FROM background_jobs WHERE assistant_id = ?1`).get("assistant-1") as { count: number }).count).toBe(0);
-      expect((db.query(`SELECT status FROM background_job_runs WHERE id = ?1`).get("run-1") as { status: string }).status).toBe("cancelled");
-      expect((db.query(`SELECT deleted_at FROM assistants WHERE id = ?1`).get("assistant-1") as { deleted_at: string | null }).deleted_at).toBeNull();
+      expect((db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT COUNT(*) AS count FROM background_jobs WHERE assistant_id = ?1`).get("assistant-1") ?? {}).count).toBe(0);
+      expect((db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT status FROM background_job_runs WHERE id = ?1`).get("run-1") ?? {}).status).toBe("cancelled");
+      expect((db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT deleted_at FROM assistants WHERE id = ?1`).get("assistant-1") ?? {}).deleted_at).toBeNull();
     } finally {
       db.close();
     }
@@ -123,11 +125,11 @@ describe("assistant-actions runbook", () => {
 
     const db = new Database(dbPath);
     try {
-      const projectAssistant = db.query(`SELECT deleted_at FROM assistants WHERE id = ?1`).get("assistant-1") as { deleted_at: string | null };
-      const globalAssistant = db.query(`SELECT deleted_at FROM assistants WHERE id = ?1`).get("assistant-global") as { deleted_at: string | null };
+      const projectAssistant = db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT deleted_at FROM assistants WHERE id = ?1`).get("assistant-1") ?? {};
+      const globalAssistant = db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT deleted_at FROM assistants WHERE id = ?1`).get("assistant-global") ?? {};
       expect(projectAssistant.deleted_at).toBeTruthy();
       expect(globalAssistant.deleted_at).toBeNull();
-      expect((db.query(`SELECT COUNT(*) AS count FROM background_jobs WHERE assistant_id = ?1`).get("assistant-1") as { count: number }).count).toBe(0);
+      expect((db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT COUNT(*) AS count FROM background_jobs WHERE assistant_id = ?1`).get("assistant-1") ?? {}).count).toBe(0);
     } finally {
       db.close();
     }
@@ -147,23 +149,17 @@ describe("assistant-actions runbook", () => {
     const db = new Database(dbPath);
     try {
       const assistant = db
-        .query(
+        .query<Record<string, unknown>, SQLQueryBindings[]>(
           `SELECT bootstrap_state, run_state, failure_streak_count, circuit_breaker_state, circuit_breaker_reason
            FROM assistants WHERE id = ?1`
         )
-        .get("assistant-1") as {
-        bootstrap_state: string;
-        run_state: string;
-        failure_streak_count: number;
-        circuit_breaker_state: string;
-        circuit_breaker_reason: string | null;
-      };
+        .get("assistant-1") ?? {};
       expect(assistant.bootstrap_state).toBe("pending");
       expect(assistant.run_state).toBe("active");
       expect(assistant.failure_streak_count).toBe(0);
       expect(assistant.circuit_breaker_state).toBe("closed");
       expect(assistant.circuit_breaker_reason).toBeNull();
-      expect((db.query(`SELECT COUNT(*) AS count FROM background_jobs WHERE assistant_id = ?1`).get("assistant-1") as { count: number }).count).toBe(1);
+      expect((db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT COUNT(*) AS count FROM background_jobs WHERE assistant_id = ?1`).get("assistant-1") ?? {}).count).toBe(1);
     } finally {
       db.close();
     }
@@ -172,7 +168,7 @@ describe("assistant-actions runbook", () => {
   test("maintenance pauses all project assistants without pausing globals", () => {
     const dbPath = createAssistantMaintenanceFixture();
     const setupDb = new Database(dbPath);
-    setupDb.query(`UPDATE assistants SET run_state = 'active' WHERE id = ?1`).run("assistant-1");
+    setupDb.query<Record<string, unknown>, SQLQueryBindings[]>(`UPDATE assistants SET run_state = 'active' WHERE id = ?1`).run("assistant-1");
     setupDb.close();
 
     const dryRun = runAssistantMaintenance({
@@ -181,7 +177,7 @@ describe("assistant-actions runbook", () => {
       project: "Docs",
       execute: false,
       json: true
-    }) as { plan: { assistantsToPauseCount: number }; applied: boolean };
+    });
 
     expect(dryRun.applied).toBe(false);
     expect(dryRun.plan.assistantsToPauseCount).toBe(1);
@@ -196,8 +192,8 @@ describe("assistant-actions runbook", () => {
 
     const db = new Database(dbPath);
     try {
-      expect((db.query(`SELECT run_state FROM assistants WHERE id = ?1`).get("assistant-1") as { run_state: string }).run_state).toBe("paused");
-      expect((db.query(`SELECT run_state FROM assistants WHERE id = ?1`).get("assistant-global") as { run_state: string }).run_state).toBe("active");
+      expect((db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT run_state FROM assistants WHERE id = ?1`).get("assistant-1") ?? {}).run_state).toBe("paused");
+      expect((db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT run_state FROM assistants WHERE id = ?1`).get("assistant-global") ?? {}).run_state).toBe("active");
     } finally {
       db.close();
     }
@@ -212,7 +208,7 @@ describe("assistant-actions runbook", () => {
       project: "Docs",
       execute: false,
       json: true
-    }) as { plan: { assistantsToResumeCount: number }; applied: boolean };
+    });
 
     expect(dryRun.applied).toBe(false);
     expect(dryRun.plan.assistantsToResumeCount).toBe(1);
@@ -228,11 +224,11 @@ describe("assistant-actions runbook", () => {
     const db = new Database(dbPath);
     try {
       const assistant = db
-        .query(`SELECT run_state, pending_reprioritize_reason FROM assistants WHERE id = ?1`)
-        .get("assistant-1") as { run_state: string; pending_reprioritize_reason: string | null };
+        .query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT run_state, pending_reprioritize_reason FROM assistants WHERE id = ?1`)
+        .get("assistant-1") ?? {};
       expect(assistant.run_state).toBe("active");
       expect(assistant.pending_reprioritize_reason).toBe("manual-resume");
-      expect((db.query(`SELECT run_state FROM assistants WHERE id = ?1`).get("assistant-global") as { run_state: string }).run_state).toBe("active");
+      expect((db.query<Record<string, unknown>, SQLQueryBindings[]>(`SELECT run_state FROM assistants WHERE id = ?1`).get("assistant-global") ?? {}).run_state).toBe("active");
     } finally {
       db.close();
     }
@@ -248,14 +244,14 @@ describe("assistant-actions runbook", () => {
       project: "Docs",
       execute: false,
       json: true
-    }) as { plan: { backgroundJobCount: number; activeRunCount: number; jobsToStartCount: number } };
+    });
 
     expect(blockedByActiveRun.plan.backgroundJobCount).toBe(1);
     expect(blockedByActiveRun.plan.activeRunCount).toBe(1);
     expect(blockedByActiveRun.plan.jobsToStartCount).toBe(0);
 
     const db = new Database(dbPath);
-    db.query(`UPDATE background_job_runs SET status = 'succeeded', completed_at = updated_at WHERE id = ?1`).run("run-1");
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`UPDATE background_job_runs SET status = 'succeeded', completed_at = updated_at WHERE id = ?1`).run("run-1");
     db.close();
 
     const plan = runAssistantMaintenance({
@@ -265,7 +261,7 @@ describe("assistant-actions runbook", () => {
       project: "Docs",
       execute: false,
       json: true
-    }) as { plan: { jobsToStartCount: number; jobsToStart: Array<{ id: string }> } };
+    });
 
     expect(plan.plan.jobsToStartCount).toBe(1);
     expect(plan.plan.jobsToStart).toEqual([expect.objectContaining({ id: "job-1" })]);
@@ -273,7 +269,7 @@ describe("assistant-actions runbook", () => {
 });
 
 function createAssistantStateFixture() {
-  const tempRoot = path.join(process.cwd(), ".tmp-test-data", "assistant-actions");
+  const tempRoot = path.join(process.cwd(), ".local/test-data", "assistant-actions");
   mkdirSync(tempRoot, { recursive: true });
   const dbPath = path.join(tempRoot, `assistant-actions-${crypto.randomUUID()}.sqlite`);
   const db = new Database(dbPath);
@@ -390,8 +386,8 @@ function createAssistantStateFixture() {
       );
     `);
     const now = "2026-04-27T12:00:00.000Z";
-    db.query(`INSERT INTO projects VALUES (?1, ?2, ?3, ?4, ?4)`).run("project-1", "Docs", "C:/repo/docs", now);
-    db.query(
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`INSERT INTO projects VALUES (?1, ?2, ?3, ?4, ?4)`).run("project-1", "Docs", "C:/repo/docs", now);
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(
       `INSERT INTO assistants VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)`
     ).run(
       "assistant-1",
@@ -411,7 +407,7 @@ function createAssistantStateFixture() {
       now,
       null
     );
-    db.query(`INSERT INTO assistant_threads VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`).run(
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`INSERT INTO assistant_threads VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`).run(
       "assistant-thread-1",
       "assistant-1",
       "session-1",
@@ -419,7 +415,7 @@ function createAssistantStateFixture() {
       now,
       now
     );
-    db.query(`INSERT INTO background_jobs VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`).run(
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`INSERT INTO background_jobs VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`).run(
       "job-1",
       "project-1",
       "assistant-1",
@@ -435,7 +431,7 @@ function createAssistantStateFixture() {
       null,
       now
     );
-    db.query(`INSERT INTO background_job_runs VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`).run(
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`INSERT INTO background_job_runs VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`).run(
       "run-1",
       "job-1",
       "project-1",
@@ -458,7 +454,7 @@ function createAssistantStateFixture() {
 }
 
 function createAssistantMaintenanceFixture() {
-  const tempRoot = path.join(process.cwd(), ".tmp-test-data", "assistant-actions");
+  const tempRoot = path.join(process.cwd(), ".local/test-data", "assistant-actions");
   mkdirSync(tempRoot, { recursive: true });
   const dbPath = path.join(tempRoot, `assistant-maintenance-${crypto.randomUUID()}.sqlite`);
   const db = new Database(dbPath);
@@ -510,8 +506,8 @@ function createAssistantMaintenanceFixture() {
       );
     `);
     const now = "2026-04-27T12:00:00.000Z";
-    db.query(`INSERT INTO projects VALUES (?1, ?2, ?3, ?4, ?4)`).run("project-1", "Docs", "C:/repo/docs", now);
-    db.query(`INSERT INTO assistants VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`).run(
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`INSERT INTO projects VALUES (?1, ?2, ?3, ?4, ?4)`).run("project-1", "Docs", "C:/repo/docs", now);
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`INSERT INTO assistants VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`).run(
       "assistant-1",
       "Release watcher",
       "project",
@@ -530,7 +526,7 @@ function createAssistantMaintenanceFixture() {
       now,
       now
     );
-    db.query(`INSERT INTO assistants VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`).run(
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`INSERT INTO assistants VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`).run(
       "assistant-global",
       "Global watcher",
       "global",
@@ -549,7 +545,7 @@ function createAssistantMaintenanceFixture() {
       now,
       now
     );
-    db.query(`INSERT INTO background_jobs VALUES (?1, ?2, ?3, ?4, ?5, ?6)`).run(
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`INSERT INTO background_jobs VALUES (?1, ?2, ?3, ?4, ?5, ?6)`).run(
       "job-1",
       "project-1",
       "assistant-1",
@@ -557,7 +553,7 @@ function createAssistantMaintenanceFixture() {
       "enabled",
       now
     );
-    db.query(`INSERT INTO background_job_runs VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`).run(
+    db.query<Record<string, unknown>, SQLQueryBindings[]>(`INSERT INTO background_job_runs VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`).run(
       "run-1",
       "job-1",
       "project-1",

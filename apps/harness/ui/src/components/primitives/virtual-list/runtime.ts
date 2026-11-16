@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount, splitProps, untrack, type JSX } from "solid-js";
-import { createVirtualizer } from "@tanstack/solid-virtual";
+import { createVirtualizer, observeElementOffset } from "@tanstack/solid-virtual";
 import { recordUiTelemetry } from "../../../lib/ui-telemetry";
 import {
   DEFAULT_VISIBLE_COUNT, NEAR_END_PX, NO_RESIZE_OBSERVER_ROW_SETTLE_FRAMES,
@@ -37,6 +37,7 @@ export function createVirtualListModel<T>(props: VirtualListProps<T>) {
   const runtime: {
     viewport?: HTMLDivElement;
     viewportObserver?: ResizeObserver;
+    synchronizeScrollOffset?: () => void;
     paginationThrottle?: number;
     pendingPaginationFrame?: number;
     pendingViewportMeasurementFrame?: number;
@@ -83,6 +84,24 @@ export function createVirtualListModel<T>(props: VirtualListProps<T>) {
 
 export type VirtualListModel<T> = ReturnType<typeof createVirtualListModel<T>>;
 export type VirtualListVirtualizer = ReturnType<typeof createVirtualizer<HTMLDivElement, HTMLDivElement>>;
+
+export function observeVirtualListOffset<T>(model: VirtualListModel<T>, virtualizer: VirtualListVirtualizer, onChange: (offset: number, scrolling: boolean) => void) {
+  const cleanup = observeElementOffset(virtualizer, (offset, scrolling) => {
+    const element = virtualizer.scrollElement;
+    // A queued scroll-end callback may still carry the offset observed while hidden.
+    onChange(element && element.clientHeight > 0 ? element.scrollTop : offset, scrolling);
+  });
+  const synchronize = () => {
+    const element = virtualizer.scrollElement;
+    // Revealing a mounted pane can restore scrollTop without a new scroll event.
+    if (element && element.clientHeight > 0 && element.scrollTop !== virtualizer.scrollOffset) onChange(element.scrollTop, false);
+  };
+  model.runtime.synchronizeScrollOffset = synchronize;
+  return () => {
+    cleanup?.();
+    if (model.runtime.synchronizeScrollOffset === synchronize) model.runtime.synchronizeScrollOffset = undefined;
+  };
+}
 
 export function getVirtualListRowElementIndex(element: HTMLElement) {
   const index = Number(element.dataset.index);
@@ -386,7 +405,8 @@ export function registerVirtualListLifecycle<T>(
     const currentItems = items();
     const anchor = getListAnchor(currentItems, local.getKey);
     const previous = untrack(lastAnchor);
-    if (!anchorsEqual(previous, anchor)) {
+    // Empty mounts still need an anchor so the first async page restores its window.
+    if (!previous || !anchorsEqual(previous, anchor)) {
       setLastAnchor(anchor);
     }
     if (currentItems.length === 0) {
@@ -538,6 +558,7 @@ export function createVirtualListViewportRuntime<T>(
       }
       const wasStuck = stuckToEnd();
       const shouldSettleToEnd = Boolean(currentOptions.stickToEndSettle && local.stickToEnd && runtime.stickToEndSettleFramesRemaining > 0);
+      runtime.synchronizeScrollOffset?.();
       virtualizer.measure();
       measureObservedRows();
       queueObservedRowsMeasurement();
@@ -771,4 +792,3 @@ export function createVirtualListMeasurementRuntime<T>(
     measureObservedRows, disconnectRowObserver,
   };
 }
-

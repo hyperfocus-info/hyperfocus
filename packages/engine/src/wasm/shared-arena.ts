@@ -1,3 +1,4 @@
+import { align, size } from "./arena-bounds.ts";
 const ARENA_MAGIC = 0x48534131;
 const ARENA_VERSION = 1;
 const HEADER_INTS = 16;
@@ -23,14 +24,9 @@ export interface StateArenaRegion {
   readonly byteLength: number;
 }
 
-function align(value: number, alignment: number): number {
-  return Math.ceil(value / alignment) * alignment;
-}
 
-function size(value: number, label: string): number {
-  if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`${label} must be a non-negative safe integer.`);
-  return value;
-}
+
+
 
 /**
  * Startup-only bump arena whose views can be handed directly to TypeScript,

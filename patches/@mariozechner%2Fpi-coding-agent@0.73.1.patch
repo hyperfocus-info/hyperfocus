@@ -1,0 +1,441 @@
+diff --git a/dist/config.js b/dist/config.js
+index db29cf280d64b7138a933fc7eec31e3a55d6f416..cf404c96aa59a805e7dd229073c63b90862ac93d 100644
+--- a/dist/config.js
++++ b/dist/config.js
+@@ -106,11 +106,11 @@ function getSelfUpdateCommandForMethod(method, installedPackageName, updatePacka
+     }
+ }
+ function readCommandOutput(command, args, options = {}) {
+-    const result = spawnSync(command, args, {
++    const result = spawnSync(command, args, { ...{
+         encoding: "utf-8",
+         stdio: ["ignore", "pipe", "pipe"],
+         shell: shouldUseWindowsShell(command),
+-    });
++    }, windowsHide: true });
+     if (result.status === 0)
+         return result.stdout.trim() || undefined;
+     if (options.requireSuccess) {
+diff --git a/dist/core/exec.js b/dist/core/exec.js
+index 29657fa0006e5dc6173d8f058e83bdb4451c72b4..5bad987aafc20b97c97fc10e2b041bd7a82b7c96 100644
+--- a/dist/core/exec.js
++++ b/dist/core/exec.js
+@@ -9,11 +9,11 @@ import { waitForChildProcess } from "../utils/child-process.js";
+  */
+ export async function execCommand(command, args, cwd, options) {
+     return new Promise((resolve) => {
+-        const proc = spawn(command, args, {
++        const proc = spawn(command, args, { ...{
+             cwd,
+             shell: false,
+             stdio: ["ignore", "pipe", "pipe"],
+-        });
++        }, windowsHide: true });
+         let stdout = "";
+         let stderr = "";
+         let killed = false;
+diff --git a/dist/core/footer-data-provider.js b/dist/core/footer-data-provider.js
+index 8b326682171ae2bb168d45c7e889a0b3d624562d..a083ef8780dd1dc932665c110e1064f9174809bf 100644
+--- a/dist/core/footer-data-provider.js
++++ b/dist/core/footer-data-provider.js
+@@ -46,21 +46,21 @@ function findGitPaths(cwd) {
+ }
+ /** Ask git for the current branch. Returns null on detached HEAD or if git is unavailable. */
+ function resolveBranchWithGitSync(repoDir) {
+-    const result = spawnSync("git", ["--no-optional-locks", "symbolic-ref", "--quiet", "--short", "HEAD"], {
++    const result = spawnSync("git", ["--no-optional-locks", "symbolic-ref", "--quiet", "--short", "HEAD"], { ...{
+         cwd: repoDir,
+         encoding: "utf8",
+         stdio: ["ignore", "pipe", "ignore"],
+-    });
++    }, windowsHide: true });
+     const branch = result.status === 0 ? result.stdout.trim() : "";
+     return branch || null;
+ }
+ /** Ask git for the current branch asynchronously. Returns null on detached HEAD or if git is unavailable. */
+ function resolveBranchWithGitAsync(repoDir) {
+     return new Promise((resolvePromise) => {
+-        execFile("git", ["--no-optional-locks", "symbolic-ref", "--quiet", "--short", "HEAD"], {
++        execFile("git", ["--no-optional-locks", "symbolic-ref", "--quiet", "--short", "HEAD"], { ...{
+             cwd: repoDir,
+             encoding: "utf8",
+-        }, (error, stdout) => {
++        }, windowsHide: true }, (error, stdout) => {
+             if (error) {
+                 resolvePromise(null);
+                 return;
+diff --git a/dist/core/package-manager.js b/dist/core/package-manager.js
+index 6e98001c4241bc490ba4f2967eef951d870a4d41..25718d949ad0d5927cc412851eea60a58e89c698 100644
+--- a/dist/core/package-manager.js
++++ b/dist/core/package-manager.js
+@@ -1873,21 +1873,21 @@ export class DefaultPackageManager {
+         };
+     }
+     spawnCommand(command, args, options) {
+-        return spawn(command, args, {
++        return spawn(command, args, { ...{
+             cwd: options?.cwd,
+             stdio: isStdoutTakenOver() ? ["ignore", 2, 2] : "inherit",
+             shell: shouldUseWindowsShell(command),
+             env: getEnv(),
+-        });
++        }, windowsHide: true });
+     }
+     spawnCaptureCommand(command, args, options) {
+         const baseEnv = getEnv();
+-        return spawn(command, args, {
++        return spawn(command, args, { ...{
+             cwd: options?.cwd,
+             stdio: ["ignore", "pipe", "pipe"],
+             shell: shouldUseWindowsShell(command),
+             env: options?.env ? { ...baseEnv, ...options.env } : baseEnv,
+-        });
++        }, windowsHide: true });
+     }
+     runCommandCapture(command, args, options) {
+         return new Promise((resolvePromise, reject) => {
+@@ -1943,12 +1943,12 @@ export class DefaultPackageManager {
+         });
+     }
+     runCommandSync(command, args) {
+-        const result = spawnSync(command, args, {
++        const result = spawnSync(command, args, { ...{
+             stdio: ["ignore", "pipe", "pipe"],
+             encoding: "utf-8",
+             shell: shouldUseWindowsShell(command),
+             env: getEnv(),
+-        });
++        }, windowsHide: true });
+         if (result.error || result.status !== 0) {
+             throw new Error(`Failed to run ${command} ${args.join(" ")}: ${result.error?.message || result.stderr || result.stdout}`);
+         }
+diff --git a/dist/core/resolve-config-value.js b/dist/core/resolve-config-value.js
+index 1e165557d038d7ef2eb1d858ef43ea8f30c134a0..4f96168112bdd7b174419113dd86bd39100f7833 100644
+--- a/dist/core/resolve-config-value.js
++++ b/dist/core/resolve-config-value.js
+@@ -21,13 +21,13 @@ export function resolveConfigValue(config) {
+ function executeWithConfiguredShell(command) {
+     try {
+         const { shell, args } = getShellConfig();
+-        const result = spawnSync(shell, [...args, command], {
++        const result = spawnSync(shell, [...args, command], { ...{
+             encoding: "utf-8",
+             timeout: 10000,
+             stdio: ["ignore", "pipe", "ignore"],
+             shell: false,
+             windowsHide: true,
+-        });
++        }, windowsHide: true });
+         if (result.error) {
+             const error = result.error;
+             if (error.code === "ENOENT") {
+@@ -47,11 +47,11 @@ function executeWithConfiguredShell(command) {
+ }
+ function executeWithDefaultShell(command) {
+     try {
+-        const output = execSync(command, {
++        const output = execSync(command, { ...{
+             encoding: "utf-8",
+             timeout: 10000,
+             stdio: ["ignore", "pipe", "ignore"],
+-        });
++        }, windowsHide: true });
+         return output.trim() || undefined;
+     }
+     catch {
+diff --git a/dist/core/tools/bash.js b/dist/core/tools/bash.js
+index 8ca8db74911ba07e5f981e7970110c23212d3b82..628da2f275fca5a9ec02c0e10aa52bc1077ceb99 100644
+--- a/dist/core/tools/bash.js
++++ b/dist/core/tools/bash.js
+@@ -30,12 +30,12 @@ export function createLocalBashOperations(options) {
+                     reject(new Error(`Working directory does not exist: ${cwd}\nCannot execute bash commands.`));
+                     return;
+                 }
+-                const child = spawn(shell, [...args, command], {
++                const child = spawn(shell, [...args, command], { ...{
+                     cwd,
+                     detached: process.platform !== "win32",
+                     env: env ?? getShellEnv(),
+                     stdio: ["ignore", "pipe", "pipe"],
+-                });
++                }, windowsHide: true });
+                 if (child.pid)
+                     trackDetachedChildPid(child.pid);
+                 let timedOut = false;
+diff --git a/dist/core/tools/find.js b/dist/core/tools/find.js
+index 675ba36c2ad5434c0c3101f19da10fa7416c07bf..a220ff7d92b927dc7777d2d9e0e51d367ebc7bbc 100644
+--- a/dist/core/tools/find.js
++++ b/dist/core/tools/find.js
+@@ -186,7 +186,7 @@ export function createFindToolDefinition(cwd, options) {
+                             }
+                         }
+                         args.push("--", effectivePattern, searchPath);
+-                        const child = spawn(fdPath, args, { stdio: ["ignore", "pipe", "pipe"] });
++                        const child = spawn(fdPath, args, { ...{ stdio: ["ignore", "pipe", "pipe"] }, windowsHide: true });
+                         const rl = createInterface({ input: child.stdout });
+                         let stderr = "";
+                         const lines = [];
+diff --git a/dist/core/tools/grep.js b/dist/core/tools/grep.js
+index 39750bcee2ca4a8d28515023b4477197cbbe15f5..5165fd7205f8798b4a3e2636b495f2179f45dcb7 100644
+--- a/dist/core/tools/grep.js
++++ b/dist/core/tools/grep.js
+@@ -141,7 +141,7 @@ export function createGrepToolDefinition(cwd, options) {
+                         if (glob)
+                             args.push("--glob", glob);
+                         args.push("--", pattern, searchPath);
+-                        const child = spawn(rgPath, args, { stdio: ["ignore", "pipe", "pipe"] });
++                        const child = spawn(rgPath, args, { ...{ stdio: ["ignore", "pipe", "pipe"] }, windowsHide: true });
+                         const rl = createInterface({ input: child.stdout });
+                         let stderr = "";
+                         let matchCount = 0;
+diff --git a/dist/modes/interactive/components/extension-editor.js b/dist/modes/interactive/components/extension-editor.js
+index 27e15125d2ec73b1231be7d8a5585ed58a3cce5d..f4d71dd381063d554143b381ad7b124d9d34f84f 100644
+--- a/dist/modes/interactive/components/extension-editor.js
++++ b/dist/modes/interactive/components/extension-editor.js
+@@ -86,10 +86,10 @@ export class ExtensionEditorComponent extends Container {
+             fs.writeFileSync(tmpFile, currentText, "utf-8");
+             this.tui.stop();
+             const [editor, ...editorArgs] = editorCmd.split(" ");
+-            const result = spawnSync(editor, [...editorArgs, tmpFile], {
++            const result = spawnSync(editor, [...editorArgs, tmpFile], { ...{
+                 stdio: "inherit",
+                 shell: process.platform === "win32",
+-            });
++            }, windowsHide: true });
+             if (result.status === 0) {
+                 const newContent = fs.readFileSync(tmpFile, "utf-8").replace(/\n$/, "");
+                 this.editor.setText(newContent);
+diff --git a/dist/modes/interactive/components/login-dialog.js b/dist/modes/interactive/components/login-dialog.js
+index fd2d40691494493608deeac5d9518adac0914711..521b7d6093d2413d008bca988c84f095b801cddc 100644
+--- a/dist/modes/interactive/components/login-dialog.js
++++ b/dist/modes/interactive/components/login-dialog.js
+@@ -82,7 +82,7 @@ export class LoginDialogComponent extends Container {
+         }
+         // Try to open browser
+         const openCmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+-        exec(`${openCmd} "${url}"`);
++        exec(`${openCmd} "${url}"`, { windowsHide: true });
+         this.tui.requestRender();
+     }
+     /**
+diff --git a/dist/modes/interactive/components/session-selector.js b/dist/modes/interactive/components/session-selector.js
+index aece7c70e952982d65ce79644b584c6d246ccc45..2f94cb1a13410fae2da1c74af1748674dc08978b 100644
+--- a/dist/modes/interactive/components/session-selector.js
++++ b/dist/modes/interactive/components/session-selector.js
+@@ -530,7 +530,7 @@ class SessionList {
+ async function deleteSessionFile(sessionPath) {
+     // Try `trash` first (if installed)
+     const trashArgs = sessionPath.startsWith("-") ? ["--", sessionPath] : [sessionPath];
+-    const trashResult = spawnSync("trash", trashArgs, { encoding: "utf-8" });
++    const trashResult = spawnSync("trash", trashArgs, { ...{ encoding: "utf-8" }, windowsHide: true });
+     const getTrashErrorHint = () => {
+         const parts = [];
+         if (trashResult.error) {
+diff --git a/dist/modes/interactive/interactive-mode.js b/dist/modes/interactive/interactive-mode.js
+index ae35af2fcdb0c8f244204bf34caf15b67d44786a..54b8f2b7cd227197adcc40b9480f0f400ee019b6 100644
+--- a/dist/modes/interactive/interactive-mode.js
++++ b/dist/modes/interactive/interactive-mode.js
+@@ -572,9 +572,9 @@ export class InteractiveMode {
+             return undefined;
+         const runTmuxShow = (option) => {
+             return new Promise((resolve) => {
+-                const proc = spawn("tmux", ["show", "-gv", option], {
++                const proc = spawn("tmux", ["show", "-gv", option], { ...{
+                     stdio: ["ignore", "pipe", "ignore"],
+-                });
++                }, windowsHide: true });
+                 let stdout = "";
+                 const timer = setTimeout(() => {
+                     proc.kill();
+@@ -2847,10 +2847,10 @@ export class InteractiveMode {
+             // Split by space to support editor arguments (e.g., "code --wait")
+             const [editor, ...editorArgs] = editorCmd.split(" ");
+             // Spawn editor synchronously with inherited stdio for interactive editing
+-            const result = spawnSync(editor, [...editorArgs, tmpFile], {
++            const result = spawnSync(editor, [...editorArgs, tmpFile], { ...{
+                 stdio: "inherit",
+                 shell: process.platform === "win32",
+-            });
++            }, windowsHide: true });
+             // On successful exit (status 0), replace editor content
+             if (result.status === 0) {
+                 const newContent = fs.readFileSync(tmpFile, "utf-8").replace(/\n$/, "");
+@@ -4110,7 +4110,7 @@ export class InteractiveMode {
+     async handleShareCommand() {
+         // Check if gh is available and logged in
+         try {
+-            const authResult = spawnSync("gh", ["auth", "status"], { encoding: "utf-8" });
++            const authResult = spawnSync("gh", ["auth", "status"], { ...{ encoding: "utf-8" }, windowsHide: true });
+             if (authResult.status !== 0) {
+                 this.showError("GitHub CLI is not logged in. Run 'gh auth login' first.");
+                 return;
+@@ -4156,7 +4156,7 @@ export class InteractiveMode {
+         };
+         try {
+             const result = await new Promise((resolve) => {
+-                proc = spawn("gh", ["gist", "create", "--public=false", tmpFile]);
++                proc = spawn("gh", ["gist", "create", "--public=false", tmpFile], { windowsHide: true });
+                 let stdout = "";
+                 let stderr = "";
+                 proc.stdout?.on("data", (data) => {
+diff --git a/dist/modes/rpc/rpc-client.js b/dist/modes/rpc/rpc-client.js
+index caa4f997808ceee917365b1a7b9e50f1372338f7..3cb68424b5f144b6cc41aa49f28e912cf2e6b2c0 100644
+--- a/dist/modes/rpc/rpc-client.js
++++ b/dist/modes/rpc/rpc-client.js
+@@ -37,11 +37,11 @@ export class RpcClient {
+         if (this.options.args) {
+             args.push(...this.options.args);
+         }
+-        this.process = spawn("node", [cliPath, ...args], {
++        this.process = spawn("node", [cliPath, ...args], { ...{
+             cwd: this.options.cwd,
+             env: { ...process.env, ...this.options.env },
+             stdio: ["pipe", "pipe", "pipe"],
+-        });
++        }, windowsHide: true });
+         // Collect stderr for debugging
+         this.process.stderr?.on("data", (data) => {
+             this.stderr += data.toString();
+diff --git a/dist/package-manager-cli.js b/dist/package-manager-cli.js
+index db9bdf3fbc82bf4603c5ecade920e62ded783319..478291175c114f6d72eea9dbf7129f0a91d79c20 100644
+--- a/dist/package-manager-cli.js
++++ b/dist/package-manager-cli.js
+@@ -274,10 +274,10 @@ async function runSelfUpdate(command) {
+     for (const step of command.steps ?? [command]) {
+         await new Promise((resolve, reject) => {
+             // Windows package managers are commonly .cmd shims. Use the shell so Node can execute them.
+-            const child = spawn(step.command, step.args, {
++            const child = spawn(step.command, step.args, { ...{
+                 stdio: "inherit",
+                 shell: shouldUseWindowsShell(step.command),
+-            });
++            }, windowsHide: true });
+             child.on("error", (error) => {
+                 reject(error);
+             });
+diff --git a/dist/utils/clipboard-image.js b/dist/utils/clipboard-image.js
+index 64ae86a593a877ce21b7d8c058a7377a0b252f77..f59956207f96601cc2ef9a71010b089e0c0eb3c5 100644
+--- a/dist/utils/clipboard-image.js
++++ b/dist/utils/clipboard-image.js
+@@ -73,11 +73,11 @@ async function convertToPng(bytes) {
+ function runCommand(command, args, options) {
+     const timeoutMs = options?.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+     const maxBufferBytes = options?.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES;
+-    const result = spawnSync(command, args, {
++    const result = spawnSync(command, args, { ...{
+         timeout: timeoutMs,
+         maxBuffer: maxBufferBytes,
+         env: options?.env,
+-    });
++    }, windowsHide: true });
+     if (result.error) {
+         return { ok: false, stdout: Buffer.alloc(0) };
+     }
+diff --git a/dist/utils/clipboard.js b/dist/utils/clipboard.js
+index 3659457e9d40da5f98c5e189212ecc09c5c449c9..c920ff68cb4ac2641ce2bfa6d9b9dac49341028d 100644
+--- a/dist/utils/clipboard.js
++++ b/dist/utils/clipboard.js
+@@ -4,10 +4,10 @@ import { isWaylandSession } from "./clipboard-image.js";
+ import { clipboard } from "./clipboard-native.js";
+ function copyToX11Clipboard(options) {
+     try {
+-        execSync("xclip -selection clipboard", options);
++        execSync("xclip -selection clipboard", { ...options, windowsHide: true });
+     }
+     catch {
+-        execSync("xsel --clipboard --input", options);
++        execSync("xsel --clipboard --input", { ...options, windowsHide: true });
+     }
+ }
+ const MAX_OSC52_ENCODED_LENGTH = 100_000;
+@@ -52,18 +52,18 @@ export async function copyToClipboard(text) {
+     if (!copied) {
+         try {
+             if (p === "darwin") {
+-                execSync("pbcopy", options);
++                execSync("pbcopy", { ...options, windowsHide: true });
+                 copied = true;
+             }
+             else if (p === "win32") {
+-                execSync("clip", options);
++                execSync("clip", { ...options, windowsHide: true });
+                 copied = true;
+             }
+             else {
+                 // Linux. Try Termux, Wayland, or X11 clipboard tools.
+                 if (process.env.TERMUX_VERSION) {
+                     try {
+-                        execSync("termux-clipboard-set", options);
++                        execSync("termux-clipboard-set", { ...options, windowsHide: true });
+                         copied = true;
+                     }
+                     catch {
+@@ -77,9 +77,9 @@ export async function copyToClipboard(text) {
+                     if (isWayland && hasWaylandDisplay) {
+                         try {
+                             // Verify wl-copy exists (spawn errors are async and won't be caught)
+-                            execSync("which wl-copy", { stdio: "ignore" });
++                            execSync("which wl-copy", { ...{ stdio: "ignore" }, windowsHide: true });
+                             // wl-copy with execSync hangs due to fork behavior; use spawn instead
+-                            const proc = spawn("wl-copy", [], { stdio: ["pipe", "ignore", "ignore"] });
++                            const proc = spawn("wl-copy", [], { ...{ stdio: ["pipe", "ignore", "ignore"] }, windowsHide: true });
+                             proc.stdin.on("error", () => {
+                                 // Ignore EPIPE errors if wl-copy exits early
+                             });
+diff --git a/dist/utils/shell.js b/dist/utils/shell.js
+index 1890d88cf395bc3329edac198e5716e6c6975be0..b3723eeba827522ad82de3971ed8ccc7ad299012 100644
+--- a/dist/utils/shell.js
++++ b/dist/utils/shell.js
+@@ -9,7 +9,7 @@ function findBashOnPath() {
+     if (process.platform === "win32") {
+         // Windows: Use 'where' and verify file exists (where can return non-existent paths)
+         try {
+-            const result = spawnSync("where", ["bash.exe"], { encoding: "utf-8", timeout: 5000 });
++            const result = spawnSync("where", ["bash.exe"], { ...{ encoding: "utf-8", timeout: 5000 }, windowsHide: true });
+             if (result.status === 0 && result.stdout) {
+                 const firstMatch = result.stdout.trim().split(/\r?\n/)[0];
+                 if (firstMatch && existsSync(firstMatch)) {
+@@ -24,7 +24,7 @@ function findBashOnPath() {
+     }
+     // Unix: Use 'which' and trust its output (handles Termux and special filesystems)
+     try {
+-        const result = spawnSync("which", ["bash"], { encoding: "utf-8", timeout: 5000 });
++        const result = spawnSync("which", ["bash"], { ...{ encoding: "utf-8", timeout: 5000 }, windowsHide: true });
+         if (result.status === 0 && result.stdout) {
+             const firstMatch = result.stdout.trim().split(/\r?\n/)[0];
+             if (firstMatch) {
+@@ -162,10 +162,10 @@ export function killProcessTree(pid) {
+     if (process.platform === "win32") {
+         // Use taskkill on Windows to kill process tree
+         try {
+-            spawn("taskkill", ["/F", "/T", "/PID", String(pid)], {
++            spawn("taskkill", ["/F", "/T", "/PID", String(pid)], { ...{
+                 stdio: "ignore",
+                 detached: true,
+-            });
++            }, windowsHide: true });
+         }
+         catch {
+             // Ignore errors if taskkill fails
+diff --git a/dist/utils/tools-manager.js b/dist/utils/tools-manager.js
+index 63b0f6881fb3f72ef47ba463c955216388889d1f..dbda5c40fdbebaf9c2472eb2946a9d9b20f0202e 100644
+--- a/dist/utils/tools-manager.js
++++ b/dist/utils/tools-manager.js
+@@ -66,7 +66,7 @@ const TOOLS = {
+ // Check if a command exists in PATH by trying to run it
+ function commandExists(cmd) {
+     try {
+-        const result = spawnSync(cmd, ["--version"], { stdio: "pipe" });
++        const result = spawnSync(cmd, ["--version"], { ...{ stdio: "pipe" }, windowsHide: true });
+         // Check for ENOENT error (command not found)
+         return result.error === undefined || result.error === null;
+     }
+@@ -166,7 +166,7 @@ async function downloadTool(tool) {
+     mkdirSync(extractDir, { recursive: true });
+     try {
+         if (assetName.endsWith(".tar.gz")) {
+-            const extractResult = spawnSync("tar", ["xzf", archivePath, "-C", extractDir], { stdio: "pipe" });
++            const extractResult = spawnSync("tar", ["xzf", archivePath, "-C", extractDir], { ...{ stdio: "pipe" }, windowsHide: true });
+             if (extractResult.error || extractResult.status !== 0) {
+                 const errMsg = extractResult.error?.message ?? extractResult.stderr?.toString().trim() ?? "unknown error";
+                 throw new Error(`Failed to extract ${assetName}: ${errMsg}`);

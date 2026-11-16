@@ -1,3 +1,4 @@
+import { smoothstep01 } from "@hyperfocus/utilities/math";
 import { GROUND_TILE_BASE_HEIGHT, GROUND_TILE_PATCH_AXIS, GROUND_TILE_SIZE, PLAYER_HEIGHT_WORLD, STATIC_VISIBILITY_RADIUS, TERRAIN_CACHE_KEY_STRIDE, TERRAIN_GRADIENT_SAMPLE, TERRAIN_HEIGHT_CACHE_MAX_ENTRIES, TERRAIN_HEIGHT_CACHE_STEP, TERRAIN_HILL_FREQUENCY, TERRAIN_HILL_HEIGHT, TERRAIN_MOUNTAIN_HEIGHT, TERRAIN_PLATFORM_CELL_CACHE_MAX_ENTRIES, TERRAIN_PLATFORM_CELL_SIZE, TERRAIN_PLATFORM_DENSITY, TERRAIN_PLATFORM_EDGE_PAD, TERRAIN_PLATFORM_HEIGHT_MAX, TERRAIN_PLATFORM_HEIGHT_MIN, TERRAIN_PLATFORM_RADIUS_MAX, TERRAIN_PLATFORM_RADIUS_MIN, TERRAIN_START_CLEAR_RADIUS, TRAVERSAL_TOOL_COOLDOWN_SECONDS, TRAVERSAL_TOOL_COUNT, TRAVERSAL_TOOL_TRIGGER_RADIUS, TRAVERSAL_TOOL_TYPES } from "./constants.ts";
 import type * as Three from "three";
 import { runtimeCallback } from "./runtime-ports.ts";
@@ -259,10 +260,7 @@ export function terrainGradientAt(x: number, z: number, sample = TERRAIN_GRADIEN
   return { x: gx, z: gz, ratio: Math.hypot(gx, gz), angle: Math.atan(Math.hypot(gx, gz)) };
 }
 
-export function smoothstep01(value: number): number {
-  const t = clamp01(value);
-  return t * t * (3 - 2 * t);
-}
+export { smoothstep01 } from "@hyperfocus/utilities/math";
 
 export function addTraversalTools(): void {
   if (state.traversalTools.length) return;

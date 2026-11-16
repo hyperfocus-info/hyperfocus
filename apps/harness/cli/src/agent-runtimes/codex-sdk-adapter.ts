@@ -5,6 +5,7 @@ import { Codex, type CodexOptions } from "@openai/codex-sdk";
 import { buildCliProcessEnv } from "./cli-process-manager";
 import { resolveCodexSandboxMode } from "./codex-sandbox-policy";
 import { buildGitRepositoryPromptContext } from "../git-context";
+import { nativeAgentEventsConfig } from "./native-agent-events";
 import type {
   PiAgentAdapter,
   PiAgentExecutionController,
@@ -15,7 +16,9 @@ import type {
 
 const CODEX_TOOL_GUIDANCE = [
   "Use native Codex tools first for general work: shell and apply_patch for local repository changes, and live web search for external or current facts.",
+  "Use apply_patch for source edits and project-local script files for multiline authoring or verification. Do not embed multiline code in PowerShell -Command or bun -e. After an escaping failure, switch to a file instead of retrying quote variants. Keep verification output concise and inspect changed functions rather than repeatedly dumping whole files.",
   "Use repository skills when the user's task matches a listed skill; skill instructions override general tool preference for that workflow.",
+  "For standalone HTML, use the verify-html skill's portable validator before browser acceptance; do not pass HTML to node --check or use Bash heredocs/process substitution in PowerShell. Verify create/edit/reload and domain boundaries before claiming completion.",
   "Before relying on git commands, follow the Git repository state block in this prompt."
 ].join("\n");
 
@@ -115,8 +118,13 @@ export function createCodexSdkAdapter(options: CodexSdkAdapterOptions): PiAgentA
   }
 
   async function startExecution(request: PiAgentPromptRequest): Promise<PiAgentExecutionController> {
+    const eventConfig=nativeAgentEventsConfig();
     const client = (options.createClient ?? createDefaultClient)({
       codexPathOverride: options.executablePath,
+      config: request.fastMode===undefined&&!Object.keys(eventConfig).length?undefined:{...eventConfig,...request.fastMode === undefined ? {} : {
+        service_tier: request.fastMode ? "fast" : "default",
+        ...(request.fastMode ? { features: { fast_mode: true } } : {})
+      }},
       env: buildCliProcessEnv({
         cols: 120,
         rows: 40
@@ -329,9 +337,9 @@ function accumulateCodexUsage(rawEvent: unknown, usage: { inputTokens: number; c
   if (rawEvent === null || typeof rawEvent !== "object" || Reflect.get(rawEvent, "type") !== "turn.completed") return;
   const rawUsage = Reflect.get(rawEvent, "usage");
   if (rawUsage === null || typeof rawUsage !== "object") return;
-  usage.inputTokens += readFiniteNumber(rawUsage, "input_tokens");
-  usage.cachedInputTokens += readFiniteNumber(rawUsage, "cached_input_tokens");
-  usage.outputTokens += readFiniteNumber(rawUsage, "output_tokens");
+  usage.inputTokens = Math.max(usage.inputTokens, readFiniteNumber(rawUsage, "input_tokens"));
+  usage.cachedInputTokens = Math.max(usage.cachedInputTokens, readFiniteNumber(rawUsage, "cached_input_tokens"));
+  usage.outputTokens = Math.max(usage.outputTokens, readFiniteNumber(rawUsage, "output_tokens"));
 }
 
 function parseCodexSdkItem(value: unknown): CodexSdkCommandEvent | CodexSdkMcpEvent | CodexSdkWebSearchEvent | CodexSdkAgentMessageEvent | undefined {
@@ -397,11 +405,6 @@ function createCodexContextUsage(
     toolCalls: 0,
     toolResults: 0,
     totalMessages: 2,
-    contextUsage: {
-      tokens: usage.inputTokens,
-      contextWindow,
-      percent: contextWindow > 0 ? Math.min(100, (usage.inputTokens / contextWindow) * 100) : 0
-    },
     tokens: {
       input: usage.inputTokens,
       output: usage.outputTokens,
@@ -413,9 +416,10 @@ function createCodexContextUsage(
   };
 
   return {
-    tokens: usage.inputTokens,
+    // SDK turn usage is cumulative billing input, not current context occupancy.
+    tokens: undefined,
     contextWindow,
-    usagePercent: contextWindow > 0 ? Math.min(100, (usage.inputTokens / contextWindow) * 100) : undefined,
+    usagePercent: undefined,
     sessionStats,
     cachedInputTokens: usage.cachedInputTokens
   };
@@ -472,11 +476,8 @@ function buildCodexPromptWithPrelude(request: PiAgentPromptRequest) {
 }
 
 function buildCodexCommandPrelude(request: PiAgentPromptRequest) {
-  const commands: string[] = [];
-  if (request.fastMode) {
-    commands.push("/fast");
-  }
-  return [buildGitRepositoryPromptContext(request.cwd), commands.join("\n")].filter(Boolean).join("\n");
+  const gitContext = buildGitRepositoryPromptContext(request.cwd);
+  return request.prompt.includes(gitContext) ? "" : gitContext;
 }
 
 function emitCommandExecutionEvent(

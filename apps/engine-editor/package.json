@@ -57,6 +57,7 @@
     "@hyperfocus/performance": "workspace:*",
     "@types/three": "0.163.0",
     "puppeteer-core": "^25.8.0",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "zod": "^3.25.76"
   }
 }

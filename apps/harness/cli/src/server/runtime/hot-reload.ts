@@ -1,3 +1,5 @@
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
+import { startThreadMessageDispatcher, stopThreadMessageDispatcher } from "../execution/thread-message-dispatcher";
 import { setDevHarnessServerSingleton } from "../../dev-server-singleton";
 import type { getDevHarnessServerSingleton } from "../../dev-server-singleton";
 import { BACKGROUND_JOB_RUNTIME_CONTRACT_VERSION } from "../core/constants";
@@ -126,7 +128,7 @@ export function consumeTrackedBackendHotReloadChange(singleton: {
 }
 
 export function readTrackedBackendHotReloadSnapshot() {
-  const result = Bun.spawnSync({
+  const result = spawnBackgroundProcessSync({
     cmd: ["git", "ls-files", "-z", "--", "apps/harness/cli", "packages/ai-core", "package.json", "bun.lock"],
     cwd: process.cwd(),
     stdout: "pipe",
@@ -201,6 +203,7 @@ export function applyHotReloadUpdate(
   }
   singleton.state.scheduler.stop();
   singleton.state.scheduler.start();
+  void stopThreadMessageDispatcher(previousState).then(() => startThreadMessageDispatcher(singleton.state));
 }
 
 export function clearPendingHotReloadUpdate(

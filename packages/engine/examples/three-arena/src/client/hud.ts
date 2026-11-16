@@ -1,3 +1,6 @@
+import { clamp01Or } from "@hyperfocus/utilities/math";
+
+import { roundDecimal } from "@hyperfocus/utilities/math";
 import { HUD_UPDATE_INTERVAL } from "./constants.ts";
 import { PERF_QUERY } from "./environment.ts";
 import { runtimeCallback } from "./runtime-ports.ts";
@@ -98,22 +101,16 @@ export function pulseShake(duration: number, power: number): void {
   state.shakePower = Math.max(state.shakePower, power);
 }
 
-export function round(value: number): number {
-  return Math.round(value * 100) / 100;
-}
+export function round(value: number): number { return roundDecimal(value, 2); }
 
 export function roundToStep(value: number, step: number): number {
   const decimals = Math.max(0, String(step).split(".")[1]?.length ?? 0);
   return Number(value.toFixed(decimals));
 }
 
-export function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
+export { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
 
-export function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-}
+export function clamp01(value: number) { return clamp01Or(value); }
 
 export function onResize(): void {
   threeView.resize(window.innerWidth, window.innerHeight);

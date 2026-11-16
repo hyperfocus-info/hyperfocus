@@ -7,7 +7,7 @@ type StreamPumpOptions = {
   onOverflow?: (bytes: number) => void;
   onError?: (error: unknown) => void;
 };
-export const DEFAULT_STREAM_MAX_QUEUED_BYTES = 256 * 1024;
+export const DEFAULT_STREAM_MAX_QUEUED_BYTES = 262144;
 
 export async function drainStreamPumps(pumps: Iterable<StreamPump>) {
   const results = await Promise.allSettled([...pumps].map((pump) => pump.end()));
@@ -31,6 +31,7 @@ export function createStreamPump(options: StreamPumpOptions) {
   const encoder = new TextEncoder();
   const queuedChunks: string[] = [];
   let drainPromise: Promise<void> | undefined;
+  let draining = false;
   let pendingError: unknown;
   let ended = false;
   let totalChars = 0;
@@ -55,7 +56,9 @@ export function createStreamPump(options: StreamPumpOptions) {
     pendingBytes += incomingBytes;
 
     for (const character of text) {
-      const bytes = encoder.encode(character).byteLength;
+      // for...of yields code points; lone surrogates encode as a 3-byte replacement.
+      const point = character.codePointAt(0)!;
+      const bytes = point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
       if (bufferedBytes > 0 && bufferedBytes + bytes > options.maxBufferedBytes) {
         options.onOverflow?.(bufferedBytes + bytes);
         queueBufferedChunk();
@@ -107,11 +110,18 @@ export function createStreamPump(options: StreamPumpOptions) {
   }
 
   function queueBufferedChunk() {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
     if (!buffered) return;
     queuedChunks.push(buffered);
     buffered = "";
     bufferedBytes = 0;
-    if (!drainPromise) drainPromise = drainChunks();
+    if (!draining) {
+      draining = true;
+      const pending = drainChunks();
+      // A synchronous throwing callback may finish the drain before assignment.
+      if (draining) drainPromise = pending;
+    }
   }
 
   async function drainChunks() {
@@ -131,6 +141,7 @@ export function createStreamPump(options: StreamPumpOptions) {
       }
     }
     drainPromise = undefined;
+    draining = false;
   }
 
   function fail(error: Error) {

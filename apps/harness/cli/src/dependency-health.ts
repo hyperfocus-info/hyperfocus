@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -38,7 +39,7 @@ async function pathExists(targetPath: string) {
 }
 
 async function runBun(args: string[], cwd: string) {
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: ["bun", ...args],
     cwd,
     stdout: "pipe",

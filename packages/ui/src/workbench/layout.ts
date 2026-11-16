@@ -1,3 +1,4 @@
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 export const workbenchPanelLimits = {
   sidebar: { minimum: 180, maximum: 640, defaultSize: 260 },
   inspector: { minimum: 220, maximum: 720, defaultSize: 300 },
@@ -54,9 +55,7 @@ export function parseWorkbenchLayout(input: string): WorkbenchLayout {
   return normalizeWorkbenchLayout(parsed.layout);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+
 
 function clamp(value: unknown, minimum: number, maximum: number, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : fallback;

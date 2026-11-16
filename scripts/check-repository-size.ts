@@ -1,12 +1,21 @@
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 
-export const MAX_GIT_FILE_BYTES = 95 * 1024 * 1024;
+export const MAX_GIT_FILE_BYTES = 99614720;
 
 export function findRepositoryPolicyViolations(entries: readonly { path: string; size: number }[]) {
   const violations: string[] = [];
   for (const entry of entries) {
     const normalized = entry.path.replaceAll("\\", "/");
+    const segments = normalized.split("/");
+    const name = segments.at(-1)!.toLowerCase();
+    if (segments.includes(".local") || segments.some(segment => [".tmp", ".tmp-test-data", ".codex-tmp"].includes(segment) || segment.startsWith(".package-build-"))) {
+      violations.push(`${normalized} is a local artifact and must stay out of Git`);
+    } else if (name.endsWith(".tmp.md") || (name.endsWith(".md") && /(?:^|[-_.])(?:tmp|temp|temporary)(?:[-_.]|$)/.test(name))) {
+      violations.push(`${normalized} is temporary documentation; move it to .local/ with a .tmp.md suffix`);
+    }
+    if (normalized.startsWith("docs/design-system/evidence/")) violations.push(`${normalized} is generated review evidence; use .local/design-system/evidence/`);
     if (entry.size > MAX_GIT_FILE_BYTES) violations.push(`${normalized} is ${entry.size} bytes (limit ${MAX_GIT_FILE_BYTES})`);
     if (/^packages\/engine\/examples\/[^/]+\/assets\/source\//i.test(normalized)) violations.push(`${normalized} is a licensed source asset and must stay out of Git`);
   }
@@ -29,9 +38,9 @@ export async function collectExistingRepositoryEntries(
 }
 
 async function main() {
-  const result = Bun.spawnSync({ cmd: ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], stdout: "pipe", stderr: "inherit" });
+  const result = spawnBackgroundProcessSync({ cmd: ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], stdout: "pipe", stderr: "inherit" });
   if (result.exitCode !== 0) throw new Error("Could not enumerate Git candidates");
-  const paths = result.stdout.toString().split("\0").filter(Boolean);
+  const paths = [...new Set(result.stdout.toString().split("\0").filter(Boolean))];
   const entries = await collectExistingRepositoryEntries(paths);
   const violations = findRepositoryPolicyViolations(entries);
   if (violations.length) throw new Error(`Repository size policy failed:\n${violations.join("\n")}`);

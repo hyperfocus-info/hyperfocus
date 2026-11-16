@@ -1,8 +1,9 @@
-import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createWriteStream,existsSync,mkdirSync,readFileSync,writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname,isAbsolute,resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { slugify } from "./catalog-names";
 
 export const BASE_URL = "https://craftpix.net";
 export const DEFAULT_COOKIE_FILE = ".local/craftpix/cookies.txt";
@@ -25,11 +26,8 @@ const CRAFTPIX_COOKIE_DOMAIN_RE = /^(?:[\w-]+\.)*craftpix\.net$/i;
 const SCRIPT_DIR = import.meta.dir;
 const HTML_BODY_PREVIEW_LENGTH = 240;
 
-export class CraftpixDownloadError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "CraftpixDownloadError";
-  }
+export function createCraftpixDownloadError(message: string) {
+  return Object.assign(new Error(message), { name: "CraftpixDownloadError" });
 }
 
 export type ResolvedDownload = {
@@ -48,6 +46,19 @@ export type DownloadRequest = {
   overwrite: boolean;
   timeout: number;
   debug?: boolean;
+};
+
+export type CraftpixDownloadProbe = {
+  status: "available" | "restricted" | "unavailable";
+  finalUrl: string;
+  archiveUrl?: string;
+  detail: string;
+};
+
+export type CraftpixHealthCheck = {
+  resolved: ResolvedDownload;
+  probe: CraftpixDownloadProbe;
+  cookies: { file: string; count: number; names: string[] };
 };
 
 export type ParsedCookies = {
@@ -119,11 +130,11 @@ export function normalizeCraftpixUrl(rawUrl: string): string {
   try {
     parsed = new URL(rawUrl);
   } catch {
-    throw new CraftpixDownloadError("Source URL must be a valid Craftpix URL.");
+    throw createCraftpixDownloadError("Source URL must be a valid Craftpix URL.");
   }
 
   if (!["http:", "https:"].includes(parsed.protocol) || parsed.hostname.toLowerCase() !== "craftpix.net") {
-    throw new CraftpixDownloadError(
+    throw createCraftpixDownloadError(
       "Source URL must point at craftpix.net with an http or https scheme.",
     );
   }
@@ -135,7 +146,7 @@ export function parseCookieFile(cookieFile: string, requireCookies: boolean): Pa
   const resolvedCookieFile = resolveWorkspacePath(cookieFile);
   if (!existsSync(resolvedCookieFile)) {
     if (requireCookies) {
-      throw new CraftpixDownloadError(
+      throw createCraftpixDownloadError(
         `Cookie file not found: ${resolvedCookieFile}. Export Craftpix cookies to Netscape format first.`,
       );
     }
@@ -160,7 +171,7 @@ export function parseCookieFile(cookieFile: string, requireCookies: boolean): Pa
       continue;
     }
 
-    const [domain, , path, secure, expirationRaw, name, ...valueParts] = parts;
+    const [domain, , path, secure, , name, ...valueParts] = parts;
     const value = valueParts.join("\t");
     const normalizedDomain = domain.replace(/^\./, "").toLowerCase();
     if (!CRAFTPIX_COOKIE_DOMAIN_RE.test(normalizedDomain)) {
@@ -179,7 +190,7 @@ export function parseCookieFile(cookieFile: string, requireCookies: boolean): Pa
   const cookies = names.map((name) => `${name}=${cookieEntries.get(name)?.value ?? ""}`);
 
   if (requireCookies && cookies.length === 0) {
-    throw new CraftpixDownloadError(
+    throw createCraftpixDownloadError(
       `Cookie file did not contain any craftpix.net cookies: ${resolvedCookieFile}`,
     );
   }
@@ -235,7 +246,7 @@ async function fetchText(url: string, headers: HeadersInit, timeout: number): Pr
   });
   const body = await response.text();
   if (!response.ok) {
-    throw new CraftpixDownloadError(
+    throw createCraftpixDownloadError(
       `Craftpix page fetch failed with HTTP ${response.status} from ${response.url}.\n  ` +
         formatHtmlFailureDetails(response.url, response.headers.get("content-type") ?? "", body),
     );
@@ -249,7 +260,7 @@ async function fetchText(url: string, headers: HeadersInit, timeout: number): Pr
 function extractProductId(pageHtml: string): string {
   const productId = extractMatch(PRODUCT_ID_RE, pageHtml, "productId") ?? extractMatch(SHORTLINK_RE, pageHtml, "productId");
   if (!productId) {
-    throw new CraftpixDownloadError(
+    throw createCraftpixDownloadError(
       "Could not find Craftpix product_ID on the page. Check that the URL is a product page.",
     );
   }
@@ -267,10 +278,6 @@ function extractPageTitle(pageHtml: string, fallbackUrl: string): string {
   return slug.replace(/-/g, " ").trim();
 }
 
-function slugify(value: string): string {
-  const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return slug || "craftpix-asset";
-}
 
 export async function resolveDownloadUrl(
   sourceUrl: string,
@@ -342,7 +349,7 @@ function formatHtmlFailureDetails(finalUrl: string, contentType: string, body: s
 }
 
 function looksLikeSignInPage(finalUrl: string, text: string): boolean {
-  if (isDownloadInterstitial(text) || /\/download\/\d+/i.test(finalUrl)) {
+  if (isDownloadInterstitial(text)) {
     return false;
   }
   if (finalUrl.includes("/wp-login.php")) {
@@ -357,32 +364,32 @@ function looksLikeSignInPage(finalUrl: string, text: string): boolean {
   return false;
 }
 
-function detectHtmlError(finalUrl: string, contentType: string, text: string): CraftpixDownloadError {
+function detectHtmlError(finalUrl: string, contentType: string, text: string): ReturnType<typeof createCraftpixDownloadError> {
   const details = formatHtmlFailureDetails(finalUrl, contentType, text);
   if (isDownloadInterstitial(text)) {
     const archiveUrl = extractCdnArchiveUrl(text);
     if (archiveUrl) {
-      return new CraftpixDownloadError(
+      return createCraftpixDownloadError(
         `Craftpix returned a download landing page but the archive could not be fetched from ${archiveUrl}. ` +
           "Re-export cookies after completing one browser download on craftpix.net (include files.craftpix.net / Cloudflare cookies if your exporter captured them).\n  " +
           details,
       );
     }
-    return new CraftpixDownloadError(
+    return createCraftpixDownloadError(
       `Craftpix returned a download landing page without an archive link. Check product access.\n  ${details}`,
     );
   }
   if (text.includes("UNLOCK DOWNLOAD") || finalUrl.includes("/membership/")) {
-    return new CraftpixDownloadError(
+    return createCraftpixDownloadError(
       `Craftpix returned a membership page instead of an archive. Refresh the exported cookies.\n  ${details}`,
     );
   }
   if (looksLikeSignInPage(finalUrl, text)) {
-    return new CraftpixDownloadError(
+    return createCraftpixDownloadError(
       `Craftpix returned a sign-in page instead of an archive. Re-export logged-in cookies.\n  ${details}`,
     );
   }
-  return new CraftpixDownloadError(
+  return createCraftpixDownloadError(
     `Craftpix returned HTML instead of an archive. Check cookies and source URL.\n  ${details}`,
   );
 }
@@ -406,6 +413,73 @@ async function fetchArchiveResponse(
   });
 }
 
+async function readResponsePrefix(response: Response) {
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array();
+  try {
+    const result = await reader.read();
+    return result.value ?? new Uint8Array();
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+/** Probes archive access without writing a file or consuming a full asset pack. */
+export async function probeCraftpixDownload(options: {
+  downloadUrl: string;
+  headers?: HeadersInit;
+  timeout?: number;
+  fetcher?: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>;
+}): Promise<CraftpixDownloadProbe> {
+  const fetcher = options.fetcher ?? fetch;
+  const timeout = options.timeout ?? DEFAULT_TIMEOUT;
+  const headers = options.headers ?? buildHeaders();
+  let landing: Response;
+  try {
+    landing = await fetcher(options.downloadUrl, {
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(timeout * 1000),
+    });
+  } catch (error) {
+    return { status: "unavailable", finalUrl: options.downloadUrl, detail: error instanceof Error ? error.message : String(error) };
+  }
+  if (!landing.ok) return { status: "unavailable", finalUrl: landing.url || options.downloadUrl, detail: `HTTP ${landing.status}` };
+
+  const landingType = landing.headers.get("content-type") ?? "";
+  if (!landingType.startsWith("text/")) {
+    const prefix = await readResponsePrefix(landing);
+    return isZipResponse(landingType, prefix)
+      ? { status: "available", finalUrl: landing.url || options.downloadUrl, detail: "Download endpoint returned archive bytes." }
+      : { status: "unavailable", finalUrl: landing.url || options.downloadUrl, detail: `Unexpected content type: ${landingType || "missing"}` };
+  }
+
+  const html = await landing.text();
+  const archiveUrl = extractCdnArchiveUrl(html);
+  if (!archiveUrl) {
+    return { status: "restricted", finalUrl: landing.url || options.downloadUrl, detail: detectHtmlError(landing.url || options.downloadUrl, landingType, html).message };
+  }
+
+  const archiveHeaders = new Headers(withReferer(headers, landing.url || options.downloadUrl));
+  archiveHeaders.set("Range", "bytes=0-7");
+  let archive: Response;
+  try {
+    archive = await fetcher(archiveUrl, {
+      headers: archiveHeaders,
+      redirect: "follow",
+      signal: AbortSignal.timeout(timeout * 1000),
+    });
+  } catch (error) {
+    return { status: "unavailable", finalUrl: landing.url || options.downloadUrl, archiveUrl, detail: error instanceof Error ? error.message : String(error) };
+  }
+  if (!archive.ok) return { status: archive.status === 401 || archive.status === 403 ? "restricted" : "unavailable", finalUrl: archive.url || archiveUrl, archiveUrl, detail: `HTTP ${archive.status}` };
+  const archiveType = archive.headers.get("content-type") ?? "";
+  const prefix = await readResponsePrefix(archive);
+  return isZipResponse(archiveType, prefix)
+    ? { status: "available", finalUrl: archive.url || archiveUrl, archiveUrl, detail: "CDN returned a ZIP signature." }
+    : { status: archiveType.startsWith("text/") ? "restricted" : "unavailable", finalUrl: archive.url || archiveUrl, archiveUrl, detail: `CDN did not return ZIP bytes (${archiveType || "missing content type"}).` };
+}
+
 function logDebug(enabled: boolean | undefined, message: string): void {
   if (enabled) {
     console.error(`[craftpix debug] ${message}`);
@@ -420,23 +494,36 @@ async function writeArchiveResponse(
   fallbackTitle: string,
 ): Promise<string> {
   if (!response.ok) {
-    throw new CraftpixDownloadError(`Craftpix download failed with HTTP ${response.status} from ${response.url}.`);
+    throw createCraftpixDownloadError(`Craftpix download failed with HTTP ${response.status} from ${response.url}.`);
   }
-  if (!response.body) {
-    throw new CraftpixDownloadError(`Craftpix returned an empty response from ${response.url}.`);
+  const body = response.body;
+  if (!body) {
+    throw createCraftpixDownloadError(`Craftpix returned an empty response from ${response.url}.`);
   }
 
   const filename =
     filenameOverride ?? inferFilename(response.headers.get("content-disposition"), response.url, fallbackTitle);
   const destination = resolve(resolvedOutputDir, filename);
   if (existsSync(destination) && !overwrite) {
-    throw new CraftpixDownloadError(
+    throw createCraftpixDownloadError(
       `Refusing to overwrite existing file: ${destination}. Pass --overwrite to replace it.`,
     );
   }
 
   mkdirSync(dirname(destination), { recursive: true });
-  const nodeStream = Readable.fromWeb(response.body as any);
+  const nodeStream = Readable.from((async function* () {
+    const reader = body.getReader();
+    try {
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) return;
+        yield chunk.value;
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+  })());
   await pipeline(nodeStream, createWriteStream(destination));
   return destination;
 }
@@ -480,7 +567,7 @@ export async function downloadArchive(
 
   const archiveBytes = new Uint8Array(await archiveResponse.arrayBuffer());
   if (!isZipResponse(archiveContentType, archiveBytes)) {
-    throw new CraftpixDownloadError(
+    throw createCraftpixDownloadError(
       `Craftpix CDN response from ${archiveResponse.url} was not a zip archive (content-type: ${archiveContentType || "unknown"}).`,
     );
   }
@@ -490,7 +577,7 @@ export async function downloadArchive(
     inferFilename(archiveResponse.headers.get("content-disposition"), archiveResponse.url, fallbackTitle);
   const destination = resolve(resolvedOutputDir, filename);
   if (existsSync(destination) && !overwrite) {
-    throw new CraftpixDownloadError(
+    throw createCraftpixDownloadError(
       `Refusing to overwrite existing file: ${destination}. Pass --overwrite to replace it.`,
     );
   }
@@ -520,7 +607,7 @@ export async function executeDownload(request: DownloadRequest): Promise<{
   }
 
   if (!request.outputDir) {
-    throw new CraftpixDownloadError("--output-dir is required unless resolve-only mode is active.");
+    throw createCraftpixDownloadError("--output-dir is required unless resolve-only mode is active.");
   }
 
   const destination = await downloadArchive(
@@ -537,5 +624,25 @@ export async function executeDownload(request: DownloadRequest): Promise<{
   return {
     resolved,
     destination,
+  };
+}
+
+export async function checkCraftpixHealth(request: {
+  sourceUrl: string;
+  cookieFile?: string;
+  subitem?: string;
+  timeout?: number;
+  fetcher?: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>;
+}): Promise<CraftpixHealthCheck> {
+  const sourceUrl = normalizeCraftpixUrl(request.sourceUrl);
+  const cookieFile = getCookieFile(request.cookieFile);
+  const parsedCookies = parseCookieFile(cookieFile, false);
+  const headers = buildHeaders(parsedCookies.header);
+  const resolved = await resolveDownloadUrl(sourceUrl, request.subitem, headers, request.timeout ?? DEFAULT_TIMEOUT);
+  const probe = await probeCraftpixDownload({ downloadUrl: resolved.downloadUrl, headers, timeout: request.timeout, fetcher: request.fetcher });
+  return {
+    resolved,
+    probe,
+    cookies: { file: parsedCookies.resolvedCookieFile, count: parsedCookies.names.length, names: parsedCookies.names },
   };
 }

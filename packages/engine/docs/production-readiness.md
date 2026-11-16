@@ -2,7 +2,7 @@
 
 Repository checks prove engine behavior on their runners. They do not prove that a particular deployment has survived production traffic, that its operators can respond, or that an independent assessor reviewed it. Production and public-package claims therefore require a release-specific evidence file and fail closed when that file is absent or incomplete.
 
-Use `bun run certify:package` for a public package and `bun run certify:mmo` for a production MMO deployment. Set `RELEASE_EVIDENCE_FILE` to the JSON document. The publish workflow expects `release-evidence/v<version>.json`, so the current `0.0.1` package cannot publish merely because unit tests pass.
+Use `bun run certify:package` for a public package and `bun run certify:mmo` for a production MMO deployment. Set `RELEASE_EVIDENCE_FILE` to the JSON document. The engine's `prepublishOnly` lifecycle runs package certification during ordinary npm publishing; packing local candidates remains available without external attestations. There is no npm publishing workflow yet. [Release TODO](release-todo.md) owns the external prerequisites and future trusted-publisher setup. Do not bypass lifecycle scripts to publish an uncertified package.
 
 Both claims require:
 
@@ -19,6 +19,13 @@ An MMO claim additionally requires:
 - deployment attestations for TLS, a shared atomic replay store, external key management, remote durable storage, autoscaling, and multi-region coordination;
 - distinct primary and secondary on-call operators, an escalation policy, a runbook, and a restore drill within 90 days.
 
-Evidence URLs must use HTTPS. Timestamps and digests make a claim auditable, but the validator does not fetch or endorse the linked records. The protected release environment must restrict approval to people who verify those records.
+Evidence URLs must use HTTPS. Timestamps and digests make a claim auditable, but the validator does not fetch or endorse the linked records or compare the declared digest to an npm tarball. The release owner must verify the exact candidate digest and records before publishing. A future protected publishing environment must preserve that check.
+
+`bun run verify:browsers` now exercises all three Playwright engines and writes
+`.local/engine-release/browser-matrix.json` at the repository root, including exact
+engine versions, profiles, fixture digest, and failures as an incomplete matrix.
+This is evidence about a generated portable HTML fixture, not a substitute for
+the public package's external-consumer proof or physical-device testing. See
+[browser support](browser-support.md) for installation and evidence scope.
 
 The validator's accepted fields are exercised in `scripts/production-readiness.test.ts`. Do not copy its `.invalid` example URLs into release evidence.

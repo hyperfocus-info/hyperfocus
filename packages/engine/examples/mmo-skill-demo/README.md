@@ -12,6 +12,13 @@ The renderer defaults to fresh render records because the pinned end-to-end A/B/
 
 The live play surface comes first. DOM UI must stay collapsible and peripheral; only one optional panel should be open at a time, and the persistent objective/control cues should remain in the canvas HUD without blocking play. Inventory, equipment, stats, debug, travel, and quest detail are secondary overlays.
 
+DOM metadata uses a 0.75rem caption floor. Authored toolbar SVG paths render through
+the browser-only `renderToolbarIcon` adapter; icon strings remain plain text in
+the portable controller contract. See the [example control evidence](../../../../docs/design-system/example-controls.md)
+for real Bag/menu, narrow and scaled checks. The canvas backing size follows its
+displayed size so HUD captions remain readable; compact screens preserve the
+objective and defer duplicate quest/minimap detail to their full views.
+
 Controller support is a first-class play path, not a convenience layer over keyboard and mouse. A PlayStation-style controller should be able to move, aim, fight, inspect the HUD, open and close panels, move focus, confirm choices, cancel/back out, and recover to active play without touching the mouse. HUD and panel prompts should reflect the current input mode, keep focus visible, and avoid analog-only interaction when a digital button or D-pad path can provide the same function. Stick deadzone is a player setting and starts at 5%.
 
 Large files are a smell. `src/shared.ts` and `src/client/render.ts` should keep shrinking by moving real responsibilities into named modules or engine helpers. `src/client/render.ts` should stay a thin orchestrator; visual mapping belongs under `src/client/render/`. Do not create barrel-only moves that make imports deeper while leaving the same giant implementation behind.

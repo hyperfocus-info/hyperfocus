@@ -9,6 +9,7 @@ import { FileLinkedText, type FileLinkConfig } from "./file-linked-text";
 import { MarkdownContent } from "./markdown-content";
 import { Dialog } from "./primitives/dialog";
 import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
+import { planReviewStyles as review } from "./execution-plan/execution-plan-dialog.styles";
 
 type ExecutionPlanDialogProps = {
   executionPlan?: ExecutionPlan;
@@ -48,14 +49,20 @@ export function ExecutionPlanDialog(props: ExecutionPlanDialogProps) {
       onClose={() => harnessStore.closeExecutionPlanDialog()}
       title="Execution plan"
       eyebrow="Plan"
-      description="Planner summary, prerequisites, contract buckets, verification scope, and correctness policy."
+      description="Review the proposed work, prerequisites, and checks. Return to the plan card to build."
       class={stylex.attrs(styles.dialogWide).class}
       contentClass={stylex.attrs(styles.dialogContent).class}
     >
-      <Show when={props.executionPlan}>
+      <Show when={props.executionPlan} fallback={<p>No plan selected. Close this dialog and open a plan from the conversation.</p>}>
         {(executionPlan) => (
-          <div {...stylex.attrs(styles.planBody)}>
-            <div {...stylex.attrs(styles.planFacts)}>
+          <div {...stylex.attrs(styles.planBody, review.body)} data-test-plan-review="">
+            <section>
+              <h3 {...stylex.attrs(review.heading)}>Summary</h3>
+              <MarkdownContent content={() => executionPlan().summary} class={stylex.attrs(styles.marginTopMd).class} fileLinks={fileLinks()} />
+            </section>
+            <details {...stylex.attrs(review.disclosure)}>
+              <summary {...stylex.attrs(review.trigger)}>Run details</summary>
+              <div {...stylex.attrs(styles.planFacts, review.facts)}>
               <div>Run: {executionPlan().runId}</div>
               <div>Iteration: {executionPlan().iteration}</div>
               <div>Route: {executionPlan().route}</div>
@@ -70,7 +77,8 @@ export function ExecutionPlanDialog(props: ExecutionPlanDialogProps) {
               <div>Delay: {executionPlan().gating.delaySeconds}s</div>
               <div>Correctness: {executionPlan().correctnessPolicy}</div>
               <div>Origin: {executionPlan().origin}</div>
-            </div>
+              </div>
+            </details>
             <Show when={hasBranchfsSizeWarning()}>
               <div {...stylex.attrs(styles.warningBadge)}>
                 <AlertTriangle {...stylex.attrs(styles.iconXs)} />
@@ -78,24 +86,13 @@ export function ExecutionPlanDialog(props: ExecutionPlanDialogProps) {
               </div>
             </Show>
 
-            <section>
-              <div {...stylex.attrs(styles.planSectionLabel)}>
-                Summary
-              </div>
-              <MarkdownContent content={() => executionPlan().summary} class={stylex.attrs(styles.marginTopMd).class} fileLinks={fileLinks()} />
-            </section>
-
-            <section>
-              <div {...stylex.attrs(styles.planSectionLabel)}>
-                Execution brief
-              </div>
+            <details {...stylex.attrs(review.disclosure)}>
+              <summary {...stylex.attrs(review.trigger)}>Execution brief</summary>
               <MarkdownContent content={() => executionPlan().finalExecutionBrief} class={stylex.attrs(styles.marginTopMd).class} fileLinks={fileLinks()} />
-            </section>
+            </details>
 
             <section>
-              <div {...stylex.attrs(styles.planSectionLabel)}>
-                Prerequisites
-              </div>
+              <h3 {...stylex.attrs(review.heading)}>Prerequisites ({executionPlan().prerequisites.length})</h3>
               <Show
                 when={executionPlan().prerequisites.length > 0}
                 fallback={<div {...stylex.attrs(styles.planEmpty)}>No explicit prerequisites.</div>}
@@ -103,8 +100,8 @@ export function ExecutionPlanDialog(props: ExecutionPlanDialogProps) {
                 <div {...stylex.attrs(styles.planStack)}>
                   <For each={executionPlan().prerequisites}>
                     {(prerequisite) => (
-                      <div {...stylex.attrs(styles.planCard)}>
-                        <div {...stylex.attrs(styles.semibold)}>{prerequisite.title}</div>
+                      <div {...stylex.attrs(styles.planCard, review.card)}>
+                        <h4 {...stylex.attrs(review.title)}>{prerequisite.title}</h4>
                         <MarkdownContent content={() => prerequisite.instruction} class={stylex.attrs(styles.marginTopSm).class} tone="muted" size="compact" fileLinks={fileLinks()} />
                         <div {...stylex.attrs(styles.planMeta)}>Reason:</div>
                         <MarkdownContent content={() => prerequisite.reason} tone="muted" size="compact" fileLinks={fileLinks()} />
@@ -117,14 +114,13 @@ export function ExecutionPlanDialog(props: ExecutionPlanDialogProps) {
             </section>
 
             <section>
-              <div {...stylex.attrs(styles.planSectionLabel)}>
-                Contracts
-              </div>
+              <h3 {...stylex.attrs(review.heading)}>Contracts ({executionPlan().contracts.length})</h3>
+              <Show when={executionPlan().contracts.length > 0} fallback={<div {...stylex.attrs(styles.planEmpty)}>No contracts in this plan.</div>}>
               <div {...stylex.attrs(styles.planStack)}>
                 <For each={executionPlan().contracts}>
                   {(contract) => (
-                    <div {...stylex.attrs(styles.planCard)}>
-                      <div {...stylex.attrs(styles.semibold)}>{contract.title}</div>
+                    <div {...stylex.attrs(styles.planCard, review.card)}>
+                      <h4 {...stylex.attrs(review.title)}>{contract.title}</h4>
                       <MarkdownContent content={() => contract.instruction} class={stylex.attrs(styles.marginTopSm).class} tone="muted" size="compact" fileLinks={fileLinks()} />
                       <div {...stylex.attrs(styles.planMeta)}>
                         <FileLinkedText text={`Owned paths: ${contract.ownedPaths.join(", ")}`} fileLinks={fileLinks()} />
@@ -145,6 +141,7 @@ export function ExecutionPlanDialog(props: ExecutionPlanDialogProps) {
                   )}
                 </For>
               </div>
+              </Show>
             </section>
           </div>
         )}

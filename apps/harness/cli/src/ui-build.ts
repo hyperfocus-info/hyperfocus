@@ -1,6 +1,10 @@
+import { buildConfiguredBrand } from '@hyperfocus/branding/config';
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
+import { createDevWatchState } from "@hyperfocus/desktop-runtime/dev-process";
 import { existsSync, watch } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createDevHmrBatcher, DEFAULT_DEV_HMR_DEBOUNCE_SCHEDULE_MS } from "@hyperfocus/desktop-runtime/dev-server";
 import { stylexSolidPlugin } from "@hyperfocus/ui/build/stylex-solid-plugin";
 import { createTimerApi, type TimerApi } from "./server/runtime/timer-api";
 
@@ -8,13 +12,16 @@ const harnessRoot = path.resolve(import.meta.dir, "..", "..");
 const repoRoot = path.resolve(harnessRoot, "..", "..");
 const uiSourceDir = path.resolve(harnessRoot, "ui");
 const aiCoreSourceDir = path.resolve(repoRoot, "packages", "ai-core", "src", "harness");
+const sharedUiSourceDir = path.resolve(repoRoot, "packages", "ui", "src");
+const sharedUiBuildDir = path.resolve(repoRoot, "packages", "ui", "build-tools");
+const liveUiSourceDirs = [uiSourceDir, aiCoreSourceDir, sharedUiSourceDir, sharedUiBuildDir];
 const uiOutDir = path.resolve(repoRoot, "dist/ui");
 const uiEntryPoint = path.resolve(uiSourceDir, "src/main.tsx");
 const contextSourceDir = path.resolve(repoRoot, "docs", "harness");
-const DEV_HMR_BACKOFF_MS = [1000, 1500, 2000, 2500, 5000, 10000, 15000] as const;
 
 type UiBuildOptions = {
   minify?: boolean;
+  outputDir?: string;
 };
 
 type LiveReloadState = {
@@ -24,6 +31,8 @@ type LiveReloadState = {
 };
 
 type CreateUiAssetManagerOptions = {
+  assetRoot?: string;
+  buildWhenMissing?: boolean;
   debounceMs?: number;
   debounceScheduleMs?: readonly number[];
   timerApi?: TimerApi;
@@ -38,22 +47,25 @@ type CreateUiAssetManagerOptions = {
   };
 };
 
-export async function buildUiBundle({ minify = false }: UiBuildOptions = {}) {
+export async function buildUiBundle({ minify = false, outputDir = uiOutDir }: UiBuildOptions = {}) {
   const start = performance.now();
 
   try {
-    await prepareUiOutDir();
+    await prepareUiOutDir({ outputDir });
 
     const result = await Bun.build({
       entrypoints: [uiEntryPoint],
-      outdir: uiOutDir,
-      format: "iife",
+      outdir: outputDir,
+      format: "esm",
+      splitting: true,
+      naming: { entry: "[name].[ext]", chunk: "[name]-[hash].[ext]", asset: "[name]-[hash].[ext]" },
       target: "browser",
       sourcemap: minify ? "none" : "external",
       minify,
       metafile: true,
       plugins: [
         stylexSolidPlugin({
+          cssOutputFile: "main.css",
           useCSSLayers: { before: ["reset"], prefix: "hyperfocus" },
           importSources: ["@stylexjs/stylex"]
         })
@@ -68,11 +80,13 @@ export async function buildUiBundle({ minify = false }: UiBuildOptions = {}) {
     }
 
     if (!minify) {
-      await appendDevSourceMapReference();
+      await appendDevSourceMapReference(outputDir);
+    } else {
+      await rm(path.join(outputDir, "main.js.map"), { force: true });
     }
 
     await writeFile(
-      path.join(uiOutDir, "index.html"),
+      path.join(outputDir, "index.html"),
       `<!doctype html>
 <html lang="en">
   <head>
@@ -84,29 +98,22 @@ export async function buildUiBundle({ minify = false }: UiBuildOptions = {}) {
   </head>
   <body>
     <div id="root"></div>
-    <script src="./main.js"></script>
+    <script type="module" src="./main.js"></script>
   </body>
 </html>
 `
     );
+    await buildConfiguredBrand({configPath:path.join(uiSourceDir,'brand.json'),directory:path.join(outputDir,'brand'),htmlPath:path.join(outputDir,'index.html')});
   } catch (error) {
     throw enrichUiBuildFileSystemError(error);
   }
 
-  console.log(`Bundled page in ${Math.round(performance.now() - start)}ms: dist/ui/index.html`);
+  console.log(`Bundled page in ${Math.round(performance.now() - start)}ms: ${path.join(outputDir, "index.html")}`);
 }
 
-export async function prepareUiOutDir() {
-  await rm(uiOutDir, { recursive: true, force: true });
-  try {
-    await mkdir(uiOutDir, { recursive: true });
-  } catch (error) {
-    if (!isNodeErrorCode(error, "EEXIST")) {
-      throw error;
-    }
-    await rm(uiOutDir, { recursive: true, force: true });
-    await mkdir(uiOutDir, { recursive: true });
-  }
+export async function prepareUiOutDir(options: { outputDir?: string } = {}) {
+  // Keep the last working page available while compilation is pending or fails.
+  await mkdir(options.outputDir ?? uiOutDir, { recursive: true });
 }
 
 export function enrichUiBuildFileSystemError(error: unknown) {
@@ -114,7 +121,7 @@ export function enrichUiBuildFileSystemError(error: unknown) {
     return error;
   }
   const message =
-    "UI build failed because the filesystem is out of space. Free disk space or clean temporary harness artifacts such as .local/branchfs, .tmp-test-data, and dist/ui, then restart the harness.";
+    "UI build failed because the filesystem is out of space. Free disk space or clean temporary harness artifacts such as .local/branchfs, .local/test-data, and dist/ui, then restart the harness.";
   return new Error(message, { cause: error });
 }
 
@@ -132,8 +139,8 @@ function hasNodeErrorCode(error: unknown, code: string): boolean {
   return error instanceof Error && error.cause !== undefined && hasNodeErrorCode(error.cause, code);
 }
 
-async function appendDevSourceMapReference() {
-  const jsPath = path.join(uiOutDir, "main.js");
+async function appendDevSourceMapReference(outputDir: string) {
+  const jsPath = path.join(outputDir, "main.js");
   const sourceMapReference = "//# sourceMappingURL=main.js.map";
   const contents = await readFile(jsPath, "utf8");
 
@@ -145,23 +152,27 @@ async function appendDevSourceMapReference() {
 }
 
 export function createUiAssetManager(options: CreateUiAssetManagerOptions = {}) {
-  const debounceScheduleMs = normalizeDebounceSchedule(options.debounceScheduleMs ?? [options.debounceMs ?? 0]);
+  const assetRoot = path.resolve(options.assetRoot ?? process.env.HARNESS_UI_OUTPUT_DIR ?? uiOutDir);
+  const buildWhenMissing = options.buildWhenMissing ?? true;
+  const debounceScheduleMs = options.debounceScheduleMs ?? [options.debounceMs ?? 0];
   const timerApi = options.timerApi ?? createTimerApi();
-  const buildUi = options.buildUiBundle ?? buildUiBundle;
+  const buildUi = options.buildUiBundle ?? ((buildOptions?: UiBuildOptions) => buildUiBundle({ ...buildOptions, outputDir: assetRoot }));
   const shouldRebuildForPath = options.isTrackedFile ?? createLiveReloadSourcePredicate();
-  const watchedSourceDirs = options.watchedSourceDirs ?? [uiSourceDir, aiCoreSourceDir];
+  const watchedSourceDirs = options.watchedSourceDirs ?? liveUiSourceDirs;
   const watchSourceDir =
     options.watchSourceDir ??
-    ((sourceDir: string, listener: (changedPath?: string) => void) =>
-      watch(sourceDir, { recursive: true }, (_eventType, filename) => {
-        listener(resolveWatchEventPath(sourceDir, filename));
-      }));
+    ((sourceDir: string, listener: (changedPath?: string) => void) => {
+      const state = createDevWatchState({ source: sourceDir, recursive: true,
+        accepts: (file) => !isIgnoredLiveReloadWatchPath(file) });
+      return watch(sourceDir, { recursive: true }, (_eventType, filename) => {
+        for (const changed of state.changes(resolveWatchEventPath(sourceDir, filename))) listener(changed);
+      });
+    });
   let buildInFlight: Promise<void> | undefined;
   let rebuildQueued = false;
   let watchers: Array<{ close(): void }> = [];
-  let rebuildTimer: number | undefined;
-  let rebuildBackoffStep = 0;
   let revision = 0;
+  let initialBuildPending = buildWhenMissing;
 
   const runBuild = async () => {
     try {
@@ -188,36 +199,26 @@ export function createUiAssetManager(options: CreateUiAssetManagerOptions = {}) 
     return buildInFlight;
   };
 
-  const clearRebuildTimer = () => {
-    if (!rebuildTimer) {
-      return;
-    }
-
-    timerApi.clearTimeout(rebuildTimer);
-    rebuildTimer = undefined;
-  };
+  const rebuildBatcher = createDevHmrBatcher({
+    scheduleMs: debounceScheduleMs,
+    timerApi,
+    reload: scheduleBuild,
+    onError: (error) => console.error(error)
+  });
 
   const queueBuild = () => {
-    const debounceMs = debounceScheduleMs[Math.min(rebuildBackoffStep, debounceScheduleMs.length - 1)] ?? 0;
-    if (debounceMs === 0) {
-      rebuildBackoffStep = 0;
-      return scheduleBuild();
-    }
-
-    clearRebuildTimer();
-    rebuildBackoffStep += 1;
-    rebuildTimer = timerApi.setTimeout(() => {
-      rebuildTimer = undefined;
-      rebuildBackoffStep = 0;
-      void scheduleBuild();
-    }, debounceMs);
-    return undefined;
+    rebuildBatcher.request("source change");
   };
 
   return {
     async ensureBuilt() {
-      if (!existsSync(path.join(uiOutDir, "index.html"))) {
-        await scheduleBuild();
+      if (initialBuildPending || !existsSync(path.join(assetRoot, "index.html"))) {
+        if (!buildWhenMissing) {
+          throw new Error(`Packaged Harness UI assets are missing from ${assetRoot}`);
+        }
+        await (buildInFlight ?? scheduleBuild());
+        if (revision === 0) throw new Error("Initial Harness UI build failed; inspect the build error above.");
+        initialBuildPending = false;
         return;
       }
 
@@ -239,10 +240,11 @@ export function createUiAssetManager(options: CreateUiAssetManagerOptions = {}) 
       }));
     },
     resolveAsset(pathname: string) {
-      const relativePath = pathname === "/" || pathname === "/ide" ? "index.html" : pathname.slice(1);
-      const assetPath = path.resolve(uiOutDir, relativePath);
+      const relativePath = pathname === "/" || pathname === "/ide" || pathname === "/swarm" ? "index.html" : pathname.slice(1);
+      const assetPath = path.resolve(assetRoot, relativePath);
+      const relativeAssetPath = path.relative(assetRoot, assetPath);
 
-      if (!assetPath.startsWith(uiOutDir)) {
+      if (relativeAssetPath.startsWith("..") || path.isAbsolute(relativeAssetPath)) {
         return undefined;
       }
 
@@ -256,11 +258,11 @@ export function createUiAssetManager(options: CreateUiAssetManagerOptions = {}) 
       return {
         revision,
         building: buildInFlight !== undefined,
-        pending: rebuildTimer !== undefined || rebuildQueued
+        pending: rebuildBatcher.getState().pending || rebuildQueued
       };
     },
     dispose() {
-      clearRebuildTimer();
+      rebuildBatcher.cancel();
       watchers.forEach((watcher) => watcher.close());
       watchers = [];
     }
@@ -268,12 +270,7 @@ export function createUiAssetManager(options: CreateUiAssetManagerOptions = {}) 
 }
 
 export function createDevHmrDebounceSchedule() {
-  return DEV_HMR_BACKOFF_MS;
-}
-
-function normalizeDebounceSchedule(schedule: readonly number[]) {
-  const normalized = schedule.map((delayMs) => Math.max(0, Math.round(delayMs))).filter((delayMs) => Number.isFinite(delayMs));
-  return normalized.length > 0 ? normalized : [0];
+  return DEFAULT_DEV_HMR_DEBOUNCE_SCHEDULE_MS;
 }
 
 function resolveWatchEventPath(sourceDir: string, filename: string | Buffer | null) {
@@ -295,6 +292,9 @@ function isIgnoredLiveReloadWatchPath(changedPath: string | undefined) {
   }
 
   const resolvedPath = path.resolve(changedPath);
+  // A checkout may itself live under .local (for example an isolated candidate).
+  const relativeWatchPath = path.relative(repoRoot, resolvedPath);
+  if (/(?:^|[/\\])(?:node_modules|dist|\.git|\.local|\.bun)(?:[/\\]|$)/.test(relativeWatchPath)) return true;
   if (isHarnessTestSourcePath(resolvedPath)) {
     return true;
   }
@@ -342,7 +342,7 @@ function createLiveReloadSourcePredicate() {
       return false;
     }
 
-    if (isPathWithin(uiSourceDir, resolvedPath) || isPathWithin(aiCoreSourceDir, resolvedPath)) {
+    if (liveUiSourceDirs.some((directory) => isPathWithin(directory, resolvedPath))) {
       return existsSync(resolvedPath) || isGitTrackedFile(relativePath);
     }
 
@@ -351,7 +351,7 @@ function createLiveReloadSourcePredicate() {
 }
 
 function isGitTrackedFile(relativePath: string) {
-  const result = Bun.spawnSync({
+  const result = spawnBackgroundProcessSync({
     cmd: ["git", "ls-files", "--error-unmatch", "--", relativePath],
     cwd: repoRoot,
     stdout: "pipe",

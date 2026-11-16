@@ -78,6 +78,24 @@ function mountPanelGroup(options: {
 }
 
 describe("PanelGroup", () => {
+  test("adds and removes controlled panels before rendering their layout", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const allPanels = horizontalPanels();
+    const [panels, setPanels] = createSignal<readonly PanelDescriptor[]>(allPanels.slice(1));
+    const [layout, setLayout] = createSignal<PanelGroupLayoutInput>({ viewport: { size: 720 } });
+    const dispose = render(() => <PanelGroup id="dynamic" panels={panels()} layout={layout} onLayoutChange={setLayout} ariaLabel="Dynamic panels" />, host);
+    try {
+      setPanels(allPanels);
+      expect(requireElement(host, '[data-panel-group-handle="resources"]').getAttribute("aria-valuenow")).toBe("260");
+      setLayout({ resources: { size: 330 }, viewport: { size: 720 } });
+      expect(requireElement(host, '[data-panel-group-handle="resources"]').getAttribute("aria-valuenow")).toBe("330");
+      setPanels(allPanels.slice(1));
+      expect(host.querySelector('[data-panel-group-panel="resources"]')).toBeNull();
+      setPanels(allPanels);
+      expect(requireElement(host, '[data-panel-group-handle="resources"]').getAttribute("aria-valuenow")).toBe("330");
+    } finally { dispose(); }
+  });
   test("exposes a clamped, collapsible horizontal separator to the keyboard", () => {
     const mounted = mountPanelGroup({ narrowBreakpoint: false });
     const separator = requireElement<HTMLElement>(mounted.host, '[data-panel-group-handle="resources"]');
@@ -225,4 +243,18 @@ describe("PanelGroup", () => {
     expect(mounted.host.querySelector<HTMLElement>('[data-panel-group-handle-cell="resources"]')?.hidden).toBe(false);
     mounted.dispose();
   });
+});
+
+test("a single click on the collapsed handle restores the same panel content and saved width", () => {
+  const mounted = mountPanelGroup({ input: { resources: { collapsed: true, size: 330 } }, narrowBreakpoint: false });
+  try {
+    const content = requireElement(mounted.host, '[data-test-resources]');
+    const handle = requireElement<HTMLElement>(mounted.host, '[data-panel-group-handle=resources]');
+    handle.click();
+    expect(mounted.current().resources.collapsed).toBe(false);
+    expect(mounted.current().resources.size).toBe(330);
+    expect(requireElement(mounted.host, '[data-test-resources]') === content).toBe(true);
+    expect(requireElement<HTMLElement>(mounted.host, '[data-panel-group-panel=resources]').hidden).toBe(false);
+    handle.click(); expect(mounted.changes).toHaveLength(1);
+  } finally { mounted.dispose(); }
 });

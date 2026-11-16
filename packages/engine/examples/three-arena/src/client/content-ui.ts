@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { requireRuntimeInstance, THREE } from "./boot-and-dom.ts";
 import type * as Three from "three";
 import { state } from "./arena-state.ts";
@@ -37,9 +38,7 @@ export function choiceVisual(choice: LevelChoice): { icon: string; kind: string 
   return { icon: architectUiAsset("status/debuff-4.png"), kind: "Core" };
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+
 
 export function hasArenaAnimationMetadata(clip: Three.AnimationClip): clip is ArenaAnimationClip {
   return "userData" in clip && isRecord(clip.userData);
@@ -160,3 +159,5 @@ export function classUnlocks(klass: PlayerClassDefinition | null | undefined): A
 export function displayNameForUnlock(id: string): string {
   return weaponsById.get(id)?.name ?? passiveItemsById.get(id)?.name ?? id;
 }
+
+export { isRecord } from "@hyperfocus/utilities/records";

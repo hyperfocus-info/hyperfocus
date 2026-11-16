@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { resolveExecutionPlanGateMode } from "../../pi-orchestrator";
 import type { executeReadyRun } from "../../pi-orchestrator";
 import { modeUsesReadOnlyExecution } from "@hyperfocus/ai-core/modes";
@@ -55,6 +56,19 @@ export async function runCorrectnessReview(
     });
   }
 
+  const classicModuleScripts = await findClassicScriptsWithModuleSyntax(rootPath, indexHtmlText);
+  if (classicModuleScripts.length > 0) {
+    gaps.push({
+      id: "module-loaded-as-classic-script",
+      category: "runnable-gap",
+      severity: "high",
+      description: `Browser entrypoint loads ESM output as a classic script: ${classicModuleScripts.join(", ")}.`,
+      suggestedFix: "Load the generated JavaScript with type=\"module\" or emit a classic-script bundle, then smoke-test browser startup.",
+      canParallelize: false,
+      ownedPaths: ["index.html", ...classicModuleScripts]
+    });
+  }
+
   const suspiciousFiles = await findSuspiciousQualityFiles(rootPath, changedWorkspaceFiles);
   if (suspiciousFiles.length > 0) {
     gaps.push({
@@ -71,14 +85,14 @@ export async function runCorrectnessReview(
   if (gaps.length === 0) {
     return {
       status: "pass",
-      summary: "Correctness review passed. Plan commitments and runnable output checks look good.",
+      summary: "Structural review found no known gaps. Runtime behavior, domain correctness, and full plan completion remain unverified by this review.",
       gaps: []
     };
   }
 
   return {
     status: "needs-iteration",
-    summary: `Correctness review found ${gaps.length} gap${gaps.length === 1 ? "" : "s"}.`,
+    summary: `Structural review found ${gaps.length} gap${gaps.length === 1 ? "" : "s"}. Runtime behavior, domain correctness, and full plan completion remain unverified by this review.`,
     gaps,
     recommendedPlan: buildCorrectiveExecutionPlan(executionPlan, gaps, readyPlan)
   };
@@ -100,6 +114,34 @@ function executionPlanRequiresWorkspaceChanges(executionPlan: ExecutionPlan) {
   return /\b(?:add|build|create|delete|edit|fix|generate|implement|install|migrate|modify|patch|refactor|remove|replace|scaffold|update|wire|write)\b/i.test(text);
 }
 
+export function findClassicLocalScriptSources(indexHtmlText: string) {
+  const sources: string[] = [];
+  for (const match of indexHtmlText.matchAll(/<script\b([^>]*)>/gi)) {
+    const attributes = match[1] ?? "";
+    if (/\btype\s*=\s*["']module["']/i.test(attributes)) continue;
+    const source = attributes.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1]?.trim();
+    if (!source || /^(?:[a-z]+:|\/\/|#)/i.test(source)) continue;
+    sources.push(source.split(/[?#]/, 1)[0]!);
+  }
+  return sources;
+}
+
+async function findClassicScriptsWithModuleSyntax(rootPath: string, indexHtmlText: string) {
+  const matches: string[] = [];
+  for (const source of findClassicLocalScriptSources(indexHtmlText)) {
+    const absolutePath = path.resolve(rootPath, source);
+    if (!isInsideRoot(rootPath, absolutePath)) continue;
+    const text = await Bun.file(absolutePath).text().catch(() => "");
+    if (/(?:^|\n)\s*(?:export(?:\s|\{|\*)|import(?:\s|\{|\*|\.))/m.test(text)) matches.push(source);
+  }
+  return matches;
+}
+
+function isInsideRoot(rootPath: string, candidatePath: string) {
+  const relative = path.relative(path.resolve(rootPath), candidatePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
 function finalAnswerReportsWorkspaceWriteBlock(content: string) {
   return (
     /\b(?:blocked|cannot|can't|could not|couldn't|read-only|unable|workspace is mounted read-only|write access|writable workspace)\b/i.test(content) &&
@@ -114,7 +156,7 @@ function getConcretePlanOwnedPaths(executionPlan: ExecutionPlan) {
 
 async function findSuspiciousQualityFiles(rootPath: string, changedFiles?: string[]) {
   if (changedFiles) return changedFiles.filter(isSuspiciousQualityFile).slice(0, 8);
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: [
       "powershell",
       "-NoProfile",
@@ -137,7 +179,7 @@ async function findSuspiciousQualityFiles(rootPath: string, changedFiles?: strin
 }
 
 async function findChangedWorkspaceFiles(rootPath: string) {
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: ["git", "status", "--porcelain", "-z", "--untracked-files=all", "--", "."],
     cwd: rootPath,
     stdout: "pipe",
@@ -186,18 +228,22 @@ function buildCorrectiveExecutionPlan(basePlan: ExecutionPlan, gaps: Correctness
       ...basePlan.gating,
       mode: resolveExecutionPlanGateMode(basePlan.mode, basePlan.gating.mode, actualSubagentCount)
     },
-    prerequisites: [],
+    prerequisites: basePlan.supervision ? basePlan.prerequisites : [],
     contracts: gaps.map((gap, index) => ({
       taskId: `correctness-${index + 1}`,
       title: gap.category === "runnable-gap" ? "Restore runnable output" : `Resolve ${gap.category}`,
       instruction: gap.suggestedFix,
+      contribution: basePlan.supervision ? {
+        outcome: basePlan.supervision.outcome, limitingFactor: gap.description, evidence: `Observed ${gap.category}: ${gap.description}`,
+        expectedImprovement: gap.suggestedFix, stopWhen: "The same failure recurs without parent-outcome improvement; redirect instead of repeating the repair.",
+      } : undefined,
       effortPoints: gap.severity === "high" ? 4 : gap.severity === "medium" ? 3 : 2,
       ownedPaths: gap.ownedPaths.length > 0 ? gap.ownedPaths : readyPlan.subtasks.flatMap((task) => task.id.split("+")).slice(0, 2),
-      dependsOnPrerequisiteIds: [],
+      dependsOnPrerequisiteIds: basePlan.supervision ? basePlan.prerequisites.map(item => item.id) : [],
       deliverables: [gap.description],
       integrationPoints: [],
       verificationScope: basePlan.subagentWorktreeStrategy === "same-worktree" ? "owned-files-only" : "worktree-full",
-      verificationCommands: basePlan.subagentWorktreeStrategy === "same-worktree" ? ["bunx tsc --noEmit"] : ["bun run typecheck", "bun run test"],
+      verificationCommands: [...new Set(basePlan.contracts.flatMap(contract => contract.verificationCommands))],
       mergeNotes: `Resolve correctness gap: ${gap.description}`
     }))
   };

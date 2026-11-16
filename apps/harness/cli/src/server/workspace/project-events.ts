@@ -15,7 +15,7 @@ import type { Dirent } from "node:fs";
 import path from "node:path";
 
 export function emitProjectTrace(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   projectId: ProjectId,
@@ -36,7 +36,7 @@ export function emitProjectTrace(
 }
 
 export function emitMessageAppended(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -91,7 +91,7 @@ export function getThreadSessionState(
 }
 
 export function emitThreadMessageAppended(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -144,7 +144,7 @@ export function findLatestNonMilestoneAssistantMessage(messages: ChatMessage[]) 
   return undefined;
 }
 
-export function emitRunUpdated(ws: Bun.ServerWebSocket<HarnessConnection>, requestId: string, project: ProjectLike) {
+export function emitRunUpdated(ws: import("../transport/events").ControlEventSocket, requestId: string, project: ProjectLike) {
   const run = project.activeRun ?? project.lastRun;
   if (!run) {
     return;
@@ -244,7 +244,7 @@ export function createRunBootstrapProjection(run: WorkspaceProjectState["activeR
     memoryRetrievals: undefined, detailState: "summary" as const };
 }
 
-export function emitWorkspaceUpdated(ws: Bun.ServerWebSocket<HarnessConnection>, requestId: string,
+export function emitWorkspaceUpdated(ws: import("../transport/events").ControlEventSocket, requestId: string,
   runtime: WorkspaceRuntimeStore, repository: WorkspaceRepository) {
   const event: Extract<ServerEvent, { type: "workspace.updated" }> = {
     type: "workspace.updated",
@@ -258,7 +258,7 @@ export function emitWorkspaceUpdated(ws: Bun.ServerWebSocket<HarnessConnection>,
 }
 
 export function emitProjectUpdated(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   projectId: ProjectId,
   project: WorkspaceProjectState,

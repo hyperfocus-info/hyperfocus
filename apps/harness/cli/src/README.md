@@ -38,6 +38,8 @@ Backend websocket handlers and runtime orchestration for harness.
 - Assistant-owned background jobs carry recent answered questions into routine context so repeated prompts honor prior user guidance.
 - Background job launch repairs stale assistant or automation-thread links before queuing, so old imported jobs fail closed only when the project itself is gone.
 - Assistant questions pass through a deterministic async-first policy gate, so duplicate or low-risk uncertainty becomes durable guidance instead of another inbox blocker.
+- Blocking/risk policy precedes guidance reuse; pending duplicates and unknown questions stay unanswered. Question-shaped runtime errors remain failures, and resolving input never implies task completion.
+- Inferred intent excludes display labels and negated instructions. Explicit task scope remains authoritative; research, documentation, and summaries do not imply permission to implement or deploy.
 - Live CLI session commands validate the session's owning thread, reject unsupported resize instead of faking terminal dimensions, keep terminal output bounded, and store captured terminal context for the next prompt on that thread.
 - Integrated terminal sessions use a separate typed control plane plus terminal websocket, persist session metadata and bounded scrollback, and restore live sessions only while the harness server process stays alive.
 - CLI and shell-job termination kills Windows process trees so stopped, timed-out, or capped runs do not leave orphaned shell windows behind.
@@ -48,7 +50,7 @@ Backend websocket handlers and runtime orchestration for harness.
 - Websocket streaming paths batch high-frequency assistant and terminal output, use heartbeat checks for stale sockets, and keep hot transcript updates narrow.
 - `server.ts` is the backend composition root; focused modules under `server/` group typed commands, execution, automation, workspace, runtime, transport, and shared contracts by responsibility.
 - Server integration suites live under `server-tests/`, grouped by the same behavioral domains with shared fixtures isolated in `server-tests/support/`.
-- Development live reload uses short backoff windows, keeps UI and backend timers independent, watches shared harness contracts for both surfaces, and ignores untracked or repo-local metadata changes.
+- Development live reload uses the shared 2.5s-to-15s exponential quiet-window primitive, keeps UI and backend timers independent, watches shared harness contracts for both surfaces, and ignores untracked or repo-local metadata changes.
 - Development DB recovery backs up local SQLite artifacts before purge so corrupted or schema-drifted workspace state remains inspectable.
 - Prompt attachments are accepted only from trusted upload metadata and can be reused on planning answers or refinements.
 - Pi provider routing supports GPT, Gemini, and Claude while keeping stable prompt context and large attachments cache-aware for cheaper repeated runs.

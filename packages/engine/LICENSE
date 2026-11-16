@@ -1,12 +1,12 @@
 Hyperfocus Source-Available Game License 2.0
 
-Copyright (c) 2026 the Licensor
+Copyright (c) 2026 Hyperfocus LLC
 
 This license is a source-available license, not an open-source license.
 
 1. Definitions
 
-"Licensor" means the copyright owner or owners of the Software.
+"Licensor" means Hyperfocus LLC.
 
 "Software" means all source code, object code, documentation, applications,
 packages, tools, scripts, assets, and other first-party materials contained in
@@ -125,6 +125,7 @@ after the calendar year ends.
 
 Reports and payments must use the contact method or payment instructions the
 Licensor publicly designates with the Software or provides to You in writing.
+The public reporting and payment contact is payment@hyperfocus.info.
 If no method is designated when payment becomes due, You must notify the
 repository owner through a private contact channel and retain the amount due
 until reasonable payment instructions are provided; the absence of published

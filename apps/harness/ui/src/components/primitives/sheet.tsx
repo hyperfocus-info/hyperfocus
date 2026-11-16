@@ -6,7 +6,7 @@ import { isTopOverlay, registerFocusReturn, registerOverlay, restoreOverlayFocus
 import { PrimitivePortal } from "./primitive-portal";
 
 const styles = stylex.create({
-  trigger: { cursor: { default: "pointer", ":disabled": "not-allowed" } },
+  trigger: { cursor: "pointer" },
   backdrop: {
     inset: 0,
     backdropFilter: "blur(4px)",
@@ -43,7 +43,7 @@ const styles = stylex.create({
     alignItems: "center",
     backgroundColor: { default: "transparent", ":hover": "var(--panel-strong)" },
     color: "var(--foreground)",
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    cursor: "pointer",
     display: "inline-flex",
     justifyContent: "center",
     transitionDuration: "150ms",
@@ -122,15 +122,8 @@ export function SheetContent(props: {
           tabindex="-1"
           ref={surfaceRef}
           onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              if (isTopOverlay(overlayId)) {
-                event.preventDefault();
-                event.stopPropagation();
-                props.onClose?.();
-              }
-              return;
-            }
-            trapFocusInOverlay(event, surfaceRef);
+            if (event.defaultPrevented) return;
+              trapFocusInOverlay(event, surfaceRef);
           }}
           onClick={(event) => event.stopPropagation()}
         >

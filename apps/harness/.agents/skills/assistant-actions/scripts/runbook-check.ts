@@ -1,163 +1,62 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-export type RunbookCheckResult = {
-  ok: boolean;
-  skillRoot: string;
-  errors: string[];
-  branchDocs: string[];
-  storyIds: string[];
-};
+const REQUIRED_HELPERS = ["assistant-state.ts", "assistant-jobs.ts", "assistant-maintenance.ts", "harness-db-path.ts"];
 
-const REQUIRED_BRANCH_DOCS = [
-  "action-index.md",
-  "assistant-selection.md",
-  "create-configure.md",
-  "chat-todos-questions.md",
-  "jobs.md",
-  "state-reporting.md",
-  "recovery.md",
-  "clarification-policy.md",
-  "operation-handoffs.md"
-];
-
-const ASSISTANT_STORY_IDS = ["US-ASSISTANTS-001", "US-ASSISTANTS-002", "US-ASSISTANTS-003", "US-ASSISTANTS-004"];
-
-const HELP_TEXT = `runbook-check.ts
-
-Usage:
-  bun.cmd .agents/skills/assistant-actions/scripts/runbook-check.ts [--skill-root <path>] [--json]
-
-Checks:
-  - master SKILL.md links all branch docs
-  - every US-ASSISTANTS story has action-index coverage
-  - assistant-state examples use the supported script invocation
-  - assistant-maintenance examples cover destructive assistant cleanup
-`;
+/** Validate the installed runbook graph without requiring repository-only story metadata. */
+export function validateRunbook(skillRoot = path.resolve(import.meta.dir, "..")) {
+  const root = path.resolve(skillRoot);
+  const errors: string[] = [];
+  const documents: string[] = [];
+  const pending = ["SKILL.md"];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const relative = pending.pop()!;
+    if (visited.has(relative)) continue;
+    visited.add(relative);
+    const file = path.resolve(root, relative);
+    if (!existsSync(file)) {
+      errors.push(`Missing document: ${relative}`);
+      continue;
+    }
+    documents.push(relative);
+    for (const match of readFileSync(file, "utf8").matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
+      const target = match[1]!.split("#")[0]!;
+      if (!target || /^(?:https?:|mailto:)/.test(target)) continue;
+      const resolved = path.resolve(path.dirname(file), target);
+      const child = path.relative(root, resolved);
+      if (child === ".." || child.startsWith(`..${path.sep}`) || path.isAbsolute(child)) {
+        errors.push(`Reference leaves installed skill: ${relative} -> ${target}`);
+      } else if (!existsSync(resolved)) {
+        errors.push(`Missing reference: ${relative} -> ${target}`);
+      } else if (resolved.endsWith(".md")) {
+        pending.push(child.replaceAll(path.sep, "/"));
+      }
+    }
+  }
+  for (const helper of REQUIRED_HELPERS) {
+    if (!existsSync(path.join(root, "scripts", helper))) errors.push(`Missing helper: scripts/${helper}`);
+  }
+  return { ok: errors.length === 0, skillRoot: root, errors, documents: documents.sort() };
+}
 
 if (import.meta.main) {
-  const args = parseArgs(Bun.argv.slice(2));
-  if (args.help) {
-    console.log(HELP_TEXT);
-    process.exit(0);
-  }
-  const result = validateRunbook(args.skillRoot);
-  if (args.json) {
-    console.log(JSON.stringify(result, null, 2));
-  } else {
-    console.log(renderRunbookCheck(result));
-  }
-  process.exit(result.ok ? 0 : 1);
-}
-
-export function validateRunbook(skillRoot = path.resolve(import.meta.dir, "..")): RunbookCheckResult {
-  const errors: string[] = [];
-  const skillPath = path.join(skillRoot, "SKILL.md");
-  const referencesRoot = path.join(skillRoot, "references");
-  const skillText = readRequiredFile(skillPath, errors);
-
-  for (const doc of REQUIRED_BRANCH_DOCS) {
-    const docPath = path.join(referencesRoot, doc);
-    if (!existsSync(docPath)) {
-      errors.push(`Missing branch doc: references/${doc}`);
-      continue;
-    }
-    if (!skillText.includes(`references/${doc}`)) {
-      errors.push(`SKILL.md does not link references/${doc}`);
-    }
-  }
-
-  const actionIndexPath = path.join(referencesRoot, "action-index.md");
-  const actionIndex = readRequiredFile(actionIndexPath, errors);
-  for (const storyId of ASSISTANT_STORY_IDS) {
-    if (!actionIndex.includes(storyId)) {
-      errors.push(`action-index.md missing ${storyId}`);
-    }
-  }
-
-  const assistantStatePath = path.join(skillRoot, "scripts", "assistant-state.ts");
-  if (!existsSync(assistantStatePath)) {
-    errors.push("Missing script: scripts/assistant-state.ts");
-  }
-  const assistantMaintenancePath = path.join(skillRoot, "scripts", "assistant-maintenance.ts");
-  if (!existsSync(assistantMaintenancePath)) {
-    errors.push("Missing script: scripts/assistant-maintenance.ts");
-  }
-
-  const docsWithExamples = ["SKILL.md", "references/jobs.md", "references/state-reporting.md", "references/operation-handoffs.md"];
-  for (const relativePath of docsWithExamples) {
-    const text = readRequiredFile(path.join(skillRoot, relativePath), errors);
-    if (!text.includes("bun.cmd .agents/skills/assistant-actions/scripts/assistant-state.ts")) {
-      errors.push(`${relativePath} missing assistant-state.ts example`);
-    }
-  }
-
-  const maintenanceDocs = ["references/jobs.md", "references/create-configure.md", "references/recovery.md", "references/operation-handoffs.md"];
-  for (const relativePath of maintenanceDocs) {
-    const text = readRequiredFile(path.join(skillRoot, relativePath), errors);
-    if (!text.includes("bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts")) {
-      errors.push(`${relativePath} missing assistant-maintenance.ts example`);
-    }
-  }
-
-  return {
-    ok: errors.length === 0,
-    skillRoot,
-    errors,
-    branchDocs: REQUIRED_BRANCH_DOCS,
-    storyIds: ASSISTANT_STORY_IDS
-  };
-}
-
-export function renderRunbookCheck(result: RunbookCheckResult) {
-  const lines = [`assistant-actions runbook check: ${result.ok ? "ok" : "failed"}`, `skillRoot: ${result.skillRoot}`];
-  if (result.errors.length > 0) {
-    lines.push("");
-    lines.push("errors:");
-    for (const error of result.errors) {
-      lines.push(`- ${error}`);
-    }
-  }
-  return lines.join("\n");
-}
-
-function parseArgs(argv: string[]) {
   let skillRoot = path.resolve(import.meta.dir, "..");
   let json = false;
-  let help = false;
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    if (!token) {
-      continue;
+  for (let index = 2; index < Bun.argv.length; index += 1) {
+    const argument = Bun.argv[index];
+    if (argument === "--help" || argument === "-h") {
+      console.log("Usage: bun runbook-check.ts [--skill-root <installed-directory>] [--json]");
+      process.exit(0);
     }
-    if (token === "--help" || token === "-h") {
-      help = true;
-      continue;
-    }
-    if (token === "--json") {
-      json = true;
-      continue;
-    }
-    if (token === "--skill-root") {
-      const value = argv[index + 1];
-      if (!value) {
-        throw new Error("--skill-root requires a path");
-      }
-      skillRoot = path.resolve(value);
-      index += 1;
-      continue;
-    }
-    throw new Error(`Unknown option: ${token}`);
+    if (argument === "--json") json = true;
+    else if (argument === "--skill-root" && Bun.argv[index + 1]) skillRoot = path.resolve(Bun.argv[++index]!);
+    else throw new Error(`Unknown or incomplete option: ${argument}`);
   }
-
-  return { skillRoot, json, help };
-}
-
-function readRequiredFile(filePath: string, errors: string[]) {
-  if (!existsSync(filePath)) {
-    errors.push(`Missing file: ${filePath}`);
-    return "";
-  }
-  return readFileSync(filePath, "utf8");
+  const result = validateRunbook(skillRoot);
+  console.log(json ? JSON.stringify(result, null, 2) : [
+    `assistant-actions runbook: ${result.ok ? "ok" : "failed"}`,
+    ...result.errors
+  ].join("\n"));
+  process.exitCode = result.ok ? 0 : 1;
 }

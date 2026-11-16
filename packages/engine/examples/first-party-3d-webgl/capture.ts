@@ -1,10 +1,12 @@
+import { spawnBackgroundProcess, terminateProcessTree } from "@hyperfocus/desktop-runtime/process";
+import { launchHeadlessBrowser } from "@hyperfocus/desktop-runtime/automation";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import puppeteer from "puppeteer-core";
+import puppeteer, { type Browser } from "puppeteer-core";
 
 type FirstParty3DSnapshot = {
   draws: number; instances: number; triangles: number; width: number; height: number;
-  textureUploads: number; ambientLights: number; directionalLights: number; shadowDraws: number;
+  textureUploads: number; ambientLights: number; directionalLights: number; shadowDraws: number; outlineDraws: number;
   paletteUploads: number; skinnedDraws: number; skinnedInstances: number; pose: number;
 };
 type FirstParty3DHook = {
@@ -32,7 +34,7 @@ function findFirst(root: string, filename: string): string | undefined {
 async function waitForServer(url: string): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
       if (response.ok) return;
     } catch {}
     await Bun.sleep(50);
@@ -46,21 +48,22 @@ const root = resolve(import.meta.dir, "../..");
 const browserPath = process.env.CHROME_PATH
   ?? findFirst(join(process.env.LOCALAPPDATA ?? "", "ms-playwright"), "chrome-headless-shell.exe");
 if (!browserPath) throw new Error("No headless Chromium found. Set CHROME_PATH to its executable.");
-const server = Bun.spawn([process.execPath, resolve(import.meta.dir, "server.ts")], {
+const server = spawnBackgroundProcess({ cmd: [process.execPath, resolve(import.meta.dir, "server.ts")],
   cwd: root,
   env: { ...process.env, PORT: String(port) },
-  stdout: "pipe",
-  stderr: "pipe"
+  stdout: "ignore",
+  stderr: "inherit"
 });
 
 try {
   await waitForServer(url);
-  const browser = await puppeteer.launch({
-    executablePath: browserPath,
-    headless: true,
+  const chrome = await launchHeadlessBrowser({
+    executable: browserPath,
     args: ["--enable-webgl", "--ignore-gpu-blocklist", "--use-angle=swiftshader", "--disable-software-rasterizer=false"]
   });
+  let browser: Browser | undefined;
   try {
+    browser = await puppeteer.connect({ browserURL: `http://127.0.0.1:${chrome.port}` });
     const page = await browser.newPage();
     await page.setViewport({ width: 960, height: 600, deviceScaleFactor: 1 });
     const browserErrors: string[] = [];
@@ -106,17 +109,20 @@ try {
       throw new Error(`Lit texture path was not exercised: ${JSON.stringify(metrics)}`);
     }
     if (metrics.shadowDraws < 1) throw new Error(`Directional shadow path was not exercised: ${JSON.stringify(metrics)}`);
+    if (metrics.outlineDraws < 1) throw new Error(`Graphic-cel outline path was not exercised: ${JSON.stringify(metrics)}`);
     if (metrics.paletteUploads < 1 || metrics.skinnedDraws < 1 || metrics.skinnedInstances < 1) {
       throw new Error(`Skinning path was not exercised: ${JSON.stringify(metrics)}`);
     }
     if (recovery.supported && recovery.generation < 2) throw new Error(`Context restoration did not advance generation: ${JSON.stringify(recovery)}`);
     const screenshot = resolve(outputDirectory, "acceptance.png");
     await page.screenshot({ path: screenshot });
-    console.log(JSON.stringify({ glError, recovery, screenshot, snapshot: metrics }, null, 2));
+    console.log(JSON.stringify({ glError, recovery, screenshot, snapshot: metrics,
+      processOwnership: { serverPid: server.pid, browserPid: chrome.pid, browserProfileDir: chrome.profileDir }
+    }, null, 2));
   } finally {
-    await browser.close();
+    try { await browser?.disconnect(); }
+    finally { await chrome.close(); }
   }
 } finally {
-  server.kill();
-  await server.exited;
+  await terminateProcessTree({ process: server });
 }

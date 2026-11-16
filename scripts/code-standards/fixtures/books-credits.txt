@@ -1,0 +1,60 @@
+import { addCents, formatMoney, salesReceiptNumberKey, type Book } from '../model';
+import type { BookCommand } from '../commands';
+import type { FinancialCommandContext } from '../financial/command-context';
+
+/** Capacity is the smallest remaining balance from this date forward. A backdated
+ * payment or credit must leave room for already recorded later settlements. */
+export function documentCapacity(book: Book, doc: Book['documents'][number], date: string): number {
+  const dates = new Map(book.entries.map(entry => [entry.id, entry.date]));
+  const changes = new Map<string, number>();
+  const change = (at: string, amount: number) => changes.set(at, addCents(changes.get(at) ?? 0, amount));
+  for (const payment of doc.payments) {
+    change(dates.get(payment.entryId)!, payment.amount);
+    if (payment.reversal) change(payment.reversal.date, -payment.amount);
+  }
+  for (const credit of doc.credits ?? []) {
+    change(credit.date, credit.amount);
+    if (credit.reversal) change(credit.reversal.date, -credit.amount);
+  }
+  let settled = 0;
+  for (const [at, amount] of changes) if (at <= date) settled = addCents(settled, amount);
+  let capacity = addCents(doc.amount, -settled);
+  for (const [at, amount] of [...changes].sort(([a], [b]) => a.localeCompare(b))) {
+    if (at <= date) continue;
+    settled = addCents(settled, amount);
+    capacity = Math.min(capacity, addCents(doc.amount, -settled));
+  }
+  return capacity;
+}
+
+export function requireDocumentCapacity(book: Book, doc: Book['documents'][number], date: string, amount: number, kind: 'payment' | 'credit') {
+  const capacity = documentCapacity(book, doc, date);
+  if (amount > capacity) throw new Error(`This ${kind} exceeds the outstanding amount available on ${date}: ${formatMoney(capacity, book.currency)} after recorded payments and credits, including later postings. The document would be overpaid.`);
+}
+
+export function applyDocumentCredit(context: FinancialCommandContext, cmd: Extract<BookCommand, { type: 'document.credit' | 'document.credit.reverse' }>) {
+  const { book, post, reverse } = context;
+  const doc = book.documents.find(row => row.id === cmd.documentId);
+  if (!doc) throw new Error('Document not found.');
+  if (doc.void) throw new Error('A voided document cannot receive credit changes.');
+  if (cmd.type === 'document.credit.reverse') {
+    const credit = doc.credits.find(row => row.id === cmd.creditId);
+    if (!credit) throw new Error('Credit note not found on this document.');
+    if (credit.reversal) throw new Error('This credit note is already reversed.');
+    const entry = book.entries.find(row => row.id === credit.entryId);
+    if (!entry) throw new Error('Credit note posting not found.');
+    credit.reversal = reverse(entry, cmd.date, cmd.reason);
+    return;
+  }
+  if (cmd.date < doc.date) throw new Error('A credit note cannot precede its document.');
+  if (book.documents.some(row => row.credits.some(credit => salesReceiptNumberKey(credit.number) === salesReceiptNumberKey(cmd.number)))) {
+    throw new Error('This credit note number already exists, including reversed credits.');
+  }
+  requireDocumentCapacity(book, doc, cmd.date, cmd.amount, 'credit');
+  const amount = doc.kind === 'invoice' ? -cmd.amount : cmd.amount;
+  const entry = post({ date: cmd.date, memo: cmd.reason, reference: cmd.number, contactId: doc.contactId, source: 'documentCredit', lines: [
+    { accountId: doc.controlAccountId, fundId: doc.fundId, amount }, { accountId: doc.accountId, fundId: doc.fundId, amount: -amount },
+  ] });
+  entry.adjusts = doc.entryId;
+  doc.credits.push({ id: crypto.randomUUID(), number: cmd.number, date: cmd.date, amount: cmd.amount, reason: cmd.reason, entryId: entry.id });
+}

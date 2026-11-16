@@ -1,5 +1,4 @@
 import type { PluggableList } from "unified";
-import rehypeHighlight from "rehype-highlight";
 import rehypeSanitize from "rehype-sanitize";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -9,8 +8,15 @@ import { findChatFileReferences, type ChatFileLinkContext } from "./chat-file-li
 const allowedLinkProtocols = new Set(["http:", "https:", "mailto:"]);
 
 export const markdownRemarkPlugins: PluggableList = [remarkGfm, remarkBreaks];
-export const markdownRehypePlugins: PluggableList = [rehypeSanitize, [rehypeHighlight, { detect: false }]];
-export const markdownLiveRehypePlugins: PluggableList = [rehypeSanitize];
+export type MarkdownHighlighter = typeof import("rehype-highlight").default;
+let highlighting: Promise<MarkdownHighlighter> | undefined;
+export function loadMarkdownHighlighter() {
+  highlighting ??= import("rehype-highlight").then(module => module.default).catch(error => {
+    highlighting = undefined;
+    throw error;
+  });
+  return highlighting;
+}
 
 export type LinkKind = "hash" | "external" | "mailto" | "invalid";
 
@@ -42,13 +48,13 @@ export function normalizeAllowedHref(href: string | null | undefined) {
   return linkKind === "invalid" ? undefined : value;
 }
 
-export function createMarkdownRehypePlugins(input: { live?: boolean; fileLinks?: ChatFileLinkContext } = {}): PluggableList {
+export function createMarkdownRehypePlugins(input: { live?: boolean; fileLinks?: ChatFileLinkContext; highlighter?: MarkdownHighlighter } = {}): PluggableList {
   const plugins: PluggableList = [rehypeSanitize];
   if (input.fileLinks) {
     plugins.push(createChatFileLinkRehypePlugin(input.fileLinks));
   }
-  if (!input.live) {
-    plugins.push([rehypeHighlight, { detect: false }]);
+  if (!input.live && input.highlighter) {
+    plugins.push([input.highlighter, { detect: false }]);
   }
   return plugins;
 }

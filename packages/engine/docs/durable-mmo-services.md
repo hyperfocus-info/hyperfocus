@@ -27,6 +27,12 @@ const server = createAuthoritativeServer({ auth, /* rooms and transport */ });
 
 The memory implementation is bounded reference infrastructure for tests and short-lived single-process development. The Bun SQLite implementation uses WAL, full synchronous commits, a configurable busy timeout, and `BEGIN IMMEDIATE` for every service operation. A different database can implement the same five-operation transaction boundary: `get`, `put`, `delete`, ordered `scan`, and `nextSequence`, plus coherent export and validate-before-swap replacement.
 
+The `combat-policy` bucket stores bounded encoded envelopes owned by the Touch of
+Death host. It shares the transaction and backup boundary, but policy checksums,
+candidate evidence, evaluation leases and promotion rules are validated by the
+host rather than the generic social-service codecs. See the
+[policy coordinator](../examples/touch-of-death/host/policy-learning/README.md).
+
 ## Transaction and identity rules
 
 - Inventory grants/consumption, wallet transfers, guild membership changes, moderation changes, chat writes/retention, ticket matching, and admission claims commit with their audit record and idempotency result in one transaction.
@@ -45,6 +51,22 @@ Inventory, guild membership, moderation, chat, and audit lists return `{ items, 
 Chat history is newest-first and deletes the oldest entry in the same transaction when a channel exceeds its configured retention. Retention is not archival or legal-hold support. If the game's policy requires durable moderation evidence, copy the relevant audit/chat records to an access-controlled archive before deletion.
 
 ## Reconnect-safe matchmaking
+
+For complete parties, `matchmaking.matchGroup({ queue, roomId, capacity, select })`
+runs synchronous host selection inside the reservation transaction. `select`
+receives detached, unexpired waiting tickets and the host time. Return either no
+IDs or exactly `capacity` unique eligible ticket IDs. Partial groups, foreign IDs,
+duplicates and asynchronous selectors reject without reserving any player. Skill,
+latency and content policy remain application-owned. The original FIFO `match`
+retains its partial-capacity semantics for existing consumers.
+
+`assignment({ roomId })` retrieves the durable matched/claimed group for host
+recovery. After persisting the game's result or abandonment, call host-only
+`release({ ticketIds, roomId, idempotencyKey })`. It retires exact tickets and clears
+an owner index only when it still points at that ticket. Waiting tickets and
+assignments to another room reject. Retries cannot cancel a newer search. This
+operation does not calculate ratings, establish a winner or authenticate clients.
+Applications must still handle readiness, cancellation races and game recovery.
 
 `matchmaking.enqueue` records one active ticket per player. A reconnect can call `ticketForPlayer` or enqueue again with a new retry key and receives the still-valid waiting/matched ticket rather than losing queue position. `match` deterministically selects the oldest waiting tickets, marks them matched, and persists a short-lived random room handoff token. `claim` atomically verifies that token, player, ticket state, and expiry, then records a claimed state; retrying the same claim idempotency key returns its prior admission result.
 

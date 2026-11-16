@@ -17,6 +17,9 @@ import { stripAnsiForStorage } from "../../../ansi-storage";
 
 export function createWorkspaceBackgroundOperations7(context: WorkspaceRepositoryContext, operations: WorkspaceBackgroundReadsOperationsSet & WorkspaceBackgroundOperations5Set & WorkspaceBackgroundOperations6Set) {
   const { db } = context;
+  function commitBackgroundJobQueue(persist: () => BackgroundJobRun | undefined) {
+    return db.transaction(persist).immediate();
+  }
   function getActiveBackgroundJobRunsByAssistant(assistantId: string) {
       return db
         .query<BackgroundJobRunRow, [string]>(
@@ -172,6 +175,7 @@ export function createWorkspaceBackgroundOperations7(context: WorkspaceRepositor
       touchBackgroundJobRunIfOwned,
     },
     publicApi: {
+      commitBackgroundJobQueue,
       getActiveBackgroundJobRunsByAssistant,
       createBackgroundJobRun,
       appendBackgroundJobRunEvent,
@@ -455,6 +459,7 @@ export function createWorkspaceBackgroundOperations10(context: WorkspaceReposito
   function repairInterruptedBackgroundJobRuns(
       options: {
         jobId?: string;
+        interruptedQueuedRunIds?: ReadonlySet<string>;
         isRunLive?: (run: BackgroundJobRun) => boolean;
         now?: Date;
         readyGraceMs?: number;
@@ -463,13 +468,13 @@ export function createWorkspaceBackgroundOperations10(context: WorkspaceReposito
       } = {}
     ) {
       const now = options.now ?? new Date();
-      const readyGraceMs = options.readyGraceMs ?? 2 * 60 * 1000;
-      const maxRunMs = options.maxRunMs ?? 30 * 60 * 1000;
-      const noProgressMs = options.noProgressMs ?? 10 * 60 * 1000;
+      const readyGraceMs = options.readyGraceMs ?? 120000;
+      const maxRunMs = options.maxRunMs ?? 1800000;
+      const noProgressMs = options.noProgressMs ?? 600000;
       const repairedRuns: BackgroundJobRun[] = [];
       for (const run of operations.getActiveBackgroundJobRuns(options.jobId)) {
         const runLive = options.isRunLive?.(run) ?? false;
-        const leaseGraceActive = run.status === "running" && hasBackgroundRunActiveLeaseGrace(run, now, readyGraceMs);
+        const leaseGraceActive = hasBackgroundRunActiveLeaseGrace(run, now, readyGraceMs);
         if (run.linkedAgentRunId) {
           const linkedRun = operations.getRun(run.projectId, run.linkedAgentRunId);
           const terminalStatus = linkedRun ? mapAgentRunStatusToBackgroundRunStatus(linkedRun.status) : undefined;
@@ -505,7 +510,7 @@ export function createWorkspaceBackgroundOperations10(context: WorkspaceReposito
             !leaseGraceActive &&
             isBackgroundRunPastLeaseGrace(run, now, readyGraceMs)
           ) {
-            const failureMessage = "Linked agent run was ready but no background controller resumed execution";
+            const failureMessage = "Linked agent run was ready but its background controller was interrupted. Review its activity before retrying manually.";
             failLinkedAgentRunIfActive(run.projectId, run.linkedAgentRunId, failureMessage, "controller-lost");
             const repairedRun = operations.setBackgroundJobRunStatus(run.id, "failed", {
               summary: linkedRun.summary,
@@ -519,27 +524,28 @@ export function createWorkspaceBackgroundOperations10(context: WorkspaceReposito
         }
   
         if (
-          run.status === "running" &&
+          (run.status === "running" || (run.status === "queued" && options.interruptedQueuedRunIds?.has(run.id))) &&
           options.isRunLive &&
           !runLive &&
           !leaseGraceActive &&
-          isBackgroundRunPastLeaseGrace(run, now, readyGraceMs)
+          (run.status === "queued" || isBackgroundRunPastLeaseGrace(run, now, readyGraceMs))
         ) {
+          const failureMessage = "Background run interrupted before completion. Review its activity before retrying manually; work may already have begun.";
           failLinkedAgentRunIfActive(
             run.projectId,
             run.linkedAgentRunId,
-            "Background run interrupted before completion",
+            failureMessage,
             "controller-lost"
           );
           const repairedRun = operations.setBackgroundJobRunStatus(run.id, "failed", {
-            failureMessage: "Background run interrupted before completion",
+            failureMessage,
             failureCategory: "controller-lost"
           });
           operations.appendBackgroundJobRunEvent(
             run.id,
             "failed",
             "Background run repaired: no live controller",
-            "No live background controller owns this running row."
+            failureMessage
           );
           repairedRuns.push(operations.getBackgroundJobRun(repairedRun.id) ?? repairedRun);
           continue;

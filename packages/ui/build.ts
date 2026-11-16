@@ -5,7 +5,17 @@ import { stylexSolidPlugin } from "./build-tools/stylex-solid-plugin";
 const sourceRoot = path.join(import.meta.dir, "src");
 const outdir = path.join(import.meta.dir, "dist");
 const entrypoints = [
+  "feedback/index.ts",
+  "theme/contrast.ts",
+  "dom/elements.ts",
+  "testing/browser.ts",
+  "tutorial/index.ts",
+  "tutorial/session.ts",
+  "game-menu/index.ts",
   "index.ts",
+  "preferences/index.ts",
+  "shortcuts/app-shortcuts.ts",
+  "primitives/overlay-stack.ts",
   "composer/index.ts",
   "primitives/index.ts",
   "source-editor/index.ts",

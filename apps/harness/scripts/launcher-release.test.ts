@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHarnessTestTempPath } from "../cli/src/test-support/test-temp-root";
-import { launcherArtifactName, prepareLauncherRelease } from "./launcher-release";
+import { launcherArtifactName, prepareLauncherRelease, runLauncherUiSmoke } from "./launcher-release";
 
 describe("Harness launcher release", () => {
   const windowsReleaseTest = process.platform === "win32" ? test : test.skip;
@@ -36,7 +36,11 @@ describe("Harness launcher release", () => {
           expect(path.basename(binaryPath)).toBe("pi-harness.exe");
           expect(await readFile(binaryPath, "utf8")).toBe("pi-harness.exe");
           expect(await listFiles(cwd)).toEqual(expectedFiles);
-          return { exitCode: 0, stdout: "Usage: pi-harness [--help]", stderr: "" };
+          return {
+            exitCode: 0,
+            stdout: "<!doctype html><title>Hyperfocus Harness</title><div id=\"root\"></div>",
+            stderr: ""
+          };
         }
       });
 
@@ -64,6 +68,36 @@ describe("Harness launcher release", () => {
       await rm(repoRoot, { recursive: true, force: true });
     }
   });
+
+  test("a server that never becomes ready is stopped before its output is drained", async () => {
+    const result = await runLauncherUiSmoke({
+      cmd: [process.execPath, "-e", "console.log(process.pid); setInterval(() => {}, 1000);"],
+      cwd: process.cwd(),
+      timeoutMs: 150,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("did not become ready");
+    const pid = Number(result.stdout.trim());
+    expect(Number.isSafeInteger(pid)).toBe(true);
+    expect(() => process.kill(pid, 0)).toThrow();
+  }, 10_000);
+
+  test("runs browser verification once and cleans up when verification fails", async () => {
+    let calls = 0;
+    let pid = 0;
+    await expect(runLauncherUiSmoke({
+      cmd: [process.execPath, "-e", `Bun.serve({hostname:'127.0.0.1',port:Number(process.env.HARNESS_PORT),fetch(request){return new Response(new URL(request.url).pathname==='/pid'?String(process.pid):'<title>Hyperfocus Harness</title><div id="root"></div>')}})`],
+      cwd: process.cwd(),
+      verify: async ({ serverUrl }) => {
+        calls += 1;
+        pid = Number(await (await fetch(`${serverUrl}/pid`)).text());
+        throw new Error("Primary action is broken");
+      },
+    })).rejects.toThrow("Primary action is broken");
+    expect(calls).toBe(1);
+    expect(pid).toBeGreaterThan(0);
+    expect(() => process.kill(pid, 0)).toThrow();
+  }, 10_000);
 });
 
 async function listFiles(root: string) {

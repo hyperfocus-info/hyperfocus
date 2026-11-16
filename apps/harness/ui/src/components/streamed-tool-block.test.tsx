@@ -53,6 +53,15 @@ createUiTest("StreamedToolBlock", () => {
     expect(screen.getByRole("button", { name: /echo long command/ })).not.toBeNull();
     expect(screen.getByText(/Run local shell command/)).not.toBeNull();
     expect(screen.getByRole("button", { name: "Copy tool calls" })).not.toBeNull();
+    expect(screen.queryByText("output tool-1")).toBeNull();
+  });
+
+  it("keeps failure output visible for recovery", () => {
+    const failed = activity("tool-failed", "exit 1");
+    failed.status = "failed";
+    render(() => <StreamedToolBlock block={block([failed])} />);
+
+    expect(screen.getByText(/output tool-failed/)).not.toBeNull();
   });
 
   it("explains arcane shell pipelines in compact rows", () => {

@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess, terminateProcessTree } from "@hyperfocus/desktop-runtime/process";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, test } from "bun:test";
@@ -79,7 +80,7 @@ test("ChatPanel exposes one responsive effort control", async () => {
 
 async function buildFixture(smokeRoot: string, fixtureSourcePath: string) {
   const outDir = path.join(smokeRoot, "dist");
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: [process.execPath, buildRunnerPath, smokeRoot, fixtureSourcePath],
     cwd: repoRoot,
     stdout: "pipe",
@@ -101,8 +102,8 @@ async function runBrowserCheck(
   options: { viewportSelector?: string; targetText?: string; remountMode?: "project-chat" | "assistant-chat" | "none";
     sourcePending?: boolean; runCardAccessibility?: boolean; effortVisibility?: boolean; viewportWidth?: number } = {}
 ) {
-  const proc = Bun.spawn({
-    cmd: ["node", runnerPath],
+  const proc = spawnBackgroundProcess({
+    cmd: [process.execPath, runnerPath],
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -119,10 +120,11 @@ async function runBrowserCheck(
     stderr: "pipe"
   });
   const completed = Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 100_000));
-  const result = await Promise.race([completed, timeout]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), 100_000); });
+  const result = await Promise.race([completed, timeout]).finally(() => clearTimeout(timer));
   if (result === "timeout") {
-    proc.kill();
+    await terminateProcessTree({ process: proc });
     await proc.exited.catch(() => undefined);
     throw new Error("ChatPanel browser runner timed out after 100000ms");
   }

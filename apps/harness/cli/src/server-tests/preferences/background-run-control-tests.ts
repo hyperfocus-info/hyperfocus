@@ -10,6 +10,45 @@ export function registerBackgroundRunControlTests(serverTest: ServerTestRegistra
 }
 
 function registerBackgroundRunGuardTests(serverTest: ServerTestRegistrar, fixture: ServerSuiteFixture) {
+    serverTest("restart fails interrupted queued work and the user can retry it", async () => {
+        const { repository, projectRoot } = fixture;
+        const firstSocket = createSocket(fixture.port);
+        await waitForEvent(firstSocket, "connection.ready");
+        const projectId = (await openProject(firstSocket, projectRoot)).payload.project.id;
+        firstSocket.close();
+        const now = new Date().toISOString();
+        const later = new Date(Date.now() + 3600000).toISOString();
+        const jobId = crypto.randomUUID();
+        const automationThreadId = crypto.randomUUID();
+        repository.saveBackgroundJob({ id: jobId, projectId, automationThreadId, kind: "ai-routine",
+            name: "Interrupted job", status: "enabled", riskLevel: "safe",
+            definition: { kind: "ai-routine", prompt: "Report a brief summary.", modeId: "implement" },
+            schedule: { type: "interval", intervalSeconds: 3600, nextRunAt: later, sourceText: "1h" },
+            scheduleInput: "1h", nextRunAt: later, createdAt: now, updatedAt: now });
+        const interrupted = repository.createBackgroundJobRun({ jobId, projectId, automationThreadId,
+            triggerSource: "schedule", status: "queued", riskLevel: "safe", approvalStatus: "approved" });
+        repository.setGlobalExecutionPaused(true);
+        await fixture.restart();
+        const socket = createSocket(fixture.port);
+        await waitForEvent(socket, "connection.ready");
+        try {
+            expect(repository.getBackgroundJobRun(interrupted.id)?.status).toBe("failed");
+            expect(repository.loadBackgroundJobsState().runs.filter((run) => run.jobId === jobId)).toHaveLength(1);
+            expect(repository.loadNotificationInboxState().items.some((item) => item.kind === "background-run-status" &&
+                item.backgroundRunId === interrupted.id && item.severity === "error")).toBe(true);
+            const resumed = waitForEvent(socket, "execution-control.updated", (event) => !event.payload.executionControl.isPaused);
+            socket.send(JSON.stringify({ type: "execution.resume-all", requestId: "resume-after-restart" }));
+            await resumed;
+            const queued = waitForEvent(socket, "background-job-run.updated", (event) =>
+                event.payload.run.jobId === jobId && event.payload.run.triggerSource === "retry");
+            socket.send(JSON.stringify({ type: "background-job.retry-run", requestId: "retry-interrupted",
+                payload: { projectId, runId: interrupted.id } }));
+            const retry = (await queued).payload.run;
+            expect(retry.id).not.toBe(interrupted.id);
+            expect(repository.getBackgroundJobRun(interrupted.id)?.status).toBe("failed");
+            expect(repository.loadBackgroundJobsState().runs.filter((run) => run.jobId === jobId)).toHaveLength(2);
+        } finally { socket.close(); }
+    }, 60000);
     serverTest("background job run-now refuses true active blockers with status detail", async () => {
         const { repository, projectRoot, port } = fixture;
         const socket = createSocket(port);
@@ -52,7 +91,7 @@ function registerBackgroundRunGuardTests(serverTest: ServerTestRegistrar, fixtur
             riskLevel: "safe",
             approvalStatus: "not-needed"
         });
-        const leaseExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        const leaseExpiresAt = new Date(Date.now() + 900000).toISOString();
         repository.setBackgroundJobRunStatus(activeRun.id, "running", {
             summary: "Still executing",
             controllerInstanceId: "controller-1",

@@ -1,3 +1,4 @@
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 export type GitRepositoryPromptContext = {
   isRepository: boolean;
   repoRoot: string;
@@ -41,7 +42,7 @@ export function buildGitRepositoryPromptContext(cwd: string) {
 
 function tryRunGit(args: string[], cwd: string) {
   try {
-    return Bun.spawnSync({
+    return spawnBackgroundProcessSync({
       cmd: ["git", ...args],
       cwd,
       stdout: "pipe",

@@ -297,6 +297,9 @@ test("protocol rejects numeric values that would silently coerce or wrap", () =>
   expect(() => encodeSnapshot(strictSchema, { ...valid, coins: -1 })).toThrow("u16");
   expect(() => encodeSnapshot(strictSchema, { ...valid, signed: 40000 })).toThrow("i16");
   expect(() => encodeSnapshot(strictSchema, { ...valid, precise: Number.NaN })).toThrow("f32");
+  for (const precise of [1e39, -1e39, Number.MAX_VALUE]) expect(() => encodeSnapshot(strictSchema, { ...valid, precise })).toThrow("finite 32-bit float");
+  const largest = 3.4028234663852886e38;
+  expect(decodeSnapshot(strictSchema, encodeSnapshot(strictSchema, { ...valid, precise: largest })).precise).toBe(largest);
   expect(() => encodeSnapshot(strictSchema, { ...valid, ids: { bad: 1 } })).toThrow("u32 map key");
 });
 

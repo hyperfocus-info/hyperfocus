@@ -1,15 +1,26 @@
-import { lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { isMissingPathError, lstatIfPresent, statIfPresent, removeBranchfsPath } from "./branchfs/filesystem";
+import { mkdir, readdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import type { BranchfsCleanupSummary } from "@hyperfocus/ai-core/protocol";
 
 const BRANCHFS_DIRNAME = ".local/branchfs";
-const BRANCHFS_DELETING_DIRNAME = ".local/branchfs-deleting";
+const activeRoots = new Set<string>();
+
+export function retainBranchfsRoot(rootPath: string) {
+  const key = path.resolve(rootPath);
+  if (activeRoots.has(key)) throw new Error("BranchFS run already has an active lease");
+  activeRoots.add(key);
+}
+
+export function releaseBranchfsRoot(rootPath: string) {
+  activeRoots.delete(path.resolve(rootPath));
+}
 
 export const DEFAULT_BRANCHFS_RETENTION = {
-  maxAgeMs: 24 * 60 * 60 * 1000,
+  maxAgeMs: 86400000,
   maxRoots: 3,
-  maxBytes: 20 * 1024 * 1024 * 1024,
-  partialGraceMs: 10 * 60 * 1000
+  maxBytes: 21474836480,
+  partialGraceMs: 600000
 };
 
 type PruneInput = {
@@ -32,9 +43,9 @@ type RootCandidate = {
 };
 
 export async function pruneBranchfsRoots(input: PruneInput): Promise<BranchfsCleanupSummary> {
-  const branchfsRoot = path.join(input.repoRoot, BRANCHFS_DIRNAME);
+  const branchfsRoot = path.join(await realpath(input.repoRoot), BRANCHFS_DIRNAME);
   await mkdir(branchfsRoot, { recursive: true });
-  const entries = await readdir(branchfsRoot, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(branchfsRoot, { withFileTypes: true });
   const roots: RootCandidate[] = [];
   const warnings: string[] = [];
   const shouldMeasureRoots = input.mode === "retention";
@@ -43,16 +54,18 @@ export async function pruneBranchfsRoots(input: PruneInput): Promise<BranchfsCle
       continue;
     }
     const rootPath = path.join(branchfsRoot, entry.name);
-    const rootStats = await lstat(rootPath).catch(() => undefined);
+    if (input.mode === "retention" && activeRoots.has(path.resolve(rootPath))) continue;
+    const rootStats = await lstatIfPresent(rootPath);
     if (!rootStats) {
       continue;
     }
     const bytes = shouldMeasureRoots
       ? await measureNoFollow(rootPath).catch((error: unknown) => {
           warnings.push(`Failed to measure ${entry.name}: ${formatError(error)}`);
-          return 0;
+          return undefined;
         })
       : 0;
+    if (bytes === undefined) continue;
     roots.push({
       path: rootPath,
       name: entry.name,
@@ -69,14 +82,16 @@ export async function pruneBranchfsRoots(input: PruneInput): Promise<BranchfsCle
     const retention = input.retention ?? DEFAULT_BRANCHFS_RETENTION;
     const now = Date.now();
     const partialGraceMs = retention.partialGraceMs ?? DEFAULT_BRANCHFS_RETENTION.partialGraceMs;
+    const protectedPartial = (root: RootCandidate) => root.partial && now - root.createdMs <= partialGraceMs;
     for (const root of roots) {
+      if (protectedPartial(root)) continue;
       if ((root.partial && now - root.createdMs > partialGraceMs) || now - root.createdMs > retention.maxAgeMs) {
         deleteNames.add(root.name);
       }
     }
 
     const newestFirst = roots
-      .filter((root) => !deleteNames.has(root.name))
+      .filter((root) => !deleteNames.has(root.name) && !protectedPartial(root))
       .sort((left, right) => right.createdMs - left.createdMs);
     newestFirst.slice(retention.maxRoots).forEach((root) => deleteNames.add(root.name));
 
@@ -100,11 +115,8 @@ export async function pruneBranchfsRoots(input: PruneInput): Promise<BranchfsCle
       continue;
     }
     try {
-      if (input.mode === "all") {
-        await quarantineBranchfsRoot(input.repoRoot, root.path, root.name);
-      } else {
-        await removeBranchfsRoot(root.path);
-      }
+      await removeBranchfsRoot(root.path);
+      releaseBranchfsRoot(root.path);
       rootsDeleted += 1;
       bytesDeleted += root.bytes;
     } catch (error) {
@@ -122,32 +134,23 @@ export async function pruneBranchfsRoots(input: PruneInput): Promise<BranchfsCle
   };
 }
 
-async function quarantineBranchfsRoot(repoRoot: string, rootPath: string, rootName: string) {
-  await unlinkKnownPassthroughs(rootPath);
-  const deletingRoot = path.join(repoRoot, BRANCHFS_DELETING_DIRNAME);
-  await mkdir(deletingRoot, { recursive: true });
-  const targetPath = path.join(deletingRoot, `${Date.now()}-${process.pid}-${rootName}`);
-  await rename(rootPath, targetPath);
-  startDetachedRemove(targetPath);
-}
-
 async function removeBranchfsRoot(rootPath: string) {
   await unlinkKnownPassthroughs(rootPath);
-  await rm(rootPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  await removeBranchfsPath(rootPath);
 }
 
 async function unlinkKnownPassthroughs(rootPath: string) {
   for (const passthrough of ["node_modules", "dist", ".bun"]) {
     const target = path.join(rootPath, "mount", passthrough);
-    const targetStats = await lstat(target).catch(() => undefined);
-    if (targetStats) {
-      await rm(target, { force: true, recursive: false }).catch(() => undefined);
+    const targetStats = await lstatIfPresent(target);
+    if (targetStats?.isSymbolicLink()) {
+      await rm(target, { force: true, recursive: false });
     }
   }
 }
 
 async function measureNoFollow(rootPath: string): Promise<number> {
-  const entryStats = await lstat(rootPath).catch(() => undefined);
+  const entryStats = await lstatIfPresent(rootPath);
   if (!entryStats || entryStats.isSymbolicLink()) {
     return 0;
   }
@@ -157,7 +160,10 @@ async function measureNoFollow(rootPath: string): Promise<number> {
   if (!entryStats.isDirectory()) {
     return 0;
   }
-  const entries = await readdir(rootPath, { withFileTypes: true }).catch(() => []);
+  const entries = await readdir(rootPath, { withFileTypes: true }).catch((error: unknown) => {
+    if (isMissingPathError(error)) return [];
+    throw error;
+  });
   let total = 0;
   for (const entry of entries) {
     total += await measureNoFollow(path.join(rootPath, entry.name));
@@ -166,37 +172,9 @@ async function measureNoFollow(rootPath: string): Promise<number> {
 }
 
 async function pathExists(targetPath: string) {
-  return (await stat(targetPath).catch(() => undefined)) !== undefined;
+  return (await statIfPresent(targetPath)) !== undefined;
 }
 
 function formatError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
-}
-
-function startDetachedRemove(targetPath: string) {
-  const command =
-    process.platform === "win32"
-      ? [
-          "powershell.exe",
-          "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-Command",
-          [
-            "param($targetPath)",
-            "$empty = Join-Path ([IO.Path]::GetTempPath()) ('branchfs-empty-' + [guid]::NewGuid().ToString('N'))",
-            "New-Item -ItemType Directory -Path $empty -Force | Out-Null",
-            "robocopy $empty $targetPath /MIR /XJ /R:0 /W:0 /NFL /NDL /NJH /NJS /NP | Out-Null",
-            "Remove-Item -LiteralPath $empty -Recurse -Force -ErrorAction SilentlyContinue",
-            "Remove-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue"
-          ].join("; "),
-          targetPath
-        ]
-      : ["rm", "-rf", "--", targetPath];
-  Bun.spawn({
-    cmd: command,
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore"
-  });
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { createAssistantId, createBackgroundJobId, createThreadId, type BackgroundJob } from "@hyperfocus/ai-core/protocol";
@@ -84,19 +85,142 @@ function saveDueJob(
     schedule: {
       type: "interval",
       intervalSeconds: 3600,
-      nextRunAt: new Date(now - 3600 * 1000).toISOString(),
+      nextRunAt: new Date(now - 3600000).toISOString(),
       sourceText: "1h"
     },
     scheduleInput: "1h",
-    nextRunAt: new Date(now - 3600 * 1000).toISOString(),
+    nextRunAt: new Date(now - 3600000).toISOString(),
     createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString(),
     ...overrides
   };
-  return repository.saveBackgroundJob(job).jobs.find((entry) => entry.id === job.id)!;
+  return repository.saveBackgroundJob(job);
 }
 
 describe("background job scheduler", () => {
+  test.each([false, true])("fails a committed occurrence after a process exit without replaying it (paused=%s)", async (paused) => {
+    const { repository, dbPath } = createRepositoryWithPath();
+    const project = addProject(repository);
+    repository.setBackgroundJobApprovalPolicyDefault("allow-all");
+    const job = saveDueJob(repository, project.id);
+    repository.close();
+    const child = spawnBackgroundProcessSync({
+      cmd: [process.execPath, "-e", `
+        import { createWorkspaceRepository } from ${JSON.stringify(new URL("./workspace-repository.ts", import.meta.url).href)};
+        import { createBackgroundJobScheduler } from ${JSON.stringify(new URL("./background-job-scheduler.ts", import.meta.url).href)};
+        const repository = createWorkspaceRepository(${JSON.stringify(dbPath)}, process.cwd());
+        await createBackgroundJobScheduler({ repository, onRunQueued() { process.exit(73); } }).tick(false);
+        process.exit(74);
+      `],
+      timeout: 10000, stdout: "pipe", stderr: "pipe"
+    });
+    expect(child.exitCode).toBe(73);
+    const reopened = createWorkspaceRepository(dbPath, process.cwd());
+    try {
+      const interrupted = reopened.getActiveBackgroundJobRuns(job.id)[0];
+      if (!interrupted) throw new Error("Committed occurrence missing after process exit");
+      expect(interrupted.status).toBe("queued");
+      expect(reopened.getBackgroundJob(job.id)?.nextRunAt).not.toBe(job.nextRunAt);
+      reopened.setGlobalExecutionPaused(paused);
+      let dispatched = 0;
+      const scheduler = createBackgroundJobScheduler({ repository: reopened, isRunLive: () => false,
+        onRunQueued() { dispatched++; } });
+      await scheduler.tick(true);
+      await scheduler.tick(false);
+      const repaired = reopened.getBackgroundJobRun(interrupted.id);
+      if (!repaired) throw new Error("Interrupted occurrence missing after repair");
+      expect(repaired.status).toBe("failed");
+      expect(repaired.failureCategory).toBe("controller-lost");
+      expect(repaired.failureMessage).toContain("retrying manually");
+      expect(repaired.events.filter((event) => event.stage === "failed")).toHaveLength(1);
+      expect(reopened.getActiveBackgroundJobRuns(job.id)).toHaveLength(0);
+      expect(reopened.loadBackgroundJobsState().runs).toHaveLength(1);
+      expect(dispatched).toBe(0);
+    } finally { reopened.close(); }
+  });
+
+  test("preserves live, leased and newly deferred queued work", async () => {
+    const repository = createRepository();
+    try {
+      const project = addProject(repository);
+      repository.setBackgroundJobApprovalPolicyDefault("allow-all");
+      const job = saveDueJob(repository, project.id);
+      await createBackgroundJobScheduler({ repository }).tick(false);
+      const inherited = repository.getActiveBackgroundJobRuns(job.id)[0];
+      if (!inherited) throw new Error("Expected a queued occurrence");
+      const live = createBackgroundJobScheduler({ repository, isRunLive: () => true });
+      await live.tick(true);
+      expect(repository.getBackgroundJobRun(inherited.id)?.status).toBe("queued");
+      repository.setBackgroundJobRunStatus(inherited.id, "queued", {
+        controllerLeaseExpiresAt: new Date(Date.now() + 900000).toISOString()
+      });
+      const leased = createBackgroundJobScheduler({ repository, isRunLive: () => false });
+      await leased.tick(true);
+      expect(repository.getBackgroundJobRun(inherited.id)?.status).toBe("queued");
+      repository.setBackgroundJobRunStatus(inherited.id, "queued", {
+        controllerLeaseExpiresAt: new Date(Date.now() - 180000).toISOString()
+      });
+      await leased.tick(false);
+      expect(repository.getBackgroundJobRun(inherited.id)?.status).toBe("failed");
+      const current = createBackgroundJobScheduler({ repository, isRunLive: () => false });
+      const deferred = repository.createBackgroundJobRun({ jobId: job.id, projectId: project.id,
+        automationThreadId: job.automationThreadId, triggerSource: "manual", status: "queued",
+        riskLevel: job.riskLevel, approvalStatus: "approved" });
+      await current.tick(false);
+      expect(repository.getBackgroundJobRun(deferred.id)?.status).toBe("queued");
+    } finally { repository.close(); }
+  });
+
+  test.each(["run", "event", "state"])("rolls back a failed %s write and retries the due occurrence after reopening", async (failure) => {
+    const { repository, dbPath } = createRepositoryWithPath();
+    const project = addProject(repository);
+    repository.setBackgroundJobApprovalPolicyDefault("allow-all");
+    const job = saveDueJob(repository, project.id);
+    let dispatched = 0;
+    const failingRepository: WorkspaceRepository = {
+      ...repository,
+      createBackgroundJobRun(input) {
+        if (failure === "run") throw new Error("Injected queue failure");
+        return repository.createBackgroundJobRun(input);
+      },
+      appendBackgroundJobRunEvent(...args) {
+        if (failure === "event") throw new Error("Injected queue failure");
+        return repository.appendBackgroundJobRunEvent(...args);
+      },
+      updateBackgroundJobSchedulerState(...args) {
+        const result = repository.updateBackgroundJobSchedulerState(...args);
+        if (failure === "state" && args[1].schedulerStatus === "queued") throw new Error("Injected queue failure");
+        return result;
+      }
+    };
+    try {
+      await expect(createBackgroundJobScheduler({ repository: failingRepository,
+        onRunQueued() { dispatched++; } }).tick(false)).rejects.toThrow("Injected queue failure");
+      expect(dispatched).toBe(0);
+    } finally {
+      repository.close();
+    }
+    const reopened = createWorkspaceRepository(dbPath, process.cwd());
+    try {
+      expect(reopened.getBackgroundJob(job.id)?.nextRunAt).toBe(job.nextRunAt);
+      expect(reopened.getBackgroundJob(job.id)?.lastRunAt).toBeUndefined();
+      expect(reopened.loadBackgroundJobsState().runs).toHaveLength(0);
+      await createBackgroundJobScheduler({ repository: reopened, onRunQueued(run) {
+        // A separate connection must see the commit before execution starts.
+        const reader = new Database(dbPath, { readonly: true });
+        try {
+          expect(reader.query("SELECT id FROM background_job_runs WHERE id = ?").get(run.id)).toEqual({ id: run.id });
+        } finally { reader.close(); }
+        dispatched++;
+      } }).tick(false);
+      expect(dispatched).toBe(1);
+      expect(reopened.loadBackgroundJobsState().runs).toHaveLength(1);
+      expect(reopened.getBackgroundJob(job.id)?.nextRunAt).not.toBe(job.nextRunAt);
+    } finally {
+      reopened.close();
+    }
+  });
+
   test("queues one startup catch-up run and advances schedule", async () => {
     const repository = createRepository();
     const project = addProject(repository);
@@ -120,11 +244,11 @@ describe("background job scheduler", () => {
       schedule: {
         type: "interval",
         intervalSeconds: 3600,
-        nextRunAt: new Date(now - 2 * 3600 * 1000).toISOString(),
+        nextRunAt: new Date(now - 7200000).toISOString(),
         sourceText: "1h"
       },
       scheduleInput: "1h",
-      nextRunAt: new Date(now - 2 * 3600 * 1000).toISOString(),
+      nextRunAt: new Date(now - 7200000).toISOString(),
       createdAt: new Date(now).toISOString(),
       updatedAt: new Date(now).toISOString()
     });
@@ -413,10 +537,10 @@ describe("background job scheduler", () => {
       schedule: {
         type: "interval",
         intervalSeconds: 3600,
-        nextRunAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+        nextRunAt: new Date(Date.now() + 3600000).toISOString(),
         sourceText: "1h"
       },
-      nextRunAt: new Date(Date.now() + 3600 * 1000).toISOString()
+      nextRunAt: new Date(Date.now() + 3600000).toISOString()
     });
     repository.createBackgroundJobRun({
       jobId: activeJob.id,
@@ -478,7 +602,7 @@ describe("background job scheduler", () => {
       repairActiveRuns(now) {
         return repository.repairInterruptedBackgroundJobRuns({
           isRunLive: () => false,
-          now: new Date(now.getTime() + 3 * 60 * 1000)
+          now: new Date(now.getTime() + 180000)
         });
       }
     });
@@ -531,7 +655,7 @@ describe("background job scheduler", () => {
       repairActiveRuns(now) {
         return repository.repairInterruptedBackgroundJobRuns({
           isRunLive: () => true,
-          now: new Date(now.getTime() + 3 * 60 * 1000)
+          now: new Date(now.getTime() + 180000)
         });
       }
     });
@@ -660,7 +784,7 @@ describe("background job scheduler", () => {
       repairActiveRuns(now) {
         return repository.repairStaleRunningBackgroundJobRuns({
           isRunLive: () => false,
-          now: new Date(now.getTime() + 3 * 60 * 1000)
+          now: new Date(now.getTime() + 180000)
         });
       }
     });
@@ -695,7 +819,7 @@ describe("background job scheduler", () => {
     repository.touchBackgroundJobRun(staleRun.id, {
       stage: "execution",
       detail: "stale",
-      now: new Date(Date.now() - 11 * 60 * 1000)
+      now: new Date(Date.now() - 660000)
     });
     const timedOut: string[] = [];
 
@@ -749,7 +873,7 @@ describe("background job scheduler", () => {
     const db = new Database(dbPath);
     db.query(`UPDATE background_job_runs SET started_at = ?2 WHERE id = ?1`).run(
       staleRun.id,
-      new Date(Date.now() - 31 * 60 * 1000).toISOString()
+      new Date(Date.now() - 1860000).toISOString()
     );
     db.close();
 
@@ -832,11 +956,11 @@ describe("background job scheduler", () => {
       schedule: {
         type: "interval",
         intervalSeconds: 300,
-        nextRunAt: new Date(now - 6 * 60 * 1000).toISOString(),
+        nextRunAt: new Date(now - 360000).toISOString(),
         sourceText: "5m"
       },
       scheduleInput: "5m",
-      nextRunAt: new Date(now - 6 * 60 * 1000).toISOString()
+      nextRunAt: new Date(now - 360000).toISOString()
     });
     const veryOverdue = saveDueJob(repository, project.id, {
       assistantId: assistant.id,
@@ -845,11 +969,11 @@ describe("background job scheduler", () => {
       schedule: {
         type: "interval",
         intervalSeconds: 600,
-        nextRunAt: new Date(now - 20 * 60 * 1000).toISOString(),
+        nextRunAt: new Date(now - 1200000).toISOString(),
         sourceText: "10m"
       },
       scheduleInput: "10m",
-      nextRunAt: new Date(now - 20 * 60 * 1000).toISOString()
+      nextRunAt: new Date(now - 1200000).toISOString()
     });
 
     const scheduler = createBackgroundJobScheduler({ repository });

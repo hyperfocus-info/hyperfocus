@@ -218,6 +218,7 @@ export function createRunFixture(overrides: Partial<AgentRunState> = {}): AgentR
     id: overrides.id ?? "run-1",
     threadId: overrides.threadId ?? "thread-1",
     threadRunSequence: overrides.threadRunSequence,
+    launchProfile: overrides.launchProfile,
     status: overrides.status ?? "ready",
     latestUserPrompt: overrides.latestUserPrompt ?? "Do work",
     planningModelId: overrides.planningModelId ?? "openai/gpt-5.4",

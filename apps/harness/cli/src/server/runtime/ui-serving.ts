@@ -1,11 +1,14 @@
 import { DEV_UI_LIVE_RELOAD_ENDPOINT } from "../core/constants";
 import type { DevHmrDebouncePolicy, UiLiveReloadMode, UiServingState } from "../core/contracts";
+import type { SetupLaunchMode } from "@hyperfocus/ai-core/protocol";
 import type { createUiAssetManager } from "../../ui-build";
 import path from "node:path";
 
 export function resolveUiServingState(input: {
   serverOnly: boolean;
   hotDevelopmentMode: boolean;
+  launchMode: SetupLaunchMode;
+  executablePath?: string;
   uiAssetManagerFactory: typeof createUiAssetManager;
   hotReloadDebouncePolicy: DevHmrDebouncePolicy;
   existingUi?: UiServingState;
@@ -26,12 +29,16 @@ export function resolveUiServingState(input: {
   return {
     mode: "static-dist",
     uiAssets: input.uiAssetManagerFactory({
+      assetRoot: input.launchMode === "portable-launcher"
+        ? path.join(path.dirname(input.executablePath ?? process.execPath), "dist", "ui")
+        : undefined,
+      buildWhenMissing: input.launchMode !== "portable-launcher",
       debounceScheduleMs: input.hotDevelopmentMode ? input.hotReloadDebouncePolicy.scheduleMs : [0]
     }),
     liveReload: input.hotDevelopmentMode ? "debounced-poll" : "disabled"
   };
 }
-export async function createUiAssetResponse(assetPath: string, liveReload: UiLiveReloadMode, sessionToken: string) {
+export async function createUiAssetResponse(assetPath: string, liveReload: UiLiveReloadMode, sessionToken: string, swarmSite = false) {
   const asset = Bun.file(assetPath);
   const headers = new Headers(liveReload === "debounced-poll" ? { "cache-control": "no-store" } : undefined);
 
@@ -43,7 +50,7 @@ export async function createUiAssetResponse(assetPath: string, liveReload: UiLiv
     const html = await asset.text();
     headers.set("content-type", "text/html; charset=utf-8");
     headers.set("cache-control", "no-store");
-    const authenticatedHtml = injectHarnessSessionToken(html, sessionToken);
+    const authenticatedHtml = injectHarnessSessionToken(swarmSite ? html.replace("</head>", '<meta name="hyperfocus-swarm-site" content="1">\n</head>') : html, sessionToken);
 
     return new Response(liveReload === "debounced-poll" ? injectDevLiveReloadScript(authenticatedHtml) : authenticatedHtml, {
       headers

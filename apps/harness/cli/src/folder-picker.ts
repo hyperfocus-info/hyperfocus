@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 export async function pickProjectFolder(): Promise<string | undefined> {
   if (process.platform !== "win32") {
     throw new Error(`Folder picker is not supported on ${process.platform}`);
@@ -13,7 +14,7 @@ export async function pickProjectFolder(): Promise<string | undefined> {
     "}"
   ].join("; ");
 
-  const proc = Bun.spawn({
+  const proc = spawnBackgroundProcess({
     cmd: ["powershell.exe", "-NoProfile", "-Sta", "-Command", script],
     stdout: "pipe",
     stderr: "pipe"

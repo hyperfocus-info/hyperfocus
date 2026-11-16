@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { createMemoryEntryId } from "@hyperfocus/ai-core/protocol";
-import { extractRunMemories, retrieveMemorySummaries, shouldExtractRunMemories } from "./memory-bank";
+import { swarmRunSchema } from "@hyperfocus/ai-core/swarm";
+import { extractRunMemories, retrieveMemorySummaries, saveSwarmRunMemory, shouldExtractRunMemories } from "./memory-bank";
 import { createWorkspaceRepository, type WorkspaceRepository } from "./workspace-repository";
 import { createHarnessTestTempPath, resolveHarnessTestTempRoot } from "./test-support/test-temp-root";
 
@@ -48,6 +49,41 @@ function saveMemory(repository: WorkspaceRepository, input: {
 }
 
 describe("memory bank", () => {
+  test("swarm disposition updates preserve user note fields and canonical project attribution", () => {
+    const repository = createRepository();
+    try {
+      const project = addProject(repository);
+      const run = swarmRunSchema.parse({ id: "run-1", request: { requestId: "request-1", projectId: project.id, goal: "Investigate current performance", repository: { revision: "a".repeat(40) } }, status: "AWAITING_APPROVAL", createdAt: Date.now(), updatedAt: Date.now(), tasks: [], candidates: [], artifacts: [], messages: [], metrics: {} });
+      const first = saveSwarmRunMemory(repository, run);
+      expect(first.projectId).toBe(project.id);
+      expect(first.pinned).toBe(false);
+      expect(first.status).toBe("active");
+      const edited = repository.saveMemoryEntry({ ...first, pinned: true, status: "archived", title: "My reviewed finding", priority: 123, hitCount: 7, lastHitAt: new Date().toISOString(), tags: ["feature:swarm", "user:reviewed"], pathGlobs: ["src/**"], confidence: "high" })!;
+      const updated = saveSwarmRunMemory(repository, { ...run, status: "COMPLETED", reason: "Rejected after comparing current evidence", artifacts: [{ id: "report-1", swarmId: run.id, taskId: "task-1", agentId: "agent-1", sourceRevision: run.request.repository.revision, name: "report.json", kind: "report", mediaType: "application/json", sha256: "b".repeat(64), bytes: 2, createdAt: Date.now() }] });
+      const { summary: priorSummary, evidence: priorEvidence, updatedAt: priorUpdatedAt, ...priorFields } = edited;
+      const { summary, evidence, updatedAt, ...preservedFields } = updated;
+      expect(preservedFields).toEqual(priorFields);
+      expect(summary).not.toBe(priorSummary);
+      expect(summary).toContain("COMPLETED: Rejected after comparing current evidence");
+      expect(evidence).not.toBe(priorEvidence);
+      expect(evidence).toContain(`report report-1 SHA-256 ${"b".repeat(64)}`);
+      expect(Date.parse(updatedAt)).toBeGreaterThanOrEqual(Date.parse(priorUpdatedAt));
+      expect(repository.listMemoryEntries(project.id)).toHaveLength(1);
+    } finally { repository.close(); }
+  });
+
+  test("swarm note refresh refuses to reassign another project's existing note", () => {
+    const repository = createRepository();
+    try {
+      const first = addProject(repository), second = addProject(repository);
+      const run = swarmRunSchema.parse({ id: "run-1", request: { requestId: "request-1", projectId: first.id, goal: "Preserve project scope", repository: { revision: "a".repeat(40) } }, status: "COMPLETED", createdAt: Date.now(), updatedAt: Date.now(), tasks: [], candidates: [], artifacts: [], messages: [], metrics: {} });
+      const existing = saveSwarmRunMemory(repository, run);
+      expect(() => saveSwarmRunMemory(repository, { ...run, request: { ...run.request, projectId: second.id } })).toThrow("different project");
+      expect(repository.getMemoryEntry(existing.id)).toEqual(existing);
+      expect(repository.listMemoryEntries(second.id)).toEqual([]);
+    } finally { repository.close(); }
+  });
+
   test("manual priority affects retrieval ranking", () => {
     const repository = createRepository();
     const project = addProject(repository);

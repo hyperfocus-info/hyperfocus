@@ -1,11 +1,10 @@
+import { clamp } from "@hyperfocus/utilities/math";
 import { Show, createEffect, createSignal, onCleanup, type Accessor, type JSX } from "solid-js";
 import { Portal } from "solid-js/web";
 
 export type FloatingLayerPlacement = "top" | "bottom" | "left" | "right";
 
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.min(maximum, Math.max(minimum, value));
-}
+
 
 export type FloatingLayerPosition = {
   left: number;

@@ -1,0 +1,3 @@
+# Server integration tests need Bun's native HTTP globals, not the root UI preload.
+[test]
+preload = []

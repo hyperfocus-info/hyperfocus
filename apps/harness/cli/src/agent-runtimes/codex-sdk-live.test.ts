@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -64,7 +65,7 @@ async function runWritableHtmlSmoke(maxAttempts: number) {
     const tempRoot = createHarnessTestTempPath("codex-live");
     mkdirSync(tempRoot, { recursive: true });
     writeFileSync(path.join(tempRoot, "README.md"), "start\n");
-    const init = Bun.spawn({
+    const init = spawnBackgroundProcess({
       cmd: ["git", "init"],
       cwd: tempRoot,
       stdout: "ignore",

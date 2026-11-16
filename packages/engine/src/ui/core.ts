@@ -15,6 +15,7 @@ import type {
 } from "./model.ts"
 
 export * from "./model.ts"
+export { createMenuNavigationInput, type MenuDirection } from '../input/menu-navigation.ts';
 
 export interface UiController<TState, TActions> {
   getSnapshot(): TState

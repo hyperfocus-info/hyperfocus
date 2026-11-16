@@ -394,10 +394,11 @@ function isSensitiveKey(key: string) {
   return /^(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key|api[-_]?key|access[-_]?token|refresh[-_]?token|id[-_]?token|token|secret|password|passwd|private[-_]?key|client[-_]?secret)$/i.test(key);
 }
 
-function redactSensitiveString(value: string) {
+export function redactSensitiveString(value: string) {
   return value
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/g, "Bearer [redacted]")
-    .replace(/\b(?:sk|rk|pk|ghp|github_pat|glpat|xox[baprs])_[A-Za-z0-9_=-]{12,}\b/g, "[redacted-token]")
+    .replace(/\b(?:sk|rk|pk|ghp|github_pat|glpat|xox[baprs])[-_][A-Za-z0-9_=-]{12,}\b/g, "[redacted-token]")
+    .replace(/\b((?:[A-Z_]*(?:API_KEY|ACCESS_TOKEN|REFRESH_TOKEN|PASSWORD|SECRET))\s*[=:]\s*)[^\s"',;]+/gi, "$1[redacted]")
     .replace(/\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g, "[redacted-jwt]");
 }
 

@@ -2,7 +2,7 @@ import { Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
 import * as stylex from "@stylexjs/stylex";
 import { cn } from "../../lib/utils";
 import { PrimitivePortal } from "./primitive-portal";
-import { isTopOverlay, registerOverlay } from "./overlay-stack";
+import { registerOverlay } from "./overlay-stack";
 
 type PopoverProps = {
   open: boolean;
@@ -24,10 +24,15 @@ const styles = stylex.create({
     borderRadius: "1.25rem",
     borderStyle: "solid",
     borderWidth: "1px",
+    overflow: "auto",
+    overscrollBehavior: "contain",
     backgroundColor: "var(--panel)",
     boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+    boxSizing: "border-box",
     position: "fixed",
     zIndex: 130,
+    maxHeight: "calc(100dvh - 24px)",
+    maxWidth: "calc(100vw - 24px)",
     width: "max-content",
   }
 });
@@ -124,9 +129,12 @@ export function Popover(props: PopoverProps) {
     if (!props.open) {
       return;
     }
-    const unregister = registerOverlay(overlayId, { onEscape: () => props.onClose?.() });
+    const unregister = registerOverlay(overlayId, { onEscape: () => props.onClose?.(), element: () => contentRef,
+      restoreFocus: triggerRef?.querySelector<HTMLElement>('button, a[href], input, [tabindex]') ?? null });
 
     queueMicrotask(updatePosition);
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(updatePosition);
+    if (contentRef) observer?.observe(contentRef);
 
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
@@ -146,6 +154,7 @@ export function Popover(props: PopoverProps) {
     window.addEventListener("mousedown", handlePointerDown);
     onCleanup(() => {
       unregister();
+      observer?.disconnect();
       window.removeEventListener("mousedown", handlePointerDown);
     });
   });
@@ -178,13 +187,7 @@ export function Popover(props: PopoverProps) {
           "--popover-trigger-width": `${position().triggerWidth}px`,
           "--popover-trigger-height": `${position().triggerHeight}px`
         }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape" && isTopOverlay(overlayId)) {
-            event.preventDefault();
-            event.stopPropagation();
-            props.onClose?.();
-          }
-        }}
+
       >
         {props.content}
       </div>

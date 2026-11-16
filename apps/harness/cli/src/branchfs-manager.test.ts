@@ -1,6 +1,8 @@
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
-import { lstat, mkdir, readFile, rm } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, symlink } from "node:fs/promises";
+import { assertExperimentPromotionPreconditions } from "./server/workspace/branchfs-guards";
 import os from "node:os";
 import path from "node:path";
 import { createBranchfsManager, testExports } from "./branchfs-manager";
@@ -13,7 +15,7 @@ describe("branchfs manager", () => {
     fixtureName: "branchfs-manager",
     packageName: "branchfs-manager-test",
     readmeTitle: "# BranchFS Test\n",
-    gitIgnore: ".local\n.tmp-test-data\n",
+    gitIgnore: ".local\n.local/test-data\n",
     extraFiles: [
       {
         relativePath: "tracked.txt",
@@ -24,6 +26,50 @@ describe("branchfs manager", () => {
         content: "keep\n"
       }
     ]
+  });
+
+  test("nested promotion uses the same dirty scope, paths and exclusions as preparation", async () => {
+    const repoRoot = await fixture.createRepoClone("nested-promotion");
+    const rootPath = path.join(repoRoot, "nested");
+    writeFileSync(path.join(repoRoot, "tracked.txt"), "outside dirty\n");
+    writeFileSync(path.join(rootPath, "keep.txt"), "inside dirty\n");
+    writeFileSync(path.join(rootPath, " spaced.txt"), "significant filename space\n");
+    const manager = createBranchfsManager({ rootPath, runId: "nested" });
+    const lease = await manager.prepareExperimentLease();
+    try {
+      await assertExperimentPromotionPreconditions(rootPath, lease.experiment);
+      writeFileSync(path.join(repoRoot, "tracked.txt"), "outside changed again\n");
+      await assertExperimentPromotionPreconditions(rootPath, lease.experiment);
+      writeFileSync(path.join(rootPath, "keep.txt"), "inside changed again\n");
+      await expect(assertExperimentPromotionPreconditions(rootPath, lease.experiment)).rejects.toThrow("Base dirty state changed");
+    } finally { await manager.discardExperiment(lease); }
+  });
+
+  test("rejects host source links and cleans the incomplete lease", async () => {
+    const rootPath = await fixture.createRepoClone("source-link");
+    const outside = await fixture.createRepoClone("source-link-target");
+    await symlink(outside, path.join(rootPath, "linked"), "junction");
+    const manager = createBranchfsManager({ rootPath, runId: "source-link" });
+    await expect(manager.prepareExperimentLease()).rejects.toThrow("symlinks are unsupported");
+    expect(existsSync(path.join(rootPath, ".local/branchfs/source-link"))).toBe(false);
+    expect(await readText(path.join(outside, "tracked.txt"))).toBe("base tracked\n");
+  });
+
+  test("reviews link metadata and refuses promotion before writing any host file", async () => {
+    const rootPath = await fixture.createRepoClone("promotion-link");
+    const outside = await fixture.createRepoClone("promotion-link-target");
+    const manager = createBranchfsManager({ rootPath, runId: "promotion-link" });
+    const lease = await manager.prepareExperimentLease();
+    try {
+      writeFileSync(path.join(lease.projectMountPath, "a-first.txt"), "must not copy");
+      await symlink(outside, path.join(lease.projectMountPath, "linked"), "junction");
+      const inspection = await manager.readInspection(lease);
+      expect(inspection.changedPaths).toContain("linked");
+      expect(inspection.diffText).toContain("symlink:");
+      await expect(manager.flushExperiment(lease)).rejects.toThrow("symlinks are unsupported");
+      expect(existsSync(path.join(rootPath, "a-first.txt"))).toBe(false);
+      expect(await readText(path.join(outside, "tracked.txt"))).toBe("base tracked\n");
+    } finally { await manager.discardExperiment(lease); }
   });
 
   test("inherits dirty tracked and untracked files into experiment mount", async () => {
@@ -47,7 +93,7 @@ describe("branchfs manager", () => {
     const manager = createBranchfsManager({ rootPath, runId: "run-git-mount" });
     const lease = await manager.prepareExperimentLease();
 
-    const statusBefore = Bun.spawnSync({
+    const statusBefore = spawnBackgroundProcessSync({
       cmd: ["git", "status", "--short"],
       cwd: lease.projectMountPath,
       stdout: "pipe",
@@ -57,7 +103,7 @@ describe("branchfs manager", () => {
     expect(statusBefore.stdout.toString()).toBe("");
 
     writeFileSync(path.join(lease.projectMountPath, "tracked.txt"), "changed in mount\n");
-    const diff = Bun.spawnSync({
+    const diff = spawnBackgroundProcessSync({
       cmd: ["git", "diff", "--", "tracked.txt"],
       cwd: lease.projectMountPath,
       stdout: "pipe",
@@ -74,13 +120,13 @@ describe("branchfs manager", () => {
 
   test("does not copy ignored local data into experiment mount", async () => {
     const rootPath = await fixture.createRepoClone("branchfs-ignored");
-    await mkdir(path.join(rootPath, ".tmp-test-data"), { recursive: true });
-    writeFileSync(path.join(rootPath, ".tmp-test-data", "cache.txt"), "ignored\n");
+    await mkdir(path.join(rootPath, ".local/test-data"), { recursive: true });
+    writeFileSync(path.join(rootPath, ".local/test-data", "cache.txt"), "ignored\n");
 
     const manager = createBranchfsManager({ rootPath, runId: "run-ignored" });
     const lease = await manager.prepareExperimentLease();
 
-    expect(existsSync(path.join(lease.projectMountPath, ".tmp-test-data"))).toBe(false);
+    expect(existsSync(path.join(lease.projectMountPath, ".local/test-data"))).toBe(false);
 
     await manager.unmountExperiment(lease);
   });
@@ -116,7 +162,7 @@ describe("branchfs manager", () => {
     const lease = await manager.prepareExperimentLease();
 
     expect((await lstat(path.join(lease.repoMountPath, "apps", "tool", "node_modules"))).isSymbolicLink()).toBe(true);
-    const result = Bun.spawnSync({
+    const result = spawnBackgroundProcessSync({
       cmd: [process.execPath, path.join(lease.repoMountPath, "apps", "tool", "import.ts")],
       cwd: lease.repoMountPath,
       stdout: "pipe",
@@ -218,6 +264,36 @@ describe("branchfs manager", () => {
     expect(existsSync(leases[1].manifestPath)).toBe(true);
 
     await Promise.all(managers.map((manager, index) => manager.unmountExperiment(leases[index])));
+  });
+
+  test("retention preserves prepared leases while later subagents start", async () => {
+    const rootPath = await fixture.createRepoClone("branchfs-active-capacity");
+    const managers = Array.from({ length: 6 }, (_, index) => createBranchfsManager({ rootPath, runId: `active-${index}` }));
+    const leases = [];
+    try {
+      for (const manager of managers) leases.push(await manager.prepareExperimentLease());
+      expect(leases.every((lease) => existsSync(lease.manifestPath))).toBe(true);
+      expect(await readText(path.join(leases[0]!.projectMountPath, "tracked.txt"))).toBe("base tracked\n");
+    } finally {
+      await Promise.all(leases.map((lease, index) => managers[index]!.unmountExperiment(lease)));
+    }
+  });
+
+  test("failed parallel materialization drains writers before cleanup can start", async () => {
+    let releaseWriter!: () => void;
+    const writerGate = new Promise<void>((resolve) => { releaseWriter = resolve; });
+    let completed = false;
+    let writerFinished = false;
+    const result = testExports.forEachConcurrent([0, 1], 2, async (index) => {
+      if (index === 0) throw new Error("materialization failed");
+      await writerGate;
+      writerFinished = true;
+    }).catch((error: unknown) => { completed = true; return error; });
+    await Bun.sleep(0);
+    expect(completed).toBe(false);
+    releaseWriter();
+    expect(await result).toEqual(new Error("materialization failed"));
+    expect(writerFinished).toBe(true);
   });
 
   test("handles dirty tracked files deleted before lease creation", async () => {

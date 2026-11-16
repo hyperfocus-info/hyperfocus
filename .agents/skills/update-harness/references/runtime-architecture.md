@@ -5,8 +5,11 @@ Use this when touching backend runtime, websocket protocol, provider structured 
 ## Runtime Shape
 
 - Runtime turn budgets are typed run contracts.
-- Budgeted model turns must reserve before prompts, persist current usage, hard-fail with a categorized exhaustion state, and include protocol, repository, orchestrator, subagent concurrency, and server lifecycle tests.
-- `run.complete` is the typed run finalization command.
+- Budgeted model turns reserve before prompts, persist current usage, and hard-fail
+  with a categorized exhaustion state. Verify the affected protocol, persistence,
+  orchestration, concurrency, or server lifecycle boundary when changing it.
+- Run finalization belongs to the active execution owner; legacy client `run.complete` requests receive a typed rejection.
+- Final assistant text and terminal state commit atomically. Resolving input or receiving partial provider text is not task completion.
 - Server completion paths should share the same helper, persist the final assistant message, clear streaming and abort state, emit `run.updated`, then emit `chat.complete`.
 - Overlapping or unknown subagent ownership must upgrade same-worktree plans to isolated BranchFS worktrees before execution.
 - Trace BranchFS isolation upgrades and keep BranchFS flush behind explicit promote/flush flow.
@@ -28,15 +31,15 @@ Use this when touching backend runtime, websocket protocol, provider structured 
 
 ## Runtime Defaults
 
-- Prefer Bun APIs and Bun runtime features when possible.
-- Use Bun TypeScript for harness internals unless lower-level code gives a clear extreme performance win.
-- Keep development local-first.
-- Do not reintroduce old OpenAI-only restriction. Current harness can support multiple providers.
-- Debug-only code should key off `process.env.NODE_ENV !== "production"`; do not add separate debug env toggles like `HARNESS_DEBUG`.
+- Preserve multi-provider support; provider-specific assumptions belong in adapters.
+- Debug-only instrumentation uses `process.env.NODE_ENV !== "production"` rather
+  than a separate `HARNESS_DEBUG` toggle. This condition never authorizes destructive
+  recovery: unset/unknown environments also satisfy it. Repair needs an explicit
+  capability or launch mode.
 
 ## Subagents And Worktrees
 
-- Prefer concrete subagent contracts with non-overlapping owned paths.
-- If paths overlap or are unknown, use isolated worktrees.
-- Use BranchFS isolation for ephemeral experiments or overlapping/unknown subagent edit ownership.
-- Do not flush isolated edits without explicit promote/flush flow.
+- Runtime subagent contracts need explicit owned paths. Overlapping or unknown
+  ownership uses isolated BranchFS worktrees and records the isolation upgrade.
+  Promotion follows the explicit flush contract. These are Harness runtime rules;
+  they do not require contributor delegation for ordinary edits.

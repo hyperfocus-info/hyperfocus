@@ -1,54 +1,39 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX, type Setter } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowUp, ArrowUpRight, Brain, Bot, Calendar, Check, CheckSquare2, CircleAlert, CirclePause,
-  CircleHelp, CirclePlay, ClipboardList, CopyPlus, Cpu, FlaskConical, Folder, Gauge, Globe, ListFilter, ListChecks,
-  Logs, MessageSquare, Plus, RefreshCcw, Save, Split, Square, SquarePen, Trash2 } from "lucide-solid";
 import {
-  createAssistantTodoId,
-  type BackgroundJob,
-  type BackgroundJobRun,
-  createRequestId,
-  type Assistant,
-  type AssistantLearning,
-  type AssistantQuestion,
-  type AssistantTodo,
-  type BulkOperationAction,
-  type BulkOperationTarget,
-  type ComposerReasoningStrength,
+type Assistant,
 } from "@hyperfocus/ai-core/protocol";
-import { formatShortTimestamp, resolveBrowserTimezone } from "../../lib/time-format";
-import { cn, toProperCase } from "../../lib/utils";
+import * as stylex from "@stylexjs/stylex";
+import { CheckSquare2,CirclePause,CirclePlay,MessageSquare,Plus,RefreshCcw,Square,Trash2 } from "lucide-solid";
+import { Show } from "solid-js";
+import { harnessStore } from "../../harness-store";
 import { normalizeAppHotkeyPreferences } from "../../lib/app-hotkeys";
-import { type AssistantEditorDraft, type AssistantDetailTab, type BackgroundJobEditorDraft, COMPOSER_REASONING_STRENGTHS,
-  DEFAULT_COMPOSER_REASONING_STRENGTH, type AssistantRosterSort, getComposerControlState, getExecutionModelOptionsForAgent,
-  getSelectedAssistant, getVisibleAssistants, harnessStore } from "../../harness-store";
-import { ActionButton } from "../action-button";
-import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
-import { DetailEmptyState, LeftPaneEmptyState, LeftPaneFilterBlock, LeftPaneHeader, LeftPaneListSection,
-  LeftPaneSearchInput, LeftPaneSearchMenu, LeftPaneShell, type LeftPaneSearchMenuItem } from "../primitives/left-pane";
-import { StatusChip, type StatusChipTone } from "../primitives/status-chip";
-import { VirtualList } from "../primitives/virtual-list";
+import { formatShortTimestamp } from "../../lib/time-format";
+import { cn } from "../../lib/utils";
 import { rightAlignedNumbersEnabled } from "../../lib/visual-flags";
-import { assistantPanelStyles, assistantUtilityStyles } from "../assistants-panel.styles";
-import { AssistantRosterPagination, createAssistantRosterPaginationController, createFilteredAssistantRoster } from "./roster-pagination";
+import { ActionButton } from "../action-button";
+import { assistantPanelStyles,assistantUtilityStyles } from "../assistants-panel.styles";
+import { FileLinkedText } from "../file-linked-text";
 import {
-  assistantRunStateTone,
-  summarizePrompt,
-  tooltipWithPrimaryHotkey,
-  toggleAssistantSelectionId,
+LeftPaneBody,LeftPaneEmptyState,LeftPaneFilterBlock,LeftPaneListSection,
+LeftPaneSearchInput,LeftPaneSearchMenu
+} from "../primitives/left-pane";
+import { StatusChip,type StatusChipTone } from "../primitives/status-chip";
+import { VirtualList } from "../primitives/virtual-list";
+import {
+assistantRunStateTone,
+summarizePrompt,
+toggleAssistantSelectionId,
+tooltipWithPrimaryHotkey,
 } from "./assistant-panel-model";
-import { createAssistantsPanelController, type AssistantsPanelController, type AssistantsPanelProps } from "./assistant-panel-controller";
-import { activeAssistantRosterFilterCount, assistantRosterMenuItems } from "./assistant-roster-menu";
+import { activeAssistantRosterFilterCount,assistantRosterMenuItems } from "./assistant-roster-menu";
+import { AssistantRosterPagination } from "./roster-pagination";
+import { useAssistantsPanel } from "./state/panel-context";
 
-export function AssistantRosterPane(props: { controller: AssistantsPanelController }) {
+export function AssistantRosterPane() {
+  const controller = useAssistantsPanel();
   const {
-    clearAssistantSelectionTimer, createScope, executionPauseReason, executionPaused,
-    getAssistantFileLinks, handleAssistantCardClick, handleAssistantRosterKeyDown,
-    openAssistantBulkContextMenu, openCreateAssistant, requestAssistantRosterPage,
-    scheduleAssistantDelayedSelection, selectedAssistantIdSet, selectedAssistantIds,
-    selectedAssistants, sendAssistantBulkOperation, setAssistantSelectionAnchorId,
-    setSelectedAssistantIds, showRoster, state, variant, visibleAssistants,
-  } = props.controller;
+    createScope, openCreateAssistant, requestAssistantRosterPage, showRoster, state,
+    visibleAssistants,
+  } = controller;
   return (
     <Show when={showRoster()}>
       <div
@@ -83,7 +68,7 @@ export function AssistantRosterPane(props: { controller: AssistantsPanelControll
             }
           />
         </LeftPaneFilterBlock>
-        <LeftPaneListSection
+        <LeftPaneBody><LeftPaneListSection
           title="Roster"
           count={`${visibleAssistants().length} total`}
           class={
@@ -94,7 +79,7 @@ export function AssistantRosterPane(props: { controller: AssistantsPanelControll
             ).class
           }
         >
-          <AssistantRosterBulkControls controller={props.controller} />
+          <AssistantRosterBulkControls />
           <VirtualList
             class={
               stylex.attrs(
@@ -190,20 +175,21 @@ export function AssistantRosterPane(props: { controller: AssistantsPanelControll
               </LeftPaneEmptyState>
             }
           >
-            {(assistant) => <AssistantRosterCard assistant={assistant} controller={props.controller} />}
+            {(assistant) => <AssistantRosterCard assistant={assistant} />}
           </VirtualList>
           <AssistantRosterPagination page={state.assistants.rosterPage} onRequest={requestAssistantRosterPage} />
-        </LeftPaneListSection>
+        </LeftPaneListSection></LeftPaneBody>
       </div>
     </Show>
   );
 }
 
-function AssistantRosterBulkControls(props: { controller: AssistantsPanelController }) {
+function AssistantRosterBulkControls() {
+  const controller = useAssistantsPanel();
   const {
-    executionPauseReason, executionPaused, selectedAssistants,
-    sendAssistantBulkOperation, setSelectedAssistantIds, variant,
-  } = props.controller;
+    executionPauseReason, executionPaused, selectedAssistants, sendAssistantBulkOperation,
+    setSelectedAssistantIds,
+  } = controller;
   return (
     <Show when={selectedAssistants().length > 0}>
                 <div
@@ -338,11 +324,14 @@ function AssistantRosterBulkControls(props: { controller: AssistantsPanelControl
   );
 }
 
-function AssistantRosterCard(props: { assistant: Assistant; controller: AssistantsPanelController }) {
-  const { clearAssistantSelectionTimer, getAssistantFileLinks, handleAssistantCardClick,
+function AssistantRosterCard(props: { assistant: Assistant; }) {
+  const controller = useAssistantsPanel();
+  const {
+    clearAssistantSelectionTimer, getAssistantFileLinks, handleAssistantCardClick,
     handleAssistantRosterKeyDown, openAssistantBulkContextMenu, scheduleAssistantDelayedSelection,
     selectedAssistantIdSet, selectedAssistantIds, setAssistantSelectionAnchorId,
-    setSelectedAssistantIds, state, variant } = props.controller;
+    setSelectedAssistantIds, state,
+  } = controller;
   const { assistant } = props; return (
     <div class={cn(
                       stylex.attrs(
@@ -552,4 +541,3 @@ function assistantBootstrapTone(
   }
   return "warning";
 }
-

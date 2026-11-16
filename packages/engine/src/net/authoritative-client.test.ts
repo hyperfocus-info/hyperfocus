@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { encodeDelta } from "../protocol/delta.ts";
 import { encodeSnapshot } from "../protocol/encode.ts";
 import { encodeMultipartReplicationEnvelope, encodeReplicationFrame } from "../protocol/frames.ts";
-import { parseBinaryProtocolMessage } from "../protocol/messages.ts";
+import { parseBinaryProtocolMessage, SESSION_SUPERSEDED_CLOSE_CODE } from "../protocol/messages.ts";
 import { defineSchema } from "../protocol/schema.ts";
 import {
   applyServerBackedStoreCommand,
@@ -14,6 +14,7 @@ import {
 } from "./authoritative-client.ts";
 
 type FakeWebSocket = AuthoritativeWebSocket & {
+  binaryType: "blob" | "arraybuffer";
   readonly url: string;
   readonly sent: unknown[];
   emit(type: "open" | "message", data?: unknown): Promise<void>;
@@ -38,6 +39,7 @@ function createFakeWebSocketHarness() {
     }
     const socket: FakeWebSocket = {
       url,
+      binaryType: "blob",
       get readyState() {
         return readyState;
       },
@@ -124,6 +126,23 @@ test("authoritative client decodes ArrayBuffer, Uint8Array, Blob frames and acks
   expect(states).toEqual([{ x: 1 }, { x: 2 }, { x: 3 }]);
   expect(client.getDebugSnapshot()).toMatchObject({ receivedSnapshots: 2, receivedDeltas: 1, lastSequence: 3 });
   expect(socket.sent.some((message) => typeof message === "string" && message.includes("replication_ack"))).toBe(true);
+});
+
+test("browser replication reaches ready without waiting for Blob IO", async () => {
+  fakeWebSockets.reset();
+  const schema = defineSchema<{ ready: boolean }>({ ready: "bool" });
+  const client = connectAuthoritative({ url: "ws://test", token: "dev:a", schema, createWebSocket: fakeWebSockets.create });
+  const states: unknown[] = [];client.onSnapshot(state => states.push(state));
+  const connected = client.connect(), socket = fakeWebSockets.instances[0]!;
+  await socket.emit("open");await admit(socket);await connected;
+  const frame = encodeReplicationFrame({ kind: "snapshot", sequence: 1, baseline: 0, bytes: encodeSnapshot(schema, { ready: true }) });
+  const buffer = new Uint8Array(frame).buffer;
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  const blob = new Blob([buffer]);blob.arrayBuffer = async () => { await waiting;return buffer; };
+  const delivered = socket.emit("message", socket.binaryType === "arraybuffer" ? buffer : blob);
+  try { await Bun.sleep(5);expect(states).toEqual([{ ready: true }]); }
+  finally { release();await delivered;client.close(); }
 });
 
 test("authoritative client sends high-rate input with binary codec when configured", async () => {
@@ -388,6 +407,43 @@ test("authoritative admission rejects explicitly and offline sends do not consum
   expect(client.getDebugSnapshot()).toMatchObject({ connected: false, state: { status: "failed", reason: "room-full" } });
 });
 
+test("cancelled token acquisition cannot replace a later admitted connection", async () => {
+  fakeWebSockets.reset();
+  const tokens: Array<(token: string) => void> = [];
+  const client = connectAuthoritative({ url: 'ws://test', reconnect: false,
+    getToken: () => new Promise<string>(resolve => tokens.push(resolve)), createWebSocket: fakeWebSockets.create });
+  try {
+    const abandoned = client.connect().then(() => 'joined', () => 'cancelled');
+    client.close({ mode: 'suspend' });
+    const current = client.connect();tokens[1]!('current');await Promise.resolve();
+    const socket = fakeWebSockets.instances[0]!;
+    await socket.emit('open');await admit(socket, 'current');await current;
+    tokens[0]!('abandoned');await Promise.resolve();
+    expect(fakeWebSockets.instances).toHaveLength(1);
+    expect(await abandoned).toBe('cancelled');
+    expect(client.getDebugSnapshot()).toMatchObject({ connected: true, playerId: 'current' });
+  } finally { client.close(); }
+});
+
+test("an abandoned reconnect credential failure cannot retry over a newer session", async () => {
+  fakeWebSockets.reset();let requests = 0, rejectOld: (error: Error) => void = () => {};
+  const client = connectAuthoritative({ url: 'ws://test',
+    getToken: () => ++requests === 2 ? new Promise<string>((_, reject) => { rejectOld = reject; }) : 'fresh',
+    reconnect: { maxAttempts: 2, initialDelayMs: 0, maxDelayMs: 0 }, createWebSocket: fakeWebSockets.create });
+  try {
+    const first = client.connect();await Promise.resolve();
+    await fakeWebSockets.instances[0]!.emit('open');await admit(fakeWebSockets.instances[0]!, 'old');await first;
+    await fakeWebSockets.instances[0]!.emitClose();await Bun.sleep(5);expect(requests).toBe(2);
+    client.close();const current = client.connect();await Promise.resolve();
+    const socket = fakeWebSockets.instances[1]!;
+    await socket.emit('open');await admit(socket, 'current');await current;
+    rejectOld(new Error('Abandoned credential request failed'));await Bun.sleep(5);
+    expect(requests).toBe(3);expect(fakeWebSockets.instances).toHaveLength(2);
+    expect(client.getDebugSnapshot().state.status).toBe('joined');
+    expect(client.getDebugSnapshot()).toMatchObject({ connected: true, playerId: 'current' });
+  } finally { client.close(); }
+});
+
 test("authoritative reconnect obtains a fresh token before restoring admission", async () => {
   fakeWebSockets.reset();
   const tokens: string[] = [];
@@ -423,6 +479,22 @@ test("authoritative reconnect obtains a fresh token before restoring admission",
   expect(client.getDebugSnapshot()).toMatchObject({ connected: true, playerId: "second" });
   expect(states).toContain("recovering");
   client.close();
+});
+
+test("superseded account close is terminal until an explicit connection request", async () => {
+  fakeWebSockets.reset();
+  const client = connectAuthoritative({ url: "ws://test", token: "dev:a", createWebSocket: fakeWebSockets.create,
+    reconnect: { maxAttempts: 3, initialDelayMs: 0, maxDelayMs: 0 } });
+  try {
+    const pending = client.connect(), first = fakeWebSockets.instances[0]!;
+    await first.emit("open");await admit(first, "first");await pending;
+    await first.emitClose(SESSION_SUPERSEDED_CLOSE_CODE, "This account signed in elsewhere.");await Bun.sleep(10);
+    expect(fakeWebSockets.instances).toHaveLength(1);
+    expect(client.getDebugSnapshot()).toMatchObject({ connected: false, state: { status: "failed", reason: "This account signed in elsewhere." } });
+    const manual = client.connect(), second = fakeWebSockets.instances[1]!;
+    expect(second).toBeDefined();await second.emit("open");await admit(second, "second", "new-room");await manual;
+    expect(client.getDebugSnapshot()).toMatchObject({ connected: true, playerId: "second", roomId: "new-room" });
+  } finally { client.close(); }
 });
 
 test("replication listener exceptions cannot prevent ACKs or later frames", async () => {

@@ -15,8 +15,9 @@ import { appendCapturedCliContext, enforceExecutionPreflight, validatePromptAtta
 import { PLANNER_DIFFICULTY_THRESHOLD, detectAutoMode, estimateTaskDifficulty, isDirectWorkspaceImplementTask } from "@hyperfocus/ai-core/mode-intent";
 import { resolveModeById, resolveModeCatalog } from "@hyperfocus/ai-core/modes";
 import type { ClientCommand } from "@hyperfocus/ai-core/protocol";
+import { loadSwarmContinuation } from "../../swarm/continuation";
 
-type ChatSendCommandContext = Pick<ServerCommandContext, "ws" | "runtime" | "repository" | "adapter" | "runtimeRegistry" | "assistantManager" | "pendingBrowserApprovals" | "connections" | "backgroundRunControllers" | "osAdapters" | "derivedProgressHeartbeatMs" | "tokenUsageSession">;
+type ChatSendCommandContext = Pick<ServerCommandContext, "ws" | "runtime" | "repository" | "adapter" | "runtimeRegistry" | "assistantManager" | "pendingBrowserApprovals" | "connections" | "backgroundRunControllers" | "osAdapters" | "derivedProgressHeartbeatMs" | "tokenUsageSession"> & { queuedThreadInput?: boolean };
 
 export async function handleChatSendCommand(command: ClientCommand, context: ChatSendCommandContext) {
   const { ws, runtime, repository, adapter, runtimeRegistry, assistantManager, pendingBrowserApprovals, connections, backgroundRunControllers, osAdapters, derivedProgressHeartbeatMs, tokenUsageSession } = context;
@@ -24,7 +25,9 @@ export async function handleChatSendCommand(command: ClientCommand, context: Cha
 case "chat.send": {
       assertGlobalExecutionNotPaused(repository);
       const projectId = command.payload.projectId;
-      const project = runtime.getProject(projectId);
+      const selectedProject = runtime.getProject(projectId);
+      const project = context.queuedThreadInput ? { ...selectedProject, activeThreadId: command.payload.threadId,
+        session: { ...selectedProject.session, messages: repository.getThreadMessages(projectId, command.payload.threadId) } } : selectedProject;
       const agentRuntime = runtimeRegistry.get(command.payload.agentId);
       const agentCapability = agentRuntime.getCapability() ?? (await agentRuntime.refreshCapability());
       assertActiveThread(project, command.payload.threadId);
@@ -33,7 +36,8 @@ case "chat.send": {
       await enforceExecutionPreflight(ws, command.requestId, runtime, repository, project, osAdapters);
       const attachments = validatePromptAttachments(repository, projectId, command.payload.threadId, command.payload.attachments);
       const capturedCliContext = runtime.consumeThreadCapturedCliContext(projectId, command.payload.threadId);
-      const promptContent = appendCapturedCliContext(command.payload.content, capturedCliContext);
+      const continuation=await loadSwarmContinuation({content:command.payload.content,projectId,rootPath:project.rootPath,threadId:command.payload.threadId});
+      const promptContent = appendCapturedCliContext(command.payload.content, capturedCliContext)+(continuation?`\n\n${continuation.context}`:"");
       const providerBrand = repository.getProviderBrand();
       const debugEnabled = command.payload.debug ?? repository.getDebugEnabledDefault();
       const resolvedExecutionModel = resolveExecutionModelIdForRuntime({
@@ -44,8 +48,10 @@ case "chat.send": {
         persistedModelId: project.session.executionModelId
       });
       const effectiveExecutionModelId = resolvedExecutionModel.modelId;
-      repository.activateProject(projectId);
-      runtime.setActiveProject(projectId);
+      if (!context.queuedThreadInput) {
+        repository.activateProject(projectId);
+        runtime.setActiveProject(projectId);
+      }
       runtime.clearProjectTransients(projectId, command.payload.threadId);
       runtime.setProjectSelectedAgentId(projectId, command.payload.agentId);
 
@@ -108,14 +114,19 @@ case "chat.send": {
       const runProject = repository.createAgentRun(
         projectId,
         promptContent,
-        agentRuntime.getDefaultPlanningModelId(providerBrand),
+        command.payload.executionModelId
+          ? effectiveExecutionModelId
+          : agentRuntime.getDefaultPlanningModelId(providerBrand),
         command.payload.threadId,
-        command.payload.runtimeBudget?.maxTurns
+        command.payload.runtimeBudget?.maxTurns,
+        { agentId: agentRuntime.id, providerBrand, reasoningStrength: command.payload.reasoningStrength, fastMode: command.payload.fastMode }
       );
       const createdRun = runProject.activeRun ?? repository.getLatestThreadRun(projectId, command.payload.threadId);
       if (!createdRun) {
         throw new Error("Run was not created");
       }
+      // The event is now stored in the durable run prompt. Failed ack stays replayable.
+      if(continuation)await continuation.acknowledge().catch(()=>{appendSystemStatus(ws,command.requestId,runtime,repository,projectId,command.payload.threadId,"Remote result is preserved in this run. Its acknowledgement will retry on the next resume.");});
       runtime.upsertPersistedProject(runProject);
       emitRunUpdatedById(ws, command.requestId, repository, projectId, createdRun.id);
 
@@ -254,7 +265,7 @@ function handleAssistantCreationIntent(
     emitAssistantCreatedCardToAll(connections, existing);
     return true;
   }
-  const runProject = repository.createAgentRun(projectId, promptContent, agentRuntime.getDefaultPlanningModelId(providerBrand), command.payload.threadId, command.payload.runtimeBudget?.maxTurns);
+  const runProject = repository.createAgentRun(projectId, promptContent, agentRuntime.getDefaultPlanningModelId(providerBrand), command.payload.threadId, command.payload.runtimeBudget?.maxTurns, { agentId: agentRuntime.id, providerBrand, reasoningStrength: command.payload.reasoningStrength, fastMode: command.payload.fastMode });
   const createdRun = runProject.activeRun ?? repository.getLatestThreadRun(projectId, command.payload.threadId);
   if (!createdRun) throw new Error("Run was not created");
   runtime.upsertPersistedProject(runProject);

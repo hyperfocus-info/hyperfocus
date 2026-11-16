@@ -1,13 +1,14 @@
 import * as stylex from "@stylexjs/stylex";
-import { ActionButton, ActionStatus } from "../action-button";
-import { Dialog } from "../primitives/dialog";
+import { ActionButton } from "../action-button";
 import { chatUtilityStyles } from "../chat-panel.utilities";
-import type { ChatPanelController } from "../chat-panel";
+import { Dialog } from "../primitives/dialog";
+import { useChatPanel } from "./state/panel-context";
 
-export function ChatSetupDialog(props: { controller: ChatPanelController }) {
+export function ChatSetupDialog() {
+  const controller = useChatPanel();
   const {
     handleCancelNonGitPreflight, handleDisableDirtyGitCheck, handleInitGitBaseline, state,
-  } = props.controller;
+  } = controller;
   return <Dialog
         open={Boolean(state.blockingNonGitPreflight)}
         title="Git setup required"
@@ -17,7 +18,7 @@ export function ChatSetupDialog(props: { controller: ChatPanelController }) {
         footer={
           <>
             <ActionButton tooltip="Initialize git and commit the current folder baseline" type="button" onClick={handleInitGitBaseline}>
-              Init Git
+              Initialize Git and commit baseline
             </ActionButton>
             <ActionButton tooltip="Disable dirty-git protection and retry this run" type="button" variant="secondary" onClick={handleDisableDirtyGitCheck}>
               Disable check and continue
@@ -31,7 +32,7 @@ export function ChatSetupDialog(props: { controller: ChatPanelController }) {
         <div class={stylex.attrs(chatUtilityStyles.spaceY2, chatUtilityStyles.textXs, chatUtilityStyles.leading6, chatUtilityStyles.textVariableMuted).class}>
           <p>{state.blockingNonGitPreflight?.preflight.repairSummary}</p>
           <p>{state.blockingNonGitPreflight?.preflight.repairDetail}</p>
+          <p>Initialize Git creates a repository and commits the current folder as its baseline. Disable check turns off dirty-git protection and retries this run.</p>
         </div>
       </Dialog>;
 }
-

@@ -18,6 +18,8 @@ export type KeyboardState = {
 type KeyboardEventTarget = Pick<EventTarget, "addEventListener" | "removeEventListener">;
 export type KeyboardActionOptions = {
   resetOnBlur?: boolean;
+  /** Capture mapped keys from text fields and editable content. Defaults to false. */
+  captureEditableTargets?: boolean;
   /** Clears held keys when a tab is hidden, frozen, or placed in page cache. */
   resetOnLifecycleChange?: boolean;
   lifecycleTarget?: KeyboardEventTarget;
@@ -126,6 +128,14 @@ function lifecycleIsHidden(target: KeyboardEventTarget) {
   return hidden === true || visibilityState === "hidden";
 }
 
+function eventTargetsEditableContent(event: Event) {
+  const target: unknown = Reflect.get(event, "target");
+  if (!target || typeof target !== "object") return false;
+  const tagName = Reflect.get(target, "tagName");
+  if (typeof tagName === "string" && ["INPUT", "TEXTAREA", "SELECT"].includes(tagName.toUpperCase())) return true;
+  return Reflect.get(target, "isContentEditable") === true;
+}
+
 export function createKeyboardActions(
   bindings: KeyboardBindings,
   target: KeyboardEventTarget | null | undefined = typeof window === "undefined" ? undefined : window,
@@ -135,10 +145,12 @@ export function createKeyboardActions(
   const state = createKeyboardState(bindings);
   const resetOnBlur = options.resetOnBlur ?? true;
   const resetOnLifecycleChange = options.resetOnLifecycleChange ?? true;
+  const captureEditableTargets = options.captureEditableTargets ?? false;
   const lifecycleTarget = options.lifecycleTarget
     ?? (typeof document === "undefined" ? target : document);
 
   function onKeyDown(event: Event) {
+    if (!captureEditableTargets && eventTargetsEditableContent(event)) return;
     const code = eventCode(event);
     if (code === undefined) return;
     if (state.set(code, true)) event.preventDefault();
@@ -147,7 +159,7 @@ export function createKeyboardActions(
   function onKeyUp(event: Event) {
     const code = eventCode(event);
     if (code === undefined) return;
-    if (state.set(code, false)) event.preventDefault();
+    if (state.set(code, false) && (captureEditableTargets || !eventTargetsEditableContent(event))) event.preventDefault();
   }
 
   function onBlur() {

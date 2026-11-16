@@ -1,12 +1,14 @@
+import { runVerificationCommands } from "@hyperfocus/ai-runtime/quality/commands";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTrace, ComposerReasoningStrength, PlannerSubtask } from "@hyperfocus/ai-core/protocol";
-import { createBranchfsManager, copyBranchfsPathRobust, type BranchfsExperimentLease, type BranchfsManager } from "./branchfs-manager";
+import { createBranchfsManager, type BranchfsExperimentLease, type BranchfsManager } from "./branchfs-manager";
+import { copyBranchfsPathRobust, readFileIfPresent, statIfPresent } from "./branchfs/filesystem";
 import type { PiAgentAdapter } from "./pi-agent-adapter";
 import type { BranchfsSubagentSnapshot } from "./pi-subagents";
+import { resolveTrustedProjectPath } from "./project-filesystem/trust";
 
-const BUN_EXECUTABLE = process.platform === "win32" ? "bun.cmd" : "bun";
 const CONFLICT_MARKER_START = "<<<<<<< BRANCHFS CURRENT";
 const CONFLICT_MARKER_SPLIT = "=======";
 const CONFLICT_MARKER_END = ">>>>>>> BRANCHFS INCOMING";
@@ -71,82 +73,66 @@ export async function prepareBranchfsIntegrationLease(
     }
   );
   const lease = await manager.prepareExperimentLease();
-  emitTrace(context, {
-    stage: "merge-start",
-    message: "Integrating isolated BranchFS subagent results",
-    detail: orderedSnapshots.map((snapshot) => snapshot.taskId).join(", ")
-  });
+  try {
+    emitTrace(context, {
+      stage: "merge-start",
+      message: "Integrating isolated BranchFS subagent results",
+      detail: orderedSnapshots.map((snapshot) => snapshot.taskId).join(", ")
+    });
 
-  let conflictResolved = false;
-  const appliedTaskIds: string[] = [];
+    let conflictResolved = false;
+    const appliedTaskIds: string[] = [];
 
-  for (const snapshot of orderedSnapshots) {
-    const inspection = await snapshot.manager.readInspection(snapshot.lease);
-    if (inspection.changedPaths.length === 0) {
-      continue;
+    for (const snapshot of orderedSnapshots) {
+      const inspection = await snapshot.manager.readInspection(snapshot.lease);
+      if (inspection.changedPaths.length === 0) {
+        continue;
+      }
+
+      const conflicts = await applySnapshotToIntegrationLease(snapshot, lease, inspection.changedPaths);
+      if (conflicts.length > 0) {
+        emitTrace(context, {
+          stage: "merge-conflict",
+          message: `Conflict while integrating ${snapshot.taskId}`,
+          detail: conflicts.map((conflict) => conflict.relativePath).join(", ")
+        });
+        await resolveBranchfsConflicts(adapter, context, lease, options.tasks, snapshot.taskId, conflicts, options.abortSignal);
+        conflictResolved = true;
+      }
+
+      appliedTaskIds.push(snapshot.taskId);
     }
 
-    const conflicts = await applySnapshotToIntegrationLease(snapshot, lease, inspection.changedPaths);
-    if (conflicts.length > 0) {
-      emitTrace(context, {
-        stage: "merge-conflict",
-        message: `Conflict while integrating ${snapshot.taskId}`,
-        detail: conflicts.map((conflict) => conflict.relativePath).join(", ")
-      });
-      await resolveBranchfsConflicts(adapter, context, lease, options.tasks, snapshot.taskId, conflicts, options.abortSignal);
-      conflictResolved = true;
+    emitTrace(context, {
+      stage: "merge-complete",
+      message: "Integrated isolated BranchFS subagent results",
+      detail: appliedTaskIds.join(", ")
+    });
+
+    return {
+      manager,
+      lease,
+      conflictResolved,
+      appliedTaskIds,
+      onTrace: context.onTrace
+    };
+  } catch (error) {
+    try {
+      await manager.discardExperiment(lease);
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "BranchFS integration and cleanup failed");
     }
-
-    appliedTaskIds.push(snapshot.taskId);
+    throw error;
   }
-
-  emitTrace(context, {
-    stage: "merge-complete",
-    message: "Integrated isolated BranchFS subagent results",
-    detail: appliedTaskIds.join(", ")
-  });
-
-  return {
-    manager,
-    lease,
-    conflictResolved,
-    appliedTaskIds,
-    onTrace: context.onTrace
-  };
 }
 
-export async function verifyBranchfsIntegrationLease(integration: BranchfsIntegrationLease) {
-  emitTraceFromIntegration(integration, {
-    stage: "verification-start",
-    message: "Running integration verification"
-  });
-
-  const packageJson: unknown = JSON.parse(await readFile(path.join(integration.lease.repoMountPath, "package.json"), "utf8"));
-  const scripts = isRecord(packageJson) && isRecord(packageJson.scripts) ? packageJson.scripts : undefined;
-
-  const ranTypecheck = typeof scripts?.typecheck === "string";
-  const ranTest = typeof scripts?.test === "string";
-
-  if (ranTypecheck) {
-    await runCommand([BUN_EXECUTABLE, "run", "typecheck"], integration.lease.repoMountPath);
-  }
-
-  if (ranTest) {
-    await runCommand([BUN_EXECUTABLE, "run", "test"], integration.lease.repoMountPath);
-  }
-
-  emitTraceFromIntegration(integration, {
-    stage: "verification-complete",
-    message: "Integration verification finished",
-    detail: [
-      ranTypecheck ? "typecheck" : "skip:typecheck",
-      ranTest ? "test" : "skip:test"
-    ].join(", ")
-  });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+export async function verifyBranchfsIntegrationLease(integration: BranchfsIntegrationLease, options: {
+  commands?: string[]; signal?: AbortSignal;
+} = {}) {
+  emitTraceFromIntegration(integration, { stage: "verification-start", message: "Running integration verification" });
+  const summary = await runVerificationCommands({ cwd: integration.lease.projectMountPath,
+    commands: options.commands ?? [], signal: options.signal });
+  emitTraceFromIntegration(integration, { stage: "verification-complete", message: summary });
 }
 
 export async function flushBranchfsIntegrationLease(integration: BranchfsIntegrationLease) {
@@ -167,9 +153,11 @@ export async function discardBranchfsIntegrationLease(integration: BranchfsInteg
 }
 
 export async function discardBranchfsSnapshots(snapshots: BranchfsSubagentSnapshot[]) {
-  await Promise.all(
-    snapshots.map((snapshot) => snapshot.manager.discardExperiment(snapshot.lease).catch(() => undefined))
+  const results = await Promise.allSettled(
+    snapshots.map((snapshot) => snapshot.manager.discardExperiment(snapshot.lease))
   );
+  const errors = results.filter((result) => result.status === "rejected").map((result) => result.reason);
+  if (errors.length) throw new AggregateError(errors, "Failed to discard BranchFS snapshots");
 }
 
 async function applySnapshotToIntegrationLease(
@@ -183,6 +171,10 @@ async function applySnapshotToIntegrationLease(
     const incomingPath = path.join(snapshot.lease.projectMountPath, relativePath);
     const integrationPath = path.join(integrationLease.projectMountPath, relativePath);
 
+    await resolveTrustedProjectPath(snapshot.lease.baseProjectPath, basePath, { allowMissing: true, rejectSymlinks: true });
+    await resolveTrustedProjectPath(snapshot.lease.projectMountPath, incomingPath, { allowMissing: true, rejectSymlinks: true });
+    await resolveTrustedProjectPath(integrationLease.projectMountPath, integrationPath, { allowMissing: true, rejectSymlinks: true });
+
     const [baseHash, incomingHash, currentHash] = await Promise.all([
       hashPath(basePath),
       hashPath(incomingPath),
@@ -194,7 +186,7 @@ async function applySnapshotToIntegrationLease(
     }
 
     if (currentHash === baseHash) {
-      await copyChangedPath(incomingPath, integrationPath);
+      await copyBranchfsPathRobust(incomingPath, integrationPath);
       continue;
     }
 
@@ -305,17 +297,8 @@ function emitTraceFromIntegration(integration: BranchfsIntegrationLease, trace: 
   integration.onTrace?.(trace);
 }
 
-async function copyChangedPath(sourcePath: string, destinationPath: string) {
-  if (!(await pathExists(sourcePath))) {
-    await rm(destinationPath, { recursive: true, force: true }).catch(() => undefined);
-    return;
-  }
-
-  await copyBranchfsPathRobust(sourcePath, destinationPath);
-}
-
 async function hashPath(targetPath: string) {
-  const entry = await stat(targetPath).catch(() => undefined);
+  const entry = await statIfPresent(targetPath);
   if (!entry) {
     return "missing";
   }
@@ -327,12 +310,7 @@ async function hashPath(targetPath: string) {
   }
 
   const hash = createHash("sha256");
-  const content = await readFile(targetPath).catch((error: unknown) => {
-    if (isMissingPathError(error)) {
-      return undefined;
-    }
-    throw error;
-  });
+  const content = await readFileIfPresent(targetPath);
   if (content === undefined) {
     return "missing";
   }
@@ -340,41 +318,11 @@ async function hashPath(targetPath: string) {
   return hash.digest("hex");
 }
 
-async function pathExists(targetPath: string) {
-  return (await stat(targetPath).catch(() => undefined)) !== undefined;
-}
-
 async function readPathText(targetPath: string) {
-  const content = await readFile(targetPath, "utf8").catch(() => "");
-  return content.replace(/\r\n/g, "\n");
+  const content = await readFileIfPresent(targetPath);
+  return content?.toString("utf8").replace(/\r\n/g, "\n") ?? "";
 }
 
 function sanitizeTaskId(taskId: string) {
   return taskId.replace(/[^a-zA-Z0-9._-]/g, "-");
-}
-
-function isMissingPathError(error: unknown) {
-  if (typeof error !== "object" || error === null || !("code" in error)) {
-    return false;
-  }
-  const code = String(error.code);
-  return code === "ENOENT" || code === "ENOTDIR";
-}
-
-async function runCommand(command: string[], cwd: string) {
-  const proc = Bun.spawn({
-    cmd: command,
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe"
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited
-  ]);
-  if (exitCode !== 0) {
-    throw new Error(`${command.join(" ")} failed: ${stderr.trim() || stdout.trim() || `exit ${exitCode}`}`);
-  }
-  return stdout.trim();
 }

@@ -1,20 +1,16 @@
+import { usePreferencesPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
 import * as stylex from "@stylexjs/stylex";
 import { CirclePause } from "lucide-solid";
 import { ActionButton } from "../action-button";
-import type { PreferencesPanelModel } from "../preferences-modal";
-import type { PreferencesOperationalActions } from "./preferences-actions";
-import { PreferenceRow, PreferenceSection, PreferenceToggle, RangeControl, SegmentedControl } from "./preferences-controls";
+import { PreferenceRow,PreferenceSection,PreferenceToggle,RangeControl,SegmentedControl } from "./preferences-controls";
 import { preferenceStyles } from "./preferences.styles";
 
-export function PreferencesBackgroundJobs(props: {
-  model: PreferencesPanelModel;
-  actions: PreferencesOperationalActions;
-  updateSavedPreference: (update: () => void) => void;
-}) {
-  const { state, store, enabledAssistantBackgroundJobCount } = props.model;
+export function PreferencesBackgroundJobs() {
+  const panel = usePreferencesPanel();
+  const { state, store, enabledAssistantBackgroundJobCount } = panel.model;
   const savedToggle = (checked: boolean, update: (value: boolean) => void) =>
-    props.updateSavedPreference(() => update(checked));
+    panel.persistence.updateSavedPreference(() => update(checked));
   return (
     <PreferenceSection title="Background Jobs" description="Approval policy, capacity, notifications, and current jobs pane defaults.">
       <PreferenceRow id="job-defaults" title="Background job defaults" description="Choose approval posture and concurrent capacity for background work.">
@@ -28,7 +24,7 @@ export function PreferencesBackgroundJobs(props: {
               { value: "ask-risky", label: "Ask risky" },
               { value: "always-ask", label: "Always ask" }
             ]}
-            onChange={(value) => props.updateSavedPreference(() => store.setBackgroundJobApprovalPolicyDefault(value))}
+            onChange={(value) => panel.persistence.updateSavedPreference(() => store.setBackgroundJobApprovalPolicyDefault(value))}
           />
           <PreferenceToggle checked={state.assistantAutoApproveNonBlockingQuestionsDefault} label="Auto-approve non-blocking questions" onChange={(checked) => savedToggle(checked, store.setAssistantAutoApproveNonBlockingQuestionsDefault)} />
           <PreferenceToggle checked={state.backgroundJobNotificationsEnabled} label="Desktop notifications" onChange={(checked) => savedToggle(checked, store.setBackgroundJobNotificationsEnabled)} />
@@ -41,7 +37,7 @@ export function PreferencesBackgroundJobs(props: {
             suffix="x"
             tooltip="Higher values allow more assistant job load before congestion delays apply, which can lead to jobs running over each other."
             formatValue={(value) => value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}
-            onChange={(value) => props.updateSavedPreference(() => store.setAssistantMaxCongestionDefault(value))}
+            onChange={(value) => panel.persistence.updateSavedPreference(() => store.setAssistantMaxCongestionDefault(value))}
           />
           <RangeControl
             label="Max background jobs"
@@ -51,7 +47,7 @@ export function PreferencesBackgroundJobs(props: {
             suffix=" jobs"
             tooltip="Caps concurrently running or queued scheduled background jobs."
             formatValue={(value) => Math.round(value).toString()}
-            onChange={(value) => props.updateSavedPreference(() => store.setMaxBackgroundJobsDefault(value))}
+            onChange={(value) => panel.persistence.updateSavedPreference(() => store.setMaxBackgroundJobsDefault(value))}
           />
         </div>
       </PreferenceRow>
@@ -64,7 +60,7 @@ export function PreferencesBackgroundJobs(props: {
             variant="secondary"
             icon={<CirclePause class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />}
             ariaLabel="Pause assistant jobs"
-            onClick={props.actions.handlePauseAssistantBackgroundJobs}
+            onClick={panel.operational.handlePauseAssistantBackgroundJobs}
           >
             Pause assistant jobs
           </ActionButton>

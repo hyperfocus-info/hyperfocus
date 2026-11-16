@@ -1,10 +1,14 @@
+import { createHash } from "node:crypto";
+import type { UsageSource } from "@hyperfocus/ai-core/protocol";
 import type { HarnessConnection } from "../core/contracts";
+import { addTokenUsageTotals, createEmptyTokenUsageTotals, normalizeTokenCount } from "../../usage/token-usage";
+export { addTokenUsageTotals, createEmptyTokenUsageTotals, normalizeTokenCount } from "../../usage/token-usage";
 import { createWebsocketEventBatcher } from "../../websocket-event-batcher";
 import type { GuardedWebSocket } from "../../websocket-send-guard";
 import type { WorkspaceRepository } from "../../workspace-repository";
 import { SERVER_EVENT_EMIT_MAX_BYTES, type CliAttachToken, type CliSession, type PreferencesState, type ProjectContextUsage, type ProjectId, type ServerEvent, type SetupState, type TerminalAttachToken, type TerminalHistoryScope, type TerminalPaneLayout, type TerminalPreferences, type TerminalSession, type TerminalShell, type TokenUsageTotals } from "@hyperfocus/ai-core/protocol";
 
-export const CONTROL_WEBSOCKET_MAX_QUEUED_BYTES = 64 * 1024 * 1024;
+export const CONTROL_WEBSOCKET_MAX_QUEUED_BYTES = 67108864;
 
 export const controlEventBatcher = createWebsocketEventBatcher({
   maxQueuedBytes: CONTROL_WEBSOCKET_MAX_QUEUED_BYTES,
@@ -16,7 +20,7 @@ export type ControlEventSocket = GuardedWebSocket & { data: HarnessConnection };
 export type ControlEventConnections = ReadonlySet<ControlEventSocket>;
 
 export function sendEvent(ws: ControlEventSocket, event: ServerEvent) {
-  controlEventBatcher.send(ws, event);
+  controlEventBatcher.send(ws, event, ws.data.encoding);
 }
 
 export function emitControlEvent(
@@ -48,7 +52,7 @@ function emitControlEventToClient(
 }
 
 export function emitAgentRuntimeUpdatedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   requestId: string,
   agentRuntimes: PreferencesState["agentRuntimes"]
 ) {
@@ -56,7 +60,7 @@ export function emitAgentRuntimeUpdatedToAll(
 }
 
 export function emitSetupUpdatedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   requestId: string,
   setup: SetupState
 ) {
@@ -64,7 +68,7 @@ export function emitSetupUpdatedToAll(
 }
 
 export function emitUsageUpdatedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   requestId: string,
   tokenUsage: ReturnType<WorkspaceRepository["getTokenUsageState"]>
 ) {
@@ -74,63 +78,39 @@ export function emitUsageUpdatedToAll(
 export function recordServerTokenUsage(
   repository: WorkspaceRepository,
   tokenUsageSession: TokenUsageTotals,
-  contextUsage: ProjectContextUsage
+  contextUsage: ProjectContextUsage,
+  attribution: { projectId?: string; threadId?: string; runId?: string; runtime?: string } = {}
 ) {
-  const delta = createTokenUsageDelta(contextUsage);
+  let delta = createTokenUsageDelta(contextUsage);
   if (delta.totalTokensIncludingCached <= 0) {
     return repository.getTokenUsageState(tokenUsageSession);
   }
 
+  const source: Omit<UsageSource, "totals"> = { projectId: attribution.projectId, threadId: attribution.threadId,
+    runtime: attribution.runtime, sourceKind: contextUsage.sourceKind, sourceLabel: contextUsage.sourceLabel, modelId: contextUsage.modelId };
+  const observationId = createHash("sha256").update(JSON.stringify([attribution.runId, source, contextUsage])).digest("hex");
+  delta = repository.recordTokenUsage(delta, source, observationId);
   Object.assign(tokenUsageSession, addTokenUsageTotals(tokenUsageSession, delta));
-  repository.addTokenUsageLifetime(delta);
   return repository.getTokenUsageState(tokenUsageSession);
 }
 
 export function createTokenUsageDelta(usage: ProjectContextUsage): TokenUsageTotals {
-  const inputTokens = normalizeTokenCount(usage.tokens);
+  const inputTokens = normalizeTokenCount(usage.inputTokens);
   const totalProcessedTokens = Math.max(inputTokens, normalizeTokenCount(usage.totalProcessedTokens ?? inputTokens));
-  const cachedInputTokens = normalizeTokenCount(usage.cachedInputTokens);
+  const cachedInputTokens = Math.min(inputTokens, normalizeTokenCount(usage.cachedInputTokens));
   return createEmptyTokenUsageTotals({
     inputTokens,
     outputTokens: Math.max(0, totalProcessedTokens - inputTokens),
     cachedInputTokens,
     totalProcessedTokens,
-    totalTokensIncludingCached: totalProcessedTokens + cachedInputTokens,
+    totalTokensIncludingCached: totalProcessedTokens,
     events: 1,
     updatedAt: usage.updatedAt
   });
 }
 
-export function normalizeTokenCount(value: number | undefined) {
-  return Number.isFinite(value) && value && value > 0 ? Math.floor(value) : 0;
-}
-
-export function createEmptyTokenUsageTotals(overrides: Partial<TokenUsageTotals> = {}): TokenUsageTotals {
-  return {
-    inputTokens: 0,
-    outputTokens: 0,
-    cachedInputTokens: 0,
-    totalProcessedTokens: 0,
-    totalTokensIncludingCached: 0,
-    events: 0,
-    ...overrides
-  };
-}
-
-export function addTokenUsageTotals(left: TokenUsageTotals, right: TokenUsageTotals): TokenUsageTotals {
-  return createEmptyTokenUsageTotals({
-    inputTokens: left.inputTokens + right.inputTokens,
-    outputTokens: left.outputTokens + right.outputTokens,
-    cachedInputTokens: left.cachedInputTokens + right.cachedInputTokens,
-    totalProcessedTokens: left.totalProcessedTokens + right.totalProcessedTokens,
-    totalTokensIncludingCached: left.totalTokensIncludingCached + right.totalTokensIncludingCached,
-    events: left.events + right.events,
-    updatedAt: [left.updatedAt, right.updatedAt].filter(Boolean).sort().at(-1)
-  });
-}
-
 export function emitTerminalShellsUpdatedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; shells: TerminalShell[] }
 ) {
   emitControlEvent(connections, {
@@ -143,7 +123,7 @@ export function emitTerminalShellsUpdatedToAll(
 }
 
 export function emitTerminalSessionsUpdatedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; sessions: TerminalSession[]; preferences: TerminalPreferences; layout?: TerminalPaneLayout }
 ) {
   emitControlEvent(connections, {
@@ -158,7 +138,7 @@ export function emitTerminalSessionsUpdatedToAll(
 }
 
 export function emitTerminalHistoryListedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; scope: TerminalHistoryScope; sessions: TerminalSession[] }
 ) {
   emitControlEvent(connections, {
@@ -172,7 +152,7 @@ export function emitTerminalHistoryListedToAll(
 }
 
 export function emitTerminalSessionCreatedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; session: TerminalSession }
 ) {
   emitControlEvent(connections, {
@@ -185,7 +165,7 @@ export function emitTerminalSessionCreatedToAll(
 }
 
 export function emitTerminalSessionUpdatedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; session: TerminalSession }
 ) {
   emitControlEvent(connections, {
@@ -198,7 +178,7 @@ export function emitTerminalSessionUpdatedToAll(
 }
 
 export function emitTerminalSessionExitedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; session: TerminalSession }
 ) {
   emitControlEvent(connections, {
@@ -226,7 +206,7 @@ export function emitTerminalAttachReadyToClient(
 }
 
 export function emitTerminalPreferencesSavedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; preferences: TerminalPreferences; layout?: TerminalPaneLayout }
 ) {
   emitControlEvent(connections, {
@@ -240,7 +220,7 @@ export function emitTerminalPreferencesSavedToAll(
 }
 
 export function emitCliSessionStartedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; projectId: ProjectId; threadId: string; session: CliSession }
 ) {
   emitControlEvent(connections, { type: "cli-session.started", requestId: input.requestId,
@@ -248,7 +228,7 @@ export function emitCliSessionStartedToAll(
 }
 
 export function emitCliSessionUpdatedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; projectId: ProjectId; threadId: string; session: CliSession }
 ) {
   emitControlEvent(connections, { type: "cli-session.updated", requestId: input.requestId,
@@ -272,7 +252,7 @@ export function emitCliSessionAttachReadyToClient(
 }
 
 export function emitCliSessionExitedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   input: { requestId: string; projectId: ProjectId; threadId: string; session: CliSession }
 ) {
   emitControlEvent(connections, { type: "cli-session.exited", requestId: input.requestId,
@@ -280,7 +260,7 @@ export function emitCliSessionExitedToAll(
 }
 
 export function emitExecutionControlUpdatedToAll(
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
+  connections: import("./events").ControlEventConnections,
   requestId: string,
   executionControl: ReturnType<WorkspaceRepository["getExecutionControlState"]>
 ) {

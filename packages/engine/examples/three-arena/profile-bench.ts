@@ -1,7 +1,8 @@
+import { required } from "./bench/profile-fields.ts";
+import { isRecord } from "@hyperfocus/utilities/records";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { spawn, type ChildProcess } from "node:child_process";
-import net from "node:net";
+import { spawnBackgroundProcess, terminateProcessTree } from "@hyperfocus/desktop-runtime/process";
 import path from "node:path";
 
 type Scenario = {
@@ -78,7 +79,7 @@ try {
   console.log(JSON.stringify(profile, null, 2));
   if (results.some((result) => result.error !== undefined)) process.exitCode = 1;
 } finally {
-  await stopProcess(server);
+  await terminateProcessTree({ process: server });
 }
 
 function selectedScenarios(options: ProfileOptions): Scenario[] {
@@ -174,9 +175,7 @@ async function readJson(file: string): Promise<UnknownRecord> {
   return requiredRecord(value, `JSON object in ${file}`);
 }
 
-function isRecord(value: unknown): value is UnknownRecord {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+
 
 function recordFrom(value: UnknownRecord): UnknownRecord {
   return Object.fromEntries(Object.entries(value));
@@ -217,22 +216,25 @@ function existsJson(file: string) {
 }
 
 async function startServer(port: number) {
-  const server = spawn(process.execPath, ["run", "./server.ts"], {
+  const server = spawnBackgroundProcess({ cmd: [process.execPath, "run", "./server.ts"],
     cwd: process.cwd(),
     env: { ...process.env, PORT: String(port) },
-    stdio: ["ignore", "pipe", "pipe"]
+    stdout: "ignore", stderr: "pipe"
   });
-  const stderr: string[] = [];
-  let spawnError: Error | undefined;
-  server.once("error", (error) => {
-    spawnError = error;
-  });
-  server.stderr?.on("data", (chunk) => stderr.push(String(chunk)));
-  await waitForHttp(`http://127.0.0.1:${port}/client.html`, 15_000, () => {
-    if (spawnError) throw spawnError;
-    if (server.exitCode !== null) throw new Error(`server exited early: ${stderr.join("")}`);
-  });
-  return server;
+  let stderr = "";
+  const decoder = new TextDecoder();
+  void (async () => {
+    if (server.stderr) for await (const chunk of server.stderr) stderr = (stderr + decoder.decode(chunk)).slice(-8_000);
+  })().catch(() => undefined);
+  try {
+    await waitForHttp(`http://127.0.0.1:${port}/client.html`, 15_000, () => {
+      if (server.exitCode !== null) throw new Error(`server exited early: ${stderr}`);
+    });
+    return server;
+  } catch (error) {
+    await terminateProcessTree({ process: server });
+    throw error;
+  }
 }
 
 async function waitForHttp(url: string, timeoutMs: number, tick: () => void) {
@@ -240,7 +242,7 @@ async function waitForHttp(url: string, timeoutMs: number, tick: () => void) {
   while (Date.now() - started < timeoutMs) {
     tick();
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
       if (response.ok) return;
     } catch {
       // Server is still starting.
@@ -251,52 +253,23 @@ async function waitForHttp(url: string, timeoutMs: number, tick: () => void) {
 }
 
 async function runCommand(label: string, command: string[]) {
-  const [executable, ...args] = command;
-  const proc = spawn(executable, args, { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"] });
-  const stdout: string[] = [];
-  const stderr: string[] = [];
-  proc.stdout?.on("data", (chunk) => stdout.push(String(chunk)));
-  proc.stderr?.on("data", (chunk) => stderr.push(String(chunk)));
-  const code = await new Promise<number | null>((resolve, reject) => {
-    proc.once("exit", resolve);
-    proc.once("error", reject);
-  });
-  if (code !== 0) {
-    throw new Error(`${label} failed with exit ${code}\n${stdout.join("")}\n${stderr.join("")}`);
+  const proc = spawnBackgroundProcess({ cmd: command, cwd: process.cwd(), timeout: 600000 });
+  try {
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited
+    ]);
+    if (code !== 0) throw new Error(`${label} failed with exit ${code}\n${stdout}\n${stderr}`);
+  } finally {
+    await terminateProcessTree({ process: proc });
   }
-}
-
-async function stopProcess(proc: ChildProcess) {
-  if (!proc.pid) return;
-  if (proc.exitCode !== null || proc.signalCode !== null) return;
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const killer = spawn("taskkill", ["/PID", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
-      killer.once("exit", () => resolve());
-      killer.once("error", () => resolve());
-    });
-    return;
-  }
-  const exited = new Promise<void>((resolve) => {
-    proc.once("exit", () => resolve());
-    proc.once("error", () => resolve());
-  });
-  if (!proc.kill()) return;
-  await exited;
 }
 
 async function findOpenPort() {
-  return await new Promise<number>((resolve, reject) => {
-    const server = net.createServer();
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(() => {
-        if (typeof address === "object" && address?.port) resolve(address.port);
-        else reject(new Error("Could not allocate port"));
-      });
-    });
-  });
+  const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("probe") });
+  const port = probe.port;
+  probe.stop(true);
+  if (!port) throw new Error("Could not allocate port");
+  return port;
 }
 
 function parseArgs(argv: string[]): ProfileOptions {
@@ -330,11 +303,7 @@ function parseArgs(argv: string[]): ProfileOptions {
   return options;
 }
 
-function required(argv: string[], index: number, flag: string) {
-  const value = argv[index];
-  if (!value) throw new Error(`${flag} requires a value`);
-  return value;
-}
+
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import type { PiAgentPromptRequest } from "../pi-agent-adapter";
+import { buildGitRepositoryPromptContext } from "../git-context";
 import { createCodexSdkAdapter, testExports } from "./codex-sdk-adapter";
 
 type FakeThreadRun = {
@@ -123,6 +124,7 @@ describe("codex sdk adapter", () => {
   });
 
   test("maps reasoning, web search, and network into sdk thread options", async () => {
+    let clientOptions: unknown;
     const thread = createFakeThread([
       {
         events: [
@@ -134,7 +136,8 @@ describe("codex sdk adapter", () => {
     const client = createFakeCodexClient(thread);
     const adapter = createCodexSdkAdapter({
       executablePath: "C:\\codex\\codex.exe",
-      createClient() {
+      createClient(options) {
+        clientOptions = options;
         return client;
       }
     });
@@ -151,12 +154,39 @@ describe("codex sdk adapter", () => {
       networkAccessEnabled: true,
       webSearchMode: "live"
     });
-    expect(String(thread.runCalls[0]?.input)).toContain("/fast");
+    expect(clientOptions).toMatchObject({ config: { service_tier: "fast", features: { fast_mode: true } } });
+    expect(String(thread.runCalls[0]?.input)).not.toContain("/fast");
   });
 
-  test("builds codex command prelude for fast mode", () => {
-    expect(testExports.buildCodexCommandPrelude(createRequest({ fastMode: true }))).toContain("/fast");
+  test("keeps service controls out of the model prompt", () => {
+    expect(testExports.buildCodexCommandPrelude(createRequest({ fastMode: true }))).not.toContain("/fast");
     expect(testExports.buildCodexCommandPrelude(createRequest({ reasoningStrength: "extra-high" }))).toContain("Git repository state:");
+  });
+
+  test("explicit Fast off overrides inherited tier while omitted controls preserve provider defaults", async () => {
+    for (const fastMode of [false, undefined]) {
+      let clientOptions: { config?: unknown } | undefined;
+      const thread = createFakeThread([{ events: [{ type: "item.completed", item: { id: "done", type: "agent_message", text: "done" } }] }]);
+      const adapter = createCodexSdkAdapter({ executablePath: "codex.exe", createClient(options) {
+        clientOptions = options;
+        return createFakeCodexClient(thread);
+      } });
+      await adapter.runPrompt(createRequest({ fastMode }));
+      expect(clientOptions?.config).toEqual(fastMode === false ? { service_tier: "default" } : undefined);
+    }
+  });
+
+  test("sends identical Git guidance once while preserving fast mode and changed guidance", () => {
+    const cwd = process.cwd();
+    const context = buildGitRepositoryPromptContext(cwd);
+    const prompt = testExports.buildCodexPromptWithPrelude(createRequest({ cwd, prompt: `${context}\nBuild the product`, fastMode: true }));
+    expect(prompt.split(context)).toHaveLength(2);
+    expect(prompt).not.toContain("/fast");
+    expect(prompt).toContain("Build the product");
+    expect(prompt).toContain(testExports.CODEX_TOOL_GUIDANCE);
+    const changed = testExports.buildCodexPromptWithPrelude(createRequest({ cwd, prompt: "Git repository state:\nA different state supplied by the caller." }));
+    expect(changed).toContain(context);
+    expect(changed).toContain("A different state supplied by the caller.");
   });
 
   test("streams appended agent-message deltas and tool events", async () => {

@@ -1,12 +1,13 @@
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { readHyperfocusProjectPair } from "../src/project/filesystem.ts";
-import { createPlayableWorld } from "../src/project/runtime-world-2d.ts";
+import { createPlayableWorld } from "../src/project/runtime2d/runtime-world-2d.ts";
 import { migrateProject, type EditorProject } from "../src/project/editor.ts";
 import { buildPortableProject } from "./build-project.ts";
-import { createProjectStarter } from "../tooling/create-project.ts";
+import { verifyGameBuildReceiptFile } from "./project-build/receipt.ts";
+import { createProjectStarter } from "../tooling/create-project-runtime.ts";
 import { startProjectDevServer, type ProjectDevServer } from "./dev-project.ts";
 import { setProjectPlayerSpeed } from "./edit-project.ts";
 
@@ -21,6 +22,7 @@ export type BeginnerJourneyEvidence = {
   errorEvents: number;
   recoveredLastGoodBuild: boolean;
   releaseFileCount: 1;
+  releaseReceiptVerified: true;
   standaloneBytes: number;
   workspaceRemoved: boolean;
 };
@@ -88,7 +90,10 @@ export async function runBeginnerJourney(options: BeginnerJourneyOptions = {}): 
     dev = undefined;
     const build = await buildPortableProject(projectRoot);
     const releaseFiles = await filesBelow(join(projectRoot, "dist"));
-    if (releaseFiles.length !== 1 || !releaseFiles[0].endsWith(".html")) throw new Error(`Release build did not produce exactly one standalone HTML file: ${releaseFiles.join(", ")}`);
+    const expectedReleaseFiles = [basename(build.outputPath), basename(build.receiptPath)].sort();
+    if (!build.outputPath.endsWith(".html") || JSON.stringify(releaseFiles.sort()) !== JSON.stringify(expectedReleaseFiles)) throw new Error(`Release build must contain the standalone HTML and its receipt: ${releaseFiles.join(", ")}`);
+    const receipt = await verifyGameBuildReceiptFile({ artifactPath: build.outputPath });
+    if (!receipt.receiptMatches || !receipt.artifactMatches) throw new Error("Release build receipt does not identify the delivered standalone HTML.");
     const standalone = await readFile(build.outputPath, "utf8");
     if (!standalone.includes("hyperfocus-project-pair") || /<script\s+src=|<link\s+[^>]*href=/i.test(standalone)) throw new Error("Release output is not a self-contained portable standalone game.");
 
@@ -103,6 +108,7 @@ export async function runBeginnerJourney(options: BeginnerJourneyOptions = {}): 
       errorEvents,
       recoveredLastGoodBuild: true,
       releaseFileCount: 1,
+      releaseReceiptVerified: true,
       standaloneBytes: build.bytes,
     };
   } finally {

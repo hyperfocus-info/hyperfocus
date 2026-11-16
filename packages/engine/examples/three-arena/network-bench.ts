@@ -1,3 +1,6 @@
+import { normalizeSignedZero, requirePort, required } from "./bench/network-fields.ts";
+import { roundDecimal } from "@hyperfocus/utilities/math";
+import { isRecord } from "@hyperfocus/utilities/records";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { spawn } from "node:child_process";
@@ -120,7 +123,7 @@ function resetMeasurementWindow(stats: ClientStats) {
 
 function startServer(staticPort: number, wsPort: number) {
   const bunExe = process.execPath;
-  const child = spawn(bunExe, ["run", "./examples/three-arena/server.ts"], {
+  const child = spawn(bunExe, ["run", "./examples/three-arena/server.ts"], { windowsHide: true,
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -275,9 +278,7 @@ async function driveInputs(clients: BenchClient[], durationMs: number, inputHz: 
   }
 }
 
-function normalizeSignedZero(value: number) {
-  return value === 0 ? 0 : value;
-}
+
 
 function recordState(client: BenchClient, state: unknown, wireBytes: number) {
   const data = isRecord(state) ? state : {};
@@ -291,9 +292,7 @@ function recordState(client: BenchClient, state: unknown, wireBytes: number) {
   if (typeof data.time === "number") client.stats.latenciesMs.push(Math.max(0, Date.now() - data.time));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+
 
 function wireByteLength(data: unknown) {
   if (typeof data === "string") return Buffer.byteLength(data);
@@ -341,10 +340,7 @@ async function stopServer(server: ReturnType<typeof startServer> | undefined) {
   await exited;
 }
 
-function requirePort(port: number | undefined): number {
-  if (port === undefined) throw new Error("Benchmark server port was not allocated.");
-  return port;
-}
+
 
 function recordFrom(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -404,11 +400,7 @@ function parseArgs(argv: string[]): BenchOptions {
   return options;
 }
 
-function required(argv: string[], index: number, flag: string) {
-  const value = argv[index];
-  if (!value) throw new Error(`${flag} requires value`);
-  return value;
-}
+
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -420,6 +412,4 @@ function percentile(values: readonly number[], p: number) {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0;
 }
 
-function round(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
+function round(value: number) { return roundDecimal(value, 3); }

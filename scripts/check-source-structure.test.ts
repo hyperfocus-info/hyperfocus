@@ -22,6 +22,14 @@ const metadata: Omit<SourceStructureException, "maxLines"> = {
   removalTarget: "Remove after the domain modules land"
 };
 
+test("compiled Website archive entries do not mask neighboring authored source", () => {
+  const prefix = 'apps/engine-editor/website/examples/store/releases/v1/site/';
+  expect(getSourceLineLimit(`${prefix}main.js`)).toBeUndefined();
+  expect(getSourceLineLimit(`${prefix}custom.js`)).toBe(1000);
+  expect(getSourceLineLimit(`${prefix}railway-setup.ts`)).toBeUndefined();
+  expect(getSourceLineLimit(`${prefix}custom.ts`)).toBe(1000);
+});
+
 function exception(maxLines: number): SourceStructureException {
   return { maxLines, ...metadata };
 }

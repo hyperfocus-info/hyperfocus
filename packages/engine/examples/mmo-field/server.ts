@@ -6,10 +6,11 @@ const port = parseTcpPort(process.env.PORT, 8_788, "PORT");
 const staticFiles = createStaticFileHandler({
   root: import.meta.dir,
   index: "client.html",
-  allow: (path) => path === "client.html" || path === "dist/client.js",
+  allow: (path) => path === "client.html" || path === "dist/client.js" || /^brand\/[a-z0-9-]+\.(svg|png|ico|json|webmanifest)$/.test(path),
 });
 const server = createAuthoritativeServer({
   transport: "websocket",
+  hostname: process.env.HOST?.trim() || "127.0.0.1",
   port,
   devMode: true,
   rooms: [fieldRoom],

@@ -1,29 +1,26 @@
+import { detailStyles } from "./assistant-detail.styles";
+import { formatFailureCategory } from "./assistant-panel-model";
+import { useAssistantsPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
-import { For, Show } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
 import type { Assistant } from "@hyperfocus/ai-core/protocol";
+import * as stylex from "@stylexjs/stylex";
 import { RefreshCcw } from "lucide-solid";
+import { For,Show } from "solid-js";
 import { harnessStore } from "../../harness-store";
 import { formatShortTimestamp } from "../../lib/time-format";
-import { toProperCase } from "../../lib/utils";
 import { ActionButton } from "../action-button";
-import type { AssistantsPanelController } from "./assistant-panel-controller";
 import { assistantUtilityStyles } from "../assistants-panel.styles";
 import { FileLinkedText } from "../file-linked-text";
 import { Dialog } from "../primitives/dialog";
 
-function formatFailureCategory(value: string) {
-  return value.replace(/-/g, " ");
-}
 
-export function AssistantCircuitBreakerDialog(props: { controller: AssistantsPanelController }) {
+export function AssistantCircuitBreakerDialog() {
+  const controller = useAssistantsPanel();
   const {
-    circuitBreakerAssistant, circuitBreakerFileLinks, circuitBreakerLogs,
-    circuitBreakerQuestions, circuitBreakerRuns, executionPauseReason,
-    executionPaused, openCircuitBreakerJobs, retryCircuitBreaker,
-    selectedCircuitBreakerAssistantId, setSelectedCircuitBreakerAssistantId,
-    variant,
-  } = props.controller;
+    circuitBreakerAssistant, circuitBreakerFileLinks, executionPauseReason, executionPaused,
+    openCircuitBreakerJobs, retryCircuitBreaker, selectedCircuitBreakerAssistantId,
+    setSelectedCircuitBreakerAssistantId,
+  } = controller;
   return (
     <Show when={selectedCircuitBreakerAssistantId()}>
       <Dialog
@@ -96,12 +93,12 @@ export function AssistantCircuitBreakerDialog(props: { controller: AssistantsPan
               class={
                 stylex.attrs(
                   assistantUtilityStyles.flex,
-                  assistantUtilityStyles.flexCol,
+                  assistantUtilityStyles.flexCol, detailStyles.readable,
                   assistantUtilityStyles.gap4,
                 ).class
               }
             >
-          <AssistantRecoverySummary assistant={assistant} />
+
               <section
                 class={
                   stylex.attrs(
@@ -145,9 +142,10 @@ export function AssistantCircuitBreakerDialog(props: { controller: AssistantsPan
                   />
                 </div>
               </section>
-        <AssistantRecoveryLogs controller={props.controller} />
-        <AssistantRecoveryRuns controller={props.controller} />
-        <AssistantRecoveryQuestions controller={props.controller} />
+              <details {...stylex.attrs(detailStyles.disclosure)}><summary {...stylex.attrs(detailStyles.disclosureTrigger)}>Assistant state</summary><AssistantRecoverySummary assistant={assistant} /></details>
+        <AssistantRecoveryLogs />
+        <AssistantRecoveryRuns />
+        <AssistantRecoveryQuestions />
             </div>
           )}
         </Show>
@@ -166,7 +164,7 @@ function AssistantRecoverySummary(props: { assistant: () => Assistant }) {
                         assistantUtilityStyles.gap2,
                         assistantUtilityStyles.text0675,
                         assistantUtilityStyles.textMuted,
-                        assistantUtilityStyles.mdGridCols2,
+                        detailStyles.columns,
                       ).class
                     }
                   >
@@ -252,8 +250,9 @@ function AssistantRecoverySummary(props: { assistant: () => Assistant }) {
   );
 }
 
-function AssistantRecoveryLogs(props: { controller: AssistantsPanelController }) {
-  const { circuitBreakerFileLinks, circuitBreakerLogs } = props.controller;
+function AssistantRecoveryLogs() {
+  const controller = useAssistantsPanel();
+  const { circuitBreakerFileLinks, circuitBreakerLogs } = controller;
   return (
     <section
                     class={
@@ -359,8 +358,9 @@ function AssistantRecoveryLogs(props: { controller: AssistantsPanelController })
   );
 }
 
-function AssistantRecoveryRuns(props: { controller: AssistantsPanelController }) {
-  const { circuitBreakerFileLinks, circuitBreakerRuns } = props.controller;
+function AssistantRecoveryRuns() {
+  const controller = useAssistantsPanel();
+  const { circuitBreakerFileLinks, circuitBreakerRuns } = controller;
   return (
     <section
                     class={
@@ -478,8 +478,9 @@ function AssistantRecoveryRuns(props: { controller: AssistantsPanelController })
   );
 }
 
-function AssistantRecoveryQuestions(props: { controller: AssistantsPanelController }) {
-  const { circuitBreakerFileLinks, circuitBreakerQuestions } = props.controller;
+function AssistantRecoveryQuestions() {
+  const controller = useAssistantsPanel();
+  const { circuitBreakerFileLinks, circuitBreakerQuestions } = controller;
   return (
     <section
                     class={

@@ -1,3 +1,4 @@
+import { formatPercent as formatPercentPoints } from "@hyperfocus/utilities/text";
 import { PERF_FLAGS } from "./environment.ts";
 import { runtimeCallback } from "./runtime-ports.ts";
 const advanceSelectedClassLevel = runtimeCallback("progressionData", "advanceSelectedClassLevel");
@@ -395,9 +396,7 @@ export function percentDelta(multiplier: number): string {
   return `${Math.max(1, Math.round((multiplier - 1) * 100))}%`;
 }
 
-export function formatPercentPoints(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
+export { formatPercent as formatPercentPoints } from "@hyperfocus/utilities/text";
 
 export function formatLevel(level: number): string {
   const numerals = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"];

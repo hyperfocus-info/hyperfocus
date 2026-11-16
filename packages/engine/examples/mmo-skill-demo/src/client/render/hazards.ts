@@ -1,3 +1,4 @@
+import { clamp01 } from "@hyperfocus/utilities/math";
 import { renderablePathCommand, renderableRecord, renderRecord, type PathCommand, type PooledRenderCommand, type Renderable, type RenderFramePool } from "@hyperfocus/engine/render";
 import { type HazardEntity } from "../../shared-contracts.ts";
 
@@ -47,9 +48,7 @@ let activeRenderPool: RenderFramePool | undefined;
 const timingScratch: HazardTimingState = { armed: false, warning: 0, lifeT: 0 };
 const lineMetricsScratch = { dx: 1, dy: 0, px: 0, py: 1, length: 1 };
 
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
+
 
 function timingFor(hazard: HazardEntity, timing?: HazardRenderTiming): HazardTimingState {
   if (!timing) {

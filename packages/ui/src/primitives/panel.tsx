@@ -3,14 +3,18 @@ import { Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { tokens } from "../theme/tokens.stylex";
 import { sharedStyles } from "../theme/styles";
+import { typography } from "../theme/typography";
 
-type HeadingElement = "h2" | "h3" | "h4";
+type HeadingElement = "h1" | "h2" | "h3" | "h4";
 
 export type PanelSurfaceProps = JSX.HTMLAttributes<HTMLDivElement>;
 
 export type PanelHeaderProps = Omit<JSX.HTMLAttributes<HTMLElement>, "title"> & {
   title: JSX.Element;
   description?: JSX.Element;
+  context?: JSX.Element;
+  icon?: JSX.Element;
+  variant?: "panel" | "view";
   actions?: JSX.Element;
   headingAs?: HeadingElement;
 };
@@ -45,27 +49,32 @@ const styles = stylex.create({
     flexBasis: "auto",
     flexGrow: 0,
     flexShrink: 0,
+    flexWrap: "wrap",
     justifyContent: "space-between",
     borderBottomColor: tokens.border,
     borderBottomStyle: "solid",
     borderBottomWidth: "1px",
     minHeight: "2.75rem",
   },
-  headerCopy: { gap: tokens.space1, display: "grid", minWidth: 0, },
+  viewHeader: { gap: tokens.space3, paddingInline: 0, alignItems: "center", marginBlockEnd: tokens.space4, paddingBlockEnd: tokens.space3, paddingBlockStart: 0, },
+  viewTitle: { fontFamily: "var(--hf-font-heading, var(--hf-font-ui))", fontSize: tokens.fontPage, fontWeight: 550, letterSpacing: "-0.025em", lineHeight: 1.25, },
+  context: { margin: 0, color: tokens.muted, fontSize: tokens.fontCaption, lineHeight: 1.5, },
+  titleRow: { gap: tokens.space3, alignItems: "center", display: "flex", minWidth: 0, },
+  viewIcon: { alignItems: "center", color: tokens.accentStrong, display: "inline-flex", flexShrink: 0, },
+  headerCopy: { gap: tokens.space1,
+ display: "grid",
+ flexBasis: '10rem',
+ flexGrow: '1',
+ flexShrink: '1',
+ overflowWrap: "anywhere",
+ minWidth: 0, },
   heading: {
     margin: 0,
     color: tokens.foreground,
-    fontFamily: tokens.fontUi,
-    fontSize: "0.88rem",
-    fontWeight: 700,
-    lineHeight: 1.25,
   },
   description: {
     margin: 0,
     color: tokens.muted,
-    fontFamily: tokens.fontUi,
-    fontSize: "0.75rem",
-    lineHeight: 1.4,
   },
   actions: {
     gap: tokens.space1,
@@ -74,6 +83,9 @@ const styles = stylex.create({
     flexBasis: "auto",
     flexGrow: 0,
     flexShrink: 0,
+    flexWrap: "wrap",
+    maxWidth: "100%",
+    minWidth: 0,
   },
   section: {
     padding: tokens.space3,
@@ -91,11 +103,7 @@ const styles = stylex.create({
   sectionHeading: {
     margin: 0,
     color: tokens.foreground,
-    fontFamily: tokens.fontUi,
-    fontSize: "0.75rem",
-    fontWeight: 700,
-    letterSpacing: "0.03em",
-    lineHeight: 1.3,
+    overflowWrap: "anywhere",
   },
   empty: {
     padding: tokens.space4,
@@ -104,17 +112,14 @@ const styles = stylex.create({
     color: tokens.foreground,
     display: "grid",
     justifyItems: "center",
+    overflowWrap: "anywhere",
     textAlign: "center",
-    minHeight: "8rem",
+    minWidth: 0,
   },
   emptyIcon: { color: tokens.muted, fontSize: "1.5rem", lineHeight: 1 },
-  emptyTitle: { fontFamily: tokens.fontUi, fontSize: "0.85rem", lineHeight: 1.3 },
   emptyDescription: {
     margin: 0,
     color: tokens.muted,
-    fontFamily: tokens.fontUi,
-    fontSize: "0.78rem",
-    lineHeight: 1.5,
     maxWidth: "32rem",
   },
   emptyActions: { gap: tokens.space2, alignItems: "center", display: "flex", flexWrap: "wrap", justifyContent: "center", },
@@ -135,17 +140,19 @@ export function PanelSurface(props: PanelSurfaceProps) {
 }
 
 export function PanelHeader(props: PanelHeaderProps) {
-  const [local, rest] = splitProps(props, ["title", "description", "actions", "headingAs", "children", "class"]);
+  const [local, rest] = splitProps(props, ["title", "description", "context", "icon", "variant", "actions", "headingAs", "children", "class"]);
   return (
     <header
       {...rest}
-      {...stylex.attrs(styles.header)}
+      {...stylex.attrs(styles.header, local.variant === "view" && styles.viewHeader)}
       classList={{ [local.class ?? ""]: Boolean(local.class) }}
       data-panel-header=""
+      data-view-header={local.variant === "view" ? "" : undefined}
     >
       <div {...stylex.attrs(styles.headerCopy)}>
-        <Dynamic component={local.headingAs ?? "h2"} {...stylex.attrs(styles.heading)}>{local.title}</Dynamic>
-        <Show when={local.description}><p {...stylex.attrs(styles.description)}>{local.description}</p></Show>
+        <Show when={local.context}><p {...stylex.attrs(styles.context)}>{local.context}</p></Show>
+        <div {...stylex.attrs(styles.titleRow)}><Show when={local.icon}><span {...stylex.attrs(styles.viewIcon)} aria-hidden="true">{local.icon}</span></Show><Dynamic component={local.headingAs ?? "h2"} {...stylex.attrs(typography.section, styles.heading, local.variant === "view" && styles.viewTitle)}>{local.title}</Dynamic></div>
+        <Show when={local.description}><p {...stylex.attrs(typography.caption, styles.description)}>{local.description}</p></Show>
         {local.children}
       </div>
       <Show when={local.actions}><div {...stylex.attrs(styles.actions)}>{local.actions}</div></Show>
@@ -165,7 +172,7 @@ export function PanelSection(props: PanelSectionProps) {
       <Show when={local.heading || local.actions}>
         <div {...stylex.attrs(styles.sectionHeader)}>
           <Show when={local.heading}>
-            <Dynamic component={local.headingAs ?? "h3"} {...stylex.attrs(styles.sectionHeading)}>{local.heading}</Dynamic>
+            <Dynamic component={local.headingAs ?? "h3"} {...stylex.attrs(typography.emphasis, styles.sectionHeading)}>{local.heading}</Dynamic>
           </Show>
           <Show when={local.actions}><div {...stylex.attrs(styles.actions)}>{local.actions}</div></Show>
         </div>
@@ -185,8 +192,8 @@ export function EmptyState(props: EmptyStateProps) {
       data-empty-state=""
     >
       <Show when={local.icon}><div {...stylex.attrs(styles.emptyIcon)} aria-hidden="true">{local.icon}</div></Show>
-      <strong {...stylex.attrs(styles.emptyTitle)}>{local.title}</strong>
-      <Show when={local.description}><p {...stylex.attrs(styles.emptyDescription)}>{local.description}</p></Show>
+      <strong {...stylex.attrs(typography.emphasis)}>{local.title}</strong>
+      <Show when={local.description}><p {...stylex.attrs(typography.body, styles.emptyDescription)}>{local.description}</p></Show>
       {local.children}
       <Show when={local.actions}><div {...stylex.attrs(styles.emptyActions)}>{local.actions}</div></Show>
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createWasmMemoryArena } from "./module-memory-arena";
+import { createWasmMemoryArena } from "./module-memory-arena.ts";
 
 describe("WASM module memory arena", () => {
   test("leases bounded memory without exposing views beyond the lease", () => {
@@ -47,10 +47,59 @@ describe("WASM module memory arena", () => {
     first.release();
     const second = arena.lease(70_000);
 
-    expect(second).toBe(first);
+    expect(second).not.toBe(first);
     expect(second.capacityBytes).toBe(70_000);
     expect(second.epoch).toBeGreaterThan(initialEpoch);
     second.release();
+  });
+
+  test("released identities cannot read, write or release a subsequent lease", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const arena = createWasmMemoryArena({ memory, allocate: () => 64, fixedCapacityBytes: 16 });
+    const first = arena.lease(4);
+    first.release();
+    const second = arena.lease(4);
+    second.writeFloat32(0, [42], 1);
+    expect(() => first.writeFloat32(0, [99], 1)).toThrow("released");
+    expect(() => first.readFloat32(0, [0], 1)).toThrow("released");
+    expect(() => first.readUint8(0, [0], 1)).toThrow("released");
+    expect(() => first.epoch).toThrow("released");
+    first.release();
+    expect(arena.leased).toBe(true);
+    const out = [0];
+    second.readFloat32(0, out, 1);
+    expect(out).toEqual([42]);
+    second.release();
+    second.release();
+    expect(arena.leased).toBe(false);
+  });
+
+  test("active reads and writes refresh views after unrelated memory growth", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const arena = createWasmMemoryArena({ memory, allocate: () => 64, fixedCapacityBytes: 16 });
+    const lease = arena.lease(16);
+    lease.writeFloat32(0, [42], 1);
+    const initialEpoch = lease.epoch;
+    memory.grow(1);
+    const typed = new Float32Array(1), plain = [0];
+    lease.readFloat32(0, typed, 1);
+    lease.readFloat32(0, plain, 1);
+    expect([...typed]).toEqual([42]);
+    expect(plain).toEqual([42]);
+    expect(lease.epoch).toBeGreaterThan(initialEpoch);
+    memory.grow(1);
+    lease.writeFloat32(0, new Float32Array([7]), 1);
+    memory.grow(1);
+    lease.writeFloat32(4, [9], 1);
+    expect([...new Float32Array(memory.buffer, 64, 2)]).toEqual([7, 9]);
+    new Uint8Array(memory.buffer)[72] = 123;
+    memory.grow(1);
+    const mask = new Uint8Array(1);
+    lease.readUint8(8, mask, 1);
+    lease.readUint8(8, plain, 1);
+    expect([...mask]).toEqual([123]);
+    expect(plain).toEqual([123]);
+    lease.release();
   });
 
   test("bounds geometric growth before invoking the module allocator", () => {

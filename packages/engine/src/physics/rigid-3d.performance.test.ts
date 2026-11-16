@@ -23,9 +23,9 @@ test("controlled 1,000-body rigid-world performance gate", () => {
       z: z * 0.75,
     });
   }
-  for (let warmup = 0; warmup < 5; warmup += 1) world.step(1 / 60);
+  for (let warmup = 0; warmup < 5; warmup += 1) world.step(0.016666666666666666);
   const started = performance.now();
-  for (let step = 0; step < 30; step += 1) world.step(1 / 60);
+  for (let step = 0; step < 30; step += 1) world.step(0.016666666666666666);
   const elapsedMs = performance.now() - started;
   expect(world.diagnostics.bodies).toBe(1_000);
   expect(world.diagnostics.candidateOverflows).toBe(0);

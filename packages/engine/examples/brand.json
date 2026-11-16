@@ -1,0 +1,10 @@
+{
+  "name": "Drawing demo",
+  "description": "Explore interactive drawing primitives.",
+  "branding": {
+    "mark": "grid",
+    "color": "#38bdf8",
+    "background": "#15131c"
+  },
+  "social": {}
+}

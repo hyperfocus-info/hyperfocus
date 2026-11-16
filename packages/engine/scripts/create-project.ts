@@ -1,4 +1,4 @@
-import { runProjectCli } from "../tooling/create-project.ts";
+import { runProjectCli } from "../tooling/create-project-runtime.ts";
 
 try {
   process.exitCode = await runProjectCli(process.argv.slice(2));

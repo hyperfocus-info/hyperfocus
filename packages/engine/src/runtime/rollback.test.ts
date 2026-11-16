@@ -1,6 +1,20 @@
 import { expect, test } from "bun:test";
 import { createInputBuffer, createRollbackLoop } from "./rollback.ts";
 
+test.each([0, false, '', undefined, null])('rollback restores a present falsy snapshot: %p', initial => {
+  let state: unknown = initial;
+  const restored: unknown[] = [];
+  const loop = createRollbackLoop<number, unknown>({ peerIds: ['local', 'remote'], localPeerId: 'local',
+    defaultInput: 0, getLocalInput: () => 1, getState: () => state,
+    setState(value) { restored.push(value); state = value; },
+    update(inputs) { state = { before: state, result: inputs.local + inputs.remote }; } });
+  loop.tick();
+  loop.receiveInput('remote', 0, 1);
+  expect(restored).toEqual([initial]);
+  expect(state).toEqual({ before: initial, result: 2 });
+  expect(loop.frame()).toBe(1);
+});
+
 test("input buffer predicts missing frames and replaces late inputs", () => {
   const buffer = createInputBuffer<number>(4);
 

@@ -1,5 +1,28 @@
 import type { MeshGeometry3D, RenderCommandBuffer3D, TextureResource3D } from "../3d-scene.ts";
 
+/** Caller owns the texture after upload succeeds; failed setup retains no GPU resource. */
+export function createFallbackTexture3D(gl: WebGL2RenderingContext): WebGLTexture {
+  const texture = gl.createTexture();
+  if (!texture) throw new Error("WebGL2 failed to allocate the fallback white texture.");
+  try {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    return texture;
+  } catch (error) {
+    gl.deleteTexture(texture);
+    throw error;
+  }
+}
+
+export function uploadInstanceMatrices3D(gl: WebGL2RenderingContext, buffer: WebGLBuffer, commands: RenderCommandBuffer3D): number {
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  if (commands.instanceCount > 0) gl.bufferSubData(gl.ARRAY_BUFFER, 0, commands.instanceMatrices, 0, commands.instanceCount * 16);
+  return commands.instanceCount * 16 * Float32Array.BYTES_PER_ELEMENT;
+}
+
 export interface WebGl2FrameStats3D {
   drawCalls: number;
   instances: number;
@@ -11,12 +34,14 @@ export interface WebGl2FrameStats3D {
   textureBindings: number;
   ambientLightsUsed: number;
   directionalLightsUsed: number;
+  pointLightsUsed: number;
   unsupportedLights: number;
   paletteUploads: number;
   paletteMatrices: number;
   skinnedDrawCalls: number;
   skinnedInstances: number;
   shadowDrawCalls: number;
+  outlineDrawCalls: number;
   uploadedBytes: number;
   width: number;
   height: number;
@@ -29,16 +54,19 @@ export interface WebGl2FrameStats3D {
 export function createWebGl2FrameStats3D(): WebGl2FrameStats3D {
   return {
     drawCalls: 0, instances: 0, triangles: 0, lines: 0, meshUploads: 0, materialBindings: 0,
-    textureUploads: 0, textureBindings: 0, ambientLightsUsed: 0, directionalLightsUsed: 0, unsupportedLights: 0, uploadedBytes: 0,
-    paletteUploads: 0, paletteMatrices: 0, skinnedDrawCalls: 0, skinnedInstances: 0, shadowDrawCalls: 0,
+    textureUploads: 0, textureBindings: 0, ambientLightsUsed: 0, directionalLightsUsed: 0, pointLightsUsed: 0, unsupportedLights: 0, uploadedBytes: 0,
+    paletteUploads: 0, paletteMatrices: 0, skinnedDrawCalls: 0, skinnedInstances: 0, shadowDrawCalls: 0, outlineDrawCalls: 0,
     width: 0, height: 0, pixelRatio: 1, contextGeneration: 0, contextLost: false, skipped: false,
   };
 }
 
 export interface MeshGpuRecord3D {
+  /** Matrix pointers belong to this VAO; the instance buffer lives for the same GPU generation. */
+  firstInstance?: number;
   source: MeshGeometry3D;
   vao: WebGLVertexArrayObject;
   positionBuffer: WebGLBuffer;
+  edgeBuffer?: WebGLBuffer;
   indexBuffer?: WebGLBuffer;
   normalBuffer?: WebGLBuffer;
   uvBuffer?: WebGLBuffer;
@@ -61,28 +89,56 @@ export interface TextureGpuRecord3D {
 export interface MainGpuResources3D {
   program: WebGLProgram;
   instanceBuffer: WebGLBuffer;
+  appearanceBuffer?: WebGLBuffer;
+  appearanceBytes?: number;
+  instanceAppearanceEnabled: WebGLUniformLocation;
   fallbackTexture: WebGLTexture;
   viewProjection: WebGLUniformLocation;
   baseColor: WebGLUniformLocation;
   emissive: WebGLUniformLocation;
   metallic: WebGLUniformLocation;
   roughness: WebGLUniformLocation;
+  uvTransform: WebGLUniformLocation;
+  uvRotation: WebGLUniformLocation;
+  shaderStyle: WebGLUniformLocation;
+  cutaway: WebGLUniformLocation;
+  toonBands: WebGLUniformLocation;
+  toonShadowColor: WebGLUniformLocation;
+  toonRimColor: WebGLUniformLocation;
+  toonRimStrength: WebGLUniformLocation;
+  outlinePass: WebGLUniformLocation;
+  outlineWidth: WebGLUniformLocation;
+  outlineColor: WebGLUniformLocation;
   alphaCutoff: WebGLUniformLocation;
   useTexture: WebGLUniformLocation;
   lit: WebGLUniformLocation;
   ambientColor: WebGLUniformLocation;
-  directionalDirection: WebGLUniformLocation;
-  directionalColor: WebGLUniformLocation;
+  directionalDirection0: WebGLUniformLocation;
+  directionalColor0: WebGLUniformLocation;
+  directionalDirection1: WebGLUniformLocation;
+  directionalColor1: WebGLUniformLocation;
+  directionalCount: WebGLUniformLocation;
+  pointCount: WebGLUniformLocation;
+  pointPositions: WebGLUniformLocation;
+  pointColors: WebGLUniformLocation;
   cameraPosition: WebGLUniformLocation;
+  baseColorTexture: WebGLUniformLocation;
   skinningEnabled: WebGLUniformLocation;
   jointPalette: WebGLUniformLocation;
   morphWeights: WebGLUniformLocation;
   shadowEnabled: WebGLUniformLocation;
   shadowViewProjection: WebGLUniformLocation;
   shadowBias: WebGLUniformLocation;
+  shadowMap: WebGLUniformLocation;
+  metallicRoughnessTexture: WebGLUniformLocation;
+  normalTexture: WebGLUniformLocation;
+  occlusionTexture: WebGLUniformLocation;
+  emissiveTexture: WebGLUniformLocation;
+  textureMapFlags: WebGLUniformLocation;
 }
 
 export interface ShadowGpuResources3D {
+  opacity: WebGLUniformLocation;
   program: WebGLProgram;
   framebuffer: WebGLFramebuffer;
   texture: WebGLTexture;

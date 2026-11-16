@@ -1,14 +1,11 @@
-import type { ComposerReasoningStrength, ProviderBrand } from "@hyperfocus/ai-core/protocol";
+import type { ComposerReasoningStrength,ProviderBrand } from "@hyperfocus/ai-core/protocol";
+import { clampLowerFirst,isFiniteNumber } from "@hyperfocus/utilities/math";
+export { parseBoundedInteger as parseBoundedIntegerStorageValue, parseBoundedDecimal as parseBoundedDecimalStorageValue } from "@hyperfocus/utilities/math";
+export { parseBooleanText as parseBooleanStorageValue } from "@hyperfocus/utilities/text";
 
 export const EXPERIENCE_MODE_STORAGE_KEY = "pi-harness:experience-mode:v1";
 
 export type HarnessExperienceMode = "simple" | "advanced";
-
-export function parseBooleanStorageValue(value: string | null) {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return undefined;
-}
 
 export function parseProviderBrandStorageValue(value: string | null): ProviderBrand | undefined {
   return value === "gpt" || value === "gemini" || value === "claude" ? value : undefined;
@@ -24,4 +21,8 @@ export function isComposerReasoningStrength(value: unknown): value is ComposerRe
 
 export function parseReasoningStrengthStorageValue(value: string | null): ComposerReasoningStrength | undefined {
   return isComposerReasoningStrength(value) ? value : undefined;
+}
+
+export function clampPanelSize(value: unknown, fallback: number) {
+  return isFiniteNumber(value) ? clampLowerFirst(value, 0.75, 5) : fallback;
 }

@@ -87,7 +87,8 @@ async function packageLauncherTarget(target: LauncherTarget) {
     );
   }
 
-  await copyLauncherRuntimeAssets(repoRoot, targetDir);
+  await copyLauncherRuntimeAssets(repoRoot, targetDir, { platform: target.includes("windows") ? "win32" : target.includes("darwin") ? "darwin" : "linux",
+    arch: target.endsWith("arm64") ? "arm64" : "x64" });
   console.log(`[package:launcher] ${target} -> ${path.relative(repoRoot, binaryPath)}`);
 }
 

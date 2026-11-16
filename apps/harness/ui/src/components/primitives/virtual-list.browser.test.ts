@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess, terminateProcessTree } from "@hyperfocus/desktop-runtime/process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -66,18 +67,19 @@ async function buildFixture() {
 }
 
 async function runBrowserCheck(baseUrl: string) {
-  const proc = Bun.spawn({
-    cmd: ["node", runnerPath],
+  const proc = spawnBackgroundProcess({
+    cmd: [process.execPath, runnerPath],
     cwd: repoRoot,
     env: { ...process.env, VIRTUAL_LIST_BROWSER_URL: baseUrl },
     stdout: "pipe",
     stderr: "pipe"
   });
   const completed = Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 45_000));
-  const result = await Promise.race([completed, timeout]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), 45_000); });
+  const result = await Promise.race([completed, timeout]).finally(() => clearTimeout(timer));
   if (result === "timeout") {
-    proc.kill();
+    await terminateProcessTree({ process: proc });
     await proc.exited.catch(() => undefined);
     throw new Error("VirtualList browser runner timed out after 45000ms");
   }

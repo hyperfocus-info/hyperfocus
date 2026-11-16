@@ -7,9 +7,6 @@ export function createLocalPreferencesSnapshot(
   overrides: LocalPreferencesState = {},
 ): LocalPreferencesState {
   return {
-    openAiApiKey: state.openAiApiKeyDraft.trim() || undefined,
-    googleApiKey: state.googleApiKeyDraft.trim() || undefined,
-    anthropicApiKey: state.anthropicApiKeyDraft.trim() || undefined,
     providerBrand: state.providerBrand,
     debugEnabled: state.debugEnabled,
     tracePanelDefaultOpen: state.tracePanelDefaultOpen,

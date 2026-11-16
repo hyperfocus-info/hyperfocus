@@ -82,7 +82,7 @@ export function createServerClock(options: ServerClockOptions = {}): ServerClock
     for (let index = 0; index < ticksToRun; index += 1) {
       tick += 1;
       lastDriftMs = accumulator;
-      enqueue({ dt: 1 / tickRate, now: time, driftMs: lastDriftMs, tick });
+      if (options.onTick) enqueue({ dt: 1 / tickRate, now: time, driftMs: lastDriftMs, tick });
     }
     return ticksToRun;
   }

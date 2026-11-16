@@ -9,7 +9,8 @@ workflow and context-loading rules.
 - Keep the harness local-first.
 - Prefer explicit typed contracts over ad hoc strings.
 - Keep websocket command handling behind a narrow typed bridge.
-- Preserve plan-first execution and verification flow.
+- Preserve the product's selected planning/execution mode and verification contract;
+  this is runtime behavior, not a separate approval requirement for contributors.
 - Persist workspace, project, thread, and chat history locally unless repo docs explicitly change strategy.
 
 ## Naming

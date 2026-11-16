@@ -46,6 +46,17 @@ createUiTest("ExecutionLog", () => {
     expect(screen.getByText(longMessage)).not.toBeNull();
     expect(screen.getByText("Full detail body")).not.toBeNull();
     expect(screen.getByText(/README.md/)).not.toBeNull();
+    expect(screen.getByText("Structured event data").closest("details")?.open).toBe(false);
+    expect(screen.getByRole("button", { name: "Copy execution log details" })).not.toBeNull();
+  });
+
+  it("copies the complete evidence when the producer supplies no explicit copy payload", async () => {
+    const copied: string[] = [];
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (value: string) => { copied.push(value); } } });
+    render(() => <ExecutionLog entries={entries} selectedEntryId="entry-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy execution log details" }));
+    await Promise.resolve();
+    expect(copied).toEqual([`${longMessage}\n\nFull detail body\n\n${JSON.stringify({ file: "README.md" }, null, 2)}`]);
   });
 
   it("renders plain details without markdown truncation and copies full detail text", async () => {

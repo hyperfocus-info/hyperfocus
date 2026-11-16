@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -15,9 +16,7 @@ type IndependentProjectFixture = {
   assets: Array<{ id: string; size: number; sha256: string }>;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function parseProjectFixture(text: string): IndependentProjectFixture {
   const value: unknown = JSON.parse(text);

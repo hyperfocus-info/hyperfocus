@@ -1,4 +1,3 @@
-import type { HarnessConnection } from "../core/contracts";
 import { emitThreadMessageAppended, findLatestNonMilestoneAssistantMessage, getThreadSessionState } from "../workspace/project-events";
 import type { WorkspaceRepository } from "../../workspace-repository";
 import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
@@ -41,7 +40,7 @@ export function findLastMessageIndex(messages: ChatMessage[], predicate: (messag
 }
 
 export function appendSystemStatus(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -66,7 +65,7 @@ export function appendSystemStatus(
 }
 
 export function appendComposerControlStatus(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,

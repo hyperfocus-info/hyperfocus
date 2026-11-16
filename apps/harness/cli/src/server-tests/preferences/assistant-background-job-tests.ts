@@ -10,8 +10,108 @@ import { createSocket, openProject, waitForEvent } from "../support/server-test-
 import type { ServerSuiteFixture } from "../support/server-suite-fixture";
 import type { ServerTestRegistrar } from "../support/server-test-sharding";
 export function registerAssistantBackgroundJobTests(serverTest: ServerTestRegistrar, fixture: ServerSuiteFixture) {
+    registerAssistantOutcomeTests(serverTest, fixture);
     registerAssistantExecutionTests(serverTest, fixture);
     registerAssistantLifecycleTests(serverTest, fixture);
+}
+
+function registerAssistantOutcomeTests(serverTest: ServerTestRegistrar, fixture: ServerSuiteFixture) {
+    serverTest("background prerequisites persist verified progress and block dependent execution on failure", async () => {
+        const { repository, projectRoot, adapter } = fixture;
+        await Bun.write(`${projectRoot}/prereq-ok.ts`, "process.exit(0);");
+        await Bun.write(`${projectRoot}/prereq-fail.ts`, "process.exit(7);");
+        let prerequisiteCalls = 0;
+        let dependentCalls = 0;
+        await fixture.restart({ adapter: { ...adapter, async runPrompt(request) {
+            if (request.kind !== "planner") { prerequisiteCalls++; return { text: "Setup complete." }; }
+            return { text: JSON.stringify({ type: "ready", summary: "Run after setup", difficultyScore: 20,
+                executionModelId: "openai/gpt-5.4", usesSubagents: false, subtasks: [], finalExecutionBrief: "Run after setup",
+                prerequisites: ["ok", "fail"].map((id) => ({ id, title: id, instruction: `Prepare ${id}`,
+                    reason: "Required setup", owner: "main", status: "pending", requiredForTaskIds: [],
+                    verificationCommands: [`bun prereq-${id}.ts`] })) }) };
+        }, async startExecution(request) { dependentCalls++; return adapter.startExecution(request); } } });
+        const socket = createSocket(fixture.port);
+        await waitForEvent(socket, "connection.ready");
+        const projectId = (await openProject(socket, projectRoot)).payload.project.id;
+        const now = new Date().toISOString();
+        const jobId = crypto.randomUUID();
+        repository.saveBackgroundJob({ id: jobId, projectId, automationThreadId: crypto.randomUUID(),
+            kind: "ai-routine", name: "Prerequisite guard", status: "enabled", riskLevel: "safe",
+            definition: { kind: "ai-routine", prompt: "Run after verified setup.", modeId: "implement" },
+            schedule: { type: "one-off", runAt: now, sourceText: "now" }, scheduleInput: "now",
+            nextRunAt: now, createdAt: now, updatedAt: now });
+        const failed = waitForEvent(socket, "background-job-run.updated", (event) =>
+            event.payload.run.jobId === jobId && event.payload.run.status === "failed", 10000);
+        socket.send(JSON.stringify({ type: "background-job.run-now", requestId: "prerequisite-guard", payload: { projectId, jobId } }));
+        const run = (await failed).payload.run;
+        expect(run.failureMessage).toContain("exit 7");
+        expect(prerequisiteCalls).toBe(2);
+        expect(dependentCalls).toBe(0);
+        expect(repository.getRun(projectId, run.linkedAgentRunId!)?.plan?.prerequisites.map((entry) => entry.status))
+            .toEqual(["completed", "pending"]);
+        socket.close();
+    }, 60000);
+    for (const scenario of ["runtime failure", "unresolved planner batch", "unanswered assistant question"] as const) {
+        serverTest(`assistant background ${scenario} never becomes successful from question policy`, async () => {
+            const { repository, projectRoot, adapter } = fixture;
+            let plannerCalls = 0;
+            const choices = ["Continue", "Wait", "Review"].map((label, index) => ({
+                id: `choice-${index}`, label, description: label, answerText: label, recommended: index === 0
+            }));
+            await fixture.restart({ adapter: { ...adapter, async runPrompt(request) {
+                if (request.kind !== "planner") return adapter.runPrompt(request);
+                plannerCalls++;
+                if (scenario === "runtime failure") throw new Error("Connection refused. Is the service running?");
+                return { text: JSON.stringify({ type: "question", summary: "Need input", questions: [
+                    { id: "target", prompt: "Which project should I inspect?", choices, required: true },
+                    ...(scenario === "unresolved planner batch"
+                        ? [{ id: "destructive", prompt: "Should I delete production data?", choices, required: true }] : [])
+                ] }) };
+            } } });
+            const socket = createSocket(fixture.port);
+            await waitForEvent(socket, "connection.ready");
+            const projectId = (await openProject(socket, projectRoot)).payload.project.id;
+            const now = new Date().toISOString();
+            const assistantId = crypto.randomUUID();
+            const jobId = crypto.randomUUID();
+            const questionId = crypto.randomUUID();
+            repository.saveAssistant({ id: assistantId, name: "Outcome guard", scope: "project", projectId,
+                personalityPrompt: "Be concise.", jobPrompt: "Inspect requested work.", agentId: "pi",
+                runState: "active", bootstrapState: "completed", failureStreakCount: 0,
+                circuitBreakerState: "closed", unreadQuestionCount: 0, createdAt: now, updatedAt: now });
+            if (scenario === "unanswered assistant question") repository.saveAssistantQuestion({ id: questionId,
+                assistantId, prompt: "Which project should I inspect?", status: "deferred", askedAt: now });
+            repository.saveBackgroundJob({ id: jobId, projectId, assistantId, automationThreadId: crypto.randomUUID(),
+                kind: "ai-routine", name: "Outcome guard", status: "enabled", riskLevel: "safe",
+                definition: { kind: "ai-routine", prompt: "Inspect requested work.", modeId: "implement" },
+                schedule: { type: "one-off", runAt: now, sourceText: "now" }, scheduleInput: "now",
+                nextRunAt: now, createdAt: now, updatedAt: now });
+            const status = scenario === "runtime failure" ? "failed" : "awaiting-user-input";
+            const notification = waitForEvent(socket, "notifications.updated", (event) => event.payload.notifications.items.some(
+                (item: NotificationInboxItem) => item.kind === "background-run-status" && item.jobId === jobId &&
+                    item.title === (status === "failed" ? "Background task failed" : "Background task needs input")), 10000);
+            socket.send(JSON.stringify({ type: "background-job.run-now", requestId: "outcome-guard", payload: { projectId, jobId } }));
+            await notification;
+            const run = repository.loadBackgroundJobsState().runs.find((entry) => entry.jobId === jobId);
+            expect(run?.status).toBe(status);
+            expect(run?.events.some((event) => event.stage === "done")).toBe(false);
+            if (scenario === "runtime failure") {
+                expect(run?.failureMessage).toContain("Connection refused");
+                expect(repository.getAssistant(assistantId)?.failureStreakCount).toBe(1);
+            } else {
+                expect(run?.linkedAgentRunId).toBeDefined();
+                const linked = repository.getRun(projectId, run!.linkedAgentRunId!);
+                expect(linked?.questions.filter((question) => question.status === "deferred"))
+                    .toHaveLength(scenario === "unresolved planner batch" ? 2 : 1);
+                expect(plannerCalls).toBe(1);
+                if (scenario === "unanswered assistant question") {
+                    expect(repository.getAssistantQuestion(questionId)?.status).toBe("deferred");
+                    expect(run?.events.some((event) => event.stage === "question-auto-resolved")).toBe(false);
+                }
+            }
+            socket.close();
+        }, 60000);
+    }
 }
 
 function registerAssistantExecutionTests(serverTest: ServerTestRegistrar, fixture: ServerSuiteFixture) {

@@ -1,0 +1,10 @@
+{
+  "name": "3D WebGL",
+  "description": "3D WebGL interactive example.",
+  "branding": {
+    "mark": "orbit",
+    "color": "#74b8ff",
+    "background": "#15131c"
+  },
+  "social": {}
+}

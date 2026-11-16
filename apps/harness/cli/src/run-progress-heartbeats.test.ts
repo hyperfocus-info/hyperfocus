@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import { formatRunProgressHeartbeat, shouldDelayDerivedProgressHeartbeat } from "./run-progress-heartbeats";
+import { describe,expect,test } from "bun:test";
+import { formatRunProgressHeartbeat,shouldDelayDerivedProgressHeartbeat } from "./run-progress-heartbeats";
+import { createSubtask } from "./test-support/fixtures/subagent-tasks";
 
 describe("run progress heartbeats", () => {
   test("cycles planning heartbeat copy so slow planner turns stay visibly alive", () => {
@@ -30,18 +31,3 @@ describe("run progress heartbeats", () => {
     expect(formatRunProgressHeartbeat(run, 2)).toBe("Subagents still running: 1/3 complete, 1 failed; active Patch code.");
   });
 });
-
-function createSubtask(
-  id: string,
-  title: string,
-  status: "pending" | "running" | "completed" | "failed"
-) {
-  return {
-    id,
-    title,
-    instruction: `Handle ${title}`,
-    status,
-    attemptCount: 1,
-    updatedAt: new Date().toISOString()
-  };
-}

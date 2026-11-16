@@ -112,7 +112,11 @@ function createCanvasResizeController(options: CanvasResizeControllerOptions) {
   let stableViewportFrames = 0;
   let parentResizeObserver: ResizeObserver | undefined;
 
-  function resize() {
+  function resize(dimensions?: { width?: number; height?: number }) {
+    const width = requirePositiveFinite(dimensions?.width ?? options.logicalWidth, "canvas width");
+    const height = requirePositiveFinite(dimensions?.height ?? options.logicalHeight, "canvas height");
+    options.logicalWidth = width;
+    options.logicalHeight = height;
     dpr = positiveDimension(window.devicePixelRatio);
     const viewport = viewportOf(options.parent);
     const backingWidth = Math.max(1, Math.round(options.logicalWidth * dpr));
@@ -183,6 +187,8 @@ function createCanvasResizeController(options: CanvasResizeControllerOptions) {
     destroy,
     observe,
     resize,
+    get width() { return options.logicalWidth; },
+    get height() { return options.logicalHeight; },
     get devicePixelRatio() {
       return dpr;
     }
@@ -332,8 +338,8 @@ export function init(options: InitOptions = {}) {
     context,
     ctx: context,
     contextType,
-    width: logicalWidth,
-    height: logicalHeight,
+    get width() { return resizeController.width; },
+    get height() { return resizeController.height; },
     resize,
     recoverContext,
     start,

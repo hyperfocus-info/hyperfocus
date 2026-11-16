@@ -31,15 +31,15 @@ case "run.resume": {
       assertGlobalExecutionNotPaused(repository);
       const projectId = command.payload.projectId;
       const project = runtime.getProject(projectId);
-      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project);
       assertActiveThread(project, command.payload.threadId);
       assertNoOtherWorkingRun(repository, runtime, projectId, command.payload.threadId, command.payload.runId);
       const activeRun = requirePersistedThreadRun(repository, projectId, command.payload.threadId, command.payload.runId);
+      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project, activeRun);
       if (!activeRun.resumable) {
         throw new Error("Run is not resumable");
       }
       await enforceExecutionPreflight(ws, command.requestId, runtime, repository, project, osAdapters);
-      const providerBrand = repository.getProviderBrand();
+      const providerBrand = activeRun.launchProfile?.providerBrand ?? repository.getProviderBrand();
       if (command.payload.guidanceText?.trim()) {
         const guidanceProject = repository.appendMessage(projectId, "user", command.payload.guidanceText, command.payload.threadId);
         runtime.upsertPersistedProject(guidanceProject);
@@ -74,8 +74,8 @@ case "run.resume": {
             abortSignal: abortController.signal,
             guidanceText: command.payload.guidanceText,
             subagentIds: command.payload.subagentIds,
-            reasoningStrength: command.payload.reasoningStrength,
-            fastMode: command.payload.fastMode,
+            reasoningStrength: command.payload.reasoningStrength ?? activeRun.launchProfile?.reasoningStrength,
+            fastMode: command.payload.fastMode ?? activeRun.launchProfile?.fastMode,
             derivedProgressHeartbeatMs,
             tokenUsageSession
           }
@@ -116,12 +116,12 @@ case "run.retry": {
       assertGlobalExecutionNotPaused(repository);
       const projectId = command.payload.projectId;
       const project = runtime.getProject(projectId);
-      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project);
       assertActiveThread(project, command.payload.threadId);
       assertProjectCanStartRetry(repository, runtime, projectId, command.payload.threadId, command.payload.runId);
       await enforceExecutionPreflight(ws, command.requestId, runtime, repository, project, osAdapters);
       const retryRun = requireRetryablePersistedRun(repository, projectId, command.payload.threadId, command.payload.runId);
-      const providerBrand = repository.getProviderBrand();
+      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project, retryRun);
+      const providerBrand = retryRun.launchProfile?.providerBrand ?? repository.getProviderBrand();
       const executionModelId = resolveExecutionModelIdForRuntime({
         runtime: agentRuntime,
         capability: agentRuntime.getCapability(),
@@ -144,7 +144,8 @@ case "run.retry": {
             retryRun.latestUserPrompt,
             retryRun.planningModelId ?? agentRuntime.getDefaultPlanningModelId(providerBrand),
             command.payload.threadId,
-            command.payload.runtimeBudget?.maxTurns ?? retryRun.runtimeBudget?.maxTurns
+            command.payload.runtimeBudget?.maxTurns ?? retryRun.runtimeBudget?.maxTurns,
+            { agentId: agentRuntime.id, providerBrand, reasoningStrength: command.payload.reasoningStrength ?? retryRun.launchProfile?.reasoningStrength, fastMode: command.payload.fastMode ?? retryRun.launchProfile?.fastMode }
           );
           const nextRunId = runProject.activeRun?.id;
           if (!nextRunId) {
@@ -164,8 +165,8 @@ case "run.retry": {
             providerBrand,
             debugEnabled,
             executionModelId,
-            reasoningStrength: command.payload.reasoningStrength,
-            fastMode: command.payload.fastMode,
+            reasoningStrength: command.payload.reasoningStrength ?? retryRun.launchProfile?.reasoningStrength,
+            fastMode: command.payload.fastMode ?? retryRun.launchProfile?.fastMode,
             abortSignal: abortController.signal,
             derivedProgressHeartbeatMs,
             tokenUsageSession
@@ -182,7 +183,8 @@ case "run.retry": {
             retryRun.latestUserPrompt,
             retryRun.planningModelId ?? agentRuntime.getDefaultPlanningModelId(providerBrand),
             command.payload.threadId,
-            command.payload.runtimeBudget?.maxTurns ?? retryRun.runtimeBudget?.maxTurns
+            command.payload.runtimeBudget?.maxTurns ?? retryRun.runtimeBudget?.maxTurns,
+            { agentId: agentRuntime.id, providerBrand, reasoningStrength: command.payload.reasoningStrength ?? retryRun.launchProfile?.reasoningStrength, fastMode: command.payload.fastMode ?? retryRun.launchProfile?.fastMode }
           );
           const nextRunId = runProject.activeRun?.id;
           if (!nextRunId) {
@@ -251,8 +253,8 @@ case "run.retry": {
               sourceRun: retryRun,
               targetTask,
               readyPlan,
-              reasoningStrength: command.payload.reasoningStrength,
-              fastMode: command.payload.fastMode,
+              reasoningStrength: command.payload.reasoningStrength ?? retryRun.launchProfile?.reasoningStrength,
+              fastMode: command.payload.fastMode ?? retryRun.launchProfile?.fastMode,
               abortSignal: abortController.signal,
               derivedProgressHeartbeatMs,
               tokenUsageSession

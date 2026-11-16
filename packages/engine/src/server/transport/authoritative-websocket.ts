@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { createBinaryProtocolParser, createProtocolMessage, encodeProtocolMessage, parseProtocolMessage, PROTOCOL_CONTROL_FRAME_MAX_BYTES, type BinaryInputPayloadOwnership, type BinaryPayloadCodec, type BinaryProtocolParser, type ProtocolMessage } from "../../protocol/messages.ts";
 import type { ServerAdmission } from "../runtime/server-admission.ts";
 import type { AuthoritativeServer, EngineServerWebSocket, JoinRoomOptions } from "../runtime/server-contract.ts";
@@ -5,10 +6,12 @@ import type { ServerReplication } from "../runtime/server-replication.ts";
 
 type AuthoritativeWebSocketOptions = {
   port: number;
+  hostname?: string;
   tickRate: number;
   inputCodec?: BinaryPayloadCodec;
   binaryInputPayloadOwnership?: BinaryInputPayloadOwnership;
   httpHandler?: (request: Request) => Response | undefined | Promise<Response | undefined>;
+  requestGuard?: (request: Request) => Response | undefined;
   now(): number;
   getStats: AuthoritativeServer["getStats"];
   joinRoom(options: JoinRoomOptions): ReturnType<AuthoritativeServer["joinRoom"]>;
@@ -23,9 +26,7 @@ function send(socket: EngineServerWebSocket<unknown>, message: ProtocolMessage) 
   if (status === 0) throw new Error("websocket message was dropped");
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function parseIncomingMessage(
   raw: string | ArrayBuffer | Uint8Array,
@@ -45,7 +46,16 @@ export function createAuthoritativeWebSocketServer(options: AuthoritativeWebSock
     : undefined;
   return Bun.serve<{ playerId?: string }>({
     port: options.port,
+    ...(options.hostname === undefined ? {} : { hostname: options.hostname }),
     async fetch(request, server) {
+      try {
+        const guarded: unknown = options.requestGuard?.(request);
+        if (guarded instanceof Response) return guarded;
+        if (guarded !== undefined) {
+          if (guarded instanceof Promise) void guarded.catch(() => undefined);
+          throw new Error('Invalid synchronous request guard result');
+        }
+      } catch { return new Response('Service unavailable', { status: 503 }); }
       const url = new URL(request.url);
       if (url.pathname === "/healthz") return new Response("ok");
       if (url.pathname === "/stats.json") return Response.json(options.getStats());
@@ -114,8 +124,8 @@ export function createAuthoritativeWebSocketServer(options: AuthoritativeWebSock
           }
         }
       },
-      async close(socket) {
-        await options.admission.closeConnection(socket);
+      async close(socket, code) {
+        await options.admission.closeConnection(socket, code);
       }
     }
   });

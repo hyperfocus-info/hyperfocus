@@ -10,8 +10,9 @@ import {
   statSync,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { $ } from "bun";
+import { runReleaseCommand } from "./smoke/run-command.ts";
 import { build, type BuildOptions } from "esbuild";
+import { buildAuthoringTools } from "./project-build/build-authoring.ts";
 import { emitPackageDeclarations } from "./build-types.ts";
 import { formatMissingPackageArtifactsMessage, getMissingPackageArtifacts } from "./package-artifacts.ts";
 
@@ -98,7 +99,9 @@ export function swapPackageArtifactDirectories(
   assertStagedArtifactDirectories(stagingRoot);
 
   const nonce = options.nonce ?? `${process.pid}-${Date.now()}`;
-  const backupRoot = assertDirectChild(packageRoot, `.package-build-backup-${nonce}`);
+  const localRoot = assertDirectChild(packageRoot, ".local");
+  mkdirSync(localRoot, { recursive: true });
+  const backupRoot = assertDirectChild(localRoot, `package-build-backup-${nonce}`);
   if (existsSync(backupRoot)) {
     throw new Error(`package build backup already exists: ${backupRoot}`);
   }
@@ -163,7 +166,7 @@ export function swapPackageArtifactDirectories(
 type BundleSpec = {
   entry: string;
   outfile: string;
-  options?: Pick<BuildOptions, "external" | "platform">;
+  options?: Pick<BuildOptions, "external" | "platform" | 'plugins'>;
 };
 
 async function buildBundles(stagingRoot: string) {
@@ -171,6 +174,8 @@ async function buildBundles(stagingRoot: string) {
     { entry: "src/core.ts", outfile: "dist/core.js" },
     { entry: "src/wasm/index.ts", outfile: "dist/wasm-runtime.js" },
     { entry: "src/experimental/index.ts", outfile: "dist/experimental.js" },
+    { entry: "src/experimental/simulation/mailbox.ts", outfile: "dist/experimental-simulation-mailbox.js" },
+    { entry: "src/physics/target-rays.ts", outfile: "dist/experimental-target-rays.js" },
     { entry: "src/net/index.ts", outfile: "dist/net.js" },
     { entry: "src/protocol/index.ts", outfile: "dist/protocol.js" },
     {
@@ -187,11 +192,15 @@ async function buildBundles(stagingRoot: string) {
     },
     { entry: "src/render/3d-core.ts", outfile: "dist/render-3d-core.js" },
     { entry: "src/render/3d-scene.ts", outfile: "dist/render-3d-scene.js" },
+    { entry: "src/render/materials/3d-presets.ts", outfile: "dist/render-3d-material-presets.js" },
     { entry: "src/render/3d-webgl2.ts", outfile: "dist/render-3d-webgl2.js" },
     { entry: "src/physics/3d.ts", outfile: "dist/physics-3d.js" },
     { entry: "src/physics/2d.ts", outfile: "dist/physics-2d.js" },
     { entry: "src/physics/rigid-3d.ts", outfile: "dist/physics-rigid-3d.js" },
+    { entry: "src/physics/ragdoll-3d.ts", outfile: "dist/physics-ragdoll-3d.js" },
+    { entry: "src/physics/physical-performance-3d.ts", outfile: "dist/physics-physical-performance-3d.js" },
     { entry: "src/motion/index.ts", outfile: "dist/motion.js" },
+    { entry: "src/motion/solvers/pose-safety.ts", outfile: "dist/motion-pose-safety.js" },
     {
       entry: "src/motion/three.ts",
       outfile: "dist/motion-three.js",
@@ -199,6 +208,10 @@ async function buildBundles(stagingRoot: string) {
     },
     { entry: "src/migrations/index.ts", outfile: "dist/migrations.js" },
     { entry: "src/project/index.ts", outfile: "dist/project.js" },
+    { entry: "src/project/metadata/index.ts", outfile: "dist/project-metadata.js" },
+    { entry: "src/project/delivery/index.ts", outfile: "dist/project-delivery.js", options: { plugins: [{ name: 'reuse-project-container', setup(api) {
+      api.onResolve({ filter: /index\.ts$/ }, args => resolve(args.resolveDir, args.path) === resolve(rootDir, 'src/project/index.ts') ? { path: './project.js', external: true } : undefined);
+    } }] } },
     { entry: "src/project/runtime-2d.ts", outfile: "dist/project-runtime-2d.js" },
     { entry: "src/project/runtime-timeline-2d.ts", outfile: "dist/project-runtime-timeline-2d.js" },
     { entry: "src/project/runtime-navigation-2d.ts", outfile: "dist/project-runtime-navigation-2d.js" },
@@ -208,6 +221,9 @@ async function buildBundles(stagingRoot: string) {
     { entry: "src/project/filesystem.ts", outfile: "dist/project-filesystem.js", options: { platform: "node" } },
     { entry: "src/project/neutral-export.ts", outfile: "dist/project-neutral-export.js" },
     { entry: "src/navigation/index.ts", outfile: "dist/navigation.js" },
+    { entry: 'src/combat/index.ts', outfile: 'dist/combat.js' },
+    { entry: 'src/combat/net/protocol.ts', outfile: 'dist/combat-net.js' },
+    { entry: 'src/progression/index.ts', outfile: 'dist/progression.js' },
     { entry: "src/content/index.ts", outfile: "dist/content.js" },
     { entry: "src/save/index.ts", outfile: "dist/save.js" },
     { entry: "src/save/browser.ts", outfile: "dist/save-browser.js" },
@@ -217,6 +233,7 @@ async function buildBundles(stagingRoot: string) {
     { entry: "src/ui/core.ts", outfile: "dist/ui-core.js" },
     { entry: "src/assets/loader.ts", outfile: "dist/assets/loader.js" },
     { entry: "src/assets/gltf-static.ts", outfile: "dist/assets/gltf-static.js" },
+    { entry: "src/assets/model-cooking.ts", outfile: "dist/assets/model-cooking.js" },
     { entry: "src/assets/gltf-skin-animation.ts", outfile: "dist/assets/gltf-skin-animation.js" },
     { entry: "src/assets/templates/index.ts", outfile: "dist/assets/templates.js" },
     {
@@ -302,10 +319,14 @@ async function buildWasm(stagingRoot: string) {
     join(rootDir, "wasm", "collision-kernel.wasm.d.ts"),
     join(stagedWasmDir, "collision-kernel.wasm.d.ts"),
   );
-  await $`bun run asc ./assembly/collision-kernel-scalar.ts --outFile ${join(stagedWasmDir, "collision-kernel.scalar.wasm")} --textFile ${join(stagedWasmDir, "collision-kernel.scalar.wat")} --runtime stub --exportRuntime -O3 --noAssert`.cwd(
-    rootDir,
-  );
-  await $`bun run asc ./assembly/collision-kernel.ts --outFile ${join(stagedWasmDir, "collision-kernel.simd.wasm")} --textFile ${join(stagedWasmDir, "collision-kernel.simd.wat")} --runtime stub --exportRuntime --enable simd -O3 --noAssert`.cwd(rootDir);
+  for (const variant of ["scalar", "simd"] as const) {
+    await runReleaseCommand({ cwd: rootDir, cmd: [process.execPath, "run", "asc",
+      `./assembly/collision-kernel${variant === "scalar" ? "-scalar" : ""}.ts`,
+      "--outFile", join(stagedWasmDir, `collision-kernel.${variant}.wasm`),
+      "--textFile", join(stagedWasmDir, `collision-kernel.${variant}.wat`),
+      "--runtime", "stub", "--exportRuntime", ...(variant === "simd" ? ["--enable", "simd"] : []), "-O3", "--noAssert",
+    ] });
+  }
   copyFileSync(join(stagedWasmDir, "collision-kernel.scalar.wasm"), join(stagedWasmDir, "collision-kernel.wasm"));
   copyFileSync(join(stagedWasmDir, "collision-kernel.scalar.wat"), join(stagedWasmDir, "collision-kernel.wat"));
 }
@@ -319,7 +340,9 @@ function assertCompleteStagedPackage(stagingRoot: string) {
 
 export async function buildPackage() {
   const nonce = `${process.pid}-${Date.now()}`;
-  const stagingRoot = assertDirectChild(rootDir, `.package-build-staging-${nonce}`);
+  const localRoot = assertDirectChild(rootDir, ".local");
+  mkdirSync(localRoot, { recursive: true });
+  const stagingRoot = assertDirectChild(localRoot, `package-build-staging-${nonce}`);
   mkdirSync(stagingRoot);
 
   try {
@@ -328,6 +351,7 @@ export async function buildPackage() {
     await emitPackageDeclarations(join(stagingRoot, "dist"));
     await buildWasm(stagingRoot);
     await buildBundles(stagingRoot);
+    await buildAuthoringTools({ packageRoot: rootDir, outputRoot: stagingRoot });
     assertCompleteStagedPackage(stagingRoot);
     swapPackageArtifactDirectories(rootDir, stagingRoot, { nonce });
   } finally {

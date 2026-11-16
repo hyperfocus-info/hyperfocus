@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 
 import {
-  CraftpixDownloadError,
+  checkCraftpixHealth,
+  createCraftpixDownloadError,
   DEFAULT_TIMEOUT,
   executeDownload,
 } from "./craftpix";
@@ -16,13 +17,14 @@ type Options = {
   overwrite: boolean;
   timeout: number;
   debug: boolean;
+  check: boolean;
 };
 
 function printUsage(): void {
   console.log(`Download a Craftpix asset with a Netscape-format browser cookie export.
 
 Usage:
-  bun .agents/skills/craftpix-download/scripts/download_asset.ts <source_url> [options]
+  bun "<skill>/scripts/download_asset.ts" <source_url> [options]
 
 Arguments:
   <source_url>            Craftpix product page URL or direct download URL
@@ -33,6 +35,7 @@ Options:
   --filename <name>       Optional output filename override
   --subitem <id>          Optional alternate package id
   --resolve-only          Print the resolved download URL without downloading
+  --check                 Probe page resolution and archive access without writing
   --overwrite             Replace an existing output file
   --timeout <seconds>     HTTP timeout in seconds (default: ${DEFAULT_TIMEOUT})
   --debug                 Log resolved cookie file path and parsed cookie names
@@ -50,6 +53,7 @@ function parseArgs(argv: string[]): Options {
     overwrite: false,
     timeout: DEFAULT_TIMEOUT,
     debug: false,
+    check: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -67,43 +71,47 @@ function parseArgs(argv: string[]): Options {
     switch (arg) {
       case "--output-dir":
         if (!next) {
-          throw new CraftpixDownloadError("--output-dir requires a value.");
+          throw createCraftpixDownloadError("--output-dir requires a value.");
         }
         options.outputDir = next;
         index += 1;
         break;
       case "--cookie-file":
         if (!next) {
-          throw new CraftpixDownloadError("--cookie-file requires a value.");
+          throw createCraftpixDownloadError("--cookie-file requires a value.");
         }
         options.cookieFile = next;
         index += 1;
         break;
       case "--filename":
         if (!next) {
-          throw new CraftpixDownloadError("--filename requires a value.");
+          throw createCraftpixDownloadError("--filename requires a value.");
         }
         options.filename = next;
         index += 1;
         break;
       case "--subitem":
         if (!next) {
-          throw new CraftpixDownloadError("--subitem requires a value.");
+          throw createCraftpixDownloadError("--subitem requires a value.");
         }
         options.subitem = next;
         index += 1;
         break;
       case "--timeout":
         if (!next) {
-          throw new CraftpixDownloadError("--timeout requires a value.");
+          throw createCraftpixDownloadError("--timeout requires a value.");
         }
         options.timeout = Number.parseInt(next, 10);
         if (!Number.isFinite(options.timeout) || options.timeout <= 0) {
-          throw new CraftpixDownloadError("--timeout must be a positive integer.");
+          throw createCraftpixDownloadError("--timeout must be a positive integer.");
         }
         index += 1;
         break;
       case "--resolve-only":
+        options.resolveOnly = true;
+        break;
+      case "--check":
+        options.check = true;
         options.resolveOnly = true;
         break;
       case "--overwrite":
@@ -113,15 +121,15 @@ function parseArgs(argv: string[]): Options {
         options.debug = true;
         break;
       default:
-        throw new CraftpixDownloadError(`Unknown argument: ${arg}`);
+        throw createCraftpixDownloadError(`Unknown argument: ${arg}`);
     }
   }
 
   if (positionals.length !== 1) {
-    throw new CraftpixDownloadError("Expected exactly one Craftpix source URL.");
+    throw createCraftpixDownloadError("Expected exactly one Craftpix source URL.");
   }
   if (!options.resolveOnly && !options.outputDir) {
-    throw new CraftpixDownloadError("--output-dir is required unless --resolve-only is set.");
+    throw createCraftpixDownloadError("--output-dir is required unless --resolve-only is set.");
   }
 
   return {
@@ -133,6 +141,11 @@ function parseArgs(argv: string[]): Options {
 async function main(): Promise<number> {
   try {
     const args = parseArgs(process.argv.slice(2));
+    if (args.check) {
+      const health = await checkCraftpixHealth(args);
+      console.log(JSON.stringify(health, null, 2));
+      return health.probe.status === "available" ? 0 : 2;
+    }
     const result = await executeDownload(args);
     console.log(args.resolveOnly ? result.resolved.downloadUrl : result.destination);
     return 0;

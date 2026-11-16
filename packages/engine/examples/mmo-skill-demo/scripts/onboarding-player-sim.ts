@@ -1,3 +1,6 @@
+import { formatPercent as pct } from "@hyperfocus/utilities/text";
+import { mean as avg } from "@hyperfocus/utilities/math";
+import { clamp01 as clamp } from "@hyperfocus/utilities/math";
 type ExperienceId = "beginner" | "intermediate" | "advanced";
 type KnowledgeId = "knows-route" | "curious-in-game" | "curious-out-of-game" | "ignorant-quit-risk";
 
@@ -208,17 +211,11 @@ const STRICT_ZERO_STAGES: Stage[] = [
   { id: "final-cut", band: "10m", label: "Final Cut", minutes: 10, baseClarity: 1, systemLoad: 0, routeAmbiguity: 0, actionNovelty: 1, repetition: 0, unlockSignal: 1 }
 ];
 
-function clamp(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
 
-function pct(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
 
-function avg(values: number[]) {
-  return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
-}
+
+
+
 
 function parseArgs() {
   const args = process.argv.slice(2);

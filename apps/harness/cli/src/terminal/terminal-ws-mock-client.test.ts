@@ -55,7 +55,7 @@ describe("terminal websocket mock client", () => {
       }
     });
 
-    const { server, port } = await startServerForTest({ port: 0, repository, adapter: createFakePiAgentAdapter() });
+    const { server, port } = await startServerForTest({ port: 0, repository, adapter: createFakePiAgentAdapter(), serverOnly: true });
     const client = createMockTerminalClient(port);
     try {
       await client.waitFor("connection.ready");

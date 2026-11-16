@@ -1,12 +1,13 @@
-import { For, Match, Show, Switch } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import { Bell, Bot, CheckCheck, CircleAlert, Download, LoaderCircle, SendHorizontal } from "lucide-solid";
 import type { NotificationInboxItem } from "@hyperfocus/ai-core/protocol";
+import * as stylex from "@stylexjs/stylex";
+import { Bell,Bot,CheckCheck,CircleAlert,Download,LoaderCircle,SendHorizontal } from "lucide-solid";
+import { For,Match,Show,Switch } from "solid-js";
 import { formatApprovalInvocationDescription } from "../../lib/tool-activity-format";
 import { ActionButton } from "../action-button";
 import { miscellaneousSurfaceStyles as styles } from "../miscellaneous-surfaces.styles";
 import { Popover } from "../primitives/popover";
-import type { NotificationInboxController } from "./contracts";
+import { requiresLauncherUpdate } from "./controller";
+import { useNotificationInbox } from "./panel-context";
 import { NotificationResponse } from "./response-forms";
 
 function notificationTitle(notification: NotificationInboxItem) {
@@ -21,6 +22,18 @@ function notificationTitle(notification: NotificationInboxItem) {
   }
 }
 
+function notificationLabel(notification: NotificationInboxItem) {
+  switch (notification.kind) {
+    case "planning-question":
+    case "planning-question-batch": return "Planning question";
+    case "assistant-question":
+    case "assistant-question-batch": return "Assistant question";
+    case "browser-approval": return "Approval needed";
+    case "cli-update": return "Runtime update";
+    case "background-run-status": return notification.severity === "error" ? "Run failed" : notification.severity === "warning" ? "Run warning" : "Run update";
+  }
+}
+
 function notificationSummary(notification: NotificationInboxItem) {
   switch (notification.kind) {
     case "background-run-status": return notification.summary;
@@ -30,7 +43,9 @@ function notificationSummary(notification: NotificationInboxItem) {
     case "assistant-question-batch": return notification.questions.map((question) => question.prompt).join(" ");
     case "browser-approval":
       return formatApprovalInvocationDescription(notification.label, notification.inputSummary);
-    case "cli-update": return `${notification.currentVersion} -> ${notification.latestVersion}. Click to update.`;
+    case "cli-update": return `${notification.currentVersion} -> ${notification.latestVersion}. ${requiresLauncherUpdate(notification)
+      ? "Download a new Harness release and restart with its launcher to update this bundled runtime."
+      : "Click to update."}`;
   }
 }
 
@@ -56,28 +71,28 @@ function NotificationKindIcon(props: { notification: NotificationInboxItem }) {
   );
 }
 
-function NotificationCard(props: {
-  notification: NotificationInboxItem;
-  controller: NotificationInboxController;
-}) {
+function NotificationCard(props: { notification: NotificationInboxItem; }) {
+  const controller = useNotificationInbox();
   return (
     <div
       {...stylex.attrs(styles.notificationCard)}
       onClick={(event) => {
         if (props.notification.kind === "background-run-status" && event.target === event.currentTarget) {
-          props.controller.openItem(props.notification);
+          controller.openItem(props.notification);
         }
       }}
     >
       <button
         type="button"
         {...stylex.attrs(styles.notificationButton)}
-        onClick={() => props.controller.openItem(props.notification)}
+        aria-expanded={props.notification.interactive ? controller.expandedId() === props.notification.id : undefined}
+        aria-controls={props.notification.interactive && controller.expandedId() === props.notification.id ? `notification-response-${props.notification.id}` : undefined}
+        onClick={() => controller.openItem(props.notification)}
       >
         <div {...stylex.attrs(styles.notificationCopy)}>
           <div {...stylex.attrs(styles.notificationMeta)}>
             <NotificationKindIcon notification={props.notification} />
-            <span>{props.notification.kind.replaceAll("-", " ")}</span>
+            <span>{notificationLabel(props.notification)}</span>
             <Show when={!props.notification.readAt}>
               <span {...stylex.attrs(styles.unreadPill)}>Unread</span>
             </Show>
@@ -88,50 +103,61 @@ function NotificationCard(props: {
           </Show>
         </div>
       </button>
-      <Show when={props.controller.expandedId() === props.notification.id && props.notification.interactive}>
-        <div {...stylex.attrs(styles.notificationExpansion)}>
-          <NotificationResponse notification={props.notification} controller={props.controller} />
+      <Show when={controller.expandedId() === props.notification.id && props.notification.interactive}>
+        <div id={`notification-response-${props.notification.id}`} {...stylex.attrs(styles.notificationExpansion)}>
+          <NotificationResponse notification={props.notification} />
         </div>
       </Show>
     </div>
   );
 }
 
-function InboxContent(props: { controller: NotificationInboxController }) {
+function InboxContent() {
+  const controller = useNotificationInbox();
   return (
     <div {...stylex.attrs(styles.inboxShell)}>
       <div {...stylex.attrs(styles.inboxHeader)}>
-        <div {...stylex.attrs(styles.notificationEyebrow)}>Notifications</div>
+        <div>
+          <div {...stylex.attrs(styles.notificationEyebrow)}>Notifications</div>
+          <div {...stylex.attrs(styles.notificationSummary)}>{controller.items().filter(item => item.interactive).length} awaiting a response</div>
+        </div>
         <ActionButton
           tooltip="Mark all passive notifications as read"
           icon={<CheckCheck {...stylex.attrs(styles.iconMd)} />}
-          size="icon"
+          size="sm"
           variant="ghost"
           ariaLabel="Mark all passive notifications as read"
-          onClick={props.controller.markAllRead}
-        />
+          onClick={controller.markAllRead}
+          disabled={!controller.items().some(item => !item.interactive && !item.readAt)}
+        >Mark updates read</ActionButton>
       </div>
       <div {...stylex.attrs(styles.inboxList)}>
         <Show
-          when={props.controller.items().length > 0}
-          fallback={<div {...stylex.attrs(styles.inboxEmpty)}>Inbox empty.</div>}
+          when={controller.items().length > 0}
+          fallback={<div {...stylex.attrs(styles.inboxEmpty)}>You're caught up. Questions and run updates will appear here.</div>}
         >
-          <For each={props.controller.items()}>
-            {(notification) => <NotificationCard notification={notification} controller={props.controller} />}
-          </For>
+          <For each={[true, false]}>{interactive => (
+            <Show when={controller.items().some(item => item.interactive === interactive)}>
+              <div {...stylex.attrs(styles.notificationMeta)}>{interactive ? "Needs your response" : "Run and runtime updates"}</div>
+              <For each={controller.items().filter(item => item.interactive === interactive)}>
+                {(notification) => <NotificationCard notification={notification} />}
+              </For>
+            </Show>
+          )}</For>
         </Show>
       </div>
     </div>
   );
 }
 
-export function NotificationInboxView(props: { controller: NotificationInboxController }) {
+export function NotificationInboxView() {
+  const controller = useNotificationInbox();
   return (
     <Popover
-      open={props.controller.open()}
-      onClose={props.controller.close}
+      open={controller.open()}
+      onClose={controller.close}
       contentClass={stylex.attrs(styles.popoverContent).class}
-      content={<InboxContent controller={props.controller} />}
+      content={<InboxContent />}
     >
       <ActionButton
         tooltip="Open notification inbox"
@@ -139,11 +165,11 @@ export function NotificationInboxView(props: { controller: NotificationInboxCont
         variant="secondary"
         size="icon"
         ariaLabel="Open notification inbox"
-        onClick={props.controller.toggle}
+        onClick={controller.toggle}
       />
-      <Show when={props.controller.unreadCount() > 0}>
+      <Show when={controller.unreadCount() > 0}>
         <div {...stylex.attrs(styles.unreadCount)}>
-          {props.controller.unreadCount() > 99 ? "99+" : props.controller.unreadCount()}
+          {controller.unreadCount() > 99 ? "99+" : controller.unreadCount()}
         </div>
       </Show>
     </Popover>

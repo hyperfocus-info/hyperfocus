@@ -4,10 +4,21 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHyperfocusProjectFiles } from "../src/project/index.ts";
-import { createStarterProject } from "../tooling/create-project.ts";
+import { createStarterProject } from "../tooling/create-project-runtime.ts";
 import { clampProjectDevDebounce, discoverProjectWatchFiles, projectDevCliHelp, startProjectDevServer } from "./dev-project.ts";
 
 describe("source-aware project dev command", () => {
+  test('an edit burst keeps only one pending rebuild and uses the actual bundle inputs', async () => {
+    const temporary = await mkdtemp(join(tmpdir(), 'hyperfocus-dev-coalescing-'));
+    let dev: Awaited<ReturnType<typeof startProjectDevServer>> | undefined;
+    try {
+      await writeCustomProject(temporary);
+      dev = await startProjectDevServer({ projectDirectory: temporary, port: 0, logger: { log() {}, error() {} } });
+      await Promise.all(Array.from({ length: 20 }, () => dev!.rebuild()));
+      expect(dev.status().buildNumber).toBe(3);
+      expect(dev.status().watchedFiles).toEqual(['.hyperfocus/assets.hfp', '.hyperfocus/project.json', 'src/behavior.ts', 'src/shared.ts']);
+    } finally { await dev?.stop();await rm(temporary, { recursive: true, force: true }); }
+  });
   test("discovers the exact pair and transitive authored source, not unrelated files", async () => {
     const temporary = await mkdtemp(join(tmpdir(), "hyperfocus-dev-discovery-"));
     const root = join(temporary, "game");

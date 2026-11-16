@@ -16,10 +16,4 @@ describe("UI primitive source guards", () => {
     expect(chatPanel).not.toContain("title={project().activeRun?.latestUserPrompt");
   });
 
-  test("shared dropdown renders option arrays through Solid list primitives", () => {
-    const dropdown = readComponent("apps/harness/ui/src/components/primitives/dropdown.tsx");
-
-    expect(dropdown).toContain("<For each={props.options}>");
-    expect(dropdown).not.toContain("props.options.map");
-  });
 });

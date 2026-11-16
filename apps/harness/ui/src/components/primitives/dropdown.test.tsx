@@ -1,6 +1,7 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
-import { render, screen } from "@solidjs/testing-library";
+import { fireEvent, render, screen } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import { Bot } from "lucide-solid";
 import { createUiTest } from "../../utils/tests/test-harness";
 import { clearBrowserStateForTests } from "../../utils/tests/store-test-utils";
@@ -43,5 +44,20 @@ createUiTest("DropdownControl", () => {
     ));
 
     expect(screen.queryByRole("button", { name: "Select provider" })).toBeNull();
+  });
+
+  it("updates the selected value through the shared descriptive choices", async () => {
+    const changes: string[] = [];
+    render(() => {
+      const [value, setValue] = createSignal("pi");
+      return <DropdownControl kind="select" ariaLabel="Select agent" icon={<Bot />} value={value()}
+        options={[{value:"pi",label:"Pi",description:"Provider runtime"},{value:"codex-cli",label:"Codex CLI",description:"Local authenticated runtime"}]}
+        onChange={next => { changes.push(next); setValue(next); }} />;
+    });
+    await fireEvent.click(screen.getByRole("button",{name:"Select agent"}));
+    await fireEvent.click(screen.getByRole("option",{name:/Codex CLI/}));
+    expect(changes).toEqual(["codex-cli"]);
+    expect(screen.getByRole("button",{name:"Select agent"}).textContent).toContain("Codex CLI");
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });

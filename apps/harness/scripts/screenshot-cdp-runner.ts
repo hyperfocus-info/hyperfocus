@@ -1,9 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { spawn, type ChildProcess } from "node:child_process";
-import net from "node:net";
+import { launchHeadlessBrowser } from "@hyperfocus/desktop-runtime/automation";
 
 type ScreenshotViewport = { name: string; width: number; height: number };
 type ScreenshotOptions = {
@@ -81,24 +79,6 @@ function parseScreenshotPayload(source: string): { baseUrl?: string; opts?: Scre
   return JSON.parse(source);
 }
 
-async function findOpenPort(): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = typeof address === "object" && address ? address.port : undefined;
-      server.close(() => {
-        if (port) {
-          resolve(port);
-        } else {
-          reject(new Error("could not allocate CDP port"));
-        }
-      });
-    });
-  });
-}
-
 function chromeCandidates() {
   if (process.env.CHROME_PATH) {
     return [process.env.CHROME_PATH];
@@ -122,96 +102,14 @@ function chromeCandidates() {
   return ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge"];
 }
 
-async function launchChrome(port: number, userDataDir: string): Promise<ChildProcess> {
-  const args = [
-    "--headless=new",
-    "--disable-gpu",
-    "--disable-dev-shm-usage",
-    "--no-first-run",
-    "--no-default-browser-check",
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${userDataDir}`,
-    "about:blank"
-  ];
-
-  const errors = [];
+async function launchChrome() {
+  const errors: string[] = [];
   for (const executable of chromeCandidates()) {
-    if (!executable) {
-      continue;
-    }
-    if (path.isAbsolute(executable) && !existsSync(executable)) {
-      continue;
-    }
-    let proc: ChildProcess | undefined;
-    try {
-      proc = spawn(executable, args, { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
-      const launched = proc;
-      await Promise.race([
-        waitForCdp(port, 10_000),
-        new Promise<never>((_, reject) => {
-          launched.once("error", reject);
-          launched.once("exit", (code) => reject(new Error(`Chrome exited early with code ${code}`)));
-        })
-      ]);
-      return launched;
-    } catch (error) {
-      errors.push(`${executable}: ${error instanceof Error ? error.message : String(error)}`);
-      await terminateProcessTree(proc);
-    }
+    if (!executable || path.isAbsolute(executable) && !existsSync(executable)) continue;
+    try { return await launchHeadlessBrowser({ executable, args: ["--disable-gpu"] }); }
+    catch (error) { errors.push(`${executable}: ${error instanceof Error ? error.message : String(error)}`); }
   }
-  throw new Error(`could not launch Chrome for CDP. Set CHROME_PATH. Tried:\n${errors.join("\n")}`);
-}
-
-async function terminateProcessTree(child?: ChildProcess) {
-  if (!child?.pid || child.exitCode !== null) {
-    return;
-  }
-
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve, reject) => {
-      const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
-        stdio: "ignore",
-        windowsHide: true
-      });
-      killer.once("error", reject);
-      killer.once("exit", () => resolve());
-    });
-  } else {
-    child.kill("SIGTERM");
-  }
-
-  const exited = await waitForProcessExit(child, 5_000);
-  if (!exited) {
-    child.kill("SIGKILL");
-    if (!(await waitForProcessExit(child, 2_000))) {
-      throw new Error(`process tree rooted at PID ${child.pid} did not exit`);
-    }
-  }
-}
-
-async function waitForProcessExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
-  if (child.exitCode !== null) {
-    return true;
-  }
-  return await Promise.race([
-    new Promise<boolean>((resolve) => child.once("exit", () => resolve(true))),
-    new Promise<boolean>((resolve) => setTimeout(() => resolve(child.exitCode !== null), timeoutMs))
-  ]);
-}
-
-async function waitForCdp(port: number, timeoutMs: number) {
-  const start = Date.now();
-  let lastError;
-  while (Date.now() - start < timeoutMs) {
-    try {
-      await CDP.Version({ port });
-      return;
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-  }
-  throw lastError ?? new Error("CDP endpoint did not become ready");
+  throw new Error(`Could not launch headless Chrome. Set CHROME_PATH. Tried:\n${errors.join("\n")}`);
 }
 
 async function waitForPageEvent(Page: CdpPageDomain, eventName: "domContentEventFired" | "loadEventFired", timeoutMs: number) {
@@ -260,12 +158,9 @@ async function captureOne(port: number, target: CdpTarget, viewport: ScreenshotV
   }
 }
 
-const port = await findOpenPort();
-const userDataDir = await mkdtemp(path.join(tmpdir(), "harness-screenshot-cdp-"));
-let chrome: ChildProcess | undefined;
-
+const chrome = await launchChrome();
+const { port } = chrome;
 try {
-  chrome = await launchChrome(port, userDataDir);
   const artifacts = [];
   for (const viewport of opts.viewports) {
     for (const route of opts.routes) {
@@ -290,6 +185,5 @@ try {
   }
   console.log(JSON.stringify({ artifacts }));
 } finally {
-  await terminateProcessTree(chrome);
-  await rm(userDataDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 125 });
+  await chrome.close();
 }

@@ -2,16 +2,46 @@
   "name": "@hyperfocus/desktop-runtime",
   "version": "0.0.1",
   "description": "Reusable deep-link, client-lease, and opt-in update primitives for browser-backed desktop apps.",
-  "license": "SEE LICENSE IN ../../LICENSE",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./dev-server": "./src/dev-server.ts",
+    "./dev-process": "./src/dev-process.ts",
+    "./process": "./src/process/index.ts",
+    "./filesystem": "./src/filesystem/remove-owned-directory.ts",
+    "./automation": "./src/automation/index.ts",
+    "./automation/guardian": "./src/automation/browser-guardian.ts",
+    "./automation/cdp-session": "./src/automation/cdp-session.ts",
+    "./automation/windows-inspection": "./src/automation/windows-inspection.ts",
+    "./automation/playwright": "./src/automation/playwright.ts",
+    "./automation/managed-server": "./src/automation/managed-server.ts"
   },
-  "files": ["src", "README.md"],
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@hyperfocus/utilities": "workspace:*",
+    "cross-spawn": "^7.0.6"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "playwright-core": "1.62.1"
+  },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm",
+    "build": "bun build ./src/index.ts ./src/dev-server.ts ./src/dev-process.ts ./src/process/index.ts ./src/automation/index.ts ./src/automation/browser-guardian.ts ./src/automation/windows-inspection.ts ./src/automation/cdp-session.ts ./src/automation/playwright.ts ./src/automation/managed-server.ts ./src/filesystem/remove-owned-directory.ts --root ./src --outdir ./dist --target bun --format esm",
     "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json",
     "test": "bun test"
+  },
+  "peerDependencies": {
+    "playwright-core": "^1.62.1"
+  },
+  "peerDependenciesMeta": {
+    "playwright-core": {
+      "optional": true
+    }
   }
 }

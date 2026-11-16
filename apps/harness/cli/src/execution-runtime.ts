@@ -1,19 +1,20 @@
-import type {
-  PiAgentAdapter,
-  PiAgentExecutionController,
-  PiAgentPromptRequest,
-  PiAgentPromptResult
-} from "./pi-agent-adapter";
-import type { ComposerReasoningStrength } from "@hyperfocus/ai-core/protocol";
 import {
-  createCapacityGovernor,
-  createCapacityLeaseRegistry,
-  type CapacityGovernor,
-  type CapacityGovernorOptions,
-  type CapacityLease,
-  type CapacityLeaseRegistry
+createCapacityGovernor,
+createCapacityLeaseRegistry,
+type CapacityGovernor,
+type CapacityGovernorOptions,
+type CapacityLease,
+type CapacityLeaseRegistry
 } from "@hyperfocus/ai-core/capacity-governor";
-import { decorateAgentRuntimeRegistry, type AgentRuntimeRegistry } from "./agent-runtimes/runtime-registry";
+import type { ComposerReasoningStrength } from "@hyperfocus/ai-core/protocol";
+import { decorateAgentRuntimeRegistry,type AgentRuntimeRegistry } from "./agent-runtimes/runtime-registry";
+import { providerForModel,providerKeys,readCapacity,readRateLimit,type ProviderKey } from "./execution/capacity-settings";
+import type {
+PiAgentAdapter,
+PiAgentExecutionController,
+PiAgentPromptRequest,
+PiAgentPromptResult
+} from "./pi-agent-adapter";
 
 export type ManagedExecutionKind = "planner" | "main" | "subagent" | "aggregator";
 
@@ -103,8 +104,8 @@ const providerRecoveryStates = new WeakMap<CapacityGovernor, {
   restoreCapacities: Map<string, number>;
 }>();
 let browserCapacityRegistry: CapacityLeaseRegistry | undefined;
-const providerKeys = ["openai", "google", "anthropic", "github", "other"] as const;
-type ProviderKey = (typeof providerKeys)[number];
+
+
 
 export function createHarnessCapacityGovernor(
   options: Partial<CapacityGovernorOptions> & {
@@ -196,6 +197,7 @@ export function getHarnessManagedAgentAdapter(
       const result = settleProviderResult(governor, request, controller.result, reservation, jitter, setTimer);
       return {
         result,
+        steer: controller.steer ? message => controller.steer!(message) : undefined,
         continueWithPrompt(prompt) {
           const continuation = { ...request, prompt: prompt ?? "continue" };
           return runProviderRequest(
@@ -265,7 +267,7 @@ async function settleProviderResult(
   }
 }
 
-function acquireProviderReservation(governor: CapacityGovernor, request: PiAgentPromptRequest) {
+async function acquireProviderReservation(governor: CapacityGovernor, request: PiAgentPromptRequest) {
   const provider = providerForModel(request.modelId);
   const snapshot = governor.snapshot();
   const providerResource = `provider.${provider}`;
@@ -276,11 +278,20 @@ function acquireProviderReservation(governor: CapacityGovernor, request: PiAgent
   if (tokenRate in snapshot.rateUsage) {
     rateCosts[tokenRate] = Math.min(estimatePromptTokens(request), snapshot.rateLimits[tokenRate].capacity);
   }
-  return governor.acquire({
+  const startedAt = performance.now();
+  request.onExecutionEvent?.({ type: "provider-capacity", state: "queued", provider, waitMs: 0 });
+  try {
+  const reservation = await governor.acquire({
     resources: { provider: 1, [providerResource]: 1 },
     ...(Object.keys(rateCosts).length ? { rateCosts } : {}),
     signal: request.abortSignal
   });
+  request.onExecutionEvent?.({ type: "provider-capacity", state: "acquired", provider, waitMs: performance.now() - startedAt });
+  return reservation;
+  } catch (error) {
+    request.onExecutionEvent?.({ type: "provider-capacity", state: "cancelled", provider, waitMs: performance.now() - startedAt });
+    throw error;
+  }
 }
 
 function coordinateProviderFailure(
@@ -369,35 +380,13 @@ export function classifyProviderCongestion(error: unknown): {
   return undefined;
 }
 
-function providerForModel(modelId: string): ProviderKey {
-  const prefix = modelId.split("/", 1)[0]?.toLowerCase();
-  if (prefix === "openai") return "openai";
-  if (prefix === "google") return "google";
-  if (prefix === "anthropic") return "anthropic";
-  if (prefix === "github" || prefix === "copilot") return "github";
-  return "other";
-}
 
 function estimatePromptTokens(request: PiAgentPromptRequest) {
   const cacheableChars = request.cacheableUserBlocks?.reduce((total, block) => total + block.text.length, 0) ?? 0;
   return Math.max(1, Math.ceil((request.prompt.length + cacheableChars) / 4) + (request.images?.length ?? 0) * 1_024);
 }
 
-function readCapacity(value: string | undefined, fallback: number, label: string) {
-  if (value === undefined || value === "") return fallback;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 4_096) {
-    throw new RangeError(`${label} must be an integer from 1 to 4096`);
-  }
-  return parsed;
-}
 
-function readRateLimit(value: string | undefined, fallback: number, label: string) {
-  if (value === undefined || value === "") return fallback;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new RangeError(`${label} must be a positive safe integer`);
-  return parsed;
-}
 
 function readOptionalRateLimit(value: string | undefined, label: string) {
   return value === undefined || value === "" ? undefined : readRateLimit(value, 1, label);

@@ -1,6 +1,6 @@
 const DEFAULT_LIMITS = {
   maxBuffers: 64,
-  maxBufferBytes: 256 * 1024 * 1024,
+  maxBufferBytes: 268435456,
   maxBufferViews: 100_000,
   maxAccessors: 100_000,
   maxNodes: 100_000,
@@ -12,12 +12,12 @@ const DEFAULT_LIMITS = {
   maxAnimations: 4_096,
   maxChannels: 100_000,
   maxKeyframes: 10_000_000,
-  maxOutputBytes: 512 * 1024 * 1024
+  maxOutputBytes: 536870912
 } as const;
 
 const HARD_LIMITS = {
   maxBuffers: 1_024,
-  maxBufferBytes: 1024 * 1024 * 1024,
+  maxBufferBytes: 1073741824,
   maxBufferViews: 1_000_000,
   maxAccessors: 1_000_000,
   maxNodes: 1_000_000,
@@ -29,7 +29,7 @@ const HARD_LIMITS = {
   maxAnimations: 65_535,
   maxChannels: 1_000_000,
   maxKeyframes: 100_000_000,
-  maxOutputBytes: 1024 * 1024 * 1024
+  maxOutputBytes: 1073741824
 } as const;
 
 export type GltfSkinAnimationCookLimits = { [Key in keyof typeof DEFAULT_LIMITS]?: number };

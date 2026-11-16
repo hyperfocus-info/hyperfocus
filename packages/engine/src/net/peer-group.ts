@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { isJsonWireSafe } from "../protocol/messages.ts";
 
 export type PeerGroupPayload = string | ArrayBuffer | Uint8Array | Record<string, unknown>;
@@ -66,8 +67,8 @@ type ChannelPair = {
 };
 
 const signalingTypes = new Set(["join", "peer-joined", "offer", "answer", "candidate", "peer-left"]);
-const DEFAULT_MAX_PAYLOAD_BYTES = 1024 * 1024;
-const DEFAULT_MAX_BUFFERED_AMOUNT = 1024 * 1024;
+const DEFAULT_MAX_PAYLOAD_BYTES = 1048576;
+const DEFAULT_MAX_BUFFERED_AMOUNT = 1048576;
 const payloadTextEncoder = new TextEncoder();
 
 export type PeerGroupLimits = {
@@ -83,9 +84,7 @@ export function normalizePeerGroupLimits(options: Pick<PeerGroupOptions, "maxPay
   return { maxPayloadBytes, maxBufferedAmount };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function isPeerIdentifier(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 1024;

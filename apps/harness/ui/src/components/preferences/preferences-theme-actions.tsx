@@ -1,18 +1,20 @@
+import { usePreferencesPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
-import { For } from "solid-js";
+import { Input } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
-import { Monitor, Moon, Palette, RotateCcw, Sun, Type } from "lucide-solid";
+import { Monitor,Moon,Palette,RotateCcw,Sun,Type } from "lucide-solid";
+import { For, Show } from "solid-js";
 import {
-  BUILT_IN_THEMES, CUSTOM_THEME_COLOR_VARIABLES, CUSTOM_THEME_FONT_VARIABLES, DEFAULT_CUSTOM_BASE_THEME_ID, THEME_OPTIONS, createDefaultCustomTheme,
-  getCustomThemeFontOptions, isBuiltInThemeId, normalizeHexColor, normalizeThemeColorInput,
-  normalizeThemeFontInput, resolveThemeMode, resolveThemeTokens, validateThemeContrast,
-  withCustomThemeToken, type CustomThemeDefinition, type ThemeCssVariable, type ThemeModePreference,
+BUILT_IN_THEMES,CUSTOM_THEME_COLOR_VARIABLES,CUSTOM_THEME_FONT_VARIABLES,DEFAULT_CUSTOM_BASE_THEME_ID,THEME_OPTIONS,createDefaultCustomTheme,
+getCustomThemeFontOptions,getThemeContrastRegressions,isBuiltInThemeId,normalizeThemeColorInput,
+normalizeThemeFontInput,resolveThemeMode,resolveThemeTokens,validateThemeContrast,
+withCustomThemeToken,type CustomThemeDefinition,type ThemeCssVariable,type ThemeModePreference,
 } from "../../theme/theme-model";
-import type { PreferencesPanelModel } from "../preferences-modal";
+import { normalizeHexColor } from "../../theme/theme-colors";
 import { pushToast } from "../../toast-store";
 import { ActionButton } from "../action-button";
+import type { PreferencesPanelModel } from "../preferences-modal";
 import { DropdownControl } from "../primitives/dropdown";
-import { Input } from "../primitives/input";
 import { Tooltip } from "../primitives/tooltip";
 import { preferenceStyles } from "./preferences.styles";
 
@@ -84,7 +86,7 @@ export function createPreferencesThemeActions(
       variable,
       normalizedValue
     );
-    const contrastFailures = validateThemeContrast(resolveThemeTokens(nextPreference, systemPrefersDark()));
+    const contrastFailures = getThemeContrastRegressions({ current: currentTokens, next: resolveThemeTokens(nextPreference, systemPrefersDark()) });
     if (contrastFailures.length > 0) {
       const firstFailure = contrastFailures[0];
       pushToast(
@@ -146,8 +148,9 @@ export function createPreferencesThemeActions(
   };
 }
 
-export function PreferencesThemePreview(props: { actions: PreferencesThemeActions }) {
-  const { resolvedThemeTokens, resolvedThemeMode } = props.actions;
+export function PreferencesThemePreview() {
+  const panel = usePreferencesPanel();
+  const { resolvedThemeTokens, resolvedThemeMode } = panel.theme;
     const tokens = () => resolvedThemeTokens();
     const swatches = () => [
       { label: "Accent", value: tokens()["--accent"] },
@@ -188,13 +191,18 @@ export function PreferencesThemePreview(props: { actions: PreferencesThemeAction
     );
   }
 
-export function PreferencesCustomThemeEditor(props: { model: PreferencesPanelModel; actions: PreferencesThemeActions }) {
-  const { store } = props.model;
-  const { customThemeDefinition, customBaseThemeOptions, updateCustomThemeBase, updateCustomThemeVariable, colorInputValue, resolvedThemeTokens } = props.actions;
+export function PreferencesCustomThemeEditor() {
+  const panel = usePreferencesPanel();
+  const { store } = panel.model;
+  const { customThemeDefinition, customBaseThemeOptions, updateCustomThemeBase, updateCustomThemeVariable, colorInputValue, resolvedThemeTokens } = panel.theme;
     const custom = () => customThemeDefinition();
     const baseThemeId = () => custom().baseThemeId ?? DEFAULT_CUSTOM_BASE_THEME_ID;
+    const contrastIssue = () => validateThemeContrast(resolvedThemeTokens())[0];
     return (
       <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanel, preferenceStyles.padding3).class} data-test-custom-theme-editor="">
+        <Show when={contrastIssue()}>{issue => <p role="status" data-test-theme-contrast-recovery="" {...stylex.attrs(preferenceStyles.themeContrastRecovery)}>
+          Some saved colors need more contrast. {issue().label} needs {issue().minimum}:1. Correct the colors below; other settings stay saved.
+        </p>}</Show>
         <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.smGridColumnsControl, preferenceStyles.smItemsCenter).class}>
           <DropdownControl
             kind="select"

@@ -1,13 +1,13 @@
+import { createBackgroundJobForFilter } from "../utils/tests/job-fixtures";
 /** @jsxImportSource solid-js */
-import { beforeEach, expect, it } from "bun:test";
-import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { createProjectThreadSummary, type Assistant, type BackgroundJob, type BackgroundJobRun, type RunDiagnosticsReport } from "@hyperfocus/ai-core/protocol";
-import { createInitialViewState, harnessStore, readBrowserUiSession } from "../harness-store";
-import { createUiTest, requireElement } from "../utils/tests/test-harness";
-import { captureDispatchedCommands, clearBrowserStateForTests, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
-import { createHarnessStateFixture, createRunFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
+import { createProjectThreadSummary,type Assistant,type BackgroundJob,type BackgroundJobRun,type RunDiagnosticsReport } from "@hyperfocus/ai-core/protocol";
+import { cleanup,fireEvent,render,screen,waitFor } from "@solidjs/testing-library";
+import { beforeEach,expect,it } from "bun:test";
+import { createInitialViewState,harnessStore,readBrowserUiSession } from "../harness-store";
+import { captureDispatchedCommands,clearBrowserStateForTests,seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
+import { createHarnessStateFixture,createRunFixture,createViewProjectFixture } from "../utils/tests/test-fixtures";
+import { createUiTest,requireElement } from "../utils/tests/test-harness";
 import { BackgroundJobsPanel } from "./background-jobs-panel";
-
 function defineScrollMetrics(scrollHeight: number, clientHeight: number) {
   const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
   const originalClientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
@@ -36,7 +36,6 @@ function defineScrollMetrics(scrollHeight: number, clientHeight: number) {
     }
   };
 }
-
 function createRunDiagnosticsReportFixture(overrides: Partial<RunDiagnosticsReport> = {}): RunDiagnosticsReport {
   return {
     windowDays: overrides.windowDays ?? 7,
@@ -136,22 +135,6 @@ function createAssistantFixture(overrides: Partial<Assistant> = {}): Assistant {
   };
 }
 
-function createBackgroundJobForFilter(id: string, projectId: string, name: string, now: string): BackgroundJob {
-  return {
-    id,
-    projectId,
-    automationThreadId: `${id}-thread`,
-    kind: "ai-routine",
-    name,
-    status: "enabled",
-    riskLevel: "safe",
-    definition: { kind: "ai-routine", prompt: `${name} prompt.` },
-    schedule: { type: "one-off", runAt: now, sourceText: "manual" },
-    scheduleInput: "manual",
-    createdAt: now,
-    updatedAt: now
-  };
-}
 
 function createBackgroundRunForFilter(
   id: string,
@@ -280,7 +263,7 @@ createUiTest("BackgroundJobsPanel", () => {
 
     render(() => <BackgroundJobsPanel />);
 
-    expect(screen.getByText("Health")).not.toBeNull();
+    expect(document.querySelector("[data-test-background-jobs-panel]")?.getAttribute("data-left-pane-kind")).toBe("health");
   });
 
   it("renders health loading state", () => {
@@ -360,7 +343,7 @@ createUiTest("BackgroundJobsPanel", () => {
 
     render(() => <BackgroundJobsPanel />);
 
-    expect(screen.getAllByText("Owner: Repo Assistant").length).toBeGreaterThan(0);
+    expect(screen.getByText("Repo Assistant").closest("[data-test-job-detail-id]")?.getAttribute("data-test-job-detail-id")).toBe(job.id);
   });
 
   it("opens the owning assistant from assistant-owned job details", () => {
@@ -446,12 +429,21 @@ createUiTest("BackgroundJobsPanel", () => {
     render(() => <BackgroundJobsPanel />);
 
     expect(screen.getByText("Active backoff jobs")).toBeTruthy();
+    const metrics = screen.getByLabelText("Scheduler metrics");
+    expect(metrics.tagName).toBe("DL");
+    expect(metrics.querySelectorAll("dt").length).toBe(5);
+    expect(metrics.previousElementSibling?.textContent).toContain("Dominant background failure");
     expect(screen.getByText("Failure Breakdown")).toBeTruthy();
     expect(screen.getByText("Repeated Prompt Hashes")).toBeTruthy();
     expect(screen.getByText("Prompt Size By Owner")).toBeTruthy();
     expect(screen.getByText("Daily Failure Series")).toBeTruthy();
     expect(screen.getByText("Health monitor")).toBeTruthy();
     expect(screen.getByText("prompt-hash-repeat")).toBeTruthy();
+    const table = screen.getByRole("region", { name: "Repeated Prompt Hashes table" });
+    expect(table.tabIndex).toBe(0);
+    expect(table.textContent).toContain("Hash");
+    expect(table.textContent).toContain("prompt-hash-repeat");
+    expect(table.querySelectorAll('[role="columnheader"]').length).toBe(6);
   });
 
   it("renders the selected health window from store state", () => {
@@ -478,6 +470,8 @@ createUiTest("BackgroundJobsPanel", () => {
     render(() => <BackgroundJobsPanel />);
 
     expect(screen.getByRole("button", { name: "30d" }).className).toContain("healthWindowSelected");
+    expect(screen.getByRole("button", { name: "30d" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "7d" }).getAttribute("aria-pressed")).toBe("false");
     expect(screen.getByRole("button", { name: "7d" }).className).toContain("healthWindowIdle");
   });
 
@@ -995,19 +989,20 @@ createUiTest("BackgroundJobsPanel", () => {
 
     expect(screen.getAllByText("Next: Due now").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Next: Queue #1: Blocked: Waiting for approval run-pending").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Select Blocked review" }));
     expect(screen.getAllByText("Queue #1: waiting for approval run-pending").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Congested (112%): scheduled work overlaps recent exclusive-lane runtime").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Last progress:/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Select Stale review" }));
     const staleWarnings = screen.getAllByText(/Stale: scheduler has not checked since/);
     const retryButtons = screen.getAllByRole("button", { name: "Retry scheduler" });
     expect(staleWarnings.length).toBeGreaterThan(0);
-    expect(retryButtons).toHaveLength(staleWarnings.length);
-    fireEvent.click(retryButtons[0]!);
-    expect(commands).toMatchObject([
-      {
-        type: "background-job.scheduler.retry"
-      }
-    ]);
+    expect(retryButtons.some(button => button.closest("[data-test-job-detail-id]")?.getAttribute("data-test-job-detail-id") === staleJob.id)).toBe(true);
+    // Header, next-run warning and schedule diagnostics all use the panel's command.
+    expect(retryButtons.length).toBeGreaterThanOrEqual(3);
+    for (const button of retryButtons) fireEvent.click(button);
+    expect(commands).toHaveLength(retryButtons.length);
+    for (const command of commands) expect(command).toMatchObject({ type: "background-job.scheduler.retry" });
   });
 
   it("shows active project chat runs in the shared runs list and opens details without changing tabs", () => {

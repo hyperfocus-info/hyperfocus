@@ -1,3 +1,5 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 import {
   invertQuaternion,
   multiplyQuaternions,
@@ -219,9 +221,7 @@ function nonNegative(value: unknown, label: string) {
   return number;
 }
 
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
+
 
 function wrapAngle(value: number) {
   return ((value + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;

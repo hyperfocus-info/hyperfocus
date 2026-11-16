@@ -1,5 +1,6 @@
-import { createStore, reconcile, type SetStoreFunction } from "solid-js/store";
-import { createRequestId, type ClientCommand, type IdeFileRead, type IdeFileTreeEntry, type IdeGitChange, type IdeSearchResult, type ServerEvent } from "@hyperfocus/ai-core/protocol";
+import { createRequestId,type ClientCommand,type IdeFileRead,type IdeFileTreeEntry,type IdeGitChange,type IdeSearchResult,type ServerEvent } from "@hyperfocus/ai-core/protocol";
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
+import { createStore,reconcile,type SetStoreFunction } from "solid-js/store";
 import { harnessStore } from "../harness-store";
 import { pushToast } from "../toast-store";
 
@@ -608,6 +609,7 @@ function readPersistedIdeState(): Partial<IdeUiState> {
   }
   try {
     const parsed = JSON.parse(window.localStorage.getItem(IDE_STATE_STORAGE_KEY) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return {
       projectId: typeof parsed.projectId === "string" ? parsed.projectId : undefined,
       activityView: isIdeActivityView(parsed.activityView) ? parsed.activityView : initialState.activityView,
@@ -656,9 +658,6 @@ function parseIdeEditorSettings(value: unknown): IdeEditorSettings {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;

@@ -1,7 +1,37 @@
-import { describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { buildUiBundle, createUiAssetManager, enrichUiBuildFileSystemError } from "./ui-build";
+import { buildUiBundle, createUiAssetManager, enrichUiBuildFileSystemError, prepareUiOutDir } from "./ui-build";
+
+test("preparing a rebuild retains the last served page", async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "harness-rebuild-retention-"));
+  try {
+    writeFileSync(path.join(dir, "index.html"), "last working page");
+    await prepareUiOutDir({ outputDir: dir });
+    expect(readFileSync(path.join(dir, "index.html"), "utf8")).toBe("last working page");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("native UI watcher ignores reads and access-time changes but rebuilds edited source", async () => {
+  const source = mkdtempSync(path.join(os.tmpdir(), "harness-watch-read-")), file = path.join(source, "main.tsx");
+  writeFileSync(file, "original");
+  const baseline = new Date("2020-01-01T00:00:00Z");
+  utimesSync(file, baseline, baseline);
+  let builds = 0;
+  const manager = createUiAssetManager({ assetRoot: source, buildWhenMissing: false, watchedSourceDirs: [source],
+    isTrackedFile: () => true, buildUiBundle: async () => { builds++; } });
+  try {
+    manager.startWatching();
+    readFileSync(file); utimesSync(file, new Date(), baseline);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(builds).toBe(0);
+    writeFileSync(file, "edited source");
+    const deadline = Date.now() + 2000;
+    while (!builds && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    expect(builds).toBe(1);
+  } finally { manager.dispose(); rmSync(source, { recursive: true, force: true }); }
+});
 
 function createFakeClock() {
   let nextTimerId = 1;
@@ -47,23 +77,54 @@ const flushMicrotasks = () => Promise.resolve().then(() => Promise.resolve());
 setDefaultTimeout(15000);
 
 describe("ui build", () => {
+  const builtUiDir = mkdtempSync(path.join(os.tmpdir(), "harness-ui-build-"));
+  afterAll(() => rmSync(builtUiDir, { recursive: true, force: true }));
+  test("refreshes existing source assets once at startup and watches shared UI changes", async () => {
+    const assetRoot = mkdtempSync(path.join(os.tmpdir(), "harness-stale-ui-"));
+    writeFileSync(path.join(assetRoot, "index.html"), "stale source build");
+    const clock = createFakeClock();
+    const listeners = new Map<string, (changedPath?: string) => void>();
+    let builds = 0;
+    const manager = createUiAssetManager({
+      assetRoot,
+      timerApi: clock,
+      async buildUiBundle() { builds += 1; },
+      watchSourceDir(directory, listener) { listeners.set(directory, listener); return { close() {} }; },
+    });
+    try {
+      await manager.ensureBuilt();
+      await manager.ensureBuilt();
+      expect(builds).toBe(1);
+      manager.startWatching();
+      expect([...listeners.keys()].every(existsSync)).toBe(true);
+      const sharedUi = path.resolve(process.cwd(), "packages/ui/src");
+      expect(listeners.has(sharedUi)).toBe(true);
+      listeners.get(sharedUi)?.(path.join(sharedUi, "workbench/panel-group.tsx"));
+      clock.advanceBy(1);
+      await flushMicrotasks();
+      expect(builds).toBe(2);
+    } finally { manager.dispose(); rmSync(assetRoot, { recursive: true, force: true }); }
+  });
+
   test("rebuilds when dist ui directory already exists", async () => {
-    const uiOutDir = path.resolve(process.cwd(), "dist/ui");
+    const uiOutDir = builtUiDir;
     mkdirSync(uiOutDir, { recursive: true });
 
-    await buildUiBundle();
+    await buildUiBundle({ outputDir: uiOutDir });
 
     expect(existsSync(path.join(uiOutDir, "index.html"))).toBe(true);
-    expect(createUiAssetManager().resolveAsset("/ide")).toBe(path.join(uiOutDir, "index.html"));
+    expect(createUiAssetManager({ assetRoot: uiOutDir }).resolveAsset("/ide")).toBe(path.join(uiOutDir, "index.html"));
+    expect(createUiAssetManager({ assetRoot: uiOutDir }).resolveAsset("/swarm")).toBe(path.join(uiOutDir, "index.html"));
   });
 
   test("emits external source maps in development build", async () => {
-    await buildUiBundle();
+    await buildUiBundle({ outputDir: builtUiDir });
 
-    const uiOutDir = path.resolve(process.cwd(), "dist/ui");
+    const uiOutDir = builtUiDir;
     const jsPath = path.join(uiOutDir, "main.js");
     const mapPath = path.join(uiOutDir, "main.js.map");
-    const sourceMapSources = parseSourceMapSources(readFileSync(mapPath, "utf8"));
+    const sourceMapSources = readdirSync(uiOutDir).filter(file => file.endsWith(".js.map"))
+      .flatMap(file => parseSourceMapSources(readFileSync(path.join(uiOutDir, file), "utf8")));
 
     expect(existsSync(jsPath)).toBe(true);
     expect(existsSync(mapPath)).toBe(true);
@@ -72,9 +133,9 @@ describe("ui build", () => {
   });
 
   test("omits source maps in production build", async () => {
-    await buildUiBundle({ minify: true });
+    await buildUiBundle({ minify: true, outputDir: builtUiDir });
 
-    const uiOutDir = path.resolve(process.cwd(), "dist/ui");
+    const uiOutDir = builtUiDir;
     const jsPath = path.join(uiOutDir, "main.js");
     const mapPath = path.join(uiOutDir, "main.js.map");
 
@@ -82,7 +143,16 @@ describe("ui build", () => {
     expect(existsSync(mapPath)).toBe(false);
     expect(readFileSync(jsPath, "utf8")).not.toContain("sourceMappingURL");
     expect(readFileSync(path.join(uiOutDir, "index.html"), "utf8")).toContain("<title>Hyperfocus Harness</title>");
-    expect(readFileSync(path.join(uiOutDir, "index.html"), "utf8")).toContain('rel="icon" href="data:image/svg+xml');
+    expect(readFileSync(path.join(uiOutDir, "index.html"), "utf8")).toContain('rel="icon" type="image/svg+xml" href="./brand/favicon.svg"');
+    expect(readFileSync(path.join(uiOutDir, "brand", "favicon.svg"), "utf8")).toContain("<svg");
+    expect(existsSync(path.join(uiOutDir, "brand", "site.webmanifest"))).toBe(true);
+    expect(readFileSync(path.join(uiOutDir, "index.html"), "utf8")).toContain('<script type="module"');
+    const chunks = readdirSync(uiOutDir).filter(file => /^(ide-workbench|terminal-drawer|swarm-page|xterm-renderer)-.*\.js$/.test(file));
+    expect(chunks.length).toBeGreaterThanOrEqual(4);
+    const manager = createUiAssetManager({ assetRoot: uiOutDir, buildWhenMissing: false });
+    for (const chunk of chunks) expect(manager.resolveAsset(`/${chunk}`)).toBe(path.join(uiOutDir, chunk));
+    expect(manager.resolveAsset("/../private.js")).toBeUndefined();
+    manager.dispose();
   });
 
   test("adds cleanup guidance to out-of-space build failures", () => {
@@ -93,6 +163,30 @@ describe("ui build", () => {
     if (!(enriched instanceof Error)) throw new Error("Expected enriched UI build failure to be an Error");
     expect(enriched.message).toContain("filesystem is out of space");
     expect(enriched.message).toContain(".local/branchfs");
+  });
+
+  test("serves a supplied packaged asset root without invoking the source build", async () => {
+    const assetRoot = mkdtempSync(path.join(os.tmpdir(), "harness-packaged-ui-"));
+    const indexPath = path.join(assetRoot, "index.html");
+    writeFileSync(indexPath, "<title>Packaged Harness</title>");
+    let buildCalled = false;
+    try {
+      const manager = createUiAssetManager({
+        assetRoot,
+        buildWhenMissing: false,
+        async buildUiBundle() {
+          buildCalled = true;
+        }
+      });
+
+      await manager.ensureBuilt();
+
+      expect(manager.resolveAsset("/")).toBe(indexPath);
+      expect(buildCalled).toBe(false);
+      manager.dispose();
+    } finally {
+      rmSync(assetRoot, { recursive: true, force: true });
+    }
   });
 
   test("debounces watch storms and publishes live reload revision only after successful rebuild", async () => {

@@ -1,15 +1,16 @@
+import { usePreferencesPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
-import type { JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { RotateCcw } from "lucide-solid";
-import { ideStore, type IdeAutoSaveMode, type IdeEditorSettings, type IdeIndentStyle, type IdeTabSize, type IdeWordWrapMode } from "../../ide/ide-store";
+import type { JSX } from "solid-js";
+import { ideStore,type IdeAutoSaveMode,type IdeEditorSettings,type IdeIndentStyle,type IdeTabSize,type IdeWordWrapMode } from "../../ide/ide-store";
 import { ActionButton } from "../action-button";
-import { PreferenceRow, PreferenceSection, SegmentedControl } from "./preferences-controls";
+import { PreferenceRow,PreferenceSection,SegmentedControl } from "./preferences-controls";
 import { preferenceStyles } from "./preferences.styles";
 
 function renderSettingControl(title: string, description: string, control: JSX.Element) {
   return (
-    <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap2, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite45, preferenceStyles.padding3, preferenceStyles.mdGridColumnsSetting, preferenceStyles.mdItemsCenter).class}>
+    <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap2, preferenceStyles.borderBottom, preferenceStyles.borderDefault, preferenceStyles.paddingBlock3, preferenceStyles.mdGridColumnsSetting, preferenceStyles.mdItemsCenter).class}>
       <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
         <div class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>{title}</div>
         <div class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.text07, preferenceStyles.leading4, preferenceStyles.colorMuted).class}>{description}</div>
@@ -19,8 +20,9 @@ function renderSettingControl(title: string, description: string, control: JSX.E
   );
 }
 
-export function PreferencesIdeSettings(props: { updateSavedPreference: (update: () => void) => void }) {
-  const { updateSavedPreference } = props;
+export function PreferencesIdeSettings() {
+  const panel = usePreferencesPanel();
+  const { updateSavedPreference } = panel.persistence;
   const renderToggle = (checked: boolean, onInput: (checked: boolean) => void, label: string) => (
     <label class={stylex.attrs(preferenceStyles.inlineFlex, preferenceStyles.minHeight9, preferenceStyles.cursorPointer, preferenceStyles.itemsCenter, preferenceStyles.justifyBetween, preferenceStyles.gap3, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanelStrong, preferenceStyles.paddingInline3, preferenceStyles.paddingBlock2, preferenceStyles.transition, preferenceStyles.hoverBackgroundSoftAccent).class}>
       <span class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.fontMedium, preferenceStyles.colorForeground).class}>{label}</span>
@@ -124,4 +126,3 @@ export function PreferencesIdeSettings(props: { updateSavedPreference: (update: 
       </PreferenceSection>
     );
   }
-

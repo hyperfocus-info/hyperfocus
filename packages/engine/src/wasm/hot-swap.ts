@@ -16,7 +16,7 @@ export type WasmSwapResult =
   | { readonly ok: true; readonly generation: number }
   | { readonly ok: false; readonly generation: number; readonly error: unknown };
 
-/** Transactional host: a failed load, validation, or migration retains the live simulator. */
+/** Latest-request-wins host. Failed swaps retain the live module; disposal is terminal. */
 export type HotSwappableWasmSimulator<State = unknown> = {
   readonly abiVersion: number;
   readonly requiredExports: readonly string[];
@@ -42,16 +42,19 @@ export function createHotSwappableWasmSimulator<State = unknown>(
   const requiredExports = Object.freeze([...(options.requiredExports ?? [])]);
   let current: WasmSimulatorModule<State> | undefined;
   let generation = 0;
+  let request = 0;
+  let disposed = false;
+  const claimed = new WeakSet<WasmSimulatorModule<State>>();
   const diagnose = (message: string, error?: unknown): void => {
     try { options.onDiagnostic?.(message, error); } catch {}
   };
   const validate = (module: WasmSimulatorModule<State>): void => {
-    if (!module || typeof module !== "object" || !module.exports) throw new TypeError("loader did not return a WASM simulator module.");
+    if (!module || typeof module !== "object" || !module.exports) throw new TypeError("Invalid WASM simulator module.");
     if (module.abiVersion !== abiVersion) {
-      throw new Error(`WASM simulator ABI ${module.abiVersion} does not match required ABI ${abiVersion}.`);
+      throw new Error(`WASM ABI ${module.abiVersion}; expected ${abiVersion}.`);
     }
     for (const name of requiredExports) {
-      if (!(name in module.exports)) throw new Error(`WASM simulator is missing required export ${name}.`);
+      if (!(name in module.exports)) throw new Error(`WASM export missing: ${name}.`);
     }
   };
 
@@ -61,16 +64,29 @@ export function createHotSwappableWasmSimulator<State = unknown>(
     get current() { return current; },
     get generation() { return generation; },
     async replace(load) {
+      const requested = ++request;
       let candidate: WasmSimulatorModule<State> | undefined;
+      const assertCurrentRequest = () => {
+        if (disposed || requested !== request) throw new Error("WASM swap is stale or disposed.");
+      };
       try {
+        assertCurrentRequest();
         candidate = await load();
+        if (claimed.has(candidate)) {
+          // This request must not dispose a module already owned by another request.
+          candidate = undefined;
+          throw new Error("WASM module instance was already used.");
+        }
+        claimed.add(candidate);
+        assertCurrentRequest();
         validate(candidate);
         if (current?.captureState) {
           const state = current.captureState();
           await candidate.restoreState?.(state);
         }
+        assertCurrentRequest();
       } catch (error) {
-        if (candidate && candidate !== current) {
+        if (candidate) {
           try { await candidate.dispose?.(); } catch (disposeError) { diagnose("candidate disposal failed", disposeError); }
         }
         diagnose("WASM simulator replacement rejected", error);
@@ -79,13 +95,14 @@ export function createHotSwappableWasmSimulator<State = unknown>(
 
       const previous = current;
       current = candidate;
-      generation += 1;
-      if (previous && previous !== candidate) {
+      const installedGeneration = ++generation;
+      if (previous) {
         try { await previous.dispose?.(); } catch (error) { diagnose("previous simulator disposal failed", error); }
       }
-      return { ok: true, generation };
+      return { ok: true, generation: installedGeneration };
     },
     async dispose() {
+      disposed = true;
       const active = current;
       current = undefined;
       if (active) await active.dispose?.();

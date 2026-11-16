@@ -50,5 +50,5 @@ function isCleanupCandidate(entry: MemoryEntry, nowMs: number) {
     return true;
   }
   const updatedAtMs = Date.parse(entry.updatedAt);
-  return Number.isFinite(updatedAtMs) && nowMs - updatedAtMs >= 30 * 24 * 60 * 60 * 1000;
+  return Number.isFinite(updatedAtMs) && nowMs - updatedAtMs >= 2592000000;
 }

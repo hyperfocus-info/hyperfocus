@@ -1,0 +1,59 @@
+{
+  "schema": "hyperfocus-brand-assets-v1",
+  "name": "MMO Skill Demo",
+  "source": "symbol:shield",
+  "sourceSha256": "b00f3432c8a59c7cf0f9ccdc99ef35ca0bfa110206754473bc51cef2c005968d",
+  "customization": "Replace the source logo in brand.json, then regenerate this directory. Do not edit renditions.",
+  "files": [
+    {
+      "path": "logo.svg",
+      "sha256": "b00f3432c8a59c7cf0f9ccdc99ef35ca0bfa110206754473bc51cef2c005968d",
+      "bytes": 279
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "bb64db2e0dca54f2a917cfd4e73bdfbe5f74a3daae5383ae9ce48fc9f7825bab",
+      "bytes": 546
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "a046bf9f9a6c5e1af5447943194ac155cc98c232e52a611b531560ce6351a2df",
+      "bytes": 826
+    },
+    {
+      "path": "favicon-32.png",
+      "sha256": "fa05167832a3b5fb126b0bd0af4a6d890798c245d64f34e9ba43273a74dcce98",
+      "bytes": 804
+    },
+    {
+      "path": "icon-192.png",
+      "sha256": "ee5a997f22e0a458692cc0bd1cbdc8949edb7c842c013f357c47fe804789b158",
+      "bytes": 4280
+    },
+    {
+      "path": "icon-512.png",
+      "sha256": "a9ce82972361f3405f76cfd4bff9e2654df547fad2c1b72c5f4f4b146e726592",
+      "bytes": 11289
+    },
+    {
+      "path": "maskable-512.png",
+      "sha256": "2e4dcc1aa1c29b5e487b19b9772c4ddef5a8402b17708b2e0ee7f128d0ed7331",
+      "bytes": 7994
+    },
+    {
+      "path": "apple-touch-icon.png",
+      "sha256": "af578a5c2d7a0206c4aa694a77271d6c782087bb40e82a7c4bca9e7d1752c48b",
+      "bytes": 3228
+    },
+    {
+      "path": "social.png",
+      "sha256": "eb59e44fbf08fc321097a2caa50a5b5736facbd170d3baa6a661c055150ee077",
+      "bytes": 13877
+    },
+    {
+      "path": "site.webmanifest",
+      "sha256": "5e8ce9dfebb36c9cd5c94104775b8e0cbb84a79a4c8d9d4adb9f0da28ed1fc94",
+      "bytes": 504
+    }
+  ]
+}

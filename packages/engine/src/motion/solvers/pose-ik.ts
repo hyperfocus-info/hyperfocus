@@ -2,6 +2,8 @@ import {
   normalizeVector3,
   quaternionFromUnitVectors,
   subtractVector3,
+  invertQuaternion,
+  multiplyQuaternions,
 } from "../math.ts";
 import type { PoseBuffer } from "../pose-buffer.ts";
 import type { CompiledSemanticRig } from "../rig.ts";
@@ -12,6 +14,7 @@ import {
   evaluateWorldPose,
   type WorldPose,
 } from "./world-pose.ts";
+import { createBendReferenceTransport } from './bend-reference.ts';
 
 export type PoseTwoBoneIKOptions = {
   rig: CompiledSemanticRig;
@@ -19,6 +22,8 @@ export type PoseTwoBoneIKOptions = {
   middleIndex: number;
   endIndex: number;
   maxStretch?: number;
+  /** Keeps the chain away from its undefined perfectly straight singularity. */
+  extensionMarginRatio?: number;
   /** Optional shared FK workspace for sequencing multiple independent limbs. */
   world?: WorldPose;
 };
@@ -26,6 +31,9 @@ export type PoseTwoBoneIKOptions = {
 export type PoseTwoBoneIKApplyOptions = {
   /** Set only when `world` already describes the current pose. */
   worldIsCurrent?: boolean;
+  bendMode?: 'authored' | 'animated';
+  targetMode?: 'absolute' | 'animated-offset';
+  endOrientation?: 'follow-chain' | 'preserve-animation';
 };
 
 export type PoseTwoBoneIKResult = TwoBoneIKResult & {
@@ -47,6 +55,7 @@ export function createPoseTwoBoneIKSolver(options: PoseTwoBoneIKOptions): PoseTw
   const { rig, rootIndex, middleIndex, endIndex } = options;
   validateChain(rig, rootIndex, middleIndex, endIndex);
   const maxStretch = finiteAtLeast(options.maxStretch ?? 1, 1, "pose IK maxStretch");
+  const extensionMarginRatio = finiteRange(options.extensionMarginRatio ?? 0, 0, .1, "pose IK extensionMarginRatio");
   const world = options.world ?? createWorldPose(rig);
   const rootSubtree = compileSubtree(rig, rootIndex);
   const middleSubtree = compileSubtree(rig, middleIndex);
@@ -65,6 +74,8 @@ export function createPoseTwoBoneIKSolver(options: PoseTwoBoneIKOptions): PoseTw
   const currentDirection = new Float32Array(3);
   const desiredDirection = new Float32Array(3);
   const delta = new Float32Array(4);
+  const transported = new Float32Array(3), target = new Float32Array(3), savedEnd = new Float32Array(4), inverseEnd = new Float32Array(4);
+  const bendTransport = createBendReferenceTransport(), endSubtree = compileSubtree(rig, endIndex);
 
   return {
     world,
@@ -76,6 +87,18 @@ export function createPoseTwoBoneIKSolver(options: PoseTwoBoneIKOptions): PoseTw
       readWorldPosition(world, rootIndex, rootPosition);
       readWorldPosition(world, middleIndex, middlePosition);
       readWorldPosition(world, endIndex, endPosition);
+      for (let i = 0; i < 3; i++) target[i] = targetWorld[i]! + (applyOptions.targetMode === 'animated-offset' ? endPosition[i]! : 0);
+      for (let i = 0; i < 4; i++) savedEnd[i] = world.rotations[endIndex * 4 + i]!;
+      if (applyOptions.bendMode === 'animated' && Math.hypot(target[0]! - endPosition[0]!, target[1]! - endPosition[1]!, target[2]! - endPosition[2]!) < 1e-8) {
+        for (let i = 0; i < 3; i++) { result.knee[i] = middlePosition[i]!; result.end[i] = endPosition[i]!; }
+        result.distance = Math.hypot(endPosition[0]! - rootPosition[0]!, endPosition[1]! - rootPosition[1]!, endPosition[2]! - rootPosition[2]!);
+        result.stretch = 1; result.reached = true; result.endError = 0;
+        return result;
+      }
+      if (applyOptions.bendMode === 'animated') {
+        subtractVector3(target, rootPosition, desiredDirection);
+        bendTransport.apply({ root: rootPosition, middle: middlePosition, end: endPosition, targetDirection: desiredDirection, fallback: poleDirectionWorld }, transported);
+      }
       const upperLength = Math.max(1e-6, Math.hypot(
         middlePosition[0] - rootPosition[0],
         middlePosition[1] - rootPosition[1],
@@ -88,17 +111,18 @@ export function createPoseTwoBoneIKSolver(options: PoseTwoBoneIKOptions): PoseTw
       ));
       solveTwoBoneIK({
         root: rootPosition,
-        target: targetWorld,
-        poleDirection: poleDirectionWorld,
+        target,
+        poleDirection: applyOptions.bendMode === 'animated' ? transported : poleDirectionWorld,
         upperLength,
         lowerLength,
         maxStretch,
+        extensionMarginRatio,
       }, rawResult);
       result.distance = rawResult.distance;
       result.stretch = rawResult.stretch;
       result.reached = rawResult.reached;
 
-      if (rawResult.stretch > 1 + 1e-6) {
+      if (rawResult.stretch > 1.000001) {
         setScaledReferenceTranslation(rig, pose, middleIndex, rawResult.stretch);
         setScaledReferenceTranslation(rig, pose, endIndex, rawResult.stretch);
         evaluateWorldPose(rig, pose, world);
@@ -120,6 +144,12 @@ export function createPoseTwoBoneIKSolver(options: PoseTwoBoneIKOptions): PoseTw
       quaternionFromUnitVectors(currentDirection, desiredDirection, delta);
       applyWorldRotationDelta(rig, pose, world, middleIndex, delta);
       applyWorldDeltaToSubtree(world, middleIndex, middleSubtree, delta);
+      if (applyOptions.endOrientation === 'preserve-animation') {
+        for (let i = 0; i < 4; i++) inverseEnd[i] = world.rotations[endIndex * 4 + i]!;
+        invertQuaternion(inverseEnd, inverseEnd); multiplyQuaternions(savedEnd, inverseEnd, delta);
+        applyWorldRotationDelta(rig, pose, world, endIndex, delta);
+        applyWorldDeltaToSubtree(world, endIndex, endSubtree, delta);
+      }
       readWorldPosition(world, endIndex, endPosition);
       result.endError = Math.hypot(
         endPosition[0] - rawResult.end[0],
@@ -232,5 +262,11 @@ function requireVector3(value: ArrayLike<number>, label: string) {
 function finiteAtLeast(value: unknown, minimum: number, label: string) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < minimum) throw new RangeError(`${label} must be at least ${minimum}`);
+  return number;
+}
+
+function finiteRange(value: unknown, minimum: number, maximum: number, label: string) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > maximum) throw new RangeError(`${label} must be from ${minimum} through ${maximum}`);
   return number;
 }

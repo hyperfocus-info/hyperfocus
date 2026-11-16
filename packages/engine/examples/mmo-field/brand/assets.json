@@ -1,0 +1,59 @@
+{
+  "schema": "hyperfocus-brand-assets-v1",
+  "name": "MMO Field",
+  "source": "symbol:grid",
+  "sourceSha256": "83b71f61bed33cec61b1d51b1ad2a1630bc3a7a3941dd10c335818cdc47f0593",
+  "customization": "Replace the source logo in brand.json, then regenerate this directory. Do not edit renditions.",
+  "files": [
+    {
+      "path": "logo.svg",
+      "sha256": "83b71f61bed33cec61b1d51b1ad2a1630bc3a7a3941dd10c335818cdc47f0593",
+      "bytes": 329
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "cb96ff7b3b9baf7982d8c3ddd86fca3b9ca7d7a4bca9fb35eb60d88a9d7619e8",
+      "bytes": 614
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "15c109d4dcd1c33fa3b5bb9cbacfe1840bff905933a252918323c0f790ad04c3",
+      "bytes": 352
+    },
+    {
+      "path": "favicon-32.png",
+      "sha256": "e172d4de563dfc214f7b66c0daaa9f669211043736970d6436c000b6c29fb79f",
+      "bytes": 330
+    },
+    {
+      "path": "icon-192.png",
+      "sha256": "8c44417ee18b429f0f5bc84388685f9981d105b530ddcb855567f9e66be2bd93",
+      "bytes": 1781
+    },
+    {
+      "path": "icon-512.png",
+      "sha256": "80e46bd5d69933a13891f271a2cd77a9fdcca9999bdeca6d445c7f889b6af908",
+      "bytes": 6782
+    },
+    {
+      "path": "maskable-512.png",
+      "sha256": "af7c5de94bd5b751579f5e84f444e10428538d01f6af4cf8e8087a6e5c7a3fe4",
+      "bytes": 5289
+    },
+    {
+      "path": "apple-touch-icon.png",
+      "sha256": "158475f649283c4b10c5b5003f616d82449b08d2dd0df485055e2c0886628a6c",
+      "bytes": 1979
+    },
+    {
+      "path": "social.png",
+      "sha256": "9428c9b68fc7db62b4ea7ca0e78e2f6458e332ac0c2b175beee0f4e235b65e68",
+      "bytes": 8568
+    },
+    {
+      "path": "site.webmanifest",
+      "sha256": "0a7b833ac9c157275fa70756aafdb01d1b4db6370b9c49be03a344a144751a43",
+      "bytes": 494
+    }
+  ]
+}

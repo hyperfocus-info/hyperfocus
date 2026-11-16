@@ -1,8 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
-import { splitProps, type JSX } from "solid-js";
+import { createUniqueId, splitProps, type JSX } from "solid-js";
 import { tokens } from "../theme/tokens.stylex";
 import { sharedStyles } from "../theme/styles";
 import { Popover, type PopoverState } from "./popover";
+import { Tooltip } from "./tooltip";
+import { moveContextMenuFocus } from './context-menu';
 
 export type ActionMenuTriggerState = {
   toggle: () => void;
@@ -17,7 +19,11 @@ export type ActionMenuProps = {
   open?: boolean;
   defaultOpen?: boolean;
   portal?: boolean;
+  /** Navigation menus align to the trigger's start edge; trailing toolbars may opt into end. */
+  align?: "start" | "center" | "end";
   onOpenChange?: (open: boolean) => void;
+  /** Bind the owning row/card as well as the visible trigger. Defaults to the trigger. */
+  contextTarget?: (trigger: HTMLElement) => HTMLElement | null | undefined;
 };
 
 export type MenuItemProps = Omit<
@@ -28,13 +34,17 @@ export type MenuItemProps = Omit<
   icon?: JSX.Element;
   shortcut?: string;
   tone?: "default" | "danger";
+  /** Additional context for ambiguous actions; visible labels need no tooltip. */
+  tooltip?: string;
 };
 
 const styles = stylex.create({
   items: {
     gap: tokens.space1,
     display: "grid",
-    minWidth: "12rem",
+    maxWidth: "100%",
+    minWidth: 0,
+    width: "12rem",
   },
   item: {
     borderColor: "transparent",
@@ -45,50 +55,36 @@ const styles = stylex.create({
     paddingBlock: tokens.space1,
     paddingInline: tokens.space2,
     alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": tokens.panelRaised, ":focus": tokens.panelRaised },
+    backgroundColor: {
+      default: "transparent",
+      ":focus:not(:disabled):not([aria-disabled='true'])": tokens.selection,
+      ":hover:not(:disabled):not([aria-disabled='true'])": `color-mix(in srgb, ${tokens.selection} 50%, ${tokens.panelRaised})`,
+    },
     color: tokens.foreground,
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    cursor: "pointer",
     display: "grid",
     fontFamily: tokens.fontUi,
-    fontSize: "0.78rem",
+    fontSize: tokens.fontControl,
     gridTemplateColumns: "auto minmax(0, 1fr) auto",
-    opacity: { default: 1, ":disabled": 0.48 },
+    lineHeight: 1.35,
+    opacity: { default: 1, ":is(:disabled, [aria-disabled='true'])": 0.48 },
     textAlign: "start",
-    minHeight: "2rem",
+    minHeight: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch },
     width: "100%",
   },
+  itemTooltip: { minWidth: 0, width: "100%", },
   danger: { color: tokens.danger },
-  icon: { alignItems: "center", display: "inline-flex", justifyContent: "center", width: "1rem" },
-  label: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, },
+  icon: { gridColumn: '1', gridRow: '1', alignItems: "center", display: "inline-flex", justifyContent: "center", width: "1rem" },
+  label: { gridColumn: '2', gridRow: '1', overflowWrap: "anywhere", whiteSpace: "normal", minWidth: 0, },
   shortcut: {
+    gridColumn: '3',
+    gridRow: '1',
     color: tokens.muted,
     fontFamily: tokens.fontMono,
-    fontSize: "0.68rem",
+    fontSize: tokens.fontCaption,
     fontVariantNumeric: tokens.numericVariant,
   },
 });
-
-function menuItems(menu: HTMLDivElement) {
-  return [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
-    .filter((item) => item.closest('[role="menu"]') === menu && !item.disabled && item.getAttribute("aria-disabled") !== "true");
-}
-
-function moveMenuFocus(event: KeyboardEvent & { currentTarget: HTMLDivElement; target: Element }) {
-  const items = menuItems(event.currentTarget);
-  if (items.length === 0) return;
-  const current = event.target.closest<HTMLButtonElement>('[role="menuitem"]');
-  const currentIndex = current ? items.indexOf(current) : -1;
-  let nextIndex: number | undefined;
-
-  if (event.key === "Home") nextIndex = 0;
-  if (event.key === "End") nextIndex = items.length - 1;
-  if (event.key === "ArrowDown") nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
-  if (event.key === "ArrowUp") nextIndex = currentIndex < 0 ? items.length - 1 : (currentIndex - 1 + items.length) % items.length;
-  if (nextIndex === undefined) return;
-
-  event.preventDefault();
-  items[nextIndex].focus();
-}
 
 export function ActionMenu(props: ActionMenuProps) {
   let popoverState: PopoverState | undefined;
@@ -97,15 +93,18 @@ export function ActionMenu(props: ActionMenuProps) {
       ariaLabel={props.ariaLabel}
       autoFocus
       contentRole="menu"
+      contextMenu
+      contextTarget={props.contextTarget}
       open={props.open}
       defaultOpen={props.defaultOpen}
       portal={props.portal}
+      align={props.align ?? "start"}
       onOpenChange={props.onOpenChange}
       trigger={(toggle, state) => {
         popoverState = state;
         return props.trigger({ toggle, open: state.open, menuId: state.contentId });
       }}
-      onContentKeyDown={(event) => moveMenuFocus(event)}
+      onContentKeyDown={(event) => moveContextMenuFocus(event.currentTarget,event)}
     >
       <div
         {...stylex.attrs(styles.items)}
@@ -124,20 +123,24 @@ export function ActionMenu(props: ActionMenuProps) {
 }
 
 export function MenuItem(props: MenuItemProps) {
-  const [local, rest] = splitProps(props, ["onSelect", "icon", "shortcut", "tone", "children", "class"]);
-  return (
+  const tooltipId = `hf-menu-tooltip-${createUniqueId()}`;
+  const [local, rest] = splitProps(props, ["onSelect", "icon", "shortcut", "tone", "tooltip", "children", "class"]);
+  const disabled = () => props.disabled || props["aria-disabled"] === true || props["aria-disabled"] === "true";
+  const button = (
     <button
       {...rest}
       {...stylex.attrs(styles.item, sharedStyles.focusRing, local.tone === "danger" ? styles.danger : undefined)}
       classList={{ [local.class ?? ""]: Boolean(local.class) }}
       type="button"
       role="menuitem"
+      aria-label={rest["aria-label"] ?? (typeof local.children === "string" ? local.children : undefined)}
+      aria-describedby={local.tooltip ? [rest["aria-describedby"], tooltipId].filter(Boolean).join(" ") : rest["aria-describedby"]}
       tabIndex={-1}
       onClick={() => {
-        if (!props.disabled) local.onSelect();
+        if (!disabled()) local.onSelect();
       }}
       onPointerMove={(event) => {
-        if (!props.disabled) event.currentTarget.focus();
+        if (!disabled()) event.currentTarget.focus();
       }}
     >
       {local.icon && <span {...stylex.attrs(styles.icon)} aria-hidden="true">{local.icon}</span>}
@@ -145,4 +148,7 @@ export function MenuItem(props: MenuItemProps) {
       {local.shortcut && <kbd {...stylex.attrs(styles.shortcut)} aria-hidden="true">{local.shortcut}</kbd>}
     </button>
   );
+  return local.tooltip
+    ? <Tooltip id={tooltipId} class={stylex.attrs(styles.itemTooltip).class} content={local.tooltip}>{button}</Tooltip>
+    : button;
 }

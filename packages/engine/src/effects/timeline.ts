@@ -1,3 +1,6 @@
+import { compareText } from "@hyperfocus/utilities/text";
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 export type TimelineEasing = "linear" | "step" | "smoothstep";
 export type TimelineLoopMode = "none" | "repeat" | "ping-pong";
 export type TimelineKeyframe = { time: number; value: number; easing?: TimelineEasing };
@@ -221,5 +224,3 @@ function assertId(value: unknown, label: string): asserts value is string { if (
 function finite(value: number, label: string) { if (!Number.isFinite(value)) throw new RangeError(`${label} must be finite`); return value; }
 function positive(value: number, label: string) { const checked = finite(value, label); if (checked <= 0) throw new RangeError(`${label} must be greater than zero`); return checked; }
 function nonnegative(value: number, label: string) { const checked = finite(value, label); if (checked < 0) throw new RangeError(`${label} must not be negative`); return checked; }
-function clamp(value: number, minimum: number, maximum: number) { return Math.max(minimum, Math.min(maximum, value)); }
-function compareText(a: string, b: string) { return a < b ? -1 : a > b ? 1 : 0; }

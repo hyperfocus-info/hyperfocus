@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -14,7 +15,7 @@ async function withTempProject(run: (root: string) => Promise<void>) {
 }
 
 async function runGit(root: string, args: string[]) {
-  const process = Bun.spawn(["git", "-C", root, ...args], { stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+  const process = spawnBackgroundProcess({ cmd: ["git", "-C", root, ...args], stdout: "pipe", stderr: "pipe", stdin: "ignore" });
   const [stdout, stderr, exitCode] = await Promise.all([new Response(process.stdout).text(), new Response(process.stderr).text(), process.exited]);
   if (exitCode !== 0) {
     throw new Error(`git ${args.join(" ")} failed: ${stderr || stdout}`);
@@ -22,6 +23,32 @@ async function runGit(root: string, args: string[]) {
 }
 
 describe("IdeProjectService", () => {
+  test("rejects reads, writes and listings through an escaping directory link", async () => {
+    await withTempProject(async root => {
+      await withTempProject(async outside => {
+        await writeFile(path.join(outside, "keep.txt"), "untouched");
+        await symlink(outside, path.join(root, "linked"), "junction");
+        const service = createIdeProjectService();
+        const file = { projectId: "project-1", projectRoot: root, filePath: "linked/keep.txt" };
+        await expect(service.readFile(file)).rejects.toThrow("outside the active project");
+        await expect(service.writeFile({ ...file, content: "escaped" })).rejects.toThrow("outside the active project");
+        await expect(service.writeFile({ ...file, filePath: "linked/new.txt", content: "escaped" })).rejects.toThrow("outside the active project");
+        await expect(service.listFileTree({ projectRoot: root, rootPath: "linked" })).rejects.toThrow("outside the active project");
+        expect(await readFile(path.join(outside, "keep.txt"), "utf8")).toBe("untouched");
+      });
+    });
+  });
+
+  test("resolves a link within the project and allows new ordinary files", async () => {
+    await withTempProject(async root => {
+      await mkdir(path.join(root, "actual"));
+      await symlink(path.join(root, "actual"), path.join(root, "linked"), "junction");
+      const service = createIdeProjectService();
+      const file = await service.writeFile({ projectId: "project-1", projectRoot: root, filePath: "linked/new.txt", content: "created" });
+      expect(file.content).toBe("created");
+      expect(await readFile(path.join(root, "actual/new.txt"), "utf8")).toBe("created");
+    });
+  });
   test("lists real project files and skips ignored heavy directories", async () => {
     await withTempProject(async (root) => {
       await mkdir(path.join(root, "src"), { recursive: true });

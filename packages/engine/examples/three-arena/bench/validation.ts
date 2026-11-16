@@ -1,9 +1,8 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import type { BenchOptions, UnknownRecord } from "./types.ts";
 import type { BenchRunResult } from "../bench.ts";
 
-export function isRecord(value: unknown): value is UnknownRecord {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+
 
 export function recordFrom(value: unknown): UnknownRecord {
   return isRecord(value) ? Object.fromEntries(Object.entries(value)) : {};
@@ -140,3 +139,5 @@ export function median(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)] ?? 0;
 }
+
+export { isRecord } from "@hyperfocus/utilities/records";

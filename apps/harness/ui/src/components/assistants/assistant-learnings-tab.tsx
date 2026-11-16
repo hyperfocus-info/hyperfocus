@@ -1,34 +1,21 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX, type Setter } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowUp, ArrowUpRight, Brain, Bot, Calendar, Check, CheckSquare2, CircleAlert, CirclePause,
-  CircleHelp, CirclePlay, ClipboardList, CopyPlus, Cpu, FlaskConical, Folder, Gauge, Globe, ListFilter, ListChecks,
-  Logs, MessageSquare, Plus, RefreshCcw, Save, Split, Square, SquarePen, Trash2 } from "lucide-solid";
 import {
-  createAssistantTodoId,
-  type BackgroundJob,
-  type BackgroundJobRun,
-  createRequestId,
-  type Assistant,
-  type AssistantLearning,
-  type AssistantQuestion,
-  type AssistantTodo,
-  type BulkOperationAction,
-  type BulkOperationTarget,
-  type ComposerReasoningStrength,
+type AssistantLearning,
 } from "@hyperfocus/ai-core/protocol";
-import { formatShortTimestamp, resolveBrowserTimezone } from "../../lib/time-format";
+import * as stylex from "@stylexjs/stylex";
+import { ArrowDown,ArrowUp,Trash2 } from "lucide-solid";
+import { Show } from "solid-js";
+import { formatShortTimestamp } from "../../lib/time-format";
 import { ActionButton } from "../action-button";
-import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
-import { StatusChip, type StatusChipTone } from "../primitives/status-chip";
+import { assistantUtilityStyles } from "../assistants-panel.styles";
+import { FileLinkedText } from "../file-linked-text";
+import { StatusChip } from "../primitives/status-chip";
 import { VirtualList } from "../primitives/virtual-list";
-import { assistantPanelStyles, assistantUtilityStyles } from "../assistants-panel.styles";
-import { createAssistantsPanelController, type AssistantsPanelController, type AssistantsPanelProps } from "./assistant-panel-controller";
+import { detailStyles } from "./assistant-detail.styles";
+import { useAssistantsPanel } from "./state/panel-context";
 
-export function AssistantLearningsTab(props: { controller: AssistantsPanelController }) {
-  const {
-    activeTab, assistantChatFileLinks, deleteLearning, filteredLearnings,
-    reorderLearning, selectedLearnings, variant,
-  } = props.controller;
+export function AssistantLearningsTab() {
+  const controller = useAssistantsPanel();
+  const { activeTab, filteredLearnings, state } = controller;
   return (
     <Show when={activeTab() === "learnings"}>
       <section
@@ -38,10 +25,13 @@ export function AssistantLearningsTab(props: { controller: AssistantsPanelContro
             assistantUtilityStyles.minH0,
             assistantUtilityStyles.flex1,
             assistantUtilityStyles.flexCol,
+            detailStyles.collection,
           ).class
         }
       >
+        <p class={stylex.attrs(detailStyles.caption).class}>Lessons retained by this assistant. Review the source and confidence before relying on them.</p>
         <VirtualList
+          dataTest="assistant-learnings"
           class={
             stylex.attrs(
               assistantUtilityStyles.minH0,
@@ -72,24 +62,25 @@ export function AssistantLearningsTab(props: { controller: AssistantsPanelContro
                   assistantUtilityStyles.borderBorder,
                   assistantUtilityStyles.py3,
                   assistantUtilityStyles.pl4,
-                  assistantUtilityStyles.text075,
+                  detailStyles.summary,
                   assistantUtilityStyles.textMuted,
                 ).class
               }
             >
-              No learnings yet.
+              {state.assistants.detailSearch.trim() ? "No learnings match your search. Clear search to see all lessons." : "No learnings yet. Lessons gathered during assistant work will appear here."}
             </div>
           }
         >
-          {(learning) => <AssistantLearningCard controller={props.controller} learning={learning} />}
+          {(learning) => <AssistantLearningCard learning={learning} />}
         </VirtualList>
       </section>
     </Show>
   );
 }
 
-function AssistantLearningCard(props: { controller: AssistantsPanelController; learning: AssistantLearning }) {
-  const { assistantChatFileLinks, deleteLearning, reorderLearning, selectedLearnings } = props.controller;
+function AssistantLearningCard(props: { learning: AssistantLearning }) {
+  const controller = useAssistantsPanel();
+  const { assistantChatFileLinks, deleteLearning, reorderLearning, selectedLearnings } = controller;
   const { learning } = props;
   return (
     <article class={stylex.attrs(
@@ -99,7 +90,7 @@ function AssistantLearningCard(props: { controller: AssistantsPanelController; l
                   <div
                     class={
                       stylex.attrs(
-                        assistantUtilityStyles.flex,
+                        detailStyles.row,
                         assistantUtilityStyles.itemsStart,
                         assistantUtilityStyles.justifyBetween,
                         assistantUtilityStyles.gap3,
@@ -108,7 +99,7 @@ function AssistantLearningCard(props: { controller: AssistantsPanelController; l
                   >
                     <div
                       class={
-                        stylex.attrs(assistantUtilityStyles.minW0)
+                        stylex.attrs(detailStyles.summary)
                           .class
                       }
                     >
@@ -131,7 +122,7 @@ function AssistantLearningCard(props: { controller: AssistantsPanelController; l
                     <div
                       class={
                         stylex.attrs(
-                          assistantPanelStyles.secondaryAction,
+                          assistantUtilityStyles.flexWrap,
                           assistantUtilityStyles.flex,
                           assistantUtilityStyles.shrink0,
                           assistantUtilityStyles.itemsCenter,
@@ -148,7 +139,7 @@ function AssistantLearningCard(props: { controller: AssistantsPanelController; l
                               : "info"
                         }
                       >
-                        {learning.confidence}
+                        {learning.confidence} confidence
                       </StatusChip>
                       <ActionButton
                         tooltip="Move assistant learning up"
@@ -256,4 +247,3 @@ function AssistantLearningCard(props: { controller: AssistantsPanelController; l
                 </article>
   );
 }
-

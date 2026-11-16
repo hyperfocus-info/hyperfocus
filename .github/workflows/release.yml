@@ -17,6 +17,8 @@ jobs:
         with:
           bun-version: 1.4.0
       - run: bun install --frozen-lockfile
+      - run: bun run check:process-policy
+      - run: bun run test:repository
       - run: bun run check:repository-size
       - run: bun run typecheck
       - run: bun run test:packages

@@ -139,7 +139,7 @@ export function createAssistantFromThreadIntent(input: {
 }
 
 export function appendAssistantCreationMessage(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -171,7 +171,7 @@ export function appendAssistantCreationMessage(
 }
 
 type ExecuteAssistantChatActionInput = {
-  ws: Bun.ServerWebSocket<HarnessConnection>;
+  ws: import("../transport/events").ControlEventSocket;
   requestId: string;
   connections: Set<Bun.ServerWebSocket<HarnessConnection>>;
   repository: WorkspaceRepository;

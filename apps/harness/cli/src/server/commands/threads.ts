@@ -14,6 +14,41 @@ type ThreadsCommandContext = Pick<ServerCommandContext, "ws" | "runtime" | "repo
 export async function handleThreadsCommand(command: ClientCommand, context: ThreadsCommandContext) {
   const { ws, runtime, repository, cliSessionManager, emitSetupRefresh, pendingBrowserApprovals, connections } = context;
   switch (command.type) {
+case "thread.message": {
+      repository.sendThreadMessage(command.payload);
+      const project = repository.getProject(command.payload.projectId);
+      runtime.upsertPersistedProject(project);
+      emitProjectUpdated(ws, command.requestId, project.id, project, repository);
+      return;
+    }
+case "thread.input": {
+      const { projectId, threadId, message, deliveryId, mode } = command.payload;
+      const project = repository.getProject(projectId);
+      const thread = project.threads.find(entry => entry.id === threadId);
+      if (!thread || thread.status === "archived") throw new Error("Choose an active project thread");
+      if (mode === "steer") {
+        const run = repository.getLatestThreadRun(projectId, threadId);
+        const parentRunId = thread.lineage?.relationship === "subagent" ? thread.lineage.runId : run?.id;
+        const execution = parentRunId ? runtime.getRunExecutionStates(projectId, parentRunId).find(entry =>
+          thread.lineage?.relationship === "subagent" ? entry.subagentId === thread.lineage.subagentId : !entry.subagentId && entry.controller?.steer) : undefined;
+        try {
+          if (!execution?.controller?.steer) throw new Error("This runtime or phase cannot receive a message mid-turn. Queue it with Enter instead.");
+          await execution.controller.steer(message);
+        } catch (error) {
+          sendEvent(ws, { type: "thread.inputRejected", requestId: command.requestId,
+            payload: { projectId, threadId, deliveryId, reason: error instanceof Error ? error.message : String(error) } });
+          return;
+        }
+        runtime.upsertPersistedProject(repository.appendMessage(projectId, "user", message, threadId));
+      } else {
+        repository.enqueueThreadMessage({ id: deliveryId, projectId, threadId, content: message });
+        runtime.upsertPersistedProject(repository.getProject(projectId));
+      }
+      emitProjectUpdated(ws, command.requestId, projectId, repository.getProject(projectId), repository);
+      sendEvent(ws, { type: "thread.inputAccepted", requestId: command.requestId,
+        payload: { projectId, threadId, content: message, deliveryId, mode } });
+      return;
+    }
 case "thread.create": {
       const nextProject = repository.createThread(command.payload.projectId);
       runtime.upsertPersistedProject(nextProject);

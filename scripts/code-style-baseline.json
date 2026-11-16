@@ -1,19 +1,25 @@
 {
   "version": 1,
   "entries": {
-    "apps/engine-editor/headless-editor.test.ts": { "assertions": 1 },
-    "apps/engine-editor/src/components/editor-center-content.tsx": { "assertions": 1 },
-    "apps/engine-editor/src/editor-command-session.ts": { "assertions": 2 },
-    "apps/engine-editor/src/export/timeline-audio-mix.test.ts": { "classes": 2, "assertions": 2 },
-    "apps/engine-editor/src/export/timeline-audio-mix.ts": { "assertions": 3 },
-    "apps/engine-editor/src/motion/timeline-authoring-panels.ts": { "assertions": 1 },
-    "apps/engine-editor/src/motion/timeline-editor-bindings.ts": { "assertions": 1 },
-    "apps/harness/cli/src/execution-runtime.ts": { "classes": 1, "assertions": 1 },
-    "apps/harness/cli/src/pi-subagents.test.ts": { "assertions": 2 },
-    "packages/engine/src/project/editor-timeline-validation.ts": { "assertions": 1 },
-    "packages/pad-pilot/src/bounded-stream.ts": { "classes": 1 },
-    "packages/performance/benchmark-report.test.ts": { "assertions": 1 },
-    "packages/performance/performance-history.test.ts": { "assertions": 1 },
-    "packages/performance/record-history.ts": { "assertions": 2 }
-  }
+    "apps/harness/cli/src/execution-runtime.ts": {
+      "classes": 1,
+      "assertions": 1
+    },
+    "apps/harness/cli/src/pi-subagents.test.ts": {
+      "assertions": 2
+    },
+    "packages/pad-pilot/src/bounded-stream.ts": {
+      "classes": 1
+    },
+    "packages/performance/benchmark-report.test.ts": {
+      "assertions": 1
+    },
+    "packages/performance/performance-history.test.ts": {
+      "assertions": 1
+    },
+    "packages/performance/record-history.ts": {
+      "assertions": 2
+    }
+  },
+  "numericLiterals": {}
 }

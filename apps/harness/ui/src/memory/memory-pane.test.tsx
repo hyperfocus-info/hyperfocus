@@ -1,12 +1,13 @@
+import { getCommandType } from "../utils/tests/transport-fixtures";
 /** @jsxImportSource solid-js */
-import { beforeEach, expect, it } from "bun:test";
-import { fireEvent, render, screen } from "@solidjs/testing-library";
 import type { MemoryEntry } from "@hyperfocus/ai-core/protocol";
-import { createUiTest } from "../utils/tests/test-harness";
+import { fireEvent,render,screen } from "@solidjs/testing-library";
+import { beforeEach,expect,it } from "bun:test";
 import {
-  captureDispatchedCommands,
-  clearBrowserStateForTests
+captureDispatchedCommands,
+clearBrowserStateForTests
 } from "../utils/tests/store-test-utils";
+import { createUiTest,requireInput } from "../utils/tests/test-harness";
 import { MemoryPane } from "./memory-pane";
 
 function createEntry(input: Pick<MemoryEntry, "id" | "title" | "priority"> & Partial<MemoryEntry>): MemoryEntry {
@@ -32,12 +33,6 @@ function createEntry(input: Pick<MemoryEntry, "id" | "title" | "priority"> & Par
   };
 }
 
-function getCommandType(value: unknown) {
-  if (!value || typeof value !== "object" || !("type" in value) || typeof value.type !== "string") {
-    return undefined;
-  }
-  return value.type;
-}
 
 createUiTest("MemoryPane", () => {
   beforeEach(clearBrowserStateForTests);
@@ -68,6 +63,7 @@ createUiTest("MemoryPane", () => {
     captureDispatchedCommands(commands);
     render(() => <MemoryPane projectId="project-memory" entries={[]} />);
 
+    fireEvent.click(screen.getByText("Add a focused note"));
     fireEvent.input(screen.getByLabelText("Note title"), { target: { value: "Frontend refactor" } });
     fireEvent.input(screen.getByLabelText("Focused context"), {
       target: { value: "Keep workspace contracts framework-neutral." }
@@ -93,5 +89,43 @@ createUiTest("MemoryPane", () => {
 
     expect(screen.getByText(/No project notes yet/i)).not.toBeNull();
     expect(screen.getByText(/durable context is worth retrieving later/i)).not.toBeNull();
+  });
+
+  it("combines note text, tags and pins and restores the full list", () => {
+    render(() => <MemoryPane projectId="project-memory" entries={[
+      createEntry({ id: "one", title: "Frontend decision", priority: 1, pinned: true, tags: ["area:frontend"] }),
+      createEntry({ id: "two", title: "Backend decision", priority: 2, tags: ["area:backend"] }),
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Filter notes by area:frontend" }));
+    expect(screen.queryByText("Backend decision")).toBeNull();
+    expect(screen.getByRole("button", { name: "Move memory up" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Show pinned notes only" }));
+    expect(screen.getByText("Frontend decision")).not.toBeNull();
+    fireEvent.input(screen.getByRole("textbox", { name: "Search project notes" }), { target: { value: "missing" } });
+    expect(screen.getByText("No notes match these filters.")).not.toBeNull();
+    expect(screen.queryByText(/No project notes yet/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clear note filters" }));
+    expect(screen.getByText("Backend decision")).not.toBeNull();
+    expect(screen.getByText("Frontend decision")).not.toBeNull();
+  });
+
+  it("shows archived notes through the status filter", () => {
+    render(() => <MemoryPane projectId="project-memory" entries={[
+      createEntry({ id: "active", title: "Active decision", priority: 1 }),
+      createEntry({ id: "archived", title: "Archived decision", priority: 2, status: "archived" }),
+    ]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Note status" }));
+    fireEvent.click(screen.getByRole("option", { name: "Archived" }));
+    expect(screen.queryByText("Active decision")).toBeNull();
+    expect(screen.getByText("Archived decision")).not.toBeNull();
+  });
+
+  it("reuses an existing semantic tag without losing a newly typed tag", () => {
+    render(() => <MemoryPane projectId="project-memory" entries={[createEntry({ id: "tagged", title: "Tagged note", priority: 1, tags: ["area:harness"] })]} />);
+    fireEvent.click(screen.getByText("Add a focused note"));
+    fireEvent.input(screen.getByLabelText("Semantic tags"), { target: { value: "feature:new-work" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose existing semantic tags" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "area:harness" }));
+    expect(requireInput(screen.getByLabelText("Semantic tags")).value).toBe("feature:new-work, area:harness");
   });
 });

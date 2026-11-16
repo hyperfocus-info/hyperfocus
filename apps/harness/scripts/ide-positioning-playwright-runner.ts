@@ -1,3 +1,4 @@
+import { connectHeadlessBrowser } from "@hyperfocus/desktop-runtime/automation";
 import type { Page } from "playwright";
 
 export {};
@@ -9,7 +10,11 @@ if (!baseUrl) {
 }
 
 const { chromium } = await import("playwright");
-const browser = await chromium.launch({ timeout: 10000 });
+const ownedBrowser = await connectHeadlessBrowser({
+  executable: chromium.executablePath(),
+  connect: (endpoint) => chromium.connectOverCDP(endpoint, { timeout: 10_000 }),
+});
+const browser = ownedBrowser.browser;
 
 try {
   const page: Page = await browser.newPage({ viewport: { width: 900, height: 520 } });
@@ -78,5 +83,5 @@ try {
 
   console.log("browser check passed");
 } finally {
-  await browser.close().catch(() => undefined);
+  try { await browser.close(); } finally { await ownedBrowser.close(); }
 }

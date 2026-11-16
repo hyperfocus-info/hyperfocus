@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { connectAuthoritative, type AuthoritativeClient, type AuthoritativeSession } from "../net/authoritative-client.ts";
 import type { ReplicationSchema } from "../protocol/schema.ts";
 import type { EntityInterpolator } from "./interpolation.ts";
@@ -46,9 +47,7 @@ export type MmoClient<
   sampleEntities(nowMs?: number): Record<string, MmoReplicatedEntity<TPublic, TOwner>> | undefined;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function isOptionalFiniteNumber(value: unknown): boolean {
   return value === undefined || (typeof value === "number" && Number.isFinite(value));

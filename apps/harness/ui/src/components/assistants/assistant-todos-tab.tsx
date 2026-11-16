@@ -1,31 +1,21 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX, type Setter } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowUp, ArrowUpRight, Brain, Bot, Calendar, Check, CheckSquare2, CircleAlert, CirclePause,
-  CircleHelp, CirclePlay, ClipboardList, CopyPlus, Cpu, FlaskConical, Folder, Gauge, Globe, ListFilter, ListChecks,
-  Logs, MessageSquare, Plus, RefreshCcw, Save, Split, Square, SquarePen, Trash2 } from "lucide-solid";
 import {
-  createAssistantTodoId,
-  type BackgroundJob,
-  type BackgroundJobRun,
-  createRequestId,
-  type Assistant,
-  type AssistantLearning,
-  type AssistantQuestion,
-  type AssistantTodo,
-  type BulkOperationAction,
-  type BulkOperationTarget,
-  type ComposerReasoningStrength,
+type AssistantTodo,
 } from "@hyperfocus/ai-core/protocol";
+import { Input } from "@hyperfocus/ui";
+import * as stylex from "@stylexjs/stylex";
+import { ArrowDown,ArrowUp,ClipboardList,Plus,Trash2 } from "lucide-solid";
+import { Show } from "solid-js";
+import { rightAlignedNumbersEnabled } from "../../lib/visual-flags";
 import { ActionButton } from "../action-button";
-import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
+import { assistantPanelStyles,assistantUtilityStyles } from "../assistants-panel.styles";
+import { FileLinkedText } from "../file-linked-text";
 import { DropdownControl } from "../primitives/dropdown";
-import { Input } from "../primitives/input";
-import { StatusChip, type StatusChipTone } from "../primitives/status-chip";
+import { StatusChip,type StatusChipTone } from "../primitives/status-chip";
 import { Textarea } from "../primitives/textarea";
 import { VirtualList } from "../primitives/virtual-list";
-import { rightAlignedNumbersEnabled } from "../../lib/visual-flags";
-import { assistantPanelStyles, assistantUtilityStyles } from "../assistants-panel.styles";
-import { createAssistantsPanelController, type AssistantsPanelController, type AssistantsPanelProps } from "./assistant-panel-controller";
+import { detailStyles } from "./assistant-detail.styles";
+import { isAssistantTodoState,isAssistantTodoWorkKind } from "./assistant-panel-model";
+import { useAssistantsPanel } from "./state/panel-context";
 
 const assistantTodoStateOptions = [
   {
@@ -93,18 +83,11 @@ const assistantTodoWorkKindOptions = [
   },
 ];
 
-function isAssistantTodoState(value: string): value is AssistantTodo["state"] {
-  return value === "pending" || value === "in-progress" || value === "blocked" || value === "completed" || value === "failed" || value === "cancelled";
-}
 
-function isAssistantTodoWorkKind(value: string): value is AssistantTodo["workKind"] { return value === "app-code" || value === "automation-code" || value === "documentation" || value === "research" || value === "blocked" || value === "unspecified"; }
 
-export function AssistantTodosTab(props: { controller: AssistantsPanelController }) {
-  const {
-    activeTab, assistantChatFileLinks, deleteTodo, handleAddTodo, newTodoTitle,
-    reorderTodo, selectedTodos, setNewTodoTitle, state, updateTodo, variant,
-    visibleTodos,
-  } = props.controller;
+export function AssistantTodosTab() {
+  const controller = useAssistantsPanel();
+  const { activeTab, handleAddTodo, newTodoTitle, setNewTodoTitle, state, visibleTodos } = controller;
   return (
     <Show when={activeTab() === "todos"}>
       <section
@@ -114,6 +97,7 @@ export function AssistantTodosTab(props: { controller: AssistantsPanelController
             assistantUtilityStyles.minH0,
             assistantUtilityStyles.flex1,
             assistantUtilityStyles.flexCol,
+            detailStyles.collection,
           ).class
         }
       >
@@ -126,16 +110,20 @@ export function AssistantTodosTab(props: { controller: AssistantsPanelController
             ).class
           }
         >
+          <label class={stylex.attrs(detailStyles.field).class}>New todo
           <Textarea
+            aria-label="New todo"
             rows="2"
             value={newTodoTitle()}
             onInput={(event) =>
               setNewTodoTitle(event.currentTarget.value)
             }
-            placeholder="Add manual todo."
-          />
+            placeholder="Describe the next task"
+          /></label>
           <ActionButton
             tooltip="Add todo to assistant list"
+            disabled={!newTodoTitle().trim()}
+            disabledReason="Enter a task first"
             icon={
               <Plus
                 class={
@@ -165,6 +153,8 @@ export function AssistantTodosTab(props: { controller: AssistantsPanelController
           itemClass={
             stylex.attrs(assistantUtilityStyles.pb3).class
           }
+          dataTest="assistant-todos"
+          empty={<p class={stylex.attrs(detailStyles.caption).class}>{state.assistants.detailSearch.trim() ? "No todos match your search. Clear search to see all tasks." : "No todos yet. Add a task above to give this assistant a next step."}</p>}
           items={visibleTodos()}
           getKey={(todo) => todo.id}
           estimateSize={128}
@@ -174,15 +164,16 @@ export function AssistantTodosTab(props: { controller: AssistantsPanelController
             batchSize: 60,
           }}
         >
-        {(todo) => <AssistantTodoCard controller={props.controller} todo={todo} />}
+        {(todo) => <AssistantTodoCard todo={todo} />}
         </VirtualList>
       </section>
     </Show>
   );
 }
 
-function AssistantTodoCard(props: { controller: AssistantsPanelController; todo: AssistantTodo }) {
-  const { assistantChatFileLinks, deleteTodo, reorderTodo, selectedTodos, updateTodo, variant } = props.controller;
+function AssistantTodoCard(props: { todo: AssistantTodo }) {
+  const controller = useAssistantsPanel();
+  const { assistantChatFileLinks } = controller;
   const { todo } = props;
   return (
     <article
@@ -219,15 +210,14 @@ function AssistantTodoCard(props: { controller: AssistantsPanelController; todo:
                     <div
                       class={
                         stylex.attrs(
-                          assistantUtilityStyles.minW0,
-                          assistantUtilityStyles.flex1,
+                          detailStyles.summary,
                         ).class
                       }
                     >
                       <div
                         class={
                           stylex.attrs(
-                            assistantUtilityStyles.text075,
+                            detailStyles.summary,
                             assistantUtilityStyles.fontSemibold,
                             assistantUtilityStyles.textForeground,
                           ).class
@@ -294,21 +284,23 @@ function AssistantTodoCard(props: { controller: AssistantsPanelController; todo:
                         )}
                       </Show>
                     </div>
-                    <AssistantTodoActions controller={props.controller} todo={todo} />
+                    <AssistantTodoActions todo={todo} />
                   </div>
-                    <AssistantTodoMetadata controller={props.controller} todo={todo} />
+                    <AssistantTodoMetadata todo={todo} />
                 </article>
   );
 }
 
-function AssistantTodoActions(props: { controller: AssistantsPanelController; todo: AssistantTodo }) {
-  const { deleteTodo, reorderTodo, selectedTodos, updateTodo } = props.controller;
+function AssistantTodoActions(props: { todo: AssistantTodo }) {
+  const controller = useAssistantsPanel();
+  const { deleteTodo, reorderTodo, selectedTodos, updateTodo } = controller;
   const { todo } = props;
   return (
     <div
                           class={
                             stylex.attrs(
-                              assistantPanelStyles.secondaryAction,
+                              assistantUtilityStyles.flexWrap,
+                              assistantUtilityStyles.maxWFull,
                               assistantUtilityStyles.flex,
                               assistantUtilityStyles.shrink0,
                               assistantUtilityStyles.itemsCenter,
@@ -422,8 +414,9 @@ function AssistantTodoActions(props: { controller: AssistantsPanelController; to
   );
 }
 
-function AssistantTodoMetadata(props: { controller: AssistantsPanelController; todo: AssistantTodo }) {
-  const { updateTodo } = props.controller;
+function AssistantTodoMetadata(props: { todo: AssistantTodo }) {
+  const controller = useAssistantsPanel();
+  const { updateTodo } = controller;
   const { todo } = props;
   return (
     <>
@@ -458,6 +451,7 @@ function AssistantTodoMetadata(props: { controller: AssistantsPanelController; t
                             }}
                           />
                           <Input
+                            aria-label={`Work target for ${todo.title}`}
                             value={todo.workTarget ?? ""}
                             placeholder="Work target"
                             onChange={(event) =>
@@ -542,4 +536,3 @@ function todoWorkKindTone(workKind: AssistantTodo["workKind"]): StatusChipTone {
       return "neutral";
   }
 }
-

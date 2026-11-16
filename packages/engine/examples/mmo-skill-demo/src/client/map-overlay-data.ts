@@ -1,3 +1,5 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 import { canvasPointFromClient, GameMap, type MapMarker } from "@hyperfocus/engine";
 import { createHtmlTooltip, createHtmlTooltipOutlet, type HtmlTooltip } from "@hyperfocus/engine/ui";
 import type { FactionVisualId } from "../data/world-landmarks.ts";
@@ -213,9 +215,7 @@ export function mapFilterSignature(filters: MapFilterState): string {
   return `gatherables:${filters.gatherables ? 1 : 0}`;
 }
 
-export function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+export { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
 
 export function labelize(value: string) {
   return value

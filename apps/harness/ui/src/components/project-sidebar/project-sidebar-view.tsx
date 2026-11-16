@@ -1,65 +1,53 @@
-import { For, Show, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type JSX } from "solid-js";
+import { createRequestId } from "@hyperfocus/ai-core/protocol";
+import { Input } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
 import {
-  DragDropProvider,
-  DragDropSensors,
-  SortableProvider,
-  createSortable,
-  transformStyle,
-  type DragEventHandler
+DragDropProvider,
+DragDropSensors,
+SortableProvider
 } from "@thisbeyond/solid-dnd";
-import { createRequestId, type BulkOperationTarget } from "@hyperfocus/ai-core/protocol";
 import {
-  getActiveProject,
-  harnessStore,
-  type ProjectSidebarGrouping,
-  type ProjectSidebarProjectSort,
-  type ProjectSidebarThreadSort
+ArrowDown,
+ArrowUp,
+Calendar,
+CheckSquare2,
+ChevronDown,
+ChevronRight,
+Clock3,
+Code2,
+Edit3,
+Folder,
+FolderOpenDot,
+GitFork,
+GripVertical,
+Layers,
+Pin,
+Plus,
+Shredder,
+Square,
+Trash2
+} from "lucide-solid";
+import { For,Show,createSignal,onCleanup } from "solid-js";
+import {
+harnessStore
 } from "../../harness-store";
-import { truncateMiddle } from "../../lib/utils";
 import { normalizeAppHotkeyPreferences } from "../../lib/app-hotkeys";
 import { tooltipWithPrimaryHotkey } from "../../lib/hotkey-hints";
-import { registerCurrentTabItemSelector } from "../../lib/current-tab-item-hotkeys";
-import { buildProjectChatSearchResults, type ProjectChatSearchResult } from "../../lib/project-chat-search";
-import { openIdeWindow } from "../../lib/ide-window";
-import { activateProjectThread } from "../../project-thread-navigation";
-import { useHarnessStore } from "../../store-providers";
+import { truncateMiddle } from "../../lib/utils";
+import { rightAlignedNumbersEnabled } from "../../lib/visual-flags";
 import { ActionButton } from "../action-button";
-import { Input } from "../primitives/input";
 import { Button } from "../primitives/button";
-import { ButtonGroup, type ButtonGroupItem } from "../primitives/button-group";
-import type { ContextMenuAction } from "../primitives/context-menu";
-import { LeftPaneEmptyState, LeftPaneFilterBlock, LeftPaneHeader, LeftPaneSearchInput, LeftPaneSearchMenu, LeftPaneShell } from "../primitives/left-pane";
-import { StatusChip, type StatusChipTone } from "../primitives/status-chip";
+import { ButtonGroup,type ButtonGroupItem } from "../primitives/button-group";
+import { LeftPaneBody,LeftPaneEmptyState,LeftPaneFilterBlock,LeftPaneHeader,LeftPaneSearchInput,LeftPaneSearchMenu,LeftPaneShell } from "../primitives/left-pane";
+import { StatusChip } from "../primitives/status-chip";
 import { Tooltip } from "../primitives/tooltip";
+import { VirtualList } from "../primitives/virtual-list";
 import { projectNavigationStyles as styles } from "../project-navigation.styles";
 import { ThreadCleanupDialog } from "../thread-cleanup-dialog";
-import { VirtualList, type VirtualListHandle } from "../primitives/virtual-list";
-import { rightAlignedNumbersEnabled } from "../../lib/visual-flags";
-import {
-  ArrowDown,
-  ArrowUp,
-  Calendar,
-  ChevronDown,
-  ChevronRight,
-  CheckSquare2,
-  Clock3,
-  Code2,
-  Edit3,
-  Folder,
-  GripVertical,
-  GitFork,
-  Plus,
-  Pin,
-  Square,
-  Trash2,
-  FolderOpenDot,
-  Layers,
-  Shredder
-} from "lucide-solid";
-import { applyDeleteButtonTone, projectActionAriaLabel, formatProjectSortLabel, formatThreadSortLabel, formatProjectGroupingLabel, SortableProjectCard, createStaticProjectCardSortableState, sortThreads, compareProjects, groupProjectCards, flattenProjectSidebarRows, estimateProjectSidebarRowSize, getLatestIso, getEarliestIso, maxIso, compareIsoAsc, compareIsoDesc, getPathBasename, getParentPath, moveId, badgeLabel, threadBadgeTone, toggleSelectionId } from "./project-sidebar-model";
-import type { ProjectCard, ProjectThreadCard, ProjectGroup, ProjectSidebarRow, ProjectCardSortableState } from "./project-sidebar-model";
 import type { ProjectSidebarController } from "./project-sidebar";
+import type { ProjectCard,ProjectCardSortableState,ProjectSidebarRow,ProjectThreadCard } from "./project-sidebar-model";
+import { SortableProjectCard,applyDeleteButtonTone,badgeLabel,createStaticProjectCardSortableState,estimateProjectSidebarRowSize,formatProjectGroupingLabel,formatProjectSortLabel,formatThreadSortLabel,projectActionAriaLabel,threadBadgeTone,toggleSelectionId } from "./project-sidebar-model";
+import { useProjectSidebar } from "./state/panel-context";
 
 function projectRowActionItems(
   project: ProjectCard,
@@ -118,9 +106,14 @@ function projectRowActionItems(
   ];
 }
 
-function ProjectRow(rowProps: { project: ProjectCard; controller: ProjectSidebarController }) {
-  const controller = rowProps.controller;
-  const { props, store, state, sendCommand, activeProject, projectCards, projectGroups, sidebarRows, visibleProjectIds, manualSortActive, editingThreadId, setEditingThreadId, threadTitleDraft, setThreadTitleDraft, lastScrolledActiveKey, setLastScrolledActiveKey, cleanupDialogOpen, setCleanupDialogOpen, projectChatSearch, setProjectChatSearch, projectChatSearchIndex, setProjectChatSearchIndex, contextMenu, setContextMenu, selectedProjectIds, setSelectedProjectIds, projectSelectionAnchorId, setProjectSelectionAnchorId, selectedProjectIdSet, selectedProjects, selectedProjectRemoveDisabledReason, owner, projectChatSearchResults, selectableProjectThreads, showContextMenu, hideContextMenu, renderContextMenuSurface, handleActivateProject, handleActivateThread, openProjectChatSearchResult, handleCreateThread, handleOpenProjectInIde, handleForkThread, handlePinThread, handleRemoveProject, handleArchiveThread, setProjectSort, setThreadSort, setGrouping, persistManualOrder, setProjectCollapsed, handleProjectDragEnd, moveProject, startRename, commitRename, activeSidebarRowKey, projectRemoveDisabledReason, clearProjectSelectionTimer, scheduleProjectDelayedSelection, consumeProjectDelayedSelection, isInteractiveProjectSelectionTarget, selectProjectWithMouse, handleProjectCardClick, bulkProjectTargets, sendBulkProjectDelete, selectedOrSingleProject, projectBulkContextActions, projectContextActions, threadContextActions, openNodeContextMenu, setSidebarList, setSidebarShellElement, setContextMenuSurfaceElement, setProjectSearchInput } = controller;
+function ProjectRow(rowProps: { project: ProjectCard }) {
+  const controller = useProjectSidebar();
+  const {
+    props, manualSortActive, setSelectedProjectIds, setProjectSelectionAnchorId,
+    selectedProjectIdSet, selectedProjects, showContextMenu, handleActivateProject,
+    setProjectCollapsed, clearProjectSelectionTimer, scheduleProjectDelayedSelection,
+    handleProjectCardClick, projectContextActions,
+  } = controller;
 
     const project = rowProps.project;
     const isActiveProject = () => project.isActive;
@@ -227,41 +220,30 @@ function ProjectRow(rowProps: { project: ProjectCard; controller: ProjectSidebar
             </div>
           </ActionButton>
 
-          <div class={stylex.attrs(styles.secondaryActions).class}>
-            <ActionButton
-              tooltip={selectedProjectIdSet().has(project.id) ? "Remove from bulk selection" : "Add to bulk selection"}
-              icon={selectedProjectIdSet().has(project.id) ? <CheckSquare2 class={stylex.attrs(styles.iconXs).class} /> : <Square class={stylex.attrs(styles.iconXs).class} />}
-              variant="ghost"
-              size="icon"
-              ariaLabel={selectedProjectIdSet().has(project.id) ? `Remove ${project.name} from bulk selection` : `Add ${project.name} to bulk selection`}
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedProjectIds((ids) => toggleSelectionId(ids, project.id));
-                setProjectSelectionAnchorId(project.id);
-              }}
-            />
-            <For each={actionItems().filter((item) => item.key !== "open-ide")}>
-              {(item) => (
-                <ActionButton
-                  tooltip={item.tooltip}
-                  disabledReason={item.disabledReason}
-                  disabled={item.disabled}
-                  icon={item.icon}
-                  variant="ghost"
-                  size="icon"
-                  class={stylex.attrs(styles.compactAction).class}
-                  ariaLabel={projectActionAriaLabel(project.name, item.key)}
-                  onClick={item.onClick}
-                />
-              )}
-            </For>
-          </div>
+          <ButtonGroup
+            menuLabel={`${project.name} actions`}
+            collapseBelowWidth={480}
+            items={() => [
+              {
+                key: "bulk-select",
+                label: selectedProjectIdSet().has(project.id) ? `Remove ${project.name} from bulk selection` : `Add ${project.name} to bulk selection`,
+                tooltip: "Toggle bulk selection",
+                icon: selectedProjectIdSet().has(project.id) ? <CheckSquare2 class={stylex.attrs(styles.iconXs).class} /> : <Square class={stylex.attrs(styles.iconXs).class} />,
+                onClick: (event) => {
+                  event.stopPropagation();
+                  setSelectedProjectIds((ids) => toggleSelectionId(ids, project.id));
+                  setProjectSelectionAnchorId(project.id);
+                },
+              },
+              ...actionItems().filter((item) => item.key !== "open-ide").map((item) => ({ ...item, label: projectActionAriaLabel(project.name, item.key) })),
+            ]}
+          />
         </div>
         {project.threads.length > 0 ? (
           <div ref={threadListElement} class={stylex.attrs(styles.threadList).class} hidden={isCollapsed()}>
-            {project.threads.map((thread) => (
-              <ProjectThreadRow controller={rowProps.controller} project={project} thread={thread} />
-            ))}
+            <For each={project.threads}>{(thread) => (
+              <ProjectThreadRow project={project} thread={thread} />
+            )}</For>
           </div>
         ) : null}
       </section>
@@ -275,9 +257,13 @@ function ProjectRow(rowProps: { project: ProjectCard; controller: ProjectSidebar
   
 }
 
-function ProjectThreadRow(props: { project: ProjectCard; thread: ProjectThreadCard; controller: ProjectSidebarController }) {
-  const controller = props.controller;
-  const { store, state, sendCommand, activeProject, projectCards, projectGroups, sidebarRows, visibleProjectIds, manualSortActive, editingThreadId, setEditingThreadId, threadTitleDraft, setThreadTitleDraft, lastScrolledActiveKey, setLastScrolledActiveKey, cleanupDialogOpen, setCleanupDialogOpen, projectChatSearch, setProjectChatSearch, projectChatSearchIndex, setProjectChatSearchIndex, contextMenu, setContextMenu, selectedProjectIds, setSelectedProjectIds, projectSelectionAnchorId, setProjectSelectionAnchorId, selectedProjectIdSet, selectedProjects, selectedProjectRemoveDisabledReason, owner, projectChatSearchResults, selectableProjectThreads, showContextMenu, hideContextMenu, renderContextMenuSurface, handleActivateProject, handleActivateThread, openProjectChatSearchResult, handleCreateThread, handleOpenProjectInIde, handleForkThread, handlePinThread, handleRemoveProject, handleArchiveThread, setProjectSort, setThreadSort, setGrouping, persistManualOrder, setProjectCollapsed, handleProjectDragEnd, moveProject, startRename, commitRename, activeSidebarRowKey, projectRemoveDisabledReason, clearProjectSelectionTimer, scheduleProjectDelayedSelection, consumeProjectDelayedSelection, isInteractiveProjectSelectionTarget, selectProjectWithMouse, handleProjectCardClick, bulkProjectTargets, sendBulkProjectDelete, selectedOrSingleProject, projectBulkContextActions, projectContextActions, threadContextActions, openNodeContextMenu, setSidebarList, setSidebarShellElement, setContextMenuSurfaceElement, setProjectSearchInput } = controller;
+function ProjectThreadRow(props: { project: ProjectCard; thread: ProjectThreadCard }) {
+  const controller = useProjectSidebar();
+  const {
+    editingThreadId, setEditingThreadId, threadTitleDraft, setThreadTitleDraft, showContextMenu,
+    handleActivateThread, handleOpenProjectInIde, handleForkThread, handlePinThread,
+    handleArchiveThread, startRename, commitRename, threadContextActions,
+  } = controller;
 
     const project = props.project;
     const thread = props.thread;
@@ -446,18 +432,18 @@ function ProjectThreadRow(props: { project: ProjectCard; thread: ProjectThreadCa
   
 }
 
-function renderSidebarRow(controller: ProjectSidebarController, row: ProjectSidebarRow) {
+function renderSidebarRow(row: ProjectSidebarRow) {
 
     if (row.kind === "group") {
       return <div class={stylex.attrs(styles.groupLabel).class}>{row.label}</div>;
     }
     if (row.kind === "project") {
-      return <ProjectRow controller={controller} project={row.project} />;
+      return <ProjectRow project={row.project} />;
     }
   
 }
 
-function ProjectSidebarFilter(filterProps: { controller: ProjectSidebarController }) {
+function ProjectSidebarFilter() {
   const {
     state,
     projectChatSearch,
@@ -470,7 +456,7 @@ function ProjectSidebarFilter(filterProps: { controller: ProjectSidebarControlle
     setThreadSort,
     setGrouping,
     setProjectSearchInput
-  } = filterProps.controller;
+  } = useProjectSidebar();
   return (
     <LeftPaneFilterBlock>
       <LeftPaneSearchInput
@@ -626,9 +612,15 @@ function ProjectSidebarFilter(filterProps: { controller: ProjectSidebarControlle
   );
 }
 
-export function ProjectSidebarView(viewProps: { controller: ProjectSidebarController }) {
-  const controller = viewProps.controller;
-  const { props, store, state, sendCommand, activeProject, projectCards, projectGroups, sidebarRows, visibleProjectIds, manualSortActive, editingThreadId, setEditingThreadId, threadTitleDraft, setThreadTitleDraft, lastScrolledActiveKey, setLastScrolledActiveKey, cleanupDialogOpen, setCleanupDialogOpen, projectChatSearch, setProjectChatSearch, projectChatSearchIndex, setProjectChatSearchIndex, contextMenu, setContextMenu, selectedProjectIds, setSelectedProjectIds, projectSelectionAnchorId, setProjectSelectionAnchorId, selectedProjectIdSet, selectedProjects, selectedProjectRemoveDisabledReason, owner, projectChatSearchResults, selectableProjectThreads, showContextMenu, hideContextMenu, renderContextMenuSurface, handleActivateProject, handleActivateThread, openProjectChatSearchResult, handleCreateThread, handleOpenProjectInIde, handleForkThread, handlePinThread, handleRemoveProject, handleArchiveThread, setProjectSort, setThreadSort, setGrouping, persistManualOrder, setProjectCollapsed, handleProjectDragEnd, moveProject, startRename, commitRename, activeSidebarRowKey, projectRemoveDisabledReason, clearProjectSelectionTimer, scheduleProjectDelayedSelection, consumeProjectDelayedSelection, isInteractiveProjectSelectionTarget, selectProjectWithMouse, handleProjectCardClick, bulkProjectTargets, sendBulkProjectDelete, selectedOrSingleProject, projectBulkContextActions, projectContextActions, threadContextActions, openNodeContextMenu, setSidebarList, setSidebarShellElement, setContextMenuSurfaceElement, setProjectSearchInput } = controller;
+export function ProjectSidebarView() {
+  const controller = useProjectSidebar();
+  const {
+    state, sendCommand, activeProject, sidebarRows, visibleProjectIds, manualSortActive,
+    cleanupDialogOpen, setCleanupDialogOpen, setSelectedProjectIds, selectedProjects,
+    selectedProjectRemoveDisabledReason, handleOpenProjectInIde, handleProjectDragEnd,
+    sendBulkProjectDelete, openNodeContextMenu, setSidebarList, setSidebarShellElement,
+    setContextMenuSurfaceElement,
+  } = controller;
   return (
     <div class={stylex.attrs(styles.contents).class}>
       <LeftPaneShell
@@ -676,7 +668,7 @@ export function ProjectSidebarView(viewProps: { controller: ProjectSidebarContro
         }
       />
 
-      <ProjectSidebarFilter controller={controller} />
+      <ProjectSidebarFilter />
 
       <Show when={selectedProjects().length > 0}>
         <div class={stylex.attrs(styles.selectionToolbar).class}>
@@ -712,11 +704,11 @@ export function ProjectSidebarView(viewProps: { controller: ProjectSidebarContro
         </div>
       </Show>
 
-      <Show
+      <LeftPaneBody><Show
         when={state.workspace.projects.length > 0}
         fallback={
           <LeftPaneEmptyState>
-            No workspace roots yet. Open project switcher or browse folder to start isolated project threads.
+            No workspace roots yet.
           </LeftPaneEmptyState>
         }
       >
@@ -735,7 +727,7 @@ export function ProjectSidebarView(viewProps: { controller: ProjectSidebarContro
                 setSidebarList(handle);
               }}
             >
-              {(row) => renderSidebarRow(controller, row)}
+              {(row) => renderSidebarRow(row)}
             </VirtualList>
           }
         >
@@ -754,14 +746,14 @@ export function ProjectSidebarView(viewProps: { controller: ProjectSidebarContro
                   setSidebarList(handle);
                 }}
               >
-                {(row) => renderSidebarRow(controller, row)}
+                {(row) => renderSidebarRow(row)}
               </VirtualList>
             </SortableProvider>
           </DragDropProvider>
         </Show>
       </Show>
 
-      <Show when={activeProject()}>
+      </LeftPaneBody><Show when={activeProject()}>
         {(project) => (
           <div class={stylex.attrs(styles.activeRoot).class}>
             Active root

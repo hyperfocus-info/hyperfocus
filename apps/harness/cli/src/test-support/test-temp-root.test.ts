@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach,describe,expect,test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp,rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createHarnessTestTempPath, isRunnerOwnedHarnessTestPath, resolveHarnessTestTempRoot } from "./test-temp-root";
+import { escapeRegExp as escapeRegex } from "@hyperfocus/utilities/text";
+import { createHarnessTestTempPath,isRunnerOwnedHarnessTestPath,resolveHarnessTestTempRoot } from "./test-temp-root";
 
 const originalRoot = process.env.HARNESS_TEST_TMP_ROOT;
 
@@ -32,7 +33,3 @@ describe("harness test temp root", () => {
     }
   });
 });
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}

@@ -1,3 +1,4 @@
+import { roundDecimal } from "@hyperfocus/utilities/math";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createRenderer, type ClientRenderTelemetry, type RendererOptions } from "../src/client/render.ts";
@@ -127,10 +128,7 @@ function config(): BenchConfig {
   };
 }
 
-function round(value: number, digits = 3) {
-  const scale = 10 ** digits;
-  return Math.round(value * scale) / scale;
-}
+function round(value: number, digits = 3) { return roundDecimal(value, digits); }
 
 function summarize(values: readonly number[]): Summary {
   if (!values.length) return { min: 0, p50: 0, p95: 0, max: 0, avg: 0 };
@@ -357,7 +355,7 @@ export async function runRegionTeleportBench(cfg = config()): Promise<RegionTele
   if (!firstTarget) throw new Error("Region benchmark has no capture targets.");
   placePlayer(state, actor, firstTarget);
   for (let frame = 0; frame < cfg.priming; frame += 1) {
-    renderer.drawFrame(state, actor, debug, frame * (1000 / 60), { x: actor.aimX, y: actor.aimY }, undefined, undefined, view);
+    renderer.drawFrame(state, actor, debug, frame * (16.666666666666668), { x: actor.aimX, y: actor.aimY }, undefined, undefined, view);
   }
 
   let frameIndex = cfg.priming;
@@ -367,7 +365,7 @@ export async function runRegionTeleportBench(cfg = config()): Promise<RegionTele
       if (!acc) throw new Error(`Missing accumulator for region: ${region.id}`);
       placePlayer(state, actor, region);
       for (let frame = 0; frame < cfg.frames; frame += 1) {
-        const timeMs = frameIndex * (1000 / 60);
+        const timeMs = frameIndex * (16.666666666666668);
         const start = performance.now();
         renderer.drawFrame(state, actor, debug, timeMs, { x: actor.aimX, y: actor.aimY }, undefined, undefined, view);
         const elapsed = performance.now() - start;

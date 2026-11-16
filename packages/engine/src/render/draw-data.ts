@@ -1,3 +1,4 @@
+
 import { truncateText, wrapText } from "./text.ts";
 
 export type RenderCamera = {
@@ -286,9 +287,7 @@ export type RenderData =
 
 export type Renderable = RenderDrawFunction | RenderData;
 
-export function finiteOr(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
+export { finiteOr } from "@hyperfocus/utilities/math";
 
 export function rectWidth(rect: RenderRectLike) {
   return rect.width ?? rect.w ?? 0;

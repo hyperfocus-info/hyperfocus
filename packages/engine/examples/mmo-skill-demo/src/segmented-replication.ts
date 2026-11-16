@@ -1,3 +1,4 @@
+import { asObject as asRecordMap } from "@hyperfocus/utilities/records";
 import {
   createBinaryReader,
   createBinaryWriter,
@@ -587,9 +588,7 @@ function readInternedString(reader: ReturnType<typeof createBinaryReader>) {
   return reader.readStringU8();
 }
 
-function asRecordMap(value: unknown): object {
-  return typeof value === "object" && value !== null ? value : {};
-}
+
 
 function writeStaticMap(writer: ReturnType<typeof createBinaryWriter>, value: unknown, kind: "number" | "string" | "bool") {
   const record = asRecordMap(value);

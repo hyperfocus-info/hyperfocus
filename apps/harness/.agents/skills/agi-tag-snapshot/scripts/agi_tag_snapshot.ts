@@ -1,3 +1,5 @@
+import { isAgiSnapshotInput, type AgiSnapshotInput } from "./snapshot-input";
+export type { AgiSnapshotInput } from "./snapshot-input";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,120 +16,7 @@ export type AgiSnapshotTag = {
   evidenceNotes: string[];
 };
 
-export type AgiSnapshotInput = {
-  sourcePath?: string;
-  game?: string;
-  sessionDate?: string;
-  firstContact?: {
-    controlsReminderAvailable?: boolean;
-    objectiveReminderAvailable?: boolean;
-    blocksFirstMeaningfulInput?: boolean;
-    currentGoalEasyToRestate?: boolean;
-    nextStepPrescriptive?: boolean;
-  };
-  earlyLoop?: {
-    firstMeaningfulInputAt?: string;
-    firstRiskAt?: string;
-    firstRewardAt?: string;
-    firstRetryOpportunityAt?: string;
-  };
-  readableProgression?: {
-    proximalGoalVisible?: boolean;
-    prerequisiteProgressVisible?: boolean;
-    evaluativeReadbackAvailable?: boolean;
-    nonComparativeNextStepVisible?: boolean;
-  };
-  forgiveness?: {
-    coyoteTimePresent?: boolean;
-    inputBufferPresent?: boolean;
-    cornerCorrectionPresent?: boolean;
-    collisionLeniencyFair?: boolean;
-    retryClarifiesMissedTiming?: boolean;
-    failFeelsStolen?: boolean;
-  };
-  inputDemand?: {
-    remapSafe?: boolean;
-    rapidRepeatedInputPresent?: boolean;
-    holdInputPresent?: boolean;
-    simultaneousInputPresent?: boolean;
-    rapidSequencePresent?: boolean;
-    precisionTimingDemandPresent?: boolean;
-    pathBasedOrAnalogDemandPresent?: boolean;
-    progressionCriticalDemandPresent?: boolean;
-    lowerDemandAlternativeAvailable?: boolean;
-    difficultyOptionHelps?: boolean;
-    demandReadableBeforeFailure?: boolean;
-  };
-  confounders?: {
-    inputCertainty?: string;
-    responseLatency?: string;
-    cameraSupportsAction?: boolean;
-    viewObstructedAtDecision?: boolean;
-    autoCameraInterference?: boolean;
-  };
-  criticalElements?: {
-    name?: string;
-    location?: string;
-    importance?: "critical" | "supporting" | "secondary";
-    readsWithoutText?: boolean;
-    readableUnderMotion?: boolean;
-    contrastStable?: boolean;
-  }[];
-  cues?: {
-    name?: string;
-    importance?: "critical" | "supporting" | "secondary";
-    nearAction?: boolean;
-    redundantSignal?: boolean;
-    signalChannels?: ("visual" | "audio" | "haptic" | "text")[];
-    reliesOnColorAlone?: boolean;
-    reliesOnAudioAlone?: boolean;
-    telegraphReadable?: boolean;
-    requiredResponseObvious?: boolean;
-    futurePathVisible?: boolean;
-    readableUnderMotion?: boolean;
-  }[];
-  stressFrames?: {
-    moment?: string;
-    clutterSource?: string;
-    cueMasked?: boolean;
-    criticalInfoLost?: boolean;
-    responseStillReadable?: boolean;
-    tags?: string[];
-    framePath?: string;
-  }[];
-  competitionMoments?: {
-    moment?: string;
-    signals?: string[];
-    dominantReadClear?: boolean;
-    responsePriorityClear?: boolean;
-    nonCriticalUiCompeting?: boolean;
-  }[];
-  ephemeralMoments?: {
-    name?: string;
-    kind?: string;
-    autoDismisses?: boolean;
-    reviewableLater?: boolean;
-    suppressibleWhenNonCritical?: boolean;
-    obstructsCriticalRead?: boolean;
-  }[];
-  beats?: {
-    at?: string;
-    label?: string;
-    activeDemands?: number;
-    newDemands?: number;
-    stackReadable?: boolean;
-  }[];
-  probeOutcomes?: {
-    probe?: string;
-    outcome?: string;
-    confidence?: number;
-    satisfaction?: number;
-    frustration?: number;
-    blockers?: string[];
-  }[];
-  strengths?: string[];
-  frictions?: string[];
-};
+
 
 export type AgiSnapshotReport = {
   game: string;
@@ -209,11 +98,11 @@ function parseMarkdownObservation(source: string): unknown | null {
 function readInput(filePath: string): AgiSnapshotInput {
   const raw = readSource(filePath);
   const trimmed = raw.trimStart();
-  const parsed = trimmed.startsWith("{") ? JSON.parse(raw) : parseMarkdownObservation(raw);
-  if (!parsed || typeof parsed !== "object") {
+  const parsed: unknown = trimmed.startsWith("{") ? JSON.parse(raw) : parseMarkdownObservation(raw);
+  if (!isAgiSnapshotInput(parsed)) {
     throw new Error("Observation source must be JSON or markdown with a fenced JSON block.");
   }
-  return parsed as AgiSnapshotInput;
+  return parsed;
 }
 
 function confidenceRank(value: AgiSnapshotTag["confidence"]): number {

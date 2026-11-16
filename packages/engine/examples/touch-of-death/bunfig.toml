@@ -1,0 +1,4 @@
+# Host protocol tests require Bun's native Request, Response and fetch.
+# Browser integration tests remain in the editor's browser lane.
+[test]
+preload = []

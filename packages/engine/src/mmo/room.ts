@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { defineSchema, type ReplicationSchema } from "../protocol/schema.ts";
 import { createRoomType } from "../server/core/room-type.ts";
 import type { AuthoritativePlayer, JoinDecision, RoomContext, RoomType } from "../server/core/types.ts";
@@ -174,9 +175,7 @@ function normalizeInterestTarget(target: Partial<MmoInterestTarget>, fallbackRad
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function hasOptionalString(value: Record<string, unknown>, key: string) {
   return value[key] === undefined || typeof value[key] === "string";

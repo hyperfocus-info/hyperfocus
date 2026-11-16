@@ -8,7 +8,7 @@ describe("background job schedule", () => {
 
     expect(preview.error).toBeUndefined();
     expect(preview.schedule?.type).toBe("interval");
-    expect(preview.schedule?.type === "interval" ? preview.schedule.intervalSeconds : 0).toBe(3 * 60 * 60);
+    expect(preview.schedule?.type === "interval" ? preview.schedule.intervalSeconds : 0).toBe(10800);
   });
 
   test("parses cron and advances due run", () => {

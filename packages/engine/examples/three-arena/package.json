@@ -7,5 +7,8 @@
     "dev": "bun run ./build.ts && bun run ./server.ts",
     "profile": "bun run ./profile-bench.ts",
     "proof:animation-keyframes": "bun run ./scripts/keyframe-contact-sheet.ts"
+  },
+  "dependencies": {
+    "@hyperfocus/utilities": "workspace:*"
   }
 }

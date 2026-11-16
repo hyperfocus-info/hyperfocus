@@ -808,7 +808,7 @@ export function createMapOverlay(canvas: HTMLCanvasElement, tiles: readonly numb
         return;
       }
 
-      if (!minimapVisible) {
+      if (!minimapVisible || canvas.width < 700) {
         minimapLayout = undefined;
         currentWorldLegendLayout = undefined;
         hoverFrame = undefined;

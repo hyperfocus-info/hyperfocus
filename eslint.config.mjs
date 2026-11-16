@@ -2,74 +2,14 @@ import tseslint from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 import stylex from "@stylexjs/eslint-plugin";
 import hyperfocus from "./scripts/eslint-plugin-hyperfocus.ts";
+import { WEBSITE_ARCHIVE_CODE_GLOB } from './scripts/source-artifacts.ts';
 
 const typedSourceFiles = [
   "packages/**/*.{ts,tsx}",
-  "apps/harness/cli/src/**/*.{ts,tsx}",
-  "apps/harness/scripts/**/*.{ts,tsx}",
-  "packages/engine/examples/**/*.{ts,tsx}",
-  "packages/engine/src/**/*.{ts,tsx}",
-  "packages/engine/scripts/**/*.{ts,tsx}",
-  "scripts/**/*.{ts,tsx}"
+  "apps/**/*.{ts,tsx}",
+  "scripts/**/*.{ts,tsx}",
+  ".agents/skills/**/scripts/**/*.{ts,tsx}"
 ];
-const repositorySourceFiles = [
-  ...typedSourceFiles,
-  "apps/harness/ui/src/**/*.{ts,tsx}",
-  "apps/engine-editor/**/*.{ts,tsx}"
-];
-const canonicalImportIgnoredGlobs = [
-  "**/*.test.ts",
-  "**/*.test.tsx",
-  "**/*.browser-build.ts",
-  "apps/harness/cli/src/ui-build.ts",
-  "apps/harness/scripts/**/*.{ts,tsx}",
-  "packages/engine/examples/*/build.ts",
-  "packages/engine/examples/*/server.ts",
-  "packages/engine/scripts/**/*.{ts,tsx}",
-  "packages/ui/build.ts"
-];
-
-// These surfaces are being decomposed separately. They retain StyleX validation,
-// but unused-symbol enforcement should only be enabled after their existing
-// findings have been cleaned up in the owning workstream.
-export const deferredUnusedSymbolGlobs = [
-  "apps/harness/ui/**",
-  "apps/engine-editor/**"
-];
-
-// Remove entries as each file is cleaned. New and already-clean files treat
-// unused symbols as errors; these known legacy files remain visible warnings
-// and `eslint --fix` still removes their unused imports automatically.
-export const legacyUnusedSymbolFiles = [
-  "apps/harness/cli/src/agent-runtimes/codex-sdk-adapter.ts",
-  "apps/harness/cli/src/agent-runtimes/runtime-registry.ts",
-  "apps/harness/cli/src/assistant-manager.ts",
-  "apps/harness/cli/src/background-job-executor.ts",
-  "apps/harness/cli/src/background-job-scheduler.test.ts",
-  "apps/harness/cli/src/background-job-scheduler.ts",
-  "apps/harness/cli/src/branchfs-subagent-integration.test.ts",
-  "apps/harness/cli/src/launch-harness.test.ts",
-  "apps/harness/cli/src/pi-orchestrator.ts",
-  "apps/harness/cli/src/pi-subagents.test.ts",
-  "apps/harness/cli/src/server.ts",
-  "apps/harness/cli/src/test-support/server-test-harness.ts",
-  "apps/harness/cli/src/workspace-repository.ts",
-  "packages/engine/scripts/export-project.ts",
-  "packages/engine/src/math/broadphase.ts",
-  "packages/engine/src/mmo/entity-collection.ts",
-  "packages/engine/src/mmo/interest.ts",
-  "packages/engine/src/motion/runtime.ts",
-  "packages/engine/src/motion/three.ts",
-  "packages/engine/src/physics/2d.ts",
-  "packages/engine/src/protocol/delta.ts",
-  "packages/engine/src/render/effects.ts",
-  "packages/engine/src/render/hud.ts",
-  "packages/engine/src/render/index.test.ts",
-  "packages/engine/src/server/core/types.ts",
-  "packages/engine/src/sync/shared-store.ts",
-  "packages/engine/src/ui/index.ts"
-];
-
 const unusedSymbolsOptions = {
   args: "after-used",
   argsIgnorePattern: "^_",
@@ -81,11 +21,54 @@ const unusedSymbolsOptions = {
 
 export default [
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/proto/generated/**", "packages/engine/browser/**"]
+    files: ["apps/pad-pilot/ui/src/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
+    plugins: { hyperfocus },
+    rules: { "hyperfocus/padpilot-module": "error" },
   },
   {
-    files: repositorySourceFiles,
-    ignores: canonicalImportIgnoredGlobs,
+    ignores: ["**/.local/**", "**/dist/**", "**/node_modules/**", "**/proto/generated/**", "packages/serialization/src/generated/**", "scripts/serialization/generated/**", "**/coverage/**", "apps/pad-pilot/build/**", "apps/pad-pilot-marketplace/data/**", "packages/engine/browser/**", WEBSITE_ARCHIVE_CODE_GLOB]
+  },
+  {
+    linterOptions: { reportUnusedDisableDirectives: "error", reportUnusedInlineConfigs: "error" }
+  },
+  {
+    files: ["packages/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}", "apps/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}", "scripts/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}", ".agents/skills/**/scripts/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { ecmaVersion: "latest", sourceType: "module", ecmaFeatures: { jsx: true } }
+    },
+    plugins: { hyperfocus, "@typescript-eslint": tseslint },
+    rules: {
+      "no-async-promise-executor": "error",
+      "no-constant-binary-expression": "error",
+      "no-unreachable": "error",
+      "@typescript-eslint/ban-ts-comment": ["error", {
+        "ts-ignore": true,
+        "ts-nocheck": true,
+        "ts-expect-error": "allow-with-description",
+        minimumDescriptionLength: 10
+      }],
+      "hyperfocus/computed-numeric-literals": "error",
+      "hyperfocus/utility-modules": "error",
+      "hyperfocus/canonical-utilities": "error",
+      "hyperfocus/no-prop-drilling": "error",
+      "hyperfocus/solid-list-rendering": "error",
+      "hyperfocus/no-derived-signal-effect": "error",
+      "hyperfocus/attention": "error",
+      "hyperfocus/direct-implementation-imports": "error"
+    }
+  },
+  {
+    // Enforce repaired foundations and host adapters; expand after checking legacy consumers.
+    files: ["packages/ui/src/primitives/**/*.{ts,tsx}", "packages/ui/src/form/**/*.{ts,tsx}", "packages/ui/src/preferences/**/*.{ts,tsx}", "packages/ui/src/task-review/**/*.{ts,tsx}",
+      "apps/pad-pilot/ui/src/components/elements/**/*.{ts,tsx}", "apps/harness/ui/src/components/primitives/button.tsx",
+      "apps/harness/ui/src/components/chat-panel*.{ts,tsx}", "apps/harness/ui/src/components/chat-panel/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
+    rules: { "hyperfocus/ui-foundation": "error" }
+  },
+  {
+    files: typedSourceFiles,
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -96,12 +79,15 @@ export default [
     },
     plugins: { hyperfocus },
     rules: {
-      "hyperfocus/canonical-imports": "warn"
+      "hyperfocus/canonical-imports": "error"
     }
   },
   {
+    files: ['packages/engine/src/{runtime,wasm,physics}/**/*.{ts,tsx}'],
+    rules: { 'hyperfocus/explicit-map-presence': 'error' }
+  },
+  {
     files: typedSourceFiles,
-    ignores: deferredUnusedSymbolGlobs,
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -114,12 +100,6 @@ export default [
     rules: {
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": ["error", unusedSymbolsOptions]
-    }
-  },
-  {
-    files: legacyUnusedSymbolFiles,
-    rules: {
-      "@typescript-eslint/no-unused-vars": ["warn", unusedSymbolsOptions]
     }
   },
   {
@@ -136,8 +116,8 @@ export default [
     rules: {
       "@stylexjs/valid-styles": "error",
       "@stylexjs/no-unused": "error",
-      "@stylexjs/valid-shorthands": "warn",
-      "@stylexjs/sort-keys": "warn"
+      "@stylexjs/valid-shorthands": "error",
+      "@stylexjs/sort-keys": "error"
     }
   }
 ];

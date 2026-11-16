@@ -1,3 +1,5 @@
+import { assertPositiveFinite, assertFinite, assertNonNegativeFinite } from "./validation.ts";
+import { finiteOr } from "@hyperfocus/utilities/math";
 import { getSprite } from "../canvas/drawing.ts";
 import { clamp } from "../math/collision.ts";
 
@@ -159,23 +161,13 @@ const DEFAULT_WHEEL_ZOOM_SPEED = 0.0015;
 const MAX_BORDER_TICKS = 4096;
 const EMPTY_DASH: number[] = [];
 
-function assertPositiveFinite(name: string, value: number): void {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new RangeError(`${name} must be a positive finite number`);
-  }
-}
 
-function finiteOr(value: number | undefined, fallback: number): number {
-  return value !== undefined && Number.isFinite(value) ? value : fallback;
-}
 
-function assertFinite(name: string, value: number): void {
-  if (!Number.isFinite(value)) throw new RangeError(`${name} must be finite`);
-}
 
-function assertNonNegativeFinite(name: string, value: number): void {
-  if (!Number.isFinite(value) || value < 0) throw new RangeError(`${name} must be a non-negative finite number`);
-}
+
+
+
+
 
 function boundsOverlap(a: MapWorldBounds, b: MapWorldBounds): boolean {
   return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;

@@ -392,8 +392,17 @@ export function createThreeHumanoidMotionController(
       controller.move(velocity);
       return facade.state;
     },
+    setLocomotionIntent(intent) {
+      controller.setLocomotionIntent(intent);
+      return facade.state;
+    },
     update(deltaSeconds) {
       const state = controller.update(deltaSeconds);
+      binding.apply(state.pose);
+      return state;
+    },
+    updateFromPhysics(sample) {
+      const state = controller.updateFromPhysics(sample);
       binding.apply(state.pose);
       return state;
     },
@@ -419,6 +428,14 @@ export function createThreeHumanoidMotionController(
     },
     setAction(actionId, actionPhase) {
       controller.setAction(actionId, actionPhase);
+      return facade.state;
+    },
+    setActionPose(intent) {
+      controller.setActionPose(intent);
+      return facade.state;
+    },
+    punch(intent) {
+      controller.punch(intent);
       return facade.state;
     },
     setActionPhase(actionPhase) {

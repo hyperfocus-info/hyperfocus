@@ -1,4 +1,6 @@
 export { createObjectPool } from "./runtime/object-pool.ts";
+export { createFrameWorkPolicy, type FrameWorkJob } from './runtime/frame-work-policy.ts';
+export { createSimulationBatch, type SimulationTrial, type SimulationTrialOutcome } from './runtime/simulation-batch.ts';
 export {
   createRetainedCursor,
   type RetainedCursor,

@@ -1,0 +1,59 @@
+{
+  "schema": "hyperfocus-brand-assets-v1",
+  "name": "Motion Lab",
+  "source": "symbol:wave",
+  "sourceSha256": "566b2c5d8d8640802d3a9b0355193781cca843bd5abfab7f5678566150150503",
+  "customization": "Replace the source logo in brand.json, then regenerate this directory. Do not edit renditions.",
+  "files": [
+    {
+      "path": "logo.svg",
+      "sha256": "566b2c5d8d8640802d3a9b0355193781cca843bd5abfab7f5678566150150503",
+      "bytes": 267
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "5e55b1d4aaa271dca1aee53a800bf4b6b32ce4bf69ecdaca585405c23fbbb2d5",
+      "bytes": 530
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "dc0b2acbf290c2f55a4b13b2d07617197ae7470ec5e1be6adb9c7c3f66908420",
+      "bytes": 641
+    },
+    {
+      "path": "favicon-32.png",
+      "sha256": "a6c2af5913f78de98963f3f7aa3d5de25634c26b689f111a813690db37d62fba",
+      "bytes": 619
+    },
+    {
+      "path": "icon-192.png",
+      "sha256": "827380a309ed96e1d0ddb419759cb9471d452b34cd8071cf6a5c597f25222155",
+      "bytes": 3361
+    },
+    {
+      "path": "icon-512.png",
+      "sha256": "43dab432358397bcce3d2dded0c45b01507054584b86005c898b2ffb68aa3112",
+      "bytes": 10369
+    },
+    {
+      "path": "maskable-512.png",
+      "sha256": "9d0c5096e12325a37431f4cbe0f0b20a3e26c8c1b3e412d3547ca54ff140418b",
+      "bytes": 6787
+    },
+    {
+      "path": "apple-touch-icon.png",
+      "sha256": "38c116fd7c39871db8d23e65c32fe17bfe5d0ffdb00a7205c60d5397ab6f4fef",
+      "bytes": 2517
+    },
+    {
+      "path": "social.png",
+      "sha256": "f92aabb760ca2e3ca8115ad05a2e7a6e613a51d856ee5f63f06bba823b9a6761",
+      "bytes": 11932
+    },
+    {
+      "path": "site.webmanifest",
+      "sha256": "eb62ebc0ab566d83850dbbf8cbbd3c25d30deb9d02206e945ef63683dadd6008",
+      "bytes": 496
+    }
+  ]
+}

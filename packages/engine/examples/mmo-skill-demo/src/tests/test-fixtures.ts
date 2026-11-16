@@ -122,3 +122,8 @@ export function createTestNpc(overrides: Partial<NpcEntity> = {}): NpcEntity {
     ...overrides
   };
 }
+
+export function rngSequence(values: number[]) {
+  let index = 0;
+  return () => values[Math.min(index++, values.length - 1)] ?? 0;
+}

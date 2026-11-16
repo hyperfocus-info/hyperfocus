@@ -1,90 +1,17 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type JSX } from "solid-js";
+import { typography } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
-import {
-  canSelectProviderBrand,
-  COMPOSER_REASONING_STRENGTHS,
-  getEffectiveProviderBrandForAgent,
-  getActiveMode,
-  getCapabilityTags,
-  getBlockingSetupCheck,
-  getComposerControlState,
-  getExecutionModelOptionsForAgent,
-  getFallbackExecutionModelIdForAgent,
-  getModelCapability,
-  getResolvedModes,
-  harnessStore,
-  hasUsableApiKeyForProvider,
-  persistMergedLocalPreferences,
-  resolveUsablePiProviderBrand,
-  shouldShowSetupChecklist,
-  type ChatPaneTab,
-  type ViewProjectState
-} from "../../harness-store";
-import { ActionButton, ActionStatus } from "../action-button";
-import { ChatComposer } from "../primitives/chat-composer";
-import { Popover } from "../primitives/popover";
-import { Tooltip } from "../primitives/tooltip";
-import { Button } from "../primitives/button";
-import {
-  Activity,
-  AlertTriangle,
-  Brain,
-  Bot,
-  Briefcase,
-  CalendarClock,
-  ClipboardList,
-  Clipboard,
-  Cpu,
-  Edit3,
-  FolderOpen,
-  Folder,
-  Gauge,
-  LoaderCircle,
-  MessageSquareMore,
-  Orbit,
-  Paperclip,
-  Pause,
-  Play,
-  RefreshCcw,
-  Plus,
-  ArrowDown,
-  Check,
-  File,
-  FileCode,
-  FileJson,
-  FileText,
-  Image,
-  SendHorizontal,
-  Settings,
-  Terminal,
-  WandSparkles,
-  X,
-  Split
-} from "lucide-solid";
-import { chatPanelStyles as styles } from "../chat-panel.styles";
+import { Show } from "solid-js";
 import { chatUtilityStyles } from "../chat-panel.utilities";
-import type { ChatPanelController } from "../chat-panel";
-import {
-  formatCapabilityTag,
-  formatTokenCount,
-  getComposerLookupOptionId,
-} from "./chat-panel-model";
+import { ChatComposerControl,ChatComposerFooter,ChatComposerLookupMenu,ChatComposerReferences,ChatComposerSetupStatus,ChatPendingQuestion } from "./chat-composer-sections";
+import { useChatPanel } from "./state/panel-context";
 
-export function ChatComposerSurface(props: { controller: ChatPanelController }) {
+export function ChatComposerSurface() {
+  const controller = useChatPanel();
   const {
-    applyComposerLookupOption, attachmentButtonDisabled, attachmentButtonReason, capabilityTags, composerLookup,
-    composerLookupActiveOptionId, composerLookupOpen, composerLookupRenderedOptions, composerReferenceBadges, composerSettingsOpen,
-    composerSubmitState, composerTimerState, contextUsage, desktopReasoningMenuOpen, draftAttachments,
-    draggingAttachments, dropState, executionPauseReason, executionPaused, getCacheHitPercent,
-    getComposerPlaceholder, getContextUsageTooltip, handleAttachmentDragLeave, handleAttachmentDragOver, handleAttachmentDrop,
-    handleComposerBadgeClick, handleComposerClick, handleComposerKeyDown, handleComposerLookupKeyDown, handleQuestionChoice,
-    handleRemoveAttachment, handleSelectAttachments, handleSubmit, pendingQuestion,
-    project, refs, renderAgentControl, renderComposerControlMenu, renderEffortControl,
-    renderModeControl, renderModelControl, renderProviderControl, resizeComposer, runWithChatPanelOwner,
-    selectedAgentHealthMessage, setComposerLookupActiveIndex, setComposerLookupForcedClosed, setComposerLookupMenuHidden, setComposerSettingsOpen,
-    setDesktopReasoningMenuOpen, setDismissedComposerLookupKey, syncComposerCaret, syncComposerLookupDomVisibility,
-    uploadingAttachments,
-  } = props.controller;
+    composerTimerState, draggingAttachments, dropState, handleAttachmentDragLeave,
+    handleAttachmentDragOver, handleAttachmentDrop, handleSelectAttachments, handleSubmit, refs,
+    selectedAgentHealthMessage,
+  } = controller;
   return <form
               data-test-chat-composer=""
               class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.shrink0, chatUtilityStyles.spaceY3).class}
@@ -96,16 +23,16 @@ export function ChatComposerSurface(props: { controller: ChatPanelController }) 
               <Show when={draggingAttachments()}>
                 <div class={stylex.attrs(chatUtilityStyles.pointerEventsNone, chatUtilityStyles.absolute, chatUtilityStyles.inset0, chatUtilityStyles.z10, chatUtilityStyles.grid, chatUtilityStyles.placeItemsCenter, chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableAccent, chatUtilityStyles.bgWhite85, chatUtilityStyles.p4, chatUtilityStyles.textCenter, chatUtilityStyles.shadowLg).class}>
                   <div>
-                    <div class={stylex.attrs(chatUtilityStyles.text075rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>{dropState().label}</div>
-                    <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>{dropState().detail}</div>
+                    <div class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableForeground).class}>{dropState().label}</div>
+                    <div class={stylex.attrs(chatUtilityStyles.mt1, typography.body, chatUtilityStyles.textVariableMuted).class}>{dropState().detail}</div>
                   </div>
                 </div>
               </Show>
-<ChatPendingQuestion controller={props.controller} />
+<ChatPendingQuestion />
 
               <Show when={selectedAgentHealthMessage()}>
                 {(message) => (
-                  <div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderSky200, chatUtilityStyles.bgSky5080, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textSky950).class}>
+                  <div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderSky200, chatUtilityStyles.bgSky5080, chatUtilityStyles.p3, typography.body, chatUtilityStyles.leading6, chatUtilityStyles.textSky950).class}>
                     {message()}
                   </div>
                 )}
@@ -117,7 +44,7 @@ export function ChatComposerSurface(props: { controller: ChatPanelController }) 
                     aria-live="polite"
                     data-test-waiting-timer=""
                     role="status"
-                    class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.px1, chatUtilityStyles.text0675rem, chatUtilityStyles.fontMedium, chatUtilityStyles.textVariableMuted).class}
+                    class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.px1, typography.body, chatUtilityStyles.fontMedium, chatUtilityStyles.textVariableMuted).class}
                   >
                     <Show when={timer().kind === "working"}>
                       <span aria-hidden="true" class={stylex.attrs(chatUtilityStyles.agentWaitingDots).class}>
@@ -131,8 +58,8 @@ export function ChatComposerSurface(props: { controller: ChatPanelController }) 
                 )}
               </Show>
 
-<ChatComposerControl controller={props.controller} />
-<ChatComposerLookupMenu controller={props.controller} />
+<ChatComposerControl />
+<ChatComposerLookupMenu />
               <input
                 ref={refs.attachmentInput}
                 class={stylex.attrs(chatUtilityStyles.hidden).class}
@@ -142,11 +69,9 @@ export function ChatComposerSurface(props: { controller: ChatPanelController }) 
                 onChange={handleSelectAttachments}
               />
 
-<ChatComposerReferences controller={props.controller} />
-<ChatComposerSetupStatus controller={props.controller} />
+<ChatComposerReferences />
+<ChatComposerSetupStatus />
 
-<ChatComposerFooter controller={props.controller} />
+<ChatComposerFooter />
             </form>;
 }
-import { getFileTypeIcon } from "./chat-composer-icons";
-import { ChatComposerControl, ChatComposerFooter, ChatComposerLookupMenu, ChatComposerReferences, ChatComposerSetupStatus, ChatPendingQuestion } from "./chat-composer-sections";

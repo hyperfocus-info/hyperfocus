@@ -1,13 +1,14 @@
-import type { ServerEvent } from "@hyperfocus/ai-core/protocol";
+import { SERVER_EVENT_FRAME_MAX_BYTES, type ServerEvent } from "@hyperfocus/ai-core/protocol";
+import { encodeValue } from "@hyperfocus/serialization";
 import { guardedWebsocketSend, type GuardedWebSocket } from "./websocket-send-guard";
 
 export const DEFAULT_CONTROL_EVENT_BATCH_FLUSH_MS = 1;
 export const DEFAULT_CONTROL_EVENT_BATCH_MAX_EVENTS = 64;
-export const DEFAULT_CONTROL_EVENT_BATCH_MAX_BYTES = 512 * 1024;
+export const DEFAULT_CONTROL_EVENT_BATCH_MAX_BYTES = 524288;
 
 type BatchEntry = {
   event: ServerEvent;
-  serialized: string;
+  serialized: string | Uint8Array;
   bytes: number;
 };
 
@@ -42,7 +43,7 @@ export function createWebsocketEventBatcher(options: WebsocketEventBatcherOption
   const maxBatchEvents = options.maxBatchEvents ?? DEFAULT_CONTROL_EVENT_BATCH_MAX_EVENTS;
   const maxBatchBytes = options.maxBatchBytes ?? DEFAULT_CONTROL_EVENT_BATCH_MAX_BYTES;
 
-  const sendSerialized = (ws: GuardedWebSocket, serialized: string) =>
+  const sendSerialized = (ws: GuardedWebSocket, serialized: string | Uint8Array) =>
     guardedWebsocketSend(ws, serialized, {
       maxQueuedBytes: options.maxQueuedBytes,
       slowCloseCode: options.slowCloseCode,
@@ -71,7 +72,9 @@ export function createWebsocketEventBatcher(options: WebsocketEventBatcherOption
     const serialized =
       entries.length === 1
         ? first.serialized
-        : `{"type":"server.events-batch","payload":{"events":[${entries.map((entry) => entry.serialized).join(",")}]}}`;
+        : typeof first.serialized === "string"
+          ? `{"type":"server.events-batch","payload":{"events":[${entries.map((entry) => entry.serialized).join(",")}]}}`
+          : encodeValue({ type: "server.events-batch", payload: { events: entries.map(entry => entry.event) } }, { maxBytes: SERVER_EVENT_FRAME_MAX_BYTES });
     return sendSerialized(ws, serialized);
   };
 
@@ -87,9 +90,9 @@ export function createWebsocketEventBatcher(options: WebsocketEventBatcherOption
   };
 
   return {
-    send(ws: GuardedWebSocket, event: ServerEvent) {
-      const serialized = JSON.stringify(event);
-      const eventBytes = encoder.encode(serialized).byteLength;
+    send(ws: GuardedWebSocket, event: ServerEvent, encoding: "protobuf" | "json" = "json") {
+      const serialized = encoding === "json" ? JSON.stringify(event) : encodeValue(event, { maxBytes: SERVER_EVENT_FRAME_MAX_BYTES });
+      const eventBytes = typeof serialized === "string" ? encoder.encode(serialized).byteLength : serialized.byteLength;
       if (options.maxEventBytes !== undefined && eventBytes > options.maxEventBytes) {
         throw new Error(`Control event exceeds ${options.maxEventBytes} byte limit`);
       }
@@ -105,6 +108,7 @@ export function createWebsocketEventBatcher(options: WebsocketEventBatcherOption
       }
 
       const state = states.get(ws) ?? { entries: [], bytes: 0 };
+      if (state.entries[0] && typeof state.entries[0].serialized !== typeof serialized) flush(ws);
       if (state.entries.length > 0 && (state.entries.length >= maxBatchEvents || state.bytes + bytes > maxBatchBytes)) {
         flush(ws);
       }

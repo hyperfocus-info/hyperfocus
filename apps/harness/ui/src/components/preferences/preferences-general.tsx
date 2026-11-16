@@ -1,17 +1,16 @@
+import { usePreferencesPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
-import { Show, type JSX } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
 import { createRequestId } from "@hyperfocus/ai-core/protocol";
-import { FolderOpen, LayoutPanelLeft, Palette } from "lucide-solid";
+import * as stylex from "@stylexjs/stylex";
+import { FolderOpen,LayoutPanelLeft,Palette } from "lucide-solid";
+import { Show,type JSX } from "solid-js";
 import { terminalStore } from "../../terminal/terminal-store";
-import { ActionButton } from "../action-button";
-import type { PreferencesPanelModel } from "../preferences-modal";
-import { DropdownControl } from "../primitives/dropdown";
 import { isBuiltInThemeId } from "../../theme/theme-model";
-import { PreferenceRow, PreferenceSection, PreferenceToggle, SegmentedControl } from "./preferences-controls";
-import type { PreferencesOperationalActions } from "./preferences-actions";
+import { ActionButton } from "../action-button";
+import { DropdownControl } from "../primitives/dropdown";
+import { PreferenceRow,PreferenceSection,PreferenceToggle,SegmentedControl } from "./preferences-controls";
+import { PreferencesCustomThemeEditor,PreferencesThemePreview } from "./preferences-theme-actions";
 import { preferenceStyles } from "./preferences.styles";
-import { PreferencesCustomThemeEditor, PreferencesThemePreview, type PreferencesThemeActions } from "./preferences-theme-actions";
 
 const projectSortOptions = [
   { value: "last-user-message", label: "Last message" },
@@ -30,7 +29,7 @@ const groupingOptions = [
 
 function SettingControl(props: { title: string; description: string; children: JSX.Element }) {
   return (
-    <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap2, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite45, preferenceStyles.padding3, preferenceStyles.mdGridColumnsSetting, preferenceStyles.mdItemsCenter).class}>
+    <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap2, preferenceStyles.borderBottom, preferenceStyles.borderDefault, preferenceStyles.paddingBlock3, preferenceStyles.mdGridColumnsSetting, preferenceStyles.mdItemsCenter).class}>
       <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
         <div class={stylex.attrs(preferenceStyles.textXs, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>{props.title}</div>
         <div class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.text07, preferenceStyles.leading4, preferenceStyles.colorMuted).class}>{props.description}</div>
@@ -40,16 +39,11 @@ function SettingControl(props: { title: string; description: string; children: J
   );
 }
 
-export function PreferencesGeneral(props: {
-  model: PreferencesPanelModel;
-  actions: PreferencesOperationalActions;
-  themeActions: PreferencesThemeActions;
-  updateSavedPreference: (update: () => void) => void;
-  rerender: () => void;
-}) {
-  const { state, store, sendCommand } = props.model;
-  const { themeOptions, themeModeTooltip, themeModeLabel, themeModeIcon, cycleThemeMode } = props.themeActions;
-  const savedToggle = (checked: boolean, update: (value: boolean) => void) => props.updateSavedPreference(() => update(checked));
+export function PreferencesGeneral() {
+  const panel = usePreferencesPanel();
+  const { state, store, sendCommand } = panel.model;
+  const { themeOptions, themeModeTooltip, themeModeLabel, themeModeIcon, cycleThemeMode } = panel.theme;
+  const savedToggle = (checked: boolean, update: (value: boolean) => void) => panel.persistence.updateSavedPreference(() => update(checked));
   const saveTerminalRendererMode = (rendererMode: "solid-prototype" | "xterm-webgl") => {
     const requestId = createRequestId();
     const preferences = { ...terminalStore.state.preferences, rendererMode };
@@ -68,20 +62,20 @@ export function PreferencesGeneral(props: {
           ]}
           onChange={(value) => {
             if (value !== "simple" && value !== "advanced") return;
-            props.updateSavedPreference(() => store.setExperienceMode(value));
+            panel.persistence.updateSavedPreference(() => store.setExperienceMode(value));
           }}
         />
       </PreferenceRow>
       <PreferenceRow id="appearance-density" title="Appearance and density" description="Pick a theme, mode, fonts, and optional custom colors.">
         <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
           <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.smGridColumnsControl, preferenceStyles.smItemsCenter).class}>
-            <DropdownControl kind="select" ariaLabel="Theme" icon={<Palette class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />} size="md" class={stylex.attrs(preferenceStyles.widthFull).class} value={state.themePreference.themeId} options={themeOptions()} onChange={(value) => { if (value !== "custom" && !isBuiltInThemeId(value)) return; store.setThemeId(value); props.rerender(); }} />
+            <DropdownControl kind="select" ariaLabel="Theme" icon={<Palette class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />} size="md" class={stylex.attrs(preferenceStyles.widthFull).class} value={state.themePreference.themeId} options={themeOptions()} onChange={(value) => { if (value !== "custom" && !isBuiltInThemeId(value)) return; store.setThemeId(value); panel.rerender(); }} />
             <ActionButton tooltip={themeModeTooltip()} ariaLabel={`Theme mode: ${themeModeLabel(state.themePreference.mode)}`} variant="secondary" class={stylex.attrs(preferenceStyles.height9, preferenceStyles.justifyStart, preferenceStyles.roundedLg, preferenceStyles.paddingInline3).class} icon={themeModeIcon()} onClick={cycleThemeMode}>
               <span class={stylex.attrs(preferenceStyles.minWidth11, preferenceStyles.textLeft).class}>{themeModeLabel(state.themePreference.mode)}</span>
             </ActionButton>
           </div>
-          <PreferencesThemePreview actions={props.themeActions} />
-          <Show when={state.themePreference.themeId === "custom"}><PreferencesCustomThemeEditor model={props.model} actions={props.themeActions} /></Show>
+          <PreferencesThemePreview />
+          <Show when={state.themePreference.themeId === "custom"}><PreferencesCustomThemeEditor /></Show>
         </div>
       </PreferenceRow>
       <PreferenceRow id="terminal-display" title="Terminal and numeric display" description="Choose terminal rendering and dense numeric alignment defaults.">
@@ -96,7 +90,7 @@ export function PreferencesGeneral(props: {
       </PreferenceRow>
       <PreferenceRow id="navigation-sidebar" title="Sidebar and layout" description="Restore main panel sizes and choose project sidebar sorting/grouping.">
         <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>
-          <ActionButton tooltip="Restore panel sizes" variant="secondary" icon={<LayoutPanelLeft class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={props.actions.handleResetPanelSizes}>Restore panel sizes</ActionButton>
+          <ActionButton tooltip="Restore panel sizes" variant="secondary" icon={<LayoutPanelLeft class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4).class} />} onClick={panel.operational.handleResetPanelSizes}>Restore panel sizes</ActionButton>
           <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2, preferenceStyles.smGridColumns3).class}>
             <DropdownControl kind="select" ariaLabel="Project sort" icon={<FolderOpen class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />} size="md" value={state.projectSidebarPreferences.projectSort} options={projectSortOptions} onChange={(value) => { if (value === "last-user-message" || value === "created-at" || value === "manual") store.setProjectSidebarPreferences({ projectSort: value }); }} />
             <DropdownControl kind="select" ariaLabel="Thread sort" icon={<FolderOpen class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />} size="md" value={state.projectSidebarPreferences.threadSort} options={threadSortOptions} onChange={(value) => { if (value === "last-user-message" || value === "created-at") store.setProjectSidebarPreferences({ threadSort: value }); }} />

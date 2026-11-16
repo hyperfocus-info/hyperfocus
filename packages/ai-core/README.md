@@ -1,10 +1,84 @@
 # @hyperfocus/ai-core
 
-Canonical zod-validated harness protocol plus a framework-neutral WebSocket client. Applications own presentation; the harness owns runtimes, persistence, credentials, and run state.
+`/connections` provides framework-neutral provider connection, device-action and
+durable-operation contracts plus an authenticated-fetch client. Hosts own secrets
+and execution; [Remote Connections](../../docs/harness/connections.md) owns the workflow.
 
-The client is deliberately optional. Consumers can remain fully offline and connect to a local harness only when AI features are requested.
+Canonical, framework-neutral AI contracts. The package contains the zod-validated Harness protocol and WebSocket client plus app-neutral execution profiles, runtime catalogs, run envelopes, typed action plans, and handoffs.
+
+`@hyperfocus/ai-core` never executes a model or reads credentials. Harness and first-party app hosts own privileged runtime state through `@hyperfocus/ai-runtime`; browser UI owns only the selected profile and reviewed action proposal.
+
+`@hyperfocus/ai-core/agent-events` defines durable event envelopes, recipients and
+the resume/wait/acknowledge client. Waiting uses a server-held callback rather than
+client polling; hosts own authentication and decide when results are durably
+incorporated. [Swarm](../../docs/harness/swarm.md#campaign-ownership-and-agent-continuation)
+is the first producer and Harness/Codex continuation is its consumer.
+
+## App runtime contracts
+
+Import `@hyperfocus/ai-core/runtime` for `AiExecutionProfile`, `AiRuntimeCatalog`, `AiRunRequest`, and `hyperfocus-app-action-plan-v1`. Agent, provider, and model are separate identifiers so hosts can offer direct providers, authenticated CLIs, or additional adapters without changing UI contracts. Action plans carry a base revision, default to atomic intent, cap bulk calls, and must be validated again by the receiving app before mutation.
+
+`AiRunRequest.deadlineAt` is an optional absolute Unix-millisecond deadline that
+survives transport hops. `AbortSignal` remains process-local and is supplied to
+the privileged runtime separately; a transport stopping its wait is not proof
+that provider or native execution has stopped.
+
+`AiRunResult.usage.costSource` distinguishes estimated cost from provider-reported
+charges independently of token usage. Subscription routing and calculated token
+rates supply estimates, including zero estimates; they are not billing receipts.
+Consumers preserve omitted provenance as reported for existing adapter compatibility.
+
+Catalog consistency validates the agent/provider/model graph independently of
+installation or authentication state. `assertProfileAvailable` validates a selected
+execution profile; an unavailable optional adapter does not invalidate the catalog.
+Use `chooseAvailableAiProfile` to reconcile persisted preferences with the current
+catalog. It preserves compatible choices, falls back to an available graph, and
+clamps reasoning and web-search settings before an app submits a run.
+Fallback searches subsequent providers and agents when a preferred route has no
+described model; it returns no selection only after all available routes are exhausted.
+Providers may declare `defaultModelId`; a described, supported declaration wins
+over catalog order, while an explicit compatible model remains authoritative.
+Missing/stale declarations are ignored. A sole described model remains unambiguous;
+multiple models without a default require an explicit selection. UI hosts can use
+`chooseAiProfileConfiguration` to expose an incomplete configuration with empty
+`modelId`; that draft fails execution-profile validation and must never enable Send.
+
+`SharedAiPreferences` holds a version and optional provider and reasoning defaults.
+The retired `designGuidance` field is ignored when reading legacy preferences.
+Design context is derived from the task, not stored as a preference.
+`aiDesignGuidanceForTask({ task, projectContext? })` returns compact defaults for
+interface work and unspecified app creation, with only the forms, data, navigation,
+media, game-menu or interactive-learning branches evidenced by the task. Composition
+and semantic content precede decoration; menu guidance declares audience/priority,
+while learning guidance requires observed completion, correction and isolated examples.
+User and project stacks and visual
+references govern; the helper imposes no brand, palette, or component library.
+Material unresolved preferences call for a focused question; reversible details
+use task-appropriate choices. Project context cannot
+trigger UI intent. Audio-only, CLI, backend-only, and explicitly excluded UI tasks
+receive no design context. The deterministic router is deliberately bounded;
+project instructions and the user's actual requirements always take precedence.
+Mixed CLI/UI requests add context only when a visual companion is explicit;
+reading UI logs in a CLI is not interface work. Representative Spanish, French,
+and German app-creation phrases are covered, not unrestricted language detection.
+`applySharedAiPreferences` resolves these against a host catalog; an explicit app
+profile takes precedence. With no saved provider, OpenAI is the initial default,
+matching Harness; an unavailable catalog route falls back to another described
+provider and model. Credentials, model IDs, and execution permissions never
+travel in this shared contract. Persistence and transport belong to
+[`@hyperfocus/ai-runtime`](../ai-runtime/README.md).
+
+Action-plan extraction accepts one schema-valid plan among surrounding JSON
+metadata and preserves fenced scalar extraction. Multiple valid plans fail
+explicitly; processing is bounded to 2 MiB and 64 JSON candidates.
 
 ## Client lifecycle
+
+Control frames retain JSON by default. `encoding: "protobuf"` opts a Harness client
+into the bounded dynamic-value experiment through `?encoding=protobuf`; readers
+accept both forms. This is separate from the proposed typed event schemas in the
+[serialization benchmark](../../docs/serialization-evidence.md), and has no default
+performance claim. Existing binary terminal/stream protocols retain their owners.
 
 `createHarnessClient(options)` treats `connection.ready`, not the WebSocket `open` event, as the usable boundary. `connect()` resolves with the validated workspace and agent snapshot only after that event. Snapshots distinguish `connecting`, `connected`, and `recovering`; the default client reconnects with bounded exponential backoff, checks liveness with protocol pings, ignores events from stale sockets, and rejects oversized event frames before parsing them.
 

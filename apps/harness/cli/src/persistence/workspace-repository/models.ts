@@ -1,12 +1,15 @@
 import { resolveModeExecutionAccess } from "@hyperfocus/ai-core/modes";
-import { browserSessionSchema, chatAttachmentSchema, chatMessageMetadataSchema, correctnessReviewSchema, executionPlanSchema, executionToolActivitySchema, intentContractSchema, memoryFreshnessSchema, planningChoiceSchema, planningQuestionIntentSchema, runFailureCategorySchema, tokenUsageTotalsSchema } from "@hyperfocus/ai-core/protocol";
-import type { AgentRunState, AgentRunStatus, BackgroundJob, BackgroundJobRun, BackgroundJobRunStatus, BrowserSession, ChatAttachment, ChatMessage, ChatMessageMetadata, CorrectnessReview, ExecutionPlan, ExecutionToolActivity, MemoryEntry, MemorySummary, ModeDefinition, PlanningChoice, PlanningQuestion, ProjectId, RunPromptStats, ThreadBadgeState, ThreadId, TokenUsageTotals, WorkspaceRuleSource } from "@hyperfocus/ai-core/protocol";
+import type { AgentRunState,AgentRunStatus,BackgroundJob,BackgroundJobRun,BackgroundJobRunStatus,BrowserSession,ChatAttachment,ChatMessage,ChatMessageMetadata,CorrectnessReview,ExecutionPlan,ExecutionToolActivity,MemoryEntry,MemorySummary,ModeDefinition,PlanningChoice,PlanningQuestion,ProjectId,RunPromptStats,ThreadBadgeState,ThreadId,TokenUsageTotals,WorkspaceRuleSource } from "@hyperfocus/ai-core/protocol";
+import { browserSessionSchema,chatAttachmentSchema,chatMessageMetadataSchema,correctnessReviewSchema,executionPlanSchema,executionToolActivitySchema,intentContractSchema,memoryFreshnessSchema,planningChoiceSchema,planningQuestionIntentSchema,runFailureCategorySchema,tokenUsageTotalsSchema } from "@hyperfocus/ai-core/protocol";
+import { isRecord as isPlainRecord } from "@hyperfocus/utilities/records";
 import { createHash } from "node:crypto";
-import { realpathSync, statSync } from "node:fs";
+import { realpathSync,statSync } from "node:fs";
 import path from "node:path";
-import type { GeminiCachedContentRecord, GeminiCachedContentRow, MemoryEntryRow, ProjectModeRow, ProjectRow, ThreadRow, WorkspaceModeRow } from "./contracts";
-import { isRecord, normalizeComposerReasoningStrength, normalizeInteger, normalizeOptionalInteger, normalizeOptionalString, normalizeRequiredString, parseJsonArrayOrEmpty, parseJsonObjectOrUndefined, recordPersistenceRecovery, safeParsePersisted } from "./persisted-values";
+import { createEmptyTokenUsageTotals } from "../../usage/token-usage";
+import type { GeminiCachedContentRecord,GeminiCachedContentRow,MemoryEntryRow,ProjectModeRow,ProjectRow,ThreadRow,WorkspaceModeRow } from "./contracts";
 import type { PersistedRecoveryContext } from "./persisted-values";
+import { isRecord,normalizeComposerReasoningStrength,normalizeInteger,normalizeOptionalInteger,normalizeOptionalString,normalizeRequiredString,parseJsonArrayOrEmpty,parseJsonObjectOrUndefined,recordPersistenceRecovery,safeParsePersisted } from "./persisted-values";
+export { addTokenUsageTotals,createEmptyTokenUsageTotals } from "../../usage/token-usage";
 
 export function toModeDefinition(row: WorkspaceModeRow | ProjectModeRow, scope: "workspace" | "project"): ModeDefinition {
   return {
@@ -134,7 +137,7 @@ export function parseChatAttachment(input: string | null, context: PersistedReco
       ...parsed,
       name: normalizeRequiredString(parsed.name, 256, "Recovered attachment"),
       mimeType: normalizeRequiredString(parsed.mimeType, 256, "application/octet-stream"),
-      sizeBytes: normalizeInteger(parsed.sizeBytes, 1, 16 * 1024 * 1024, 1),
+      sizeBytes: normalizeInteger(parsed.sizeBytes, 1, 16777216, 1),
       key: normalizeRequiredString(parsed.key, 512, "recovered"),
       uploadedAt: normalizeRequiredString(parsed.uploadedAt, 256, new Date().toISOString())
     },
@@ -161,7 +164,7 @@ export function parseChatAttachments(input: string | null, context: PersistedRec
           ...record,
           name: normalizeRequiredString(record.name, 256, "Recovered attachment"),
           mimeType: normalizeRequiredString(record.mimeType, 256, "application/octet-stream"),
-          sizeBytes: normalizeInteger(record.sizeBytes, 1, 16 * 1024 * 1024, 1),
+          sizeBytes: normalizeInteger(record.sizeBytes, 1, 16777216, 1),
           key: normalizeRequiredString(record.key, 512, "recovered"),
           uploadedAt: normalizeRequiredString(record.uploadedAt, 256, new Date().toISOString())
         },
@@ -296,9 +299,6 @@ export function normalizeExecutionPlanGating(input: unknown): unknown {
   };
 }
 
-export function isPlainRecord(input: unknown): input is Record<string, unknown> {
-  return typeof input === "object" && input !== null && !Array.isArray(input);
-}
 
 export function normalizeExecutionPlanOrigin(value: unknown): unknown {
   if (typeof value !== "string") {
@@ -531,33 +531,9 @@ export function parseToolActivities(input: string | null): ExecutionToolActivity
   return activities;
 }
 
-export function createEmptyTokenUsageTotals(overrides: Partial<TokenUsageTotals> = {}): TokenUsageTotals {
-  return {
-    inputTokens: 0,
-    outputTokens: 0,
-    cachedInputTokens: 0,
-    totalProcessedTokens: 0,
-    totalTokensIncludingCached: 0,
-    events: 0,
-    ...overrides
-  };
-}
-
 export function normalizeTokenUsageTotals(input: unknown): TokenUsageTotals {
   const parsed = tokenUsageTotalsSchema.safeParse(input);
-  return parsed.success ? parsed.data : createEmptyTokenUsageTotals();
-}
-
-export function addTokenUsageTotals(left: TokenUsageTotals, right: TokenUsageTotals): TokenUsageTotals {
-  return createEmptyTokenUsageTotals({
-    inputTokens: left.inputTokens + right.inputTokens,
-    outputTokens: left.outputTokens + right.outputTokens,
-    cachedInputTokens: left.cachedInputTokens + right.cachedInputTokens,
-    totalProcessedTokens: left.totalProcessedTokens + right.totalProcessedTokens,
-    totalTokensIncludingCached: left.totalTokensIncludingCached + right.totalTokensIncludingCached,
-    events: left.events + right.events,
-    updatedAt: [left.updatedAt, right.updatedAt].filter(Boolean).sort().at(-1)
-  });
+  return parsed.success ? { ...parsed.data, totalTokensIncludingCached: parsed.data.totalProcessedTokens } : createEmptyTokenUsageTotals();
 }
 
 export function parseIntentContract(input: string | null) {
@@ -591,10 +567,11 @@ export function parseBackgroundJobDefinition(kind: BackgroundJob["kind"], input:
   }
   if (kind === "shell") {
     value.executable = normalizeRequiredString(value.executable, 1024, "echo");
-    value.args = parseUnknownStringArray(value.args, 64, 4096);
+    // Arguments are literal process inputs: whitespace and empty strings carry meaning.
+    value.args = Array.isArray(value.args) ? value.args.filter((arg): arg is string => typeof arg === "string").slice(0, 64).map(arg => arg.slice(0, 4096)) : [];
     value.cwd = normalizeOptionalString(value.cwd, 4096);
     value.envRefs = parseUnknownStringArray(value.envRefs, 32, 128);
-    value.timeoutSeconds = normalizeInteger(value.timeoutSeconds, 1, 24 * 60 * 60, 60);
+    value.timeoutSeconds = normalizeInteger(value.timeoutSeconds, 1, 86400, 60);
   } else {
     value.prompt = normalizeRequiredString(value.prompt, 32000, "Recovered background job prompt.");
     value.modeId = normalizeOptionalString(value.modeId, 128);
@@ -626,7 +603,7 @@ export function parseBackgroundJobSchedule(input: string | null, fallbackDate: s
     return value;
   }
   value.type = "interval";
-  value.intervalSeconds = normalizeInteger(value.intervalSeconds, 60, 365 * 24 * 60 * 60, 60);
+  value.intervalSeconds = normalizeInteger(value.intervalSeconds, 60, 31536000, 60);
   value.nextRunAt = normalizeRequiredString(value.nextRunAt, 256, fallbackDate);
   value.sourceText = normalizeRequiredString(value.sourceText, 512, "recovered");
   return value;
@@ -657,10 +634,10 @@ export function parseUnknownStringArray(input: unknown, maxItems: number, maxIte
 export function deriveMemoryFreshness(row: Pick<MemoryEntryRow, "updated_at" | "last_hit_at">): MemoryEntry["freshness"] {
   const reference = row.last_hit_at ?? row.updated_at;
   const ageMs = Date.now() - new Date(reference).getTime();
-  if (!Number.isFinite(ageMs) || ageMs < 1000 * 60 * 60 * 24 * 14) {
+  if (!Number.isFinite(ageMs) || ageMs < 1209600000) {
     return memoryFreshnessSchema.parse("fresh");
   }
-  if (ageMs < 1000 * 60 * 60 * 24 * 60) {
+  if (ageMs < 5184000000) {
     return memoryFreshnessSchema.parse("aging");
   }
   return memoryFreshnessSchema.parse("stale");
@@ -890,3 +867,5 @@ export function createThreadLoadError(projectId: ProjectId, threadId: ThreadId, 
 export function isThreadLoadError(error: unknown): error is ThreadLoadError {
   return error instanceof Error && error.name === "ThreadLoadError" && "threadId" in error && "cause" in error;
 }
+
+export { isRecord as isPlainRecord } from "@hyperfocus/utilities/records";

@@ -1,4 +1,4 @@
-import { type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, type JSX } from "solid-js";
 import { createComponent } from "solid-js/web";
 import * as stylex from "@stylexjs/stylex";
 import { createCoalescedText } from "@hyperfocus/ui/transcript";
@@ -15,6 +15,8 @@ import type {
 import { resolveChatFileTarget } from "../lib/chat-file-links";
 import {
   createMarkdownRehypePlugins,
+  loadMarkdownHighlighter,
+  type MarkdownHighlighter,
   markdownRemarkPlugins,
   classifyLinkHref,
   extractTextContent,
@@ -272,6 +274,17 @@ export function MarkdownContent(props: MarkdownContentProps) {
     enabled: () => Boolean(props.live),
     intervalMs: () => props.liveRenderIntervalMs
   });
+  const [highlighter, setHighlighter] = createSignal<MarkdownHighlighter>();
+  createEffect(() => {
+    if (props.live || !/(?:^|\n) {0,3}(?:`{3,}|~{3,})\S/.test(content())) return;
+    let disposed = false;
+    onCleanup(() => { disposed = true; });
+    void loadMarkdownHighlighter().then(plugin => {
+      if (!disposed) setHighlighter(() => plugin);
+    }).catch(() => {
+      // Code and copy actions remain available when optional highlighting fails.
+    });
+  });
 
   const components: SolidMarkdownComponents = {
     ...staticMarkdownComponents,
@@ -350,6 +363,7 @@ export function MarkdownContent(props: MarkdownContentProps) {
       return createMarkdownRehypePlugins({
         live: props.live,
         fileLinks: props.fileLinks,
+        highlighter: highlighter(),
       });
     },
     get renderingStrategy() {

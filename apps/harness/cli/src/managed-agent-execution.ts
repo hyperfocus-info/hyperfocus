@@ -33,7 +33,7 @@ export async function runManagedAgentExecution(
 
   while (true) {
     controller = await adapter.startExecution(
-      withLifecycleCallbacks(nextRequest, (event) => {
+      withLifecycleCallbacks({ ...nextRequest, qualityAgentId: options.subagentId ?? "main" }, (event) => {
         handleExecutionEvent(options.store, options, controller, event);
       })
     );

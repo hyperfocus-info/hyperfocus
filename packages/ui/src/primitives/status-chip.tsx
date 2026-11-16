@@ -15,7 +15,7 @@ const styles = stylex.create({
     alignItems: "center",
     display: "inline-flex",
     fontFamily: tokens.fontMono,
-    fontSize: "0.68rem",
+    fontSize: tokens.fontCaption,
     fontVariantNumeric: tokens.numericVariant,
     fontWeight: 700,
     lineHeight: 1,

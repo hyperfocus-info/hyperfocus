@@ -1,3 +1,7 @@
+import { getContrastRatio, getRelativeLuminance } from "@hyperfocus/ui/theme/contrast";
+export { getContrastRatio } from "@hyperfocus/ui/theme/contrast";
+import { isRecord } from "@hyperfocus/utilities/records";
+import { blendHexColors, ensureTextContrast, getReadableTextColor, normalizeHexColor, parseHexColor } from "./theme-colors";
 export type ThemeModePreference = "system" | "light" | "dark";
 export type ResolvedThemeMode = "light" | "dark";
 export type BuiltInThemeId =
@@ -27,10 +31,13 @@ export const THEME_CSS_VARIABLES = [
   "--markdown-inline-code-border",
   "--info",
   "--info-strong",
+  "--info-foreground",
   "--warning",
   "--warning-strong",
+  "--warning-foreground",
   "--danger",
   "--danger-strong",
+  "--danger-foreground",
   "--success",
   "--success-strong",
   "--ring",
@@ -56,8 +63,9 @@ type GeneratedThemeCssVariable =
   | "--markdown-inline-code-bg"
   | "--markdown-inline-code-foreground"
   | "--markdown-inline-code-border";
+type ControlForegroundVariable = "--info-foreground" | "--warning-foreground" | "--danger-foreground";
 type ThemeSeedTokens =
-  Omit<ThemeTokens, "--font-ui" | "--font-display" | "--font-mono" | GeneratedThemeCssVariable> &
+  Omit<ThemeTokens, "--font-ui" | "--font-display" | "--font-mono" | GeneratedThemeCssVariable | ControlForegroundVariable> &
   Partial<Pick<ThemeTokens, GeneratedThemeCssVariable>>;
 
 export type ThemeFonts = {
@@ -218,21 +226,43 @@ function withFonts(
   fonts: ThemeFonts,
   tokens: ThemeSeedTokens
 ): ThemeTokens {
-  return {
+  return withReadableThemeColors({
     ...tokens,
     ...createBlendedSurfaceTokens(tokens),
-    ...SEMANTIC_LABEL_TOKENS,
+    "--info-foreground": "#ffffff",
+    "--warning-foreground": "#ffffff",
+    "--danger-foreground": "#ffffff",
     "--font-ui": fonts.ui,
     "--font-display": fonts.display,
     "--font-mono": fonts.mono
-  };
+  });
 }
 
-function enforceFixedThemeTokens(tokens: ThemeTokens): ThemeTokens {
-  return {
-    ...tokens,
-    ...SEMANTIC_LABEL_TOKENS
-  };
+function withReadableThemeColors(tokens: ThemeTokens, custom: Partial<ThemeTokens> = {}): ThemeTokens {
+  const surfaces = [tokens["--bg"], tokens["--panel"], tokens["--panel-strong"], tokens["--row"]];
+  const colors = { ...tokens };
+  colors["--ring"] = ensureTextContrast(tokens["--ring"], surfaces, 3);
+  colors["--muted"] = custom["--muted"] ?? ensureTextContrast(tokens["--muted"], surfaces);
+  colors["--accent"] = custom["--accent"] ?? ensureTextContrast(tokens["--accent"], surfaces);
+  colors["--accent-strong"] = ensureTextContrast(tokens["--accent-strong"], [
+    ...surfaces, blendHexColors(tokens["--panel-strong"], colors["--accent"], 0.14)
+  ]);
+  colors["--accent-foreground"] = getReadableTextColor(colors["--accent"], colors["--accent-strong"]);
+  for (const tone of ["info", "warning", "danger", "success"] as const) {
+    const base = `--${tone}` as const;
+    const strong = `--${tone}-strong` as const;
+    colors[base] = ensureTextContrast(SEMANTIC_LABEL_TOKENS[base], surfaces);
+    colors[strong] = ensureTextContrast(SEMANTIC_LABEL_TOKENS[strong], [
+      ...surfaces, blendHexColors(tokens["--panel-strong"], colors[base], 0.14)
+    ]);
+  }
+  colors["--danger-foreground"] = getReadableTextColor(colors["--danger"], colors["--danger-strong"]);
+  colors["--warning-foreground"] = getReadableTextColor(colors["--warning"], colors["--warning-strong"]);
+  colors["--info-foreground"] = getReadableTextColor(colors["--info"], colors["--info-strong"]);
+  colors["--markdown-inline-code-bg"] = colors["--accent"];
+  colors["--markdown-inline-code-foreground"] = getReadableTextColor(colors["--accent"]);
+  colors["--markdown-inline-code-border"] = blendHexColors(colors["--accent"], colors["--markdown-inline-code-foreground"], 0.24);
+  return colors;
 }
 
 function createBlendedSurfaceTokens(
@@ -753,7 +783,7 @@ export function resolveThemeTokens(preference: ThemePreference, systemPrefersDar
   const normalized = normalizeThemePreference(preference);
   const mode = resolveThemeMode(normalized, systemPrefersDark);
   if (normalized.themeId !== "custom") {
-    return enforceFixedThemeTokens(getBuiltInTheme(normalized.themeId)[mode]);
+    return { ...getBuiltInTheme(normalized.themeId)[mode] };
   }
 
   const custom = normalized.custom ?? createDefaultCustomTheme();
@@ -764,12 +794,11 @@ export function resolveThemeTokens(preference: ThemePreference, systemPrefersDar
     ...customTokens
   };
   const derivedTokens = createBlendedSurfaceTokens(mergedTokens);
-  return {
+  return withReadableThemeColors({
     ...mergedTokens,
     ...derivedTokens,
-    ...customTokens,
-    ...SEMANTIC_LABEL_TOKENS
-  };
+    ...customTokens
+  }, customTokens);
 }
 
 export function withThemePreference(
@@ -836,49 +865,50 @@ export function normalizeThemeFontInput(variable: ThemeCssVariable, value: strin
 }
 
 export function validateThemeContrast(tokens: ThemeTokens) {
-  const pairs = [
+  const pairs: Array<{ foreground: ThemeCssVariable; background: ThemeCssVariable; minimum: number; label: string; backgroundMix?: number }> = [
     { foreground: "--foreground", background: "--bg", minimum: 4.5, label: "Text on background" },
     { foreground: "--foreground", background: "--panel", minimum: 4.5, label: "Text on panel" },
     { foreground: "--foreground", background: "--panel-strong", minimum: 4.5, label: "Text on strong panel" },
-    { foreground: "--accent-foreground", background: "--accent", minimum: 3, label: "Accent controls" },
+    { foreground: "--foreground", background: "--row", minimum: 4.5, label: "Text on row" },
+    { foreground: "--accent-foreground", background: "--accent", minimum: 4.5, label: "Accent controls" },
+    { foreground: "--accent-foreground", background: "--accent-strong", minimum: 4.5, label: "Hovered accent controls" },
+    { foreground: "--danger-foreground", background: "--danger", minimum: 4.5, label: "Danger controls" },
+    { foreground: "--danger-foreground", background: "--danger-strong", minimum: 4.5, label: "Hovered danger controls" },
+    { foreground: "--warning-foreground", background: "--warning", minimum: 4.5, label: "Warning controls" },
+    { foreground: "--warning-foreground", background: "--warning-strong", minimum: 4.5, label: "Hovered warning controls" },
+    { foreground: "--info-foreground", background: "--info", minimum: 4.5, label: "Selected agent labels" },
     {
       foreground: "--markdown-inline-code-foreground",
       background: "--markdown-inline-code-bg",
       minimum: 4.5,
       label: "Inline code chips"
     }
-  ] as const;
+  ];
+  for (const [background, label] of [["--bg", "background"], ["--panel", "panel"], ["--panel-strong", "raised panel"], ["--row", "row"]] as const) {
+    pairs.push({ foreground: "--ring", background, minimum: 3, label: `Focus indicator on ${label}` });
+    pairs.push({ foreground: "--muted", background, minimum: 4.5, label: `Muted text on ${label}` });
+    for (const tone of ["info", "warning", "danger", "success", "accent"] as const) {
+      pairs.push({ foreground: `--${tone}`, background, minimum: 4.5, label: `${tone} text on ${label}` });
+      pairs.push({ foreground: `--${tone}-strong`, background, minimum: 4.5, label: `Strong ${tone} text on ${label}` });
+    }
+  }
+  for (const [tone, backgroundMix] of [["success", 0.13], ["warning", 0.14], ["danger", 0.12], ["info", 0.12], ["accent", 0.14]] as const) {
+    pairs.push({ foreground: `--${tone}-strong`, background: `--${tone}`, backgroundMix, minimum: 4.5, label: `${tone} status chip` });
+  }
 
   return pairs
     .map((pair) => ({
       ...pair,
-      ratio: getContrastRatio(tokens[pair.foreground], tokens[pair.background])
+      ratio: getContrastRatio(tokens[pair.foreground], pair.backgroundMix === undefined ? tokens[pair.background]
+        : blendHexColors(tokens["--panel-strong"], tokens[pair.background], pair.backgroundMix))
     }))
     .filter((result) => result.ratio < result.minimum);
 }
 
-export function getContrastRatio(foreground: string, background: string) {
-  const foregroundRgb = parseHexColor(foreground);
-  const backgroundRgb = parseHexColor(background);
-  if (!foregroundRgb || !backgroundRgb) {
-    return 1;
-  }
-
-  const foregroundLuminance = getRelativeLuminance(foregroundRgb);
-  const backgroundLuminance = getRelativeLuminance(backgroundRgb);
-  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
-  const darker = Math.min(foregroundLuminance, backgroundLuminance);
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-export function normalizeHexColor(value: string) {
-  const trimmed = value.trim();
-  const short = /^#?([0-9a-fA-F]{3})$/.exec(trimmed);
-  if (short) {
-    return `#${short[1].split("").map((digit) => `${digit}${digit}`).join("")}`.toLowerCase();
-  }
-  const long = /^#?([0-9a-fA-F]{6})$/.exec(trimmed);
-  return long ? `#${long[1].toLowerCase()}` : undefined;
+/** Older saved colors can be repaired one field at a time without admitting new failures. */
+export function getThemeContrastRegressions(options: { current: ThemeTokens; next: ThemeTokens }) {
+  const previous = new Map(validateThemeContrast(options.current).map(issue => [issue.label, issue.ratio]));
+  return validateThemeContrast(options.next).filter(issue => issue.ratio < (previous.get(issue.label) ?? issue.minimum));
 }
 
 function normalizePartialTokens(input: unknown, fallbackTokens: ThemeTokens): Partial<ThemeTokens> | undefined {
@@ -901,55 +931,4 @@ function normalizePartialTokens(input: unknown, fallbackTokens: ThemeTokens): Pa
     }
   }
   return Object.keys(tokens).length > 0 ? tokens : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseHexColor(value: string) {
-  const normalized = normalizeHexColor(value);
-  if (!normalized) {
-    return undefined;
-  }
-  const numeric = Number.parseInt(normalized.slice(1), 16);
-  return {
-    r: (numeric >> 16) & 255,
-    g: (numeric >> 8) & 255,
-    b: numeric & 255
-  };
-}
-
-function getRelativeLuminance(color: { r: number; g: number; b: number }) {
-  const channels = [color.r, color.g, color.b].map((channel) => {
-    const normalized = channel / 255;
-    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
-  });
-  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
-}
-
-function blendHexColors(from: string, to: string, amountTo: number) {
-  const fromRgb = parseHexColor(from);
-  const toRgb = parseHexColor(to);
-  if (!fromRgb || !toRgb) {
-    return normalizeHexColor(from) ?? normalizeHexColor(to) ?? "#000000";
-  }
-  const amount = Math.max(0, Math.min(1, amountTo));
-  return rgbToHex({
-    r: Math.round(fromRgb.r * (1 - amount) + toRgb.r * amount),
-    g: Math.round(fromRgb.g * (1 - amount) + toRgb.g * amount),
-    b: Math.round(fromRgb.b * (1 - amount) + toRgb.b * amount)
-  });
-}
-
-function rgbToHex(color: { r: number; g: number; b: number }) {
-  return `#${[color.r, color.g, color.b]
-    .map((channel) => Math.max(0, Math.min(255, channel)).toString(16).padStart(2, "0"))
-    .join("")}`;
-}
-
-function getReadableTextColor(background: string) {
-  return getContrastRatio("#ffffff", background) >= getContrastRatio("#0b0d12", background)
-    ? "#ffffff"
-    : "#0b0d12";
 }

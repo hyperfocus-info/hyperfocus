@@ -49,6 +49,34 @@ export function formatDeterministicToolSchemas(tools: Array<{ name: string; sche
     .join("\n\n");
 }
 
+const MAX_EXECUTION_TRANSCRIPT_CHARS = 24_000;
+
+export function formatBoundedExecutionTranscript(
+  messages: ReadonlyArray<{ role: string; content: string }>,
+  options: { duplicateBrief?: string } = {}
+) {
+  const visibleMessages = messages.filter((message) => message.role !== "system");
+  let duplicateIndex = -1;
+  for (let index = visibleMessages.length - 1; index >= 0 && options.duplicateBrief; index -= 1) {
+    const message = visibleMessages[index]!;
+    if (message.role === "user" && message.content.trim() === options.duplicateBrief.trim()) {
+      duplicateIndex = index;
+      break;
+    }
+  }
+  const transcript = visibleMessages
+    .filter((_, index) => index !== duplicateIndex)
+    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+    .join("\n");
+  return boundExecutionTranscript(transcript);
+}
+
+export function boundExecutionTranscript(transcript: string) {
+  if (transcript.length <= MAX_EXECUTION_TRANSCRIPT_CHARS) return transcript;
+  const marker = "[Earlier thread content omitted to keep execution context bounded.]\n";
+  return marker + transcript.slice(-(MAX_EXECUTION_TRANSCRIPT_CHARS - marker.length));
+}
+
 function normalizeSection(section: DeterministicPromptSection) {
   const content = Array.isArray(section.content) ? section.content.filter(Boolean).join("\n") : section.content;
   const normalized = content?.trim();

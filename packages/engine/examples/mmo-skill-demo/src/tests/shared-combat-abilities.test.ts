@@ -557,8 +557,8 @@ test("MMO Skill Demo caltrops charge effects remain schema-encodable", async () 
   await server.receiveInput(player.id, { action: "config", devField: "E", devText: "bow-caltrops" });
   await server.tick(0);
   await server.receiveInput(player.id, { action: "e", aimX: player.x + 100, aimY: player.y });
-  await server.tick(1 / 60);
-  await server.tick(1 / 60);
+  await server.tick(0.016666666666666666);
+  await server.tick(0.016666666666666666);
 
   expect(room.ctx.state.effects.some((effect) => effect.effectKind === "cone")).toBe(true);
   expect(() => encodeSnapshot(mmoSkillDemoSchema, room.ctx.state)).not.toThrow();

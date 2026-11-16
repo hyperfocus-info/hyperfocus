@@ -31,8 +31,8 @@ case "planning.answer-batch": {
       assertGlobalExecutionNotPaused(repository);
       const projectId = command.payload.projectId;
       const project = runtime.getProject(projectId);
-      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project);
       const targetRun = requirePersistedThreadRun(repository, projectId, command.payload.threadId, command.payload.runId);
+      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project, targetRun);
       const answersById = new Map(command.payload.answers.map((answer) => [answer.questionId, answer.content]));
       if (answersById.size !== command.payload.answers.length) {
         throw new Error("Duplicate planning question answers are not allowed");
@@ -47,7 +47,7 @@ case "planning.answer-batch": {
         return question;
       });
 
-      const providerBrand = repository.getProviderBrand();
+      const providerBrand = targetRun.launchProfile?.providerBrand ?? repository.getProviderBrand();
       const attachments = validatePromptAttachments(repository, projectId, command.payload.threadId, command.payload.attachments);
       const capturedCliContext = runtime.consumeThreadCapturedCliContext(projectId, command.payload.threadId);
       const combinedContent = pendingQuestions
@@ -102,8 +102,8 @@ case "planning.answer-batch": {
             providerBrand,
             requestedModelId: targetRun.executionModelId ?? project.session.executionModelId
           }).modelId,
-          reasoningStrength: command.payload.reasoningStrength,
-          fastMode: command.payload.fastMode,
+          reasoningStrength: command.payload.reasoningStrength ?? targetRun.launchProfile?.reasoningStrength,
+          fastMode: command.payload.fastMode ?? targetRun.launchProfile?.fastMode,
           abortSignal: abortController.signal,
           derivedProgressHeartbeatMs,
           tokenUsageSession
@@ -146,8 +146,8 @@ case "planning.answer": {
       assertGlobalExecutionNotPaused(repository);
       const projectId = command.payload.projectId;
       const project = runtime.getProject(projectId);
-      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project);
       const targetRun = requirePersistedThreadRun(repository, projectId, command.payload.threadId, command.payload.runId);
+      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project, targetRun);
       const pendingQuestion = targetRun.questions.find(
         (question) =>
           question.id === command.payload.questionId &&
@@ -157,7 +157,7 @@ case "planning.answer": {
         throw new Error("Planning question is not answerable");
       }
 
-      const providerBrand = repository.getProviderBrand();
+      const providerBrand = targetRun.launchProfile?.providerBrand ?? repository.getProviderBrand();
       const attachments = validatePromptAttachments(repository, projectId, command.payload.threadId, command.payload.attachments);
       const capturedCliContext = runtime.consumeThreadCapturedCliContext(projectId, command.payload.threadId);
       const promptContent = appendCapturedCliContext(command.payload.content, capturedCliContext);
@@ -206,8 +206,8 @@ case "planning.answer": {
             providerBrand,
             modeId: project.selectedModeId,
             executionModelId: targetRun.executionModelId ?? project.session.executionModelId,
-            reasoningStrength: command.payload.reasoningStrength,
-            fastMode: command.payload.fastMode
+            reasoningStrength: command.payload.reasoningStrength ?? targetRun.launchProfile?.reasoningStrength,
+            fastMode: command.payload.fastMode ?? targetRun.launchProfile?.fastMode
           });
           const completedProject = rejectPendingBrowserApprovalsForRun(pendingBrowserApprovals, repository, projectId,
             targetRun.id, "Run completed", "completed");
@@ -314,9 +314,9 @@ async function continueAnsweredRun(
   const { ws, runtime, repository, runtimeRegistry, pendingBrowserApprovals, connections, derivedProgressHeartbeatMs, tokenUsageSession } = context;
   const projectId = command.payload.projectId;
   const project = runtime.getProject(projectId);
-  const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project);
   const targetRun = requirePersistedThreadRun(repository, projectId, command.payload.threadId, command.payload.runId);
-  const providerBrand = repository.getProviderBrand();
+      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project, targetRun);
+  const providerBrand = targetRun.launchProfile?.providerBrand ?? repository.getProviderBrand();
 
   const linkedBackgroundRun = repository.getBackgroundJobRunByLinkedAgentRunId(targetRun.id);
       if (linkedBackgroundRun?.status === "awaiting-user-input") {
@@ -351,8 +351,8 @@ async function continueAnsweredRun(
             providerBrand,
             requestedModelId: targetRun.executionModelId ?? project.session.executionModelId
           }).modelId,
-          reasoningStrength: command.payload.reasoningStrength,
-          fastMode: command.payload.fastMode,
+          reasoningStrength: command.payload.reasoningStrength ?? targetRun.launchProfile?.reasoningStrength,
+          fastMode: command.payload.fastMode ?? targetRun.launchProfile?.fastMode,
           abortSignal: abortController.signal,
           derivedProgressHeartbeatMs,
           tokenUsageSession

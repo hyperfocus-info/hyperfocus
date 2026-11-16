@@ -1,0 +1,47 @@
+{
+  "name": "@hyperfocus/touch-of-death",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "./src/uploads/moderation-entry.ts"
+  ],
+  "exports": {
+    "./swarm": "./src/swarm/recipe.ts",
+    "./presentation/*": "./src/presentation/*.ts",
+    "./network/*": "./src/network/*.ts",
+    "./appearance/*": "./src/appearance/*.ts",
+    "./training/*": "./src/training/*.ts",
+    "./uploads/*": "./src/uploads/*.ts",
+    "./rewards/*": "./src/rewards/*.ts",
+    "./learning/*": "./src/learning/*.ts",
+    "./trial-evidence": "./src/trial-evidence.ts",
+    "./telemetry/*": "./src/telemetry/*.ts",
+    "./combat/*": "./src/combat/*.ts",
+    "./host/*": "./host/*.ts",
+    "./replay": "./src/replay/archive.ts",
+    "./replay/limits": "./src/replay/limits.ts",
+    "./replay/appearance": "./src/replay/appearance.ts"
+  },
+  "scripts": {
+    "build": "bun build ./host/relay.ts --outdir ./.local/build --target bun",
+    "dev": "bun ./host/relay.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun run test:native && bun run test:browser",
+    "test:native": "bun test ./src ./host --timeout 30000",
+    "test:browser": "bun test --preload ../../../../apps/harness/ui/src/utils/tests/preload.ts ./browser-tests",
+    "generate:replay": "bun scripts/generate-replay.ts"
+  },
+  "dependencies": {
+    "@hyperfocus/engine": "workspace:*",
+    "zod": "^3.25.76",
+    "@bufbuild/protobuf": "^2.13.0",
+    "@hyperfocus/utilities": "workspace:*"
+  },
+  "devDependencies": {
+    "@hyperfocus/desktop-runtime": "workspace:*",
+    "playwright-core": "1.62.1",
+    "@bufbuild/protoc-gen-es": "^2.13.0",
+    "grpc-tools": "^1.13.1"
+  }
+}

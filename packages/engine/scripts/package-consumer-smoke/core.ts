@@ -1,3 +1,4 @@
+import { assert } from "@hyperfocus/utilities/assert";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, parse, relative } from "node:path";
@@ -31,6 +32,8 @@ const expectedPackageFiles = [
   "dist/core.js",
   "dist/wasm-runtime.js",
   "dist/experimental.js",
+  "dist/experimental-simulation-mailbox.js",
+  "dist/experimental-target-rays.js",
   "dist/net.js",
   "dist/protocol.js",
   "dist/server.js",
@@ -39,14 +42,20 @@ const expectedPackageFiles = [
   "dist/render-3d.js",
   "dist/render-3d-core.js",
   "dist/render-3d-scene.js",
+  "dist/render-3d-material-presets.js",
   "dist/render-3d-webgl2.js",
   "dist/physics-3d.js",
   "dist/physics-2d.js",
   "dist/physics-rigid-3d.js",
+  "dist/physics-ragdoll-3d.js",
+  "dist/physics-physical-performance-3d.js",
   "dist/motion.js",
+  "dist/motion-pose-safety.js",
   "dist/motion-three.js",
   "dist/migrations.js",
   "dist/project.js",
+  "dist/project-delivery.js",
+  "dist/project-metadata.js",
   "dist/project-runtime-2d.js",
   "dist/project-runtime-timeline-2d.js",
   "dist/project-runtime-navigation-2d.js",
@@ -56,6 +65,9 @@ const expectedPackageFiles = [
   "dist/project-filesystem.js",
   "dist/project-neutral-export.js",
   "dist/navigation.js",
+  'dist/combat.js',
+  'dist/combat-net.js',
+  'dist/progression.js',
   "dist/content.js",
   "dist/save.js",
   "dist/save-browser.js",
@@ -65,11 +77,13 @@ const expectedPackageFiles = [
   "dist/ui-core.js",
   "dist/assets/loader.js",
   "dist/assets/gltf-static.js",
+  "dist/assets/model-cooking.js",
   "dist/assets/gltf-skin-animation.js",
   "dist/assets/templates.js",
   "dist/post-processing-prototype.js",
   "dist/src/",
   "docs/README.md",
+  "docs/project-delivery.md",
   "docs/architectural-resilience-matrix.md",
   "docs/schema/editor-project-v2.schema.json",
   "docs/browser-support.md",
@@ -83,6 +97,9 @@ const expectedPackageFiles = [
   "wasm/collision-kernel.simd.wasm",
   "tooling/cdp-client.ts",
   "tooling/create-project.ts",
+  "dist/tooling/",
+  "dist/scripts/",
+  "tooling/project-cli.ts",
   "tooling/example-build.ts",
   "tooling/server.ts",
   "readme.md",
@@ -92,12 +109,6 @@ const expectedPackageFiles = [
 const expectedBrowserPackageFiles = filesUnder(join(rootDir, "browser"))
   .map((path) => relative(rootDir, path).replaceAll("\\", "/"))
   .sort();
-
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
 
 function packagePathMatchesExactCasing(relativePath: string) {
   const parts = relativePath.split("/").filter(Boolean);
@@ -240,6 +251,14 @@ const rigid3dExport = manifest.exports?.["./physics/rigid-3d"];
 assert(rigid3dExport?.import === "./dist/physics-rigid-3d.js", "physics/rigid-3d import must resolve to the generated bounded 3D world");
 assert(rigid3dExport?.types === "./dist/src/physics/rigid-3d.d.ts", "physics/rigid-3d types must resolve to generated declarations");
 
+const ragdoll3dExport = manifest.exports?.["./physics/ragdoll-3d"];
+assert(ragdoll3dExport?.import === "./dist/physics-ragdoll-3d.js", "physics/ragdoll-3d import must resolve to the generated articulated controller");
+assert(ragdoll3dExport?.types === "./dist/src/physics/ragdoll-3d.d.ts", "physics/ragdoll-3d types must resolve to generated declarations");
+
+const physicalPerformance3dExport = manifest.exports?.["./physics/physical-performance-3d"];
+assert(physicalPerformance3dExport?.import === "./dist/physics-physical-performance-3d.js", "physics/physical-performance-3d import must resolve to the generated deterministic performance runtime");
+assert(physicalPerformance3dExport?.types === "./dist/src/physics/physical-performance-3d.d.ts", "physics/physical-performance-3d types must resolve to generated declarations");
+
 const motionExport = manifest.exports?.["./motion"];
 assert(motionExport?.import === "./dist/motion.js", "motion import must resolve to the renderer-neutral motion build");
 assert(motionExport?.types === "./dist/src/motion/index.d.ts", "motion export types must resolve to generated motion declarations");
@@ -255,6 +274,8 @@ assert(migrationsExport?.types === "./dist/src/migrations/index.d.ts", "migratio
 const projectExport = manifest.exports?.["./project"];
 assert(projectExport?.import === "./dist/project.js", "project import must resolve to the generated portable project build");
 assert(projectExport?.types === "./dist/src/project/index.d.ts", "project export types must resolve to generated portable project declarations");
+const deliveryExport = manifest.exports?.['./project/delivery'];
+assert(deliveryExport?.import === './dist/project-delivery.js' && deliveryExport?.types === './dist/src/project/delivery/index.d.ts', 'delivery export must include its runtime and public declarations');
 
 const projectRuntime2dExport = manifest.exports?.["./project/runtime-2d"];
 assert(projectRuntime2dExport?.import === "./dist/project-runtime-2d.js", "project/runtime-2d import must resolve to the generated portable runtime build");
@@ -382,7 +403,11 @@ const render3dWebgl2Build = await import(pathToFileURL(join(rootDir, "dist/rende
 const physics3dBuild = await import(pathToFileURL(join(rootDir, "dist/physics-3d.js")).href);
 const physics2dBuild = await import(pathToFileURL(join(rootDir, "dist/physics-2d.js")).href);
 const rigid3dBuild = await import(pathToFileURL(join(rootDir, "dist/physics-rigid-3d.js")).href);
+const ragdoll3dBuild = await import(pathToFileURL(join(rootDir, "dist/physics-ragdoll-3d.js")).href);
+const physicalPerformance3dBuild = await import(pathToFileURL(join(rootDir, "dist/physics-physical-performance-3d.js")).href);
 const motionBuild = await import(pathToFileURL(join(rootDir, "dist/motion.js")).href);
+const poseSafetyBuild = await import(pathToFileURL(join(rootDir, 'dist/motion-pose-safety.js')).href);
+assert(poseSafetyBuild.inspectSignedJoint('elbow', [-Math.SQRT1_2, 0, 0, Math.SQRT1_2], { axis: [1, 0, 0], reference: [0, 0, 0, 1], minRadians: 0, maxRadians: 2.7, maxOffAxisRadians: .1 })[0]?.code === 'joint-direction', 'Packed pose safety must reject reversed flexion');
 const motionThreeBuild = await import(pathToFileURL(join(rootDir, "dist/motion-three.js")).href);
 const migrationsBuild = await import(pathToFileURL(join(rootDir, "dist/migrations.js")).href);
 const projectBuild = await import(pathToFileURL(join(rootDir, "dist/project.js")).href);
@@ -483,6 +508,8 @@ assertRuntimeMatchesDeclarations("render/3d-webgl2", render3dWebgl2Build, readFi
 assertRuntimeMatchesDeclarations("physics/3d", physics3dBuild, readFileSync(join(rootDir, "dist/src/physics/3d.d.ts"), "utf8"));
 assertRuntimeMatchesDeclarations("physics/2d", physics2dBuild, readFileSync(join(rootDir, "dist/src/physics/2d.d.ts"), "utf8"));
 assertRuntimeMatchesDeclarations("physics/rigid-3d", rigid3dBuild, readFileSync(join(rootDir, "dist/src/physics/rigid-3d.d.ts"), "utf8"));
+assertRuntimeMatchesDeclarations("physics/ragdoll-3d", ragdoll3dBuild, readFileSync(join(rootDir, "dist/src/physics/ragdoll-3d.d.ts"), "utf8"));
+assertRuntimeMatchesDeclarations("physics/physical-performance-3d", physicalPerformance3dBuild, readFileSync(join(rootDir, "dist/src/physics/physical-performance-3d.d.ts"), "utf8"));
 assertRuntimeMatchesDeclarations("motion/three", motionThreeBuild, readFileSync(join(rootDir, "dist/src/motion/three.d.ts"), "utf8"));
 for (const exportName of ["createPoseBuffer", "autoMapHumanoidRig", "compileMotionGraph", "createHumanoidMotionController"]) {
   assert(exportName in motionBuild, `motion build is missing ${exportName}`);

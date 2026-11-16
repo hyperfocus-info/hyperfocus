@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { testExports } from "./cli-update-checker";
+import { installCliUpdate, testExports } from "./cli-update-checker";
 
 describe("cli update checker helpers", () => {
+  test.each(["pi", "codex-cli"] as const)("rejects portable %s updates before running a package manager", async (agentId) => {
+    await expect(installCliUpdate(agentId, "portable-launcher")).rejects.toThrow("Download a new Harness release");
+  });
   test("parses semver from runtime version output", () => {
     expect(testExports.parseVersion("codex-cli 0.132.0")).toBe("0.132.0");
     expect(testExports.parseVersion("gh copilot version v1.2.3")).toBe("1.2.3");

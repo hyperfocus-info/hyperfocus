@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildPortableProject } from "./build-project.ts";
-import { createPlayableWorld } from "../src/project/runtime-world-2d.ts";
+import { verifyGameBuildReceiptFile } from "./project-build/receipt.ts";
+import { createPlayableWorld } from "../src/project/runtime2d/runtime-world-2d.ts";
 import { createPlayableStoryController2D } from "../src/project/runtime-story-2d.ts";
 import { createPlayableSaveController2D } from "../src/project/runtime-save-2d.ts";
 import { createInMemorySaveStorage } from "../src/save/index.ts";
-import { PROJECT_STARTERS, createProjectStarter, createStarterProject, inspectProjectStarter, projectCliHelp } from "../tooling/create-project.ts";
+import { PROJECT_STARTERS, createProjectStarter, createStarterProject, inspectProjectStarter, projectCliHelp } from "../tooling/create-project-runtime.ts";
 
 describe("minimal portable project starters", () => {
   for (const template of PROJECT_STARTERS) {
@@ -25,7 +26,8 @@ describe("minimal portable project starters", () => {
         expect(JSON.parse(projectText).extensions.hyperfocusSave).toMatchObject({ schema: "portable-world-snapshot-v1", slots: ["auto"], maxBytes: 262_144 });
         const built = await buildPortableProject(root);
         expect(built.behaviorCount).toBe(0);
-        expect(await filesBelow(join(root, "dist"))).toHaveLength(1);
+        expect((await filesBelow(join(root, "dist"))).sort()).toEqual([basename(built.outputPath), basename(built.receiptPath)].sort());
+        expect(await verifyGameBuildReceiptFile({ artifactPath: built.outputPath })).toEqual({ receiptMatches: true, artifactMatches: true });
       } finally {
         await rm(temporary, { recursive: true, force: true });
       }

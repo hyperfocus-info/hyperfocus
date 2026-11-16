@@ -1,3 +1,5 @@
+import { compareText } from "@hyperfocus/utilities/text";
+import { isRecord } from "@hyperfocus/utilities/records";
 import {
   canonicalHyperfocusJson,
   hashHyperfocusAsset,
@@ -9,7 +11,7 @@ import { truncateUtf8 } from "../core/text.ts";
 export const NEUTRAL_EXPORT_FORMAT = "hyperfocus-neutral-export" as const;
 export const NEUTRAL_EXPORT_VERSION = 1;
 export const MAX_NEUTRAL_EXPORT_ASSETS = 5_000;
-export const MAX_NEUTRAL_EXPORT_BYTES = 1024 * 1024 * 1024;
+export const MAX_NEUTRAL_EXPORT_BYTES = 1073741824;
 
 const NEUTRAL_COMPONENTS = new Set(["transform", "sprite", "collider", "input", "camera", "audio", "ui"]);
 
@@ -274,7 +276,7 @@ function assignNeutralScriptPaths(project: NeutralExportProject) {
     return [{ sourcePath: file.path, path, mimeType: "text/typescript" as const, bytes: new TextEncoder().encode(file.source) }];
   }).sort((a, b) => compareText(a.path, b.path));
   const bytes = exported.reduce((total, file) => total + file.bytes.byteLength, 0);
-  if (bytes > 16 * 1024 * 1024) throw new Error("Project exceeds neutral export script byte limit 16777216.");
+  if (bytes > 16777216) throw new Error("Project exceeds neutral export script byte limit 16777216.");
   return exported;
 }
 
@@ -415,12 +417,4 @@ function safeFileSegment(value: string, maximum: number): string {
 
 function escapePointer(value: string): string {
   return value.replace(/~/g, "~0").replace(/\//g, "~1");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function compareText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }

@@ -1,10 +1,16 @@
 ---
 name: grill-me
-description: Interview the user relentlessly about a plan or design until reaching shared understanding, resolving each branch of the decision tree. Use when user wants to stress-test a plan, get grilled on their design, or mentions "grill me".
+description: Stress-test a plan through an interview when the user asks to be grilled or explicitly requests design questioning. Do not attach an interview to ordinary implementation.
 ---
 
-Interview me relentlessly about every aspect of this plan until we reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one. For each question, provide your recommended answer.
+# Grill me
 
-Ask the questions one at a time.
+Explore repository facts first. Ask the next consequential question whose answer
+changes the plan, following dependencies rather than a fixed questionnaire.
+Expose assumptions, conflicts, and tradeoffs; use existing approved decisions
+and examples before asking the user to repeat them.
 
-If a question can be answered by exploring the codebase, explore the codebase instead.
+Continue while material branches remain or the user wants more pressure testing.
+Conclude with resolved decisions and genuine unknowns. Save reusable approved
+decisions in the owning plan when the task includes maintaining it. The interview
+does not create a new approval gate for implementation already requested.

@@ -1,3 +1,5 @@
+import { isAbsolutePath } from "./utils";
+
 export type ChatFileTarget = {
   path: string;
   line?: number;
@@ -141,10 +143,6 @@ function normalizePath(value: string) {
     parts.push(part);
   }
   return `${prefix}${parts.join("/")}`.replace(/\/$/, "");
-}
-
-function isAbsolutePath(value: string) {
-  return /^[A-Za-z]:\//.test(value) || value.startsWith("/");
 }
 
 function isInsidePath(path: string, rootPath: string) {

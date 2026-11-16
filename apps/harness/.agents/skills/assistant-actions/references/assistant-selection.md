@@ -1,35 +1,20 @@
-# Assistant Selection
+# Assistant selection
 
-Use deterministic resolution before invoking a model or making a mutation.
+Resolve an exact id or a unique name in the named/current project first, then a
+unique global name. Case-insensitive or fuzzy matches are usable only when
+unambiguous. Use current persisted state, not a guess from the assistant prompt.
 
-## Resolution Order
+- Project-chat operations default to the current project unless another is named.
+- Global assistants can answer state questions anywhere; project work and jobs need
+  a known destination. A clone can use the current project as its destination.
+- Bulk project actions target project-scoped assistants. Include global assistants
+  only when named, or when the user explicitly requests workspace-wide scope.
+- Ask one focused question when assistant, job, todo, question, project, or schedule
+  still has multiple plausible targets. Supply the actual candidates.
+- Do not ask again for an exact target, an already supplied schedule, or an
+  authorized recovery action. An empty lookup is a result, not a clarification need.
+- A request to inspect failure does not authorize retry. A requested recovery can
+  proceed after local diagnosis unless it needs a human decision or missing access.
 
-1. Exact assistant id.
-2. Exact assistant name in current project.
-3. Exact global assistant name.
-4. Single case-insensitive name match across visible assistants.
-5. Single fuzzy name match only if it is unambiguous.
-6. Ask for clarification.
-
-## Project Scope
-
-- Project assistant: prefer current project unless user names another project.
-- Global assistant: allow state questions anywhere; require target project before project work or job creation.
-- Clone requests: source may be global or another project; destination must be explicit or current project.
-- Bulk project requests target project-scoped assistants only; global assistants must be named explicitly or the user must request workspace-wide all.
-- Bulk workspace requests require explicit `all assistants` wording before mutating every non-deleted assistant.
-
-## Ambiguity Cases
-
-Ask before acting when:
-
-- Multiple assistants share the same name.
-- User says `assistant` without a name and more than one assistant is visible.
-- User asks a project mutation for a global assistant without destination project.
-- User asks job creation without schedule or one-shot intent.
-- User asks to recover a circuit-tripped assistant without saying whether to retry or only inspect.
-- User asks for a bulk mutation but scope could mean current project, all projects, or named assistants.
-
-## Clarification Shape
-
-Use short options with one recommended path. Include assistant name, scope, and project label in each option.
+After clarification, resume the original action using
+[operation handoffs](operation-handoffs.md).

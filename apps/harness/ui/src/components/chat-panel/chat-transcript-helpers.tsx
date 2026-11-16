@@ -1,17 +1,13 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type JSX } from "solid-js";
+import { typography } from "@hyperfocus/ui";
+import {   Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import {
-  createRequestId,
-  type AssistantActionMessageMetadata,
-  type AgentRunState,
-  type AgentRunSummary,
-  type ChatAttachment,
-  type ChatMessage,
-  type ProviderBrand,
-  type SetupAction
+
+
+  type AgentRunState
 } from "@hyperfocus/ai-core/protocol";
-import { buildChatTimelineRows, type ChatTimelineRow, type TimelineLiveMessage } from "../../lib/chat-timeline-model";
-import { formatShortTimestamp, resolveBrowserTimezone } from "../../lib/time-format";
+import {  type ChatTimelineRow } from "../../lib/chat-timeline-model";
+import { formatShortTimestamp } from "../../lib/time-format";
 import { chatUtilityStyles } from "../chat-panel.utilities";
 
 export function RunLedgerCompact(props: { run?: AgentRunState }) {
@@ -20,7 +16,7 @@ export function RunLedgerCompact(props: { run?: AgentRunState }) {
     <Show when={ledger()}>
       {(entry) => (
         <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p3).class}>
-          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Run ledger</div>
+          <div class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Run ledger</div>
           <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.grid, chatUtilityStyles.gap1).class}>
             <Show when={entry().currentPhase}>{(value) => <div>Phase: {value()}</div>}</Show>
             <Show when={entry().nextStep}>{(value) => <div>Next: {value()}</div>}</Show>
@@ -41,7 +37,7 @@ export function RunProofBundleCompact(props: { run?: AgentRunState }) {
     <Show when={bundle()}>
       {(proof) => (
         <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedXl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p3).class}>
-          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Proof bundle</div>
+          <div class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Proof bundle</div>
           <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.grid, chatUtilityStyles.gap1).class}>
             <Show when={proof().diffSummary}>{(value) => <div>Diff: {value()}</div>}</Show>
             <div>Evidence refs: {evidenceCount()}</div>

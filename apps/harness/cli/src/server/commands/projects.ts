@@ -5,7 +5,7 @@ import { commitProjectDeletion } from "../automation/background-run-cancellation
 import { emitBackgroundJobsDeletedToAll, emitBackgroundJobsUpdatedToAll, emitNotificationsUpdatedToAll } from "../automation/background-events";
 import type { ServerCommandContext } from "./context";
 import { emitControlEvent, sendEvent } from "../transport/events";
-import { discoverComposerFilePaths, discoverSkillPathsForProjectRoot, loadBoundedProjectState } from "../workspace/project-events";
+import { discoverComposerFilePaths, discoverSkillPathsForProjectRoot, emitProjectUpdated, loadBoundedProjectState } from "../workspace/project-events";
 import { findProjectForegroundRunWithStatuses } from "../execution/state";
 import { isAbortError } from "../runtime/error-classification";
 import { sendCommandRejected } from "../transport/command-rejection";
@@ -130,6 +130,9 @@ case "project.activate": {
       repository.activateProject(command.payload.projectId);
       runtime.setActiveProject(command.payload.projectId);
       const project = runtime.getProject(command.payload.projectId);
+      // Catalog entries are summary shells. Activating one must also hydrate its
+      // run projection so detail requests can restore questions and execution state.
+      emitProjectUpdated(ws, command.requestId, project.id, project, repository);
       sendEvent(ws, {
         type: "project.activated",
         requestId: command.requestId,
@@ -205,7 +208,7 @@ case "workspace.projectChildren.list": {
       const collectionCount = [command.payload.threads, command.payload.messages, command.payload.runSummaries,
         command.payload.filePaths].filter(Boolean).length;
       const collections = (["filePaths", "threads", "messages", "runSummaries"] as const).filter((key) => command.payload[key]);
-      const budget = Math.floor((SERVER_EVENT_EMIT_MAX_BYTES - 16 * 1024) / collectionCount);
+      const budget = Math.floor((SERVER_EVENT_EMIT_MAX_BYTES - 16384) / collectionCount);
       const threads = command.payload.threads ? fitBoundedPage((limit) => context.repository.listWorkspaceProjectThreads(project.id,
         { cursor: command.payload.threads!.cursor, limit }), command.payload.threads.limit ?? 128, (page) => ({ threads: page }), budget) : undefined;
       const messages = command.payload.messages ? { threadId: command.payload.messages.threadId,

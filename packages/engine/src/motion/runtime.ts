@@ -1,3 +1,4 @@
+import { clamp01Or as clamp01 } from "@hyperfocus/utilities/math";
 import type { CompiledMotionGraph, CompiledMotionInput, CompiledMotionNode, CompiledMotionPortLocation } from "./compiler.ts";
 import {
   createDevelopmentPoseView,
@@ -85,9 +86,7 @@ function compareCodeUnits(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-}
+
 
 function firstPoseLocation(locations: Readonly<Record<string, CompiledMotionPortLocation>>) {
   for (const location of Object.values(locations)) if (location.kind === "pose") return location;

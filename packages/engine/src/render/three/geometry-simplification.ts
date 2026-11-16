@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { MeshoptSimplifier } from "meshoptimizer";
+import { MeshoptSimplifier } from "meshoptimizer/meshopt_simplifier.module.js";
 
 export type ThreeLikeGeometry = object & {
   dispose?(): unknown;
@@ -271,7 +271,7 @@ function copySimplifiedAttributes(
   const sourceAttributes = source.attributes ?? {};
   const attributeNames = options.attributes ?? Object.keys(sourceAttributes);
   const recomputeNormals = options.computeVertexNormals ?? Boolean(sourceAttributes.normal);
-  const missing = 2 ** 32 - 1;
+  const missing = 4294967295;
   for (const name of attributeNames) {
     if (name === "normal" && recomputeNormals) continue;
     const attribute = getBufferGeometryAttribute(source, name);

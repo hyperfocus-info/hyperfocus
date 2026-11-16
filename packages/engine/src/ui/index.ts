@@ -148,11 +148,13 @@ function createMmoUiShellRenderers(options: MmoUiShellRendererOptions): MmoUiShe
       button.title = action.title ?? action.label
       button.setAttribute("aria-label", action.title ?? action.label)
       button.textContent = action.label
-      if (action.icon) {
+      const renderedIcon = config.renderToolbarIcon?.({ action, document: doc })
+      if (action.icon || renderedIcon) {
         const icon = createElement(doc, "span", "ce-mmo-tool-icon")
         icon.setAttribute("aria-hidden", "true")
         // Icons are untrusted UI data. Treat strings as text instead of parsing markup.
-        icon.textContent = action.icon
+        if (renderedIcon) icon.appendChild(renderedIcon.cloneNode(true))
+        else icon.textContent = action.icon ?? ""
         const label = createElement(doc, "span", "ce-mmo-tool-label", action.label)
         replace(button, icon, label)
       }

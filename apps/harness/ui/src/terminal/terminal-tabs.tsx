@@ -1,9 +1,10 @@
 import { For, Show, createMemo, createSignal } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { Bolt, ChevronDown, ChevronRight, Square, TerminalSquare, X } from "lucide-solid";
+import { Bolt, ChevronDown, ChevronRight, Pencil, Square, TerminalSquare, X } from "lucide-solid";
 import { ActionButton } from "../components/action-button";
-import { Input } from "../components/primitives/input";
+import { Input } from "@hyperfocus/ui";
 import { terminalStyles as styles, terminalUtilities as utilities } from "./terminal.styles";
+import { terminalControlStyles as controls } from './terminal-controls.styles';
 
 export type TerminalTabItem = {
   id: string;
@@ -20,6 +21,12 @@ export function TerminalTabs(props: {
   onRename: (sessionId: string, name: string) => void;
   onClose: (sessionId: string) => void;
 }) {
+  let navigation: HTMLElement | undefined;
+  const focusSession = (id: string) => queueMicrotask(() => {
+    const target = [...(navigation?.querySelectorAll<HTMLButtonElement>('[data-terminal-select]') ?? [])]
+      .find(button => button.dataset.terminalSelect === id);
+    target?.focus();
+  });
   const [editingId, setEditingId] = createSignal<string>();
   const [draft, setDraft] = createSignal("");
   const [collapsed, setCollapsed] = createSignal<Record<"terminal" | "spawned", boolean>>({
@@ -42,6 +49,7 @@ export function TerminalTabs(props: {
   ]);
 
   const commit = (session: TerminalTabItem) => {
+    if (editingId() !== session.id) return;
     const name = draft().trim();
     if (session.renamable !== false && name && name !== session.name) {
       props.onRename(session.id, name);
@@ -54,13 +62,13 @@ export function TerminalTabs(props: {
   };
 
   return (
-    <nav class={stylex.attrs(utilities.flex, utilities.minH0, utilities.flex1, utilities.flexCol, utilities.gap3).class} aria-label="Terminal sessions">
+    <nav ref={navigation} class={stylex.attrs(utilities.flex, utilities.minH0, utilities.flex1, utilities.flexCol, utilities.gap3).class} aria-label="Terminal sessions">
       <For each={groups()}>
         {(group) => (
           <section class={stylex.attrs(utilities.grid, utilities.gap1).class}>
             <button
               type="button"
-              class={stylex.attrs(styles.hoverSurface, utilities.flex, utilities.cursorPointer, utilities.itemsCenter, utilities.gap2, utilities.roundedMd, utilities.px15, utilities.py1, utilities.textLeft, utilities.transition).class}
+              class={stylex.attrs(styles.hoverSurface, utilities.flex, utilities.cursorPointer, utilities.itemsCenter, utilities.gap2, utilities.roundedMd, utilities.px15, utilities.py1, utilities.textLeft, utilities.transition, controls.select).class}
               aria-expanded={!collapsed()[group.id]}
               aria-label={`${collapsed()[group.id] ? "Expand" : "Collapse"} ${group.title} (${group.subtitle})`}
               onClick={() => toggleGroup(group.id)}
@@ -84,15 +92,17 @@ export function TerminalTabs(props: {
                       <div
                         data-terminal-session-row=""
                         class={props.activeSessionId === session.id
-                          ? stylex.attrs(styles.selectionSurface, utilities.flex, utilities.minH9, utilities.minW0, utilities.itemsCenter, utilities.gap1, utilities.roundedMd, utilities.border, utilities.text074, utilities.transition).class
-                          : stylex.attrs(styles.idleSession, utilities.flex, utilities.minH9, utilities.minW0, utilities.itemsCenter, utilities.gap1, utilities.roundedMd, utilities.border, utilities.text074, utilities.transition).class}
+                          ? stylex.attrs(styles.selectionSurface, utilities.flex, utilities.minH9, utilities.minW0, utilities.itemsCenter, utilities.gap1, utilities.roundedMd, utilities.border, utilities.text074, utilities.transition, controls.row).class
+                          : stylex.attrs(styles.idleSession, utilities.flex, utilities.minH9, utilities.minW0, utilities.itemsCenter, utilities.gap1, utilities.roundedMd, utilities.border, utilities.text074, utilities.transition, controls.row).class}
                       >
                         <Show
                           when={editingId() === session.id}
                           fallback={
                             <button
                               type="button"
-                              class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flex1, utilities.cursorPointer, utilities.itemsCenter, utilities.gap2, utilities.bgTransparent, utilities.px2, utilities.py15, utilities.textLeft).class}
+                              data-terminal-select={session.id}
+                              aria-pressed={props.activeSessionId === session.id}
+                              class={stylex.attrs(utilities.flex, utilities.minW0, utilities.cursorPointer, utilities.itemsCenter, utilities.gap2, utilities.bgTransparent, utilities.px2, utilities.py15, utilities.textLeft, controls.select).class}
                               onClick={() => props.onSelect(session.id)}
                               onDblClick={() => {
                                 if (session.renamable === false) {
@@ -104,8 +114,8 @@ export function TerminalTabs(props: {
                             >
                               <ActivityIcon category={session.category ?? "terminal"} status={session.status} />
                               <span class={stylex.attrs(utilities.minW0, utilities.flex1).class}>
-                                <span class={stylex.attrs(utilities.block, utilities.truncate, utilities.fontMedium, styles.foreground).class}>{session.name}</span>
-                                <span class={stylex.attrs(utilities.block, utilities.truncate, utilities.text058, utilities.uppercase, utilities.leading3, utilities.tracking008, styles.muted).class}>{session.status}</span>
+                                <span class={stylex.attrs(utilities.block, utilities.fontMedium, styles.foreground, controls.name).class}>{session.name}</span>
+                                <span class={stylex.attrs(utilities.block, styles.muted, controls.metadata).class}>{session.status}</span>
                               </span>
                               <TerminalStatusDot status={session.status} />
                             </button>
@@ -114,34 +124,44 @@ export function TerminalTabs(props: {
                           <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flex1, utilities.itemsCenter, utilities.gap2, utilities.px2, utilities.py15).class}>
                             <ActivityIcon category={session.category ?? "terminal"} status={session.status} />
                             <Input
+                              ref={element => queueMicrotask(() => { element.focus(); element.select(); })}
                               aria-label="Rename terminal"
-                              class={stylex.attrs(styles.input, utilities.h6, utilities.minW0, utilities.flex1, utilities.roundedMd, utilities.px1, utilities.py0, utilities.text072).class}
+                              class={stylex.attrs(styles.input, controls.input).class}
                               value={draft()}
                               onInput={(event) => setDraft(event.currentTarget.value)}
                               onBlur={() => commit(session)}
                               onKeyDown={(event) => {
                                 if (event.key === "Enter") {
                                   commit(session);
+                                  focusSession(session.id);
                                 }
                                 if (event.key === "Escape") {
                                   setEditingId(undefined);
+                                  focusSession(session.id);
                                 }
                               }}
                             />
                           </div>
+                        </Show>
+                        <div {...stylex.attrs(controls.controls)}>
+                        <Show when={session.renamable !== false}>
+                          <ActionButton tooltip={`Rename ${session.name}`} variant="ghost" size="icon" class={stylex.attrs(styles.action, controls.target).class}
+                            icon={<Pencil class={stylex.attrs(utilities.h35, utilities.w35).class} />}
+                            onClick={() => { setEditingId(session.id); setDraft(session.name); }} />
                         </Show>
                         <ActionButton
                           tooltip={`Close ${session.name}`}
                           ariaLabel={`Close ${session.name}`}
                           variant="ghost"
                           size="icon"
-                          class={stylex.attrs(styles.action, utilities.mr1, utilities.h6, utilities.w6, utilities.shrink0, utilities.roundedMd).class}
+                          class={stylex.attrs(styles.action, controls.target).class}
                           icon={<X class={stylex.attrs(utilities.h3, utilities.w3).class} />}
                           onClick={(event) => {
                             event.stopPropagation();
                             props.onClose(session.id);
                           }}
                         />
+                        </div>
                       </div>
                     )}
                   </For>

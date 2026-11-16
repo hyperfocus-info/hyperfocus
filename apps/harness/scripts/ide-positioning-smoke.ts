@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess, terminateProcessTree } from "@hyperfocus/desktop-runtime/process";
 import { appendFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stylexSolidPlugin } from "@hyperfocus/ui/build/stylex-solid-plugin";
@@ -184,23 +185,24 @@ function isPathWithin(directory: string, candidatePath: string) {
 async function runBrowserCheck(baseUrl: string) {
   await progress("launching browser runner");
   const runnerPath = path.join(import.meta.dir, "ide-positioning-playwright-runner.ts");
-  const proc = Bun.spawn({
-    cmd: ["node", runnerPath],
+  const proc = spawnBackgroundProcess({
+    cmd: [process.execPath, runnerPath],
     cwd: repoRoot,
     env: { ...process.env, IDE_POSITIONING_URL: baseUrl },
     stdout: "pipe",
     stderr: "pipe"
   });
 
-  const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 30_000));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), 30_000); });
   const completed = Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited
   ]);
-  const result = await Promise.race([completed, timeout]);
+  const result = await Promise.race([completed, timeout]).finally(() => clearTimeout(timer));
   if (result === "timeout") {
-    proc.kill();
+    await terminateProcessTree({ process: proc });
     await proc.exited.catch(() => undefined);
     throw new Error("IDE positioning browser runner timed out after 30000ms");
   }

@@ -236,7 +236,7 @@ test("additive Layer applies target times inverse-reference before the base rota
     poseEdge("ref-in", "ref", "pose", "layer", "reference"),
   ], "layer");
   const runtime = createMotionGraphRuntime(compileMotionGraph(motion, compileOptions([baseSource, additiveSource])));
-  runtime.evaluate(1 / 60);
+  runtime.evaluate(0.016666666666666666);
   for (let component = 0; component < 4; component += 1) {
     expect(runtime.pose.rotations[4 + component]).toBeCloseTo(0.5, 5);
   }
@@ -271,7 +271,7 @@ test("development custom-node validation rejects undeclared writes and NaNs", ()
       { id: "bad", kind: "custom", implementation: definition.implementation, pass: "base-locomotion", writes: { tags: ["Head"], components: ["translation"] } },
     ], [], "bad");
     const runtime = createMotionGraphRuntime(compileMotionGraph(source, compileOptions([definition], true)));
-    expect(() => runtime.evaluate(1 / 60)).toThrow();
+    expect(() => runtime.evaluate(0.016666666666666666)).toThrow();
   }
 });
 
@@ -296,10 +296,10 @@ test("inertialization preserves transition continuity and converges to the new t
   ], "smooth");
   const runtime = createMotionGraphRuntime(compileMotionGraph(motion, compileOptions([movingSource])));
   runtime.signals.set("actionPhase", 0);
-  runtime.evaluate(1 / 60);
+  runtime.evaluate(0.016666666666666666);
   runtime.signals.setMany({ actionId: "jump", actionPhase: 10 });
-  expect(runtime.evaluate(1 / 60).translations[0]).toBeLessThan(5);
-  for (let index = 0; index < 40; index += 1) runtime.evaluate(1 / 60);
+  expect(runtime.evaluate(0.016666666666666666).translations[0]).toBeLessThan(5);
+  for (let index = 0; index < 40; index += 1) runtime.evaluate(0.016666666666666666);
   expect(runtime.pose.translations[0]).toBeGreaterThan(9.5);
 });
 
@@ -315,9 +315,9 @@ test("notify timelines cross normalized phase wraps using an explicit cycle", ()
   ], "ref");
   const runtime = createMotionGraphRuntime(compileMotionGraph(motion, compileOptions()));
   runtime.signals.setMany({ gaitCycle: 0, gaitPhase: 0.9 });
-  runtime.evaluate(1 / 60);
+  runtime.evaluate(0.016666666666666666);
   runtime.signals.setMany({ gaitCycle: 1, gaitPhase: 0.1 });
-  runtime.evaluate(1 / 60);
+  runtime.evaluate(0.016666666666666666);
   expect(runtime.notifyCount).toBe(1);
   expect(runtime.getNotify(0)).toMatchObject({ id: "step", name: "footstep", cycle: 1 });
 });
@@ -327,7 +327,7 @@ test("warm repeated evaluation reuses the pose arena", () => {
   const runtime = createMotionGraphRuntime(compileMotionGraph(motion, compileOptions()));
   const pose = runtime.pose;
   const rotations = pose.rotations;
-  for (let index = 0; index < 2_000; index += 1) runtime.evaluate(1 / 60);
+  for (let index = 0; index < 2_000; index += 1) runtime.evaluate(0.016666666666666666);
   expect(runtime.pose).toBe(pose);
   expect(runtime.pose.rotations).toBe(rotations);
   expect(runtime.pose.rotations.every(Number.isFinite)).toBe(true);
@@ -359,5 +359,5 @@ test("graph pose registers can live directly in one WebAssembly memory", () => {
 
   expect(runtime.pose.buffer).toBe(memory.buffer);
   expect(runtime.pose.byteOffset).toBe(128);
-  expect(runtime.evaluate(1 / 60).rotations.buffer).toBe(memory.buffer);
+  expect(runtime.evaluate(0.016666666666666666).rotations.buffer).toBe(memory.buffer);
 });

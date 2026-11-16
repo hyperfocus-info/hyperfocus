@@ -1,3 +1,4 @@
+import { roundDecimal } from "@hyperfocus/utilities/math";
 import { dirname, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { createMmoEntityRegistry } from "../src/mmo/entity-registry.ts";
@@ -30,9 +31,7 @@ function median(values: readonly number[]) {
   return sorted[Math.floor(sorted.length / 2)] ?? 0;
 }
 
-function round(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
+function round(value: number) { return roundDecimal(value, 3); }
 
 function sample(label: string, run: () => void, repeats = 7): BenchSample {
   for (let i = 0; i < 2; i += 1) run();

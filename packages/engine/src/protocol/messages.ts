@@ -1,6 +1,9 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 export const PROTOCOL_VERSION = 1;
-export const PROTOCOL_CONTROL_FRAME_MAX_BYTES = 1024 * 1024;
-export const PROTOCOL_BINARY_INPUT_MAX_BYTES = 64 * 1024;
+export const PROTOCOL_CONTROL_FRAME_MAX_BYTES = 1048576;
+export const PROTOCOL_BINARY_INPUT_MAX_BYTES = 65536;
+/** Terminal for automatic reconnect; an explicit new sign-in may start another session. */
+export const SESSION_SUPERSEDED_CLOSE_CODE = 4001;
 
 export const protocolMessageTypes = [
   "client_hello",
@@ -56,9 +59,7 @@ const MAX_JSON_NODES = 100_000;
 const MAX_JSON_TEXT_UNITS = PROTOCOL_CONTROL_FRAME_MAX_BYTES;
 const textEncoder = new TextEncoder();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 export function isJsonWireSafe(
   value: unknown,

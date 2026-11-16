@@ -5,7 +5,7 @@ import { requestCliAttach } from "../terminal/terminal-transport";
 import { getActiveProject, harnessStore } from "../harness-store";
 import { sendCliSessionInput } from "../harness-websocket";
 import { ActionButton } from "./action-button";
-import { Input } from "./primitives/input";
+import { Input } from "@hyperfocus/ui";
 import { terminalStyles as styles, terminalUtilities as utilities } from "../terminal/terminal.styles";
 
 export function CliSessionPanel() {

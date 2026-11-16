@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sharedAiPreferencesSchema } from "../../runtime/user-preferences";
 import { modeDefinitionSchema } from "./conversation";
 import { runDiagnosticsWindowDaysSchema } from "./execution";
 import {
@@ -257,6 +258,7 @@ export const runtimeClientCommandSchema = z.discriminatedUnion("type", [
     type: z.literal("preferences.save"),
     requestId: requestIdSchema,
     payload: z.object({
+      sharedAiPreferences: sharedAiPreferencesSchema.optional(),
       openAiApiKey: z.string().min(1).max(1024).optional(),
       googleApiKey: z.string().min(1).max(1024).optional(),
       anthropicApiKey: z.string().min(1).max(1024).optional(),

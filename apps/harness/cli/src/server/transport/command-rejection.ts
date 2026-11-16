@@ -1,10 +1,9 @@
-import type { HarnessConnection } from "../core/contracts";
 import { sendEvent } from "./events";
 import { commandRejectionCodeSchema, createRequestId } from "@hyperfocus/ai-core/protocol";
 import type { CommandRejectionCode } from "@hyperfocus/ai-core/protocol";
 
 export function sendCommandRejected(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("./events").ControlEventSocket,
   message: string,
   detail: string,
   requestId: string = createRequestId(),

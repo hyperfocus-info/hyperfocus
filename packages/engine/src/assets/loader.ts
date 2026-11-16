@@ -1,3 +1,4 @@
+import { clamp01Or as clamp01 } from "@hyperfocus/utilities/math";
 export { createAssetLoaderUi, createCanvasAssetLoader, runAssetLoaderRafLoop } from "./presentation.ts";
 export type {
   AssetLoaderRafLoop,
@@ -660,9 +661,7 @@ function defaultStatusLabel(status: AssetLoadStatus) {
   return "Waiting";
 }
 
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-}
+
 
 function defaultNow() {
   return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();

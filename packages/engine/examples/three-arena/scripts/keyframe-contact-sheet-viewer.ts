@@ -1,3 +1,5 @@
+import { mean as average } from "@hyperfocus/utilities/math";
+import { modulo } from "@hyperfocus/utilities/math";
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -206,7 +208,7 @@ function createProceduralActor(baseModel: THREE.Group, skin: THREE.Texture, t3ri
     motion.sync({
       position: [0, 0, z], resolvedDelta: [0, 0, dz], desiredVelocity: [0, 0, RUN_SPEED],
       facing: [0, 0, 1], aimTarget: [0, 4.4, z + 8], aimWeight: 1, grounded: true, groundNormal: [0, 1, 0],
-    }, 1 / 60);
+    }, 0.016666666666666666);
   }
   const phaseBeforeCalibration = motion.controller.state.locomotion.gaitPhase;
   const calibrationDistance = 0.01;
@@ -270,7 +272,7 @@ function advanceProceduralToPhase(actor: ReturnType<typeof createProceduralActor
   const current = actor.motion.controller.state.locomotion.gaitPhase;
   let remaining = normalizePhase(phase - current);
   while (remaining > 1e-6) {
-    const phaseStep = Math.min(remaining, 1 / 120);
+    const phaseStep = Math.min(remaining, 0.008333333333333333);
     const dz = phaseStep * actor.cycleDistance;
     actor.z += dz;
     actor.motion.sync({
@@ -492,12 +494,10 @@ function worldDistance(left: THREE.Object3D, right: THREE.Object3D): number {
   return a.distanceTo(b);
 }
 
-function average(values: number[]): number {
-  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
-}
+
 
 function normalizePhase(value: number): number {
-  return ((value % 1) + 1) % 1;
+  return modulo(value, 1);
 }
 
 function loadFbx(url: string): Promise<THREE.Group> {

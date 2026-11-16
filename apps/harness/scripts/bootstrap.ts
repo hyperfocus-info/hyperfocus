@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess, spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { isCliUsageError, parseCliOptions } from "../cli/src/cli-options";
@@ -57,7 +58,7 @@ async function ensureDependenciesInstalled() {
   }
 
   console.log("[bootstrap] node_modules missing, running bun install");
-  const installProcess = Bun.spawn({
+  const installProcess = spawnBackgroundProcess({
     cmd: [process.execPath, "install"],
     cwd: repoRoot,
     stdout: "inherit",
@@ -106,7 +107,7 @@ function findCdpBrowser() {
   }
 
   return ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge"].find((candidate) => {
-    const probe = Bun.spawnSync({
+    const probe = spawnBackgroundProcessSync({
       cmd: ["which", candidate],
       stdout: "ignore",
       stderr: "ignore"

@@ -1,6 +1,7 @@
 import { createEffect, createMemo, onCleanup, Show, type JSX } from "solid-js";
 import { X } from "lucide-solid";
 import * as stylex from "@stylexjs/stylex";
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import { cn } from "../../lib/utils";
 import { PrimitivePortal } from "./primitive-portal";
 import { isTopOverlay, registerFocusReturn, registerOverlay, restoreOverlayFocus, trapFocusInOverlay } from "./overlay-stack";
@@ -21,7 +22,7 @@ const styles = stylex.create({
   backdrop: { inset: 0, backdropFilter: "blur(4px)", backgroundColor: "rgb(0 0 0 / 0.45)", position: "fixed", zIndex: 80, },
   positioner: {
     inset: 0,
-    padding: { default: "0.75rem", "@media (min-width: 768px)": "1.25rem" },
+    padding: tokens.space2,
     alignItems: "center",
     display: "flex",
     justifyContent: "center",
@@ -29,9 +30,9 @@ const styles = stylex.create({
     zIndex: 81,
   },
   surface: {
-    padding: "1.25rem",
+    padding: { default: tokens.space4, "@media (max-width: 30rem)": tokens.space2 },
     borderColor: "var(--border)",
-    borderRadius: "1.75rem",
+    borderRadius: tokens.radius,
     borderStyle: "solid",
     borderWidth: "1px",
     gap: "1rem",
@@ -41,37 +42,46 @@ const styles = stylex.create({
     flexDirection: "column",
     maxHeight: "90vh",
     maxWidth: "36rem",
+    minHeight: 0,
+    minWidth: 0,
     width: "100%",
   },
-  header: { gap: "0.75rem", alignItems: "flex-start", display: "flex", justifyContent: "space-between", },
-  heading: { gap: "0.25rem", display: "flex", flexDirection: "column", },
-  eyebrow: { color: "var(--muted)", fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase" },
-  title: { margin: 0, color: "var(--foreground)", fontSize: "1.25rem", fontWeight: 600, letterSpacing: "-0.04em", lineHeight: "1.75rem", },
-  description: { margin: 0, color: "var(--muted)", fontSize: "0.75rem", lineHeight: "1.25rem", },
+  header: { gap: tokens.space3, alignItems: "flex-start", display: "flex", flexShrink: 0, justifyContent: "space-between", minWidth: 0, },
+  heading: { gap: tokens.space1, display: "flex", flexDirection: "column", overflowWrap: "anywhere", minWidth: 0, },
+  eyebrow: { color: "var(--muted)", fontSize: tokens.fontCaption, fontWeight: 600, letterSpacing: "normal", textTransform: "none" },
+  title: { margin: 0, color: "var(--foreground)", fontSize: tokens.fontSection, fontWeight: 600, lineHeight: 1.3, },
+  description: { margin: 0, color: "var(--muted)", fontSize: tokens.fontCaption, lineHeight: "1.25rem", },
   close: {
     borderRadius: "0.5rem",
     borderWidth: 0,
+    outline: { default: "none", ":focus-visible": `2px solid ${tokens.focus}` },
     alignItems: "center",
     backgroundColor: { default: "transparent", ":hover": "var(--panel-strong)" },
     color: { default: "var(--muted)", ":hover": "var(--foreground)" },
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    cursor: "pointer",
     display: "inline-flex",
+    flexShrink: 0,
     justifyContent: "center",
+    outlineOffset: "2px",
     transitionDuration: "150ms",
     transitionProperty: "background-color, color",
-    height: "2rem",
-    width: "2rem",
+    height: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch },
+    width: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch },
   },
   icon: { height: "1rem", width: "1rem" },
-  content: { gap: "1rem", overflow: "auto", display: "flex", flexDirection: "column", maxHeight: "70%", },
-  footer: { gap: "0.5rem", display: "flex", flexWrap: "wrap", justifyContent: "flex-end", }
+  content: { gap: tokens.space4, overflow: "auto", display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0, },
+  footer: { gap: tokens.space2, display: "flex", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end", }
 });
 
 export function Dialog(props: DialogProps) {
   let surfaceRef: HTMLElement | undefined;
   const overlayId = `dialog-${Math.random().toString(36).slice(2)}`;
   const isOpen = createMemo(() => Boolean(typeof props.open === "function" ? props.open() : props.open));
-  const renderChildren = () => (typeof props.children === "function" ? props.children() : props.children);
+  const renderChildren = () => {
+    // JSX children can be a getter that constructs nested portals; read it once.
+    const children = props.children;
+    return typeof children === "function" ? children() : children;
+  };
 
   createEffect(() => {
     if (!isOpen()) {
@@ -117,27 +127,15 @@ export function Dialog(props: DialogProps) {
             tabindex="-1"
             ref={surfaceRef}
             onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                if (isTopOverlay(overlayId)) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  props.onClose?.();
-                }
-                return;
-              }
+              if (event.defaultPrevented) return;
               trapFocusInOverlay(event, surfaceRef);
             }}
             onClick={(event) => event.stopPropagation()}
           >
             <div {...stylex.attrs(styles.header)}>
               <div {...stylex.attrs(styles.heading)}>
-                <div {...stylex.attrs(styles.eyebrow)}>
-                  {props.eyebrow ?? "Dialog"}
-                </div>
+                <Show when={props.eyebrow}>{(eyebrow) => <div {...stylex.attrs(styles.eyebrow)}>{eyebrow()}</div>}</Show>
                 <h2 {...stylex.attrs(styles.title)}>{props.title}</h2>
-                <Show when={props.description}>
-                  <p {...stylex.attrs(styles.description)}>{props.description}</p>
-                </Show>
               </div>
               <button
                 {...stylex.attrs(styles.close)}
@@ -149,7 +147,7 @@ export function Dialog(props: DialogProps) {
               </button>
             </div>
 
-            <div data-test-dialog-content="" class={cn(stylex.attrs(styles.content).class, props.contentClass)}>{renderChildren()}</div>
+            <div data-test-dialog-content="" data-ui-dialog-body="" class={cn(stylex.attrs(styles.content).class, props.contentClass)}><Show when={props.description}><p {...stylex.attrs(styles.description)}>{props.description}</p></Show>{renderChildren()}</div>
 
             <Show when={props.footer}>
               <div {...stylex.attrs(styles.footer)}>{props.footer}</div>

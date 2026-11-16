@@ -1,3 +1,4 @@
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 export type WorkerRoomEvent<TPayload = unknown> = {
   type: string;
   roomId?: string;
@@ -108,9 +109,7 @@ export function createWorkerRoomEvent<TPayload>(
   return event;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+
 
 function isWorkerConstructor(value: unknown): value is WorkerRoomWorkerConstructor {
   if (typeof value !== "function") return false;

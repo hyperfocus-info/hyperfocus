@@ -1,3 +1,7 @@
+import { finiteOr as finiteNumberOr } from "@hyperfocus/utilities/math";
+import { clampLowerFirst as clamp, clamp01Or as clamp01 } from "@hyperfocus/utilities/math";
+
+import { cos, sin } from '../math/simulation.ts';
 import type {
   HeightField3D,
   Physics3DCollider,
@@ -183,8 +187,8 @@ function boxBoxOverlap(a: BoxFootprint, b: BoxFootprint, padding: number) {
 }
 
 function boxAxes(box: BoxFootprint) {
-  const c = Math.cos(box.rotationY);
-  const s = Math.sin(box.rotationY);
+  const c = cos(box.rotationY);
+  const s = sin(box.rotationY);
   return [
     { x: c, z: s },
     { x: -s, z: c }
@@ -217,8 +221,8 @@ function projectPoints(points: Array<{ x: number; z: number }>, axis: { x: numbe
 function toBoxLocal(x: number, z: number, box: BoxFootprint) {
   const dx = x - box.x;
   const dz = z - box.z;
-  const c = Math.cos(box.rotationY);
-  const s = Math.sin(box.rotationY);
+  const c = cos(box.rotationY);
+  const s = sin(box.rotationY);
   return { x: dx * c + dz * s, z: -dx * s + dz * c };
 }
 
@@ -295,9 +299,9 @@ function vecX(value: Vec3Input) { return isVec3Tuple(value) ? assertFinite(value
 function vecY(value: Vec3Input) { return isVec3Tuple(value) ? assertFinite(value[1], "vec3 y") : assertFinite(value.y, "vec3 y"); }
 function vecZ(value: Vec3Input) { return isVec3Tuple(value) ? assertFinite(value[2], "vec3 z") : assertFinite(value.z, "vec3 z"); }
 function isVec3Tuple(value: Vec3Input): value is Vec3ArrayLike { return Array.isArray(value) || ArrayBuffer.isView(value); }
-function finiteOr(value: unknown, fallback: number) { const number = Number(value); return Number.isFinite(number) ? number : fallback; }
+function finiteOr(value: unknown, fallback: number) { return finiteNumberOr(Number(value), fallback); }
 function assertFinite(value: unknown, label: string) { const number = Number(value); if (!Number.isFinite(number)) throw new Error(`${label} must be finite`); return number; }
 function nonNegative(value: unknown, label: string) { return Math.max(0, assertFinite(value, label)); }
-function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); }
-function clamp01(value: number) { return clamp(finiteOr(value, 0), 0, 1); }
+
+
 function square(value: number) { return value * value; }

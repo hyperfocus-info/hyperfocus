@@ -148,7 +148,7 @@ export const mmoSkillDemoZone = createMmoSkillDemoRoomType({
 export const mmoSkillDemoDungeon = createMmoSkillDemoRoomType({
   name: "mmo-skill-demo-dungeon",
   maxPlayers: 20,
-  replication: { snapshotRate: 1, deltaRate: 6, maxBytesPerClientPerSecond: 32 * 1024 }
+  replication: { snapshotRate: 1, deltaRate: 6, maxBytesPerClientPerSecond: 32768 }
 });
 
 export const mmoSkillDemoCottage = createMmoSkillDemoRoomType({

@@ -1,14 +1,16 @@
+import { defaultProviderCapabilities } from "@hyperfocus/ai-core/capabilities";
+import { modeUsesReadOnlyExecution,resolveModeById } from "@hyperfocus/ai-core/modes";
+import type { AgentRunState,Assistant,BackgroundJob,BackgroundJobSchedule,PreferencesState,WorkspaceProjectState } from "@hyperfocus/ai-core/protocol";
+import { createSharedAiPreferencesStore,type SharedAiPreferencesStore } from "@hyperfocus/ai-runtime/preferences";
+import { isRecord } from "@hyperfocus/utilities/records";
 import type { AgentRuntime } from "../../agent-runtimes/agent-runtime";
 import type { AgentRuntimeRegistry } from "../../agent-runtimes/runtime-registry";
 import type { PiAgentAdapter } from "../../pi-agent-adapter";
 import type { WorkspaceRepository } from "../../workspace-repository";
 import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
-import { defaultProviderCapabilities } from "@hyperfocus/ai-core/capabilities";
-import { modeUsesReadOnlyExecution, resolveModeById } from "@hyperfocus/ai-core/modes";
-import type { Assistant, BackgroundJob, BackgroundJobSchedule, PreferencesState, WorkspaceProjectState } from "@hyperfocus/ai-core/protocol";
 
-export function resolveProjectAgentRuntime(runtimeRegistry: AgentRuntimeRegistry, project: WorkspaceProjectState) {
-  return runtimeRegistry.get(project.session.selectedAgentId ?? "pi");
+export function resolveProjectAgentRuntime(runtimeRegistry: AgentRuntimeRegistry, project: WorkspaceProjectState, run: AgentRunState | undefined = project.activeRun ?? project.lastRun) {
+  return runtimeRegistry.get(run?.launchProfile?.agentId ?? project.session.selectedAgentId ?? "pi");
 }
 
 export function assertRuntimeAvailable(runtime: AgentRuntime, capability = runtime.getCapability()) {
@@ -28,7 +30,8 @@ export function assertRuntimeAvailable(runtime: AgentRuntime, capability = runti
 export function getPreferencesState(
   repository: WorkspaceRepository,
   adapter: PiAgentAdapter,
-  runtimeRegistry: AgentRuntimeRegistry
+  runtimeRegistry: AgentRuntimeRegistry,
+  options: { sharedAiPreferencesStore?: SharedAiPreferencesStore } = {}
 ): PreferencesState {
   const hasUsableOpenAiApiKey = adapter.hasApiKey("openai");
   const hasStoredOpenAiApiKey = Boolean(repository.getStoredOpenAiApiKey());
@@ -38,6 +41,7 @@ export function getPreferencesState(
   const hasStoredAnthropicApiKey = Boolean(repository.getStoredAnthropicApiKey());
 
   return {
+    sharedAiPreferences: (options.sharedAiPreferencesStore ?? createSharedAiPreferencesStore()).read(),
     hasUsableApiKey: hasUsableOpenAiApiKey || hasUsableGoogleApiKey || hasUsableAnthropicApiKey,
     hasStoredApiKey: hasStoredOpenAiApiKey || hasStoredGoogleApiKey || hasStoredAnthropicApiKey,
     hasUsableOpenAiApiKey,
@@ -172,9 +176,6 @@ export function extractProviderErrorMessage(payload: unknown) {
   return typeof payload.error.message === "string" ? payload.error.message : undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export function sanitizeProviderConnectionError(error: unknown, apiKey: string) {
   const rawMessage = error instanceof Error ? error.message : "Provider connection failed.";

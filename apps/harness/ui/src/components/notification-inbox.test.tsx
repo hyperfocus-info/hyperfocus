@@ -9,6 +9,7 @@ import type {
   BackgroundJobRun,
   BackgroundRunStatusNotification,
   ClientCommand,
+  NotificationInboxItem,
   PlanningQuestionNotification
 } from "@hyperfocus/ai-core/protocol";
 import { createUiTest } from "../utils/tests/test-harness";
@@ -414,6 +415,29 @@ createUiTest("openAssistantQuestionNotificationFromInbox", () => {
 createUiTest("openCliUpdateNotificationFromInbox", () => {
   beforeEach(() => {
     clearBrowserStateForTests();
+  });
+
+  it.each([
+    ["portable-launcher", "pi", false], ["portable-launcher", "codex-cli", false],
+    ["portable-launcher", "claude-cli", true], ["portable-launcher", "copilot-cli", true],
+    ["source", "pi", true], ["source", "codex-cli", true]
+  ] as const)("routes %s %s updates without offering ineffective installs", async (launchMode, agentId, installs) => {
+    const notification: Extract<NotificationInboxItem, { kind: "cli-update" }> = { id: "cli-update:test", kind: "cli-update", interactive: true,
+      createdAt: isoNow(), agentId, label: agentId, currentVersion: "1.0.0", latestVersion: "2.0.0", updateCommand: "update" };
+    const base = createHarnessStateFixture();
+    seedHarnessStoreForTests(createHarnessStateFixture({ setup: { ...base.setup, launchMode },
+      notifications: { items: [notification], unreadCount: 1, interactiveUnreadCount: 1, passiveUnreadCount: 0 } }));
+    const commands: ClientCommand[] = [];
+    captureDispatchedCommands(commands);
+    const view = render(() => <NotificationInbox />);
+    try {
+      view.getByRole("button", { name: "Open notification inbox" }).click();
+      const update = await view.findByRole("button", { name: new RegExp(`${agentId} update available`) });
+      expect(update.textContent).toContain(installs ? "Click to update." : "Download a new Harness release");
+      update.click();
+      expect(commands.some((command) => command.type === "cli-updates.install")).toBe(installs);
+      expect(harnessStore.state.preferencesActiveSectionId).toBe("developer-advanced");
+    } finally { view.unmount(); }
   });
 
   it("opens the developer settings source for CLI update notifications", () => {

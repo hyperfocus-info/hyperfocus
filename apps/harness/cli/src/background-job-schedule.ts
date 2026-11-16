@@ -215,10 +215,10 @@ function parseRelativeInterval(input: string, now: Date): BackgroundJobSchedule 
     unit.startsWith("m")
       ? 60
       : unit.startsWith("h")
-      ? 60 * 60
+      ? 3600
       : unit.startsWith("d")
-      ? 24 * 60 * 60
-      : 7 * 24 * 60 * 60;
+      ? 86400
+      : 604800;
   const intervalSeconds = amount * multiplierSeconds;
   if (intervalSeconds < 60) {
     return undefined;
@@ -252,7 +252,7 @@ function computeNextCronOccurrence(expression: string, after: Date) {
   start.setSeconds(0, 0);
   start.setMinutes(start.getMinutes() + 1);
 
-  for (let step = 0; step < 366 * 24 * 60; step += 1) {
+  for (let step = 0; step < 527040; step += 1) {
     const candidate = new Date(start.getTime() + step * 60 * 1000);
     if (
       cronFieldMatches(candidate.getMinutes(), minuteField, 0, 59) &&

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { GlobalRegistrator } from "@happy-dom/global-registrator"
+import { registerTestDom } from "../test-support/register-dom.ts"
 import {
   applyEngineUiTheme,
   createEngineUiControlStyles,
@@ -15,7 +15,7 @@ import {
   showHtmlDialog
 } from "./index.ts"
 
-if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register()
+registerTestDom();
 
 function createTestDocument(): Document {
   return globalThis.document.implementation.createHTMLDocument("engine-ui-test")
@@ -231,6 +231,20 @@ test("mmo toolbar treats icon strings as text instead of executable markup", () 
   const icon = findByClass(shell.elements.toolbar, "ce-mmo-tool-icon")
   expect(icon.textContent).toBe(markup)
   expect(icon.children).toHaveLength(0)
+  shell.destroy()
+})
+
+test("mmo toolbar renders explicitly supplied browser icon nodes without changing portable action data", () => {
+  const doc = createTestDocument()
+  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg")
+  const path = doc.createElementNS("http://www.w3.org/2000/svg", "path")
+  path.setAttribute("d", "M0 0h10")
+  svg.appendChild(path)
+  const shell = createMmoUiShell({ document: doc, toolbar: [{ id: "bag", label: "Bag", icon: "bag" }], renderToolbarIcon: ({ action }) => action.id === "bag" ? svg : undefined })
+  const icon = findByClass(shell.elements.toolbar, "ce-mmo-tool-icon")
+  expect(icon.querySelector("svg path")?.getAttribute("d")).toBe("M0 0h10")
+  expect(icon.textContent).toBe("")
+  expect(svg.parentNode).toBeNull()
   shell.destroy()
 })
 

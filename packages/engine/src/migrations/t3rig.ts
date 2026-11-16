@@ -1,3 +1,4 @@
+import { isPlainRecord } from "@hyperfocus/utilities/records";
 import {
   T3_RIG_SCHEMA_VERSION,
   parseT3Rig,
@@ -26,11 +27,7 @@ export type MigrateT3RigOptions = {
 
 export const t3RigMigrations: readonly T3RigMigration[] = Object.freeze([]);
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+
 
 function requirePlainRecord(value: unknown, label: string): Record<string, unknown> {
   if (!isPlainRecord(value)) throw new TypeError(`${label} must be a plain object`);

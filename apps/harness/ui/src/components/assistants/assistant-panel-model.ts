@@ -1,17 +1,20 @@
+import { type AssistantTodo } from "@hyperfocus/ai-core/protocol";
+
+
 import type {
-  Assistant,
-  AssistantLearning,
-  BulkOperationAction,
-  ComposerReasoningStrength,
+Assistant,
+AssistantLearning,
+BulkOperationAction
 } from "@hyperfocus/ai-core/protocol";
+import { type ComposerReasoningStrength } from "@hyperfocus/ai-core/protocol";
+import { formatForDisplay } from "@tanstack/solid-hotkeys";
 import type { AssistantWorkloadCollectionState } from "../../assistant-workload-state";
 import {
-  DEFAULT_COMPOSER_REASONING_STRENGTH,
-  harnessStore,
-  type AssistantRosterSort,
+DEFAULT_COMPOSER_REASONING_STRENGTH,
+harnessStore,
+type AssistantRosterSort,
 } from "../../harness-store";
 import type { StatusChipTone } from "../primitives/status-chip";
-import { formatForDisplay } from "@tanstack/solid-hotkeys";
 
 export function formatHotkeyHint(hotkey: string) {
   return formatForDisplay(hotkey).split("+").map((part) => part.trim()).filter(Boolean).join(" + ");
@@ -233,3 +236,17 @@ export function fuzzyMatches(haystack: string, query: string) {
 export function summarizePrompt(prompt: string, maxLength = 120) {
   return prompt.replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
+
+export function isComposerReasoningStrength(value: string): value is ComposerReasoningStrength { return value === "low" || value === "medium" || value === "high" || value === "extra-high"; }
+
+
+
+export function formatFailureCategory(value: string) {
+  return value.replace(/-/g, " ");
+}
+
+export function isAssistantTodoState(value: string): value is AssistantTodo["state"] {
+  return value === "pending" || value === "in-progress" || value === "blocked" || value === "completed" || value === "failed" || value === "cancelled";
+}
+
+export function isAssistantTodoWorkKind(value: string): value is AssistantTodo["workKind"] { return value === "app-code" || value === "automation-code" || value === "documentation" || value === "research" || value === "blocked" || value === "unspecified"; }

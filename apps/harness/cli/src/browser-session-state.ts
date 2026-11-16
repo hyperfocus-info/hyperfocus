@@ -1,9 +1,10 @@
 import {
-  deriveBrowserSessionStatus,
-  type BrowserActivity,
-  type BrowserActivityKind,
-  type BrowserSession
+deriveBrowserSessionStatus,
+type BrowserActivity,
+type BrowserActivityKind,
+type BrowserSession
 } from "@hyperfocus/ai-core/protocol";
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 
 type BrowserSessionOwner = BrowserSession["owner"];
 
@@ -416,9 +417,6 @@ function asRecord(value: unknown) {
   return isRecord(value) ? value : undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function readString(record: Record<string, unknown> | undefined, keys: string[]) {
   if (!record) {

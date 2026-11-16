@@ -4,18 +4,21 @@ import type { BackgroundJob } from "./protocol/jobs-and-notifications";
 import type { IntentArtifactType } from "./protocol/shared";
 
 const DEFAULT_ALLOWED_ADAPTATION =
-  "May adapt implementation details to fit repository conventions, but do not downgrade required artifact types without recording the blocker.";
+  "May adapt details within the user's requested scope. Inferred artifact types never authorize extra work or override explicit requirements and exclusions.";
 
 const CODING_PATTERN =
-  /\b(app|web app|saas|frontend|backend|api|screen|component|feature|product|launch|implement|build|database|workflow|solid|react|route|page)\b/i;
-const AUTOMATION_PATTERN = /\b(automation|script|tooling|factory|assistant|agent|job|skill|repeatable|workflow)\b/i;
+  /\b(apps?|websites?|saas|frontend|backend|api|screens?|components?|software|code|database|solid|react|routes?|pages?)\b/i;
+const AUTOMATION_PATTERN = /\b(automation|scripts?|tooling|factory|assistants?|agents?|jobs?|skills?|repeatable|workflows?)\b/i;
 const RESEARCH_PATTERN = /\b(research|analy[sz]e|market|compare|scan|investigate|audit|review)\b/i;
 const DOCUMENTATION_PATTERN = /\b(doc|docs|documentation|readme|notes|guide|catalog)\b/i;
 const TEST_PATTERN = /\b(test|verify|verification|proof|evidence|smoke|typecheck)\b/i;
-const DEPLOYMENT_PATTERN = /\b(deploy|release|launch slice|ship|production)\b/i;
 const QUESTION_PATTERN = /\b(question|ask|blocked|blocker|input needed|approval)\b/i;
 const GENERIC_OBJECTIVE_PATTERN =
   /\b(short purpose summary|assistant-owned job created from project chat|project assistant created from thread prompt|global assistant created from thread prompt|no description provided|assistant state persisted)\b/i;
+const CHANGE_REQUEST_PATTERN = /^(?:(?:please|then|also)\s+)*(?:builds?|implement|create|make|update|fix|repair|refactor|add|remove|maintain|produce|convert)\b/i;
+const DOCUMENTATION_REQUEST_PATTERN = /^(?:(?:please|then|also)\s+)*(?:write|update|create|maintain|produce|fix|add)\s+(?:(?:a|the)\s+)?(?:doc|docs|documentation|readme|notes|guide|catalog)\b/i;
+const DEPLOY_REQUEST_PATTERN = /^(?:(?:please|then|also)\s+)*(?:deploy|release|ship|launch)\b/i;
+const NON_MUTATING_SCOPE_PATTERN = /\b(?:read[ -]only|(?:research|audit|review|analysis|report|documentation|docs)[ -]only|only (?:research|audit|review|analy[sz]e|report|document))\b/i;
 
 type AssistantIntentSource = Pick<Assistant, "name" | "description" | "jobPrompt">;
 type BackgroundJobIntentSource = Pick<BackgroundJob, "name" | "description" | "kind" | "definition">;
@@ -30,7 +33,7 @@ export function compileAssistantIntentContract(assistant: AssistantIntentSource)
   return buildIntentContract({
     objective: chooseObjective([assistant.description, assistant.jobPrompt, assistant.name]),
     sourcePrompt,
-    owner: "assistant"
+    taskText: authoredTaskText([assistant.description, assistant.jobPrompt])
   });
 }
 
@@ -45,7 +48,7 @@ export function compileBackgroundJobIntentContract(job: BackgroundJobIntentSourc
   return buildIntentContract({
     objective: chooseObjective([job.description, definitionPrompt, job.name]),
     sourcePrompt,
-    owner: "background-job"
+    taskText: authoredTaskText([job.description, job.definition.kind === "ai-routine" ? job.definition.prompt : undefined])
   });
 }
 
@@ -68,7 +71,7 @@ export function renderIntentContractPrompt(contract: IntentContract): string {
   const parsed = normalizeIntentContract(contract);
   return [
     "# INTENT CONTRACT",
-    "Use this contract as authority for scope, priority, and completion.",
+    "This contract summarizes inferred intent. Explicit user requirements and exclusions remain authoritative; inferred artifact types do not authorize additional work.",
     `Objective: ${parsed.objective}`,
     `Artifact types: ${parsed.artifactTypes.join(", ")}`,
     renderList("Deliverables", parsed.deliverables),
@@ -85,8 +88,8 @@ export function renderIntentContractPrompt(contract: IntentContract): string {
     .join("\n");
 }
 
-function buildIntentContract(input: { objective: string; sourcePrompt: string; owner: "assistant" | "background-job" }) {
-  const artifactTypes = inferArtifactTypes(input.sourcePrompt);
+function buildIntentContract(input: { objective: string; sourcePrompt: string; taskText: string }) {
+  const artifactTypes = inferArtifactTypes(input.taskText);
   const coding = artifactTypes.includes("app-code");
   const automation = artifactTypes.includes("automation-code");
   const research = artifactTypes.includes("research");
@@ -99,7 +102,7 @@ function buildIntentContract(input: { objective: string; sourcePrompt: string; o
     deliverables: [
       coding ? "Working app or product code that advances the objective." : undefined,
       automation ? "Reusable automation, assistant job, skill, or script when work is repeatable." : undefined,
-      research ? "Research converted into ranked implementation or automation work." : undefined,
+      research ? "Findings that answer the requested research or review question." : undefined,
       docsOnly ? "Documentation changes that directly satisfy the requested documentation outcome." : undefined,
       deployment ? "Small launch slice or release-ready increment." : undefined,
       "Evidence showing contract progress, remaining gap, or blocker."
@@ -108,19 +111,19 @@ function buildIntentContract(input: { objective: string; sourcePrompt: string; o
     qualityBar: [
       coding ? "Prefer real behavior changes over prose-only updates." : undefined,
       automation ? "Make repeatable work executable where scope allows." : undefined,
-      research ? "Do not stop at catalog notes when buildable work is available." : undefined,
+      research ? "Separate evidence, uncertainty, and recommendations; implement only when requested." : undefined,
       docsOnly ? "Keep docs concise, current, and tied to source evidence." : undefined,
       "Respect repository conventions and keep changes scoped to the objective."
     ].filter((value): value is string => Boolean(value)),
     evidenceRequired: [
       coding || automation ? "Relevant tests, typecheck, smoke proof, or explicit blocker." : undefined,
-      research ? "Source-backed findings and concrete next build target." : undefined,
+      research ? "Source-backed findings with relevant limitations." : undefined,
       docsOnly ? "Docs changed plus source or blocker that makes docs the valid output." : undefined,
-      "Summary of artifacts changed and remaining gap."
+      "Summary of the requested outcome, evidence, and any remaining gap."
     ].filter((value): value is string => Boolean(value)),
     nonGoals: [
       coding || automation ? "Docs-only completion unless docs are requested or implementation is blocked." : undefined,
-      "Endless catalog notes without artifact progress.",
+      "Additional implementation, automation, or deployment not requested by the user.",
       "Unbounded refactors outside the stated objective."
     ].filter((value): value is string => Boolean(value)),
     stopConditions: [
@@ -132,30 +135,36 @@ function buildIntentContract(input: { objective: string; sourcePrompt: string; o
   });
 }
 
-function inferArtifactTypes(sourcePrompt: string): IntentArtifactType[] {
+function inferArtifactTypes(taskText: string): IntentArtifactType[] {
   const types: IntentArtifactType[] = [];
-  if (CODING_PATTERN.test(sourcePrompt)) {
-    types.push("app-code");
+  // This is a bounded hint router, not a language parser or an authority grant.
+  // Excluded clauses and display metadata must never manufacture deliverables.
+  const nonMutating = NON_MUTATING_SCOPE_PATTERN.test(taskText);
+  const clauses = taskText.split(/[.!?;\n]+/).flatMap((sentence) =>
+    sentence.split(/\b(?:do not|don't|never|without|avoid|no|not to)\b/i)[0]!.split(/\b(?:and|then)\b/i)
+  ).map((clause) => clause.trim().replace(/^(?:[-*:]\s*)+/, ""));
+  for (const clause of clauses) {
+    const change = CHANGE_REQUEST_PATTERN.test(clause);
+    const research = RESEARCH_PATTERN.test(clause) && (!change || /\b(?:report|findings|analysis)\b/i.test(clause));
+    const documentation = DOCUMENTATION_PATTERN.test(clause);
+    if (research) types.push("research");
+    if (documentation) types.push("documentation");
+    if (!nonMutating && change && !research && !DOCUMENTATION_REQUEST_PATTERN.test(clause)) {
+      if (CODING_PATTERN.test(clause)) types.push("app-code");
+      if (AUTOMATION_PATTERN.test(clause)) types.push("automation-code");
+    }
+    if (!nonMutating && DEPLOY_REQUEST_PATTERN.test(clause)) types.push("deployment");
+    if (TEST_PATTERN.test(clause)) types.push("test-evidence");
+    if (QUESTION_PATTERN.test(clause)) types.push("question");
   }
-  if (AUTOMATION_PATTERN.test(sourcePrompt)) {
-    types.push("automation-code");
-  }
-  if (RESEARCH_PATTERN.test(sourcePrompt)) {
-    types.push("research");
-  }
-  if (DOCUMENTATION_PATTERN.test(sourcePrompt)) {
-    types.push("documentation");
-  }
-  if (TEST_PATTERN.test(sourcePrompt) || types.includes("app-code") || types.includes("automation-code")) {
+  if (types.includes("app-code") || types.includes("automation-code")) {
     types.push("test-evidence");
   }
-  if (DEPLOYMENT_PATTERN.test(sourcePrompt)) {
-    types.push("deployment");
-  }
-  if (QUESTION_PATTERN.test(sourcePrompt)) {
-    types.push("question");
-  }
   return uniqueArtifactTypes(types.length > 0 ? types : ["unknown"]);
+}
+
+function authoredTaskText(parts: Array<string | undefined>) {
+  return parts.filter((part) => part?.trim() && !GENERIC_OBJECTIVE_PATTERN.test(part)).join("\n");
 }
 
 function renderBackgroundJobDefinitionPrompt(job: BackgroundJobIntentSource) {
@@ -166,39 +175,11 @@ function renderBackgroundJobDefinitionPrompt(job: BackgroundJobIntentSource) {
 }
 
 function chooseObjective(candidates: Array<string | undefined>) {
-  const ranked = candidates
-    .map((candidate, index) => ({ text: candidate?.replace(/\s+/g, " ").trim() ?? "", index }))
-    .filter((candidate) => candidate.text.length > 0)
-    .map((candidate) => ({ ...candidate, score: scoreObjectiveCandidate(candidate.text, candidate.index) }))
-    .sort((left, right) => right.score - left.score || left.index - right.index);
-  return boundedText(ranked[0]?.text ?? "Carry out the requested assistant or job work.", 4000);
-}
-
-function scoreObjectiveCandidate(text: string, index: number) {
-  let score = GENERIC_OBJECTIVE_PATTERN.test(text) ? -100 : 40;
-  if (CODING_PATTERN.test(text)) {
-    score += 25;
-  }
-  if (AUTOMATION_PATTERN.test(text)) {
-    score += 20;
-  }
-  if (RESEARCH_PATTERN.test(text)) {
-    score += 12;
-  }
-  if (DOCUMENTATION_PATTERN.test(text)) {
-    score += 6;
-  }
-  if (TEST_PATTERN.test(text)) {
-    score += 8;
-  }
-  if (DEPLOYMENT_PATTERN.test(text)) {
-    score += 8;
-  }
-  if (/\b(build|implement|create|make|turn|convert|produce|ship|maintain|research|audit)\b/i.test(text)) {
-    score += 10;
-  }
-  score += Math.min(12, Math.floor(text.length / 40));
-  return score - index;
+  const authored = candidates.filter((candidate): candidate is string => Boolean(candidate?.trim() && !GENERIC_OBJECTIVE_PATTERN.test(candidate)));
+  // Prefer an actual task over a display summary, without rewarding coding words.
+  const objective = authored.find((candidate) => NON_MUTATING_SCOPE_PATTERN.test(candidate)
+    || /^(?:build|implement|create|make|update|fix|maintain|produce|ship|research|audit|review|compare|summarize)\b/i.test(candidate.trim())) ?? authored[0];
+  return boundedText(objective ?? "Carry out the requested assistant or job work.", 4000);
 }
 
 function renderList(label: string, items: string[]) {

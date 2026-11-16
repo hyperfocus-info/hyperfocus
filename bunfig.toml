@@ -1,5 +1,2 @@
-jsx = "solid"
-jsxFactory = "solid-js"
-
 [test]
 preload = ["./apps/harness/ui/src/utils/tests/preload.ts"]

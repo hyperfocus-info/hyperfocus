@@ -2,21 +2,21 @@
   "version": 1,
   "exceptions": {
     "apps/engine-editor/src/client.ts": {
-      "maxLines": 3616,
+      "maxLines": 3508,
       "owner": "apps/engine-editor",
       "reason": "Legacy editor source predates the source-structure limit.",
       "boundary": "Separate editor transport, project state, and presentation concerns.",
       "removalTarget": "Remove as the editor workstream decomposes this file below 1000 lines."
     },
     "apps/engine-editor/src/editor-shell.ts": {
-      "maxLines": 2588,
+      "maxLines": 2500,
       "owner": "apps/engine-editor",
       "reason": "Legacy editor source predates the source-structure limit.",
       "boundary": "Separate editor transport, project state, and presentation concerns.",
       "removalTarget": "Remove as the editor workstream decomposes this file below 1000 lines."
     },
     "apps/harness/cli/src/pi-orchestrator.ts": {
-      "maxLines": 1958,
+      "maxLines": 1768,
       "owner": "apps/harness/cli",
       "reason": "Legacy harness backend source predates the source-structure limit.",
       "boundary": "Separate orchestration policy, continuation handling, and runtime translation.",
@@ -30,49 +30,49 @@
       "removalTarget": "Remove after the suite is split below 1500 lines."
     },
     "apps/harness/ui/src/components/background-jobs-panel.tsx": {
-      "maxLines": 2313,
+      "maxLines": 2073,
       "owner": "apps/harness/ui",
       "reason": "Legacy harness UI source predates the source-structure limit.",
       "boundary": "Separate job views, editor flows, filtering, and reusable presentation.",
       "removalTarget": "Remove as the UI workstream decomposes this file below 1000 lines."
     },
     "apps/harness/ui/src/components/chat-panel.test.tsx": {
-      "maxLines": 2653,
+      "maxLines": 2563,
       "owner": "apps/harness/ui",
       "reason": "Legacy UI test suite predates the test source-structure limit.",
       "boundary": "Split component tests by chat behavior while retaining shared fixtures.",
       "removalTarget": "Remove as the UI workstream splits this suite below 1500 lines."
     },
     "apps/harness/ui/src/components/chat-panel.tsx": {
-      "maxLines": 3184,
+      "maxLines": 3016,
       "owner": "apps/harness/ui",
       "reason": "Legacy harness UI source predates the source-structure limit.",
       "boundary": "Separate message rendering, composer behavior, run controls, and dialogs.",
       "removalTarget": "Remove as the UI workstream decomposes this file below 1000 lines."
     },
     "apps/harness/ui/src/harness-store.ts": {
-      "maxLines": 4772,
+      "maxLines": 4700,
       "owner": "apps/harness/ui",
       "reason": "Legacy harness UI state source predates the source-structure limit.",
       "boundary": "Separate transport, normalized state, selectors, and domain actions.",
       "removalTarget": "Remove as the UI workstream decomposes this file below 1000 lines."
     },
     "apps/harness/ui/src/ide/ide-workbench.tsx": {
-      "maxLines": 3225,
+      "maxLines": 3099,
       "owner": "apps/harness/ui",
       "reason": "Legacy harness UI source predates the source-structure limit.",
       "boundary": "Separate workbench layout, editor state, file operations, and panels.",
       "removalTarget": "Remove as the UI workstream decomposes this file below 1000 lines."
     },
     "apps/harness/ui/src/store/store.test.ts": {
-      "maxLines": 3649,
+      "maxLines": 3646,
       "owner": "apps/harness/ui",
       "reason": "Legacy UI state test suite predates the test source-structure limit.",
       "boundary": "Split store tests by state domain while retaining shared fixtures.",
       "removalTarget": "Remove as the UI workstream splits this suite below 1500 lines."
     },
     "packages/engine/src/render/3d.ts": {
-      "maxLines": 2632,
+      "maxLines": 2630,
       "owner": "engine",
       "reason": "Legacy engine source predates the source-structure limit.",
       "boundary": "Keep renderer orchestration separate from resources, passes, and backend adapters.",
@@ -80,41 +80,6 @@
     }
   },
   "directoryExceptions": {
-    "apps/pad-pilot/scripts": {
-      "maxFiles": 50,
-      "owner": "apps/pad-pilot",
-      "reason": "Imported native/release tooling predates the repository directory file limit.",
-      "boundary": "Group build, validation, preset, update, and generation workflows by owner.",
-      "removalTarget": "Ratchet during tooling organization and remove at 25 files."
-    },
-    "apps/pad-pilot/scripts/synaesthetic-evaluator": {
-      "maxFiles": 36,
-      "owner": "apps/pad-pilot",
-      "reason": "Imported evaluator suite predates the repository directory file limit.",
-      "boundary": "Group audio, MIDI, storage, orchestration, and dashboard domains.",
-      "removalTarget": "Ratchet during evaluator decomposition and remove at 25 files."
-    },
-    "apps/pad-pilot/ui/src/components/elements": {
-      "maxFiles": 52,
-      "owner": "apps/pad-pilot",
-      "reason": "Imported PadPilot element catalog predates the repository directory file limit.",
-      "boundary": "Move generic interaction to @hyperfocus/ui and group remaining domain element families.",
-      "removalTarget": "Ratchet with primitive/StyleX zipper slices and remove at 25 files."
-    },
-    "apps/pad-pilot/ui/src/modules/fx": {
-      "maxFiles": 37,
-      "owner": "apps/pad-pilot",
-      "reason": "Imported FX Module predates the repository directory file limit.",
-      "boundary": "Group graph state, presets, console composition, and node presentation.",
-      "removalTarget": "Ratchet during FX decomposition and remove at 25 files."
-    },
-    "apps/pad-pilot/ui/src/modules/generator/utils": {
-      "maxFiles": 34,
-      "owner": "apps/pad-pilot",
-      "reason": "Imported Generator intelligence predates the repository directory file limit.",
-      "boundary": "Group prompt, fallback, massage, options, and MIDI contract domains.",
-      "removalTarget": "Ratchet during Generator contract decomposition and remove at 25 files."
-    },
     "apps/engine-editor/src": {
       "maxFiles": 55,
       "owner": "apps/engine-editor",
@@ -137,7 +102,7 @@
       "removalTarget": "Ratchet this count as the UI workstream organizes components, then remove it at 25 files."
     },
     "apps/harness/ui/src/components/primitives": {
-      "maxFiles": 31,
+      "maxFiles": 29,
       "owner": "apps/harness/ui",
       "reason": "The legacy harness primitive directory predates the directory structure limit and is owned by a separate active workstream.",
       "boundary": "Separate primitive families only where ownership and dependency direction remain clear.",
@@ -149,6 +114,41 @@
       "reason": "The legacy harness UI utility directory predates the directory structure limit and is owned by a separate active workstream.",
       "boundary": "Move feature-specific utilities beside their owners and retain only genuinely shared UI utilities here.",
       "removalTarget": "Ratchet this count as the UI workstream assigns ownership, then remove it at 25 files."
+    },
+    "apps/pad-pilot/scripts": {
+      "maxFiles": 49,
+      "owner": "apps/pad-pilot",
+      "reason": "Imported native/release tooling predates the repository directory file limit.",
+      "boundary": "Group build, validation, preset, update, and generation workflows by owner.",
+      "removalTarget": "Ratchet during tooling organization and remove at 25 files."
+    },
+    "apps/pad-pilot/scripts/synaesthetic-evaluator": {
+      "maxFiles": 34,
+      "owner": "apps/pad-pilot",
+      "reason": "Imported evaluator suite predates the repository directory file limit.",
+      "boundary": "Group audio, MIDI, storage, orchestration, and dashboard domains.",
+      "removalTarget": "Ratchet during evaluator decomposition and remove at 25 files."
+    },
+    "apps/pad-pilot/ui/src/components/elements": {
+      "maxFiles": 49,
+      "owner": "apps/pad-pilot",
+      "reason": "Imported PadPilot element catalog predates the repository directory file limit.",
+      "boundary": "Move generic interaction to @hyperfocus/ui and group remaining domain element families.",
+      "removalTarget": "Ratchet with primitive/StyleX zipper slices and remove at 25 files."
+    },
+    "apps/pad-pilot/ui/src/modules/fx": {
+      "maxFiles": 37,
+      "owner": "apps/pad-pilot",
+      "reason": "Imported FX Module predates the repository directory file limit.",
+      "boundary": "Group graph state, presets, console composition, and node presentation.",
+      "removalTarget": "Ratchet during FX decomposition and remove at 25 files."
+    },
+    "apps/pad-pilot/ui/src/modules/generator/utils": {
+      "maxFiles": 31,
+      "owner": "apps/pad-pilot",
+      "reason": "Imported Generator intelligence predates the repository directory file limit.",
+      "boundary": "Group prompt, fallback, massage, options, and MIDI contract domains.",
+      "removalTarget": "Ratchet during Generator contract decomposition and remove at 25 files."
     },
     "packages/engine/examples/mmo-skill-demo/src": {
       "maxFiles": 52,

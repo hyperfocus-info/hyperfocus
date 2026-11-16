@@ -1,0 +1,10 @@
+{
+  "name": "Magic Map",
+  "description": "Magic Map interactive example.",
+  "branding": {
+    "mark": "controller",
+    "color": "#65d9eb",
+    "background": "#15131c"
+  },
+  "social": {}
+}

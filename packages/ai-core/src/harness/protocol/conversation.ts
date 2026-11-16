@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { qualityTraceSchema } from "../../quality/contracts";
 
 import {
   agentIdSchema,
@@ -141,10 +142,32 @@ export const planPrerequisiteSchema = z.object({
   reason: z.string().min(1),
   requiredForTaskIds: z.array(z.string().min(1).max(128)),
   owner: z.enum(["main", "subagent"]),
-  status: z.enum(["pending", "completed"])
+  status: z.enum(["pending", "completed"]),
+  verificationCommands: z.array(z.string().min(1)).max(16).optional()
 });
 
+// Optional for legacy/trivial plans; substantial new plans use the existing plan boundary.
+export const outcomeSupervisionSchema = z.object({
+  request: z.string().min(1).max(32000),
+  intent: z.string().min(1).max(2000),
+  outcome: z.string().min(1).max(2000),
+  experience: z.string().min(1).max(2000),
+  evidence: z.array(z.string().min(1).max(2000)).min(1).max(16),
+  constraints: z.array(z.string().min(1).max(2000)).max(16),
+  budget: z.string().min(1).max(2000),
+  deadlineAt: z.number().finite().positive().optional(),
+  decision: z.enum(["continue", "redirect", "stop", "escalate"]),
+  reason: z.string().min(1).max(2000),
+}).strict();
+
 export const subagentContractSchema = z.object({
+  contribution: z.object({
+    outcome: z.string().min(1).max(2000),
+    limitingFactor: z.string().min(1).max(2000),
+    evidence: z.string().min(1).max(2000),
+    expectedImprovement: z.string().min(1).max(2000),
+    stopWhen: z.string().min(1).max(2000),
+  }).strict().optional(),
   taskId: z.string().min(1).max(128),
   title: z.string().min(1),
   instruction: z.string().min(1),
@@ -169,6 +192,8 @@ export const correctnessGapSchema = z.object({
 });
 
 export const executionPlanSchema = z.object({
+  supervision: outcomeSupervisionSchema.optional(),
+  quality: qualityTraceSchema.optional(),
   runId: runIdSchema,
   origin: z.enum(["initial", "quick-task", "correctness-followup"]),
   iteration: z.number().int().min(1),
@@ -248,6 +273,14 @@ export const assistantActionMessageMetadataSchema = z.object({
 });
 
 export const chatMessageMetadataSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("thread-message"),
+    sourceThreadId: z.string().min(1).max(128),
+    targetThreadId: z.string().min(1).max(128),
+    deliveryId: z.string().uuid(),
+    body: z.string().max(16000).optional(),
+    direction: z.enum(["sent", "received"])
+  }),
   planSummaryMessageMetadataSchema,
   runMilestonesMessageMetadataSchema,
   assistantActionMessageMetadataSchema
@@ -259,7 +292,7 @@ export const chatAttachmentSchema = z.object({
   documentType: chatDocumentTypeSchema.optional(),
   name: z.string().min(1).max(256),
   mimeType: z.string().min(1).max(256),
-  sizeBytes: z.number().int().min(1).max(16 * 1024 * 1024),
+  sizeBytes: z.number().int().min(1).max(16777216),
   url: z.string().url().max(2048).refine((value) => value.startsWith("https://"), {
     message: "Attachment URLs must be HTTPS UploadThing URLs"
   }),

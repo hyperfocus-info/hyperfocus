@@ -46,19 +46,32 @@ const aliases: Record<HumanoidSemantic, readonly string[]> = {
   rightUpperArm: ["rightarm", "rightupperarm", "rupperarm", "upperarmr", "armr"],
   rightLowerArm: ["rightforearm", "rightlowerarm", "rforearm", "lowerarmr", "forearmr"],
   rightHand: ["righthand", "rhand", "handr", "rightwrist", "wristr"],
-  leftUpperLeg: ["leftupleg", "leftupperleg", "leftthigh", "lthigh", "thighl", "uplegl"],
-  leftLowerLeg: ["leftleg", "leftlowerleg", "leftshin", "lshin", "shinl", "calfl"],
+  leftUpperLeg: ["leftupleg", "leftupperleg", "upperlegl", "leftthigh", "lthigh", "thighl", "uplegl"],
+  leftLowerLeg: ["leftleg", "leftlowerleg", "lowerlegl", "leftshin", "lshin", "shinl", "calfl"],
   leftFoot: ["leftfoot", "lfoot", "footl", "leftankle", "anklel"],
-  leftToes: ["lefttoe", "lefttoebase", "ltoe", "toel"],
-  rightUpperLeg: ["rightupleg", "rightupperleg", "rightthigh", "rthigh", "thighr", "uplegr"],
-  rightLowerLeg: ["rightleg", "rightlowerleg", "rightshin", "rshin", "shinr", "calfr"],
+  leftToes: ["lefttoe", "lefttoebase", "ltoe", "toel", "leftball", "lball", "balll"],
+  rightUpperLeg: ["rightupleg", "rightupperleg", "upperlegr", "rightthigh", "rthigh", "thighr", "uplegr"],
+  rightLowerLeg: ["rightleg", "rightlowerleg", "lowerlegr", "rightshin", "rshin", "shinr", "calfr"],
   rightFoot: ["rightfoot", "rfoot", "footr", "rightankle", "ankler"],
-  rightToes: ["righttoe", "righttoebase", "rtoe", "toer"],
+  rightToes: ["righttoe", "righttoebase", "rtoe", "toer", "rightball", "rball", "ballr"],
 };
 
 export function normalizeRigBoneName(name: string): string {
   const namespaceTail = name.split(":").at(-1) ?? name;
   return namespaceTail.toLowerCase().replace(/^mixamorig/, "").replace(/[^a-z0-9]/g, "");
+}
+
+/** Best stable semantic implied by a bone name, without requiring DOM or source-rig cooking. */
+export function inferHumanoidSemanticFromBoneName(name: string): HumanoidSemantic | undefined {
+  const normalized = normalizeRigBoneName(name);
+  let best: { semantic: HumanoidSemantic; score: number } | undefined;
+  for (const semantic of humanoidSemantics) {
+    for (const alias of aliases[semantic]) {
+      const score = normalized === alias ? 3 : normalized.endsWith(alias) ? 2 : alias.length >= 5 && normalized.includes(alias) ? 1 : 0;
+      if (score > (best?.score ?? 0)) best = { semantic, score };
+    }
+  }
+  return best?.semantic;
 }
 
 function isMixamoBone(bone: SourceBoneDescriptor) {

@@ -1,7 +1,8 @@
+import { assert } from "@hyperfocus/utilities/assert";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { $ } from "bun";
+import { runReleaseCommand } from "./smoke/run-command.ts";
 import { formatMissingPackageArtifactsMessage, getMissingPackageArtifacts } from "./package-artifacts.ts";
 
 const rootDir = join(import.meta.dir, "..");
@@ -9,20 +10,13 @@ const supportedViteVersions = ["8.0.14"] as const;
 const runCurrentVite = process.argv.includes("--current");
 const viteVersions = runCurrentVite ? (["latest"] as const) : supportedViteVersions;
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-const bunCommand = process.platform === "win32" ? "bun.cmd" : "bun";
-
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
 
 const packDir = mkdtempSync(join(tmpdir(), "catalog-engine-vite-pack-"));
 
 try {
   const missingArtifacts = getMissingPackageArtifacts(rootDir);
   assert(missingArtifacts.length === 0, formatMissingPackageArtifactsMessage(missingArtifacts));
-  const tarballOutput = await $`${npmCommand} pack --json --pack-destination ${packDir}`.cwd(rootDir).text();
+  const tarballOutput = await runReleaseCommand({ cmd: [npmCommand, "pack", "--json", "--pack-destination", packDir], cwd: rootDir });
   const packOutput: unknown = JSON.parse(tarballOutput);
   if (!Array.isArray(packOutput) || !packOutput.every(isPackEntry)) throw new Error("npm pack output was malformed");
   const [tarball] = packOutput;
@@ -74,8 +68,8 @@ try {
         ].join("\n")
       );
 
-      await $`${bunCommand} install --no-progress`.cwd(consumerDir).quiet();
-      await $`${bunCommand} run build`.cwd(consumerDir).quiet();
+      await runReleaseCommand({ cmd: [process.execPath, "install", "--no-progress"], cwd: consumerDir });
+      await runReleaseCommand({ cmd: [process.execPath, "run", "build"], cwd: consumerDir });
       const emittedFiles = readdirSync(join(consumerDir, "dist", "assets"));
 
       assert(

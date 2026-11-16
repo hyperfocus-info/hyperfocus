@@ -1,4 +1,5 @@
 export { createSceneLifecycle, createScenePrefabCatalog } from "./scene-prefab.ts";
+export { createVoxelVolume3D } from "./voxel-volume.ts";
 export { createStoryCatalog, type DialogueSession, type QuestSession, type StoryCatalog } from "./story.ts";
 export type {
   ContentComponent,

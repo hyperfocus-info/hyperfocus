@@ -1,7 +1,7 @@
 import { createEffect, createMemo, type Accessor } from "solid-js";
 import { createRequestId, type Assistant, type BackgroundJob, type BackgroundJobRun, type ClientCommand } from "@hyperfocus/ai-core/protocol";
 import type { PendingBackgroundJobSource } from "./background-job-source-state";
-import { ASSISTANT_WORKLOAD_PAGE_SIZE, isAssistantJobBootstrapAvailable, type AssistantWorkloadCollectionState as WorkloadCollectionState,
+import { ASSISTANT_WORKLOAD_PAGE_SIZE, isAssistantJobBootstrapAvailable,
   type AssistantWorkloadState } from "./store/assistant-workload-pages";
 export type { AssistantWorkloadCollectionState, AssistantWorkloadPageState } from "./store/assistant-workload-pages";
 

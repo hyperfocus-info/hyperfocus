@@ -14,6 +14,13 @@ Tagged GitHub releases build the same application and attach a portable archive.
 
 ## Harness
 
+Prepare the Windows x64 npm candidate with `bun run package:harness:npm`. It packs
+the portable launcher, installs it outside the checkout, and verifies the UI and
+authenticated command channel through package-name binary resolution. After an
+authorized npm publication, users with Bun 1.4 or newer can run
+`bunx @hyperfocus/harness` without a checkout. This preparation does not publish
+the package or establish other platform support.
+
 The harness retains its standalone launcher packaging flow. GitHub releases attach a
 versioned `hyperfocus-harness-v<version>-windows-x64.zip` containing the complete
 Windows launcher directory. The tagged workflow runs the full Harness test gate,

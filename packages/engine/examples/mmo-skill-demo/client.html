@@ -20,7 +20,8 @@
         background: #11160f;
       }
       main {
-        width: min(100vw, 1180px);
+        width: min(100%, 1180px);
+        min-width: 0;
         box-sizing: border-box;
         padding: 18px;
         position: relative;
@@ -155,7 +156,7 @@
         display: block;
         margin-top: 3px;
         color: #bccaa5;
-        font-size: 11px;
+        font-size: 0.75rem;
         line-height: 1.2;
       }
       .inventory-grid,
@@ -202,7 +203,7 @@
       .section-label {
         margin: 2px 0 -2px;
         color: #f6d77a;
-        font-size: 11px;
+        font-size: 0.75rem;
         font-weight: 800;
         letter-spacing: 0;
         text-transform: uppercase;
@@ -243,6 +244,9 @@
       canvas:focus-visible {
         outline: 3px solid var(--ce-ui-focus-ring, #f3df91);
         outline-offset: 3px;
+      }
+      @media (max-width: 720px) {
+        #game { height: min(70dvh, 640px); min-height: 480px; aspect-ratio: auto; }
       }
       .visually-hidden {
         position: absolute;
@@ -368,7 +372,7 @@
         }
       }
     </style>
-  </head>
+  <!-- app-brand:start --><link rel="icon" type="image/svg+xml" href="./brand/favicon.svg"><link rel="icon" type="image/png" sizes="32x32" href="./brand/favicon-32.png"><link rel="apple-touch-icon" href="./brand/apple-touch-icon.png"><link rel="manifest" href="./brand/site.webmanifest"><meta property="og:type" content="website"><meta property="og:site_name" content="MMO Skill Demo"><meta property="og:title" content="MMO Skill Demo"><meta property="og:description" content="MMO Skill Demo interactive example."><meta property="og:locale" content="en_US"><meta property="og:image:alt" content="MMO Skill Demo logo"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="MMO Skill Demo"><meta name="twitter:description" content="MMO Skill Demo interactive example."><meta name="twitter:image:alt" content="MMO Skill Demo logo"><!-- app-brand:end --></head>
   <body>
     <main>
       <p id="game-controls" class="visually-hidden">Move with WASD, the arrow keys, or the left controller stick. Aim with the mouse or right stick. Use the toolbar to open game panels.</p>

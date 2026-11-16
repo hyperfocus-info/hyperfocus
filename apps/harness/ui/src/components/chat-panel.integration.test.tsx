@@ -1,5 +1,6 @@
 /** @jsxImportSource solid-js */
 import { beforeEach, expect, it } from "bun:test";
+import type { ClientCommand } from "@hyperfocus/ai-core/protocol";
 import { createUiTest, requireButton } from "../utils/tests/test-harness";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { ChatPanel } from "./chat-panel";
@@ -18,6 +19,62 @@ import {
 createUiTest("ChatPanel followup integration", () => {
   beforeEach(() => {
     clearBrowserStateForTests();
+  });
+
+  it("updates composer effort label and sends reasoning plus fast mode", () => {
+    const commands: ClientCommand[] = [];
+    const project = createViewProjectFixture({
+      id: "project-effort-send",
+      draft: "ship it"
+    });
+    seedHarnessStoreForTests(
+      createHarnessStateFixture({
+        hasUsableApiKey: true,
+        hasUsableOpenAiApiKey: true,
+        selectedReasoningStrength: "medium",
+        hasGlobalSelectedReasoningStrength: true,
+        selectedFastMode: true,
+        hasGlobalSelectedFastMode: true,
+        workspace: {
+          activeProjectId: project.id,
+          projects: [project]
+        }
+      })
+    );
+
+    captureDispatchedCommands(commands);
+    render(() => <ChatPanel />);
+
+    const effortTrigger = document.querySelector<HTMLButtonElement>("[data-test-effort-trigger]");
+    if (!effortTrigger) {
+      throw new Error("Expected effort trigger");
+    }
+    expect(effortTrigger.textContent).toContain("Medium");
+    expect(effortTrigger.textContent).toContain("Fast");
+
+    fireEvent.click(effortTrigger);
+    const high = screen.getByRole("button", { name: /^High/ });
+    expect(requireButton(high).disabled).toBe(false);
+    high.focus();
+    fireEvent.click(high);
+    expect(harnessStore.state.selectedReasoningStrength).toBe("high");
+    expect(document.activeElement).toBe(high);
+    expect(high.getAttribute("aria-pressed")).toBe("true");
+    const standard = screen.getByRole("button", { name: /^Off/ });
+    fireEvent.click(standard);
+    expect(standard.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(effortTrigger);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send task to Pi" }));
+
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({
+      type: "chat.send",
+      payload: {
+        reasoningStrength: "high",
+        fastMode: false
+      }
+    });
   });
 
   it("keeps exhausted run-detail recovery visible beyond its toast", () => {

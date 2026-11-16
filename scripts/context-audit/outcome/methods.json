@@ -1,0 +1,58 @@
+{
+  "performance": {
+    "question": "Is the observed cost the bottleneck in the user's workload?",
+    "rawEvidence": ["Per-trial samples, traces, allocations/GC, environment and workload identity"],
+    "instruments": ["packages/performance/README.md", "packages/performance/swarm/comparison.ts", "scripts/serialization/README.md"],
+    "technique": "Experimental design: predeclare useful effect and tail limits; use paired AB/BA trials across sessions, treat trial medians rather than frames as replicates.",
+    "falsifier": "An unchanged control drifts, a tail regresses, or the actual journey does not improve.",
+    "judge": "Existing environment-qualified comparator plus correctness fixture; unavailable telemetry is unknown, never zero."
+  },
+  "ui": {
+    "question": "Can the intended user complete the interaction at the constrained viewport?",
+    "rawEvidence": ["Rendered surface, semantic tree, keyboard/focus transitions, runtime errors, approved reference"],
+    "instruments": [".agents/skills/app-ui-standard/SKILL.md", ".agents/skills/dev-server/SKILL.md", "docs/design-system/evidence-index.md", "packages/ui/README.md"],
+    "technique": "Interaction design and accessibility: compare hierarchy against approved references; exercise narrow width, empty/error states and keyboard-only completion.",
+    "falsifier": "The control renders but cannot finish the task, loses focus, clips required content, or conflicts with a scoped approval.",
+    "judge": "Real browser interaction and computed geometry; human approval for unresolved taste. A screenshot alone proves neither."
+  },
+  "animation": {
+    "question": "Does the action read correctly at gameplay distance and contact time?",
+    "rawEvidence": ["Effects-off full-cycle clips, source motion, signed joint angles, frame/pose strips and contact timestamps"],
+    "instruments": [".agents/skills/game-art-direction/references/motion.md", "scripts/game-art/README.md"],
+    "technique": "Animation and perception: evaluate timing, silhouette and contact synchronization separately from VFX, then compare the combined gameplay result.",
+    "falsifier": "Finite transforms still contain knee flips, sliding contact, repeated frames or an unreadable silhouette.",
+    "judge": "Rig and cadence checks plus matched rendered references; quality remains scoped to actual human feedback."
+  },
+  "architecture": {
+    "question": "Which real caller burden or recurring failure would the new boundary remove?",
+    "rawEvidence": ["Literal call sites, manifest/dependency edges, failing consumer, public imports, failure traces"],
+    "instruments": ["scripts/project-discovery/README.md", ".agents/skills/improve-codebase-architecture/SKILL.md", "docs/package-testing.md"],
+    "technique": "Systems engineering: model ownership and failure propagation; use compatibility matrices and real consumer probes before extraction.",
+    "falsifier": "The proposed abstraction is already present, moves the same burden to callers, or has no demonstrated consumer.",
+    "judge": "Existing public consumer tests and both named host paths; a static dependency graph is only discovery."
+  },
+  "defect": {
+    "question": "What user outcome fails, and which causal hypothesis predicts that failure?",
+    "rawEvidence": ["Original input/seed, error stack, persisted state and failing interaction"],
+    "instruments": [".agents/skills/dev-server/references/registry.md", "docs/adversarial-testing.md", ".agents/skills/user-audit/SKILL.md"],
+    "technique": "Reliability engineering: reproduce the failure, isolate one cause, replay the original input and a held-out boundary/recovery case.",
+    "falsifier": "The reproduction still fails, or the fix only works in fresh state and fails after restart/retry.",
+    "judge": "Original reproduction plus independent runtime/state observation. Tests authored with the fix need an additional oracle."
+  },
+  "release": {
+    "question": "Can the intended user complete first use and recovery with this exact candidate?",
+    "rawEvidence": ["Artifact hash/version/platform, extracted files, setup output, journey and recovery evidence"],
+    "instruments": [".agents/skills/ship-readiness/SKILL.md", "docs/shipping.md", "scripts/shipping/profiles.ts"],
+    "technique": "Manufacturing QA and reproducibility: trace the delivered artifact, test outside the checkout and sample the critical failure/recovery boundary.",
+    "falsifier": "The evidence belongs to a different build, checkout files hide a missing asset, or a planned/skipped gate appears passed.",
+    "judge": "Existing ship-check JSON with explicit expected status plus installed/extracted journey; publication still needs authorization."
+  },
+  "orchestration": {
+    "question": "Does scheduling reduce time to the verified outcome without losing ownership or recovery?",
+    "rawEvidence": ["Queue timestamps, lease/fence events, process lifetime, cancellation and partial-result receipts"],
+    "instruments": ["docs/harness/swarm.md", "packages/performance/README.md", "docs/development.md"],
+    "technique": "Distributed systems and queueing: measure wait/service time, isolate independent work, inject lease loss and cancellation, verify idempotent recovery.",
+    "falsifier": "Throughput rises while verified latency, contention, duplicate work or orphaned processes worsen.",
+    "judge": "Durable lease and lifecycle tests plus observed end-to-end completion; additional agent opinions are not ground truth."
+  }
+}

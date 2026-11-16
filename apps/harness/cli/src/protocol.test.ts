@@ -113,7 +113,7 @@ describe("client command validation", () => {
       requestId: "req-cleanup",
       payload: {
         projectIds: ["project-1", "project-2"],
-        olderThanMs: 30 * 24 * 60 * 60 * 1000,
+        olderThanMs: 2592000000,
         ageBasis: "last-user-message"
       }
     });
@@ -154,7 +154,7 @@ describe("client command validation", () => {
       type: "thread.cleanupArchive",
       requestId: "req-cleanup-all",
       payload: {
-        olderThanMs: 7 * 24 * 60 * 60 * 1000,
+        olderThanMs: 604800000,
         ageBasis: "last-user-message"
       }
     });

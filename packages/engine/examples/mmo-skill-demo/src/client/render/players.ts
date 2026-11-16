@@ -1,3 +1,4 @@
+import { clamp01 } from "@hyperfocus/utilities/math";
 import { renderablePathCommand, renderableRecord, renderRecord, type PathCommand, type PooledRenderCommand, type Renderable, type RenderFramePool } from "@hyperfocus/engine/render";
 import { type PlayerEntity } from "../../shared-contracts.ts";
 import type { ClientImages } from "../assets.ts";
@@ -58,9 +59,7 @@ const SLOT_ACCENTS: Record<string, string> = {
   R: "244,211,107"
 };
 
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
+
 
 function rgba(rgb: string, alpha: number) {
   return `rgba(${rgb},${clamp01(alpha)})`;
@@ -186,9 +185,9 @@ function compactRecentByStartedMs<T extends { startedMs: number }>(items: T[], t
 }
 
 function chargeColor(t: number) {
-  const r = Math.round(255 + (244 - 255) * t);
-  const g = Math.round(255 + (211 - 255) * t);
-  const b = Math.round(255 + (107 - 255) * t);
+  const r = Math.round(255 + ((-11)) * t);
+  const g = Math.round(255 + ((-44)) * t);
+  const b = Math.round(255 + ((-148)) * t);
   return `rgba(${r},${g},${b},0.48)`;
 }
 

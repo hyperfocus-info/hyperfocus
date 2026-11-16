@@ -1,3 +1,5 @@
+import { asRecord } from "@hyperfocus/utilities/records";
+import { isRecord } from "@hyperfocus/utilities/records";
 import { decodeField, decodeSnapshot, encodeField, encodeSnapshot, __protocolInternals } from "./encode.ts";
 import type { NormalizedField, ReplicationSchema } from "./schema.ts";
 
@@ -16,13 +18,9 @@ function cloneSerializable<T>(value: T): T {
   return structuredClone(value);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {};
-}
+
+
 
 function hasOwn(record: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(record, key);

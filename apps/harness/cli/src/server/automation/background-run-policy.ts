@@ -41,19 +41,6 @@ export function formatBackgroundLaunchProfileDetail(run: BackgroundJobRun) {
     `fastMode=${run.fastMode === undefined ? "default" : String(run.fastMode)}`].join(" ");
 }
 
-export function tryMarkAssistantQuestionRunWaiting(repository: WorkspaceRepository, backgroundRunId: string, message: string) {
-  const prompt = extractAssistantQuestionPrompt(message);
-  if (!prompt) return undefined;
-  repository.appendBackgroundJobRunEvent(backgroundRunId, "awaiting-user-input", "Waiting for user input", prompt);
-  return repository.setBackgroundJobRunStatus(backgroundRunId, "awaiting-user-input", { summary: prompt });
-}
-
-export function extractAssistantQuestionPrompt(message: string) {
-  const normalized = message.replace(/\s+/g, " ").trim();
-  if (!normalized || normalized.length > 1200 || !normalized.includes("?")) return undefined;
-  return normalized.match(/\b(?:what|which|who|when|where|why|how|should|could|would|can|do|does|did|is|are|was|were)\b[^?]*\?/i)?.[0]?.trim();
-}
-
 export function isExecutionModelIdAvailableForRuntime(agentId: "pi" | "copilot-cli" | "codex-cli",
   capability: { discoveredModels: string[]; activeModel?: string } | undefined, modelId: string | undefined,
   providerBrand: ProviderBrand) {

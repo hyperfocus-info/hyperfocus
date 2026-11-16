@@ -42,6 +42,7 @@ export type PanelGroupProps = {
 };
 
 const styles = stylex.create({
+  hidden: { display: "none" },
   root: {
     overflow: "hidden",
     alignItems: "stretch",
@@ -258,8 +259,6 @@ function updatePanelHandle(handle: HTMLElement, panel: PanelDescriptor, state: P
     "aria-label",
     `${state.collapsed ? "Show" : "Resize"} ${panel.label}${panel.collapseMode === "none" ? "." : `. Press Enter to ${state.collapsed ? "show" : "hide"}; double-click to reset size.`}`,
   );
-  const grip = handle.querySelector<HTMLElement>("[data-panel-group-grip]");
-  if (grip) grip.textContent = state.collapsed ? (panel.resizeHandle === "start" ? "<" : ">") : "";
 }
 
 export function PanelGroup(props: PanelGroupProps) {
@@ -268,13 +267,20 @@ export function PanelGroup(props: PanelGroupProps) {
   let applyLayoutToDom = () => {};
   let observedContainerNarrow = false;
   let currentInternalNarrowPanelId: string | undefined;
-  let currentLayout = normalizePanelGroupLayout(props.panels, props.layout());
+  const controlledLayout = createMemo(() => {
+    validatePanelGroupProps(props);
+    return normalizePanelGroupLayout(props.panels, props.layout());
+  });
+  let previousControlledLayout = controlledLayout();
+  let currentLayout = previousControlledLayout;
   const resizeController = createPanelPointerResizeController();
   const [layoutRevision, setLayoutRevision] = createSignal(0);
   const [containerNarrow, setContainerNarrow] = createSignal(false);
   const [internalNarrowPanelId, setInternalNarrowPanelId] = createSignal<string>();
   const layout = () => {
     layoutRevision();
+    const next = controlledLayout();
+    if (next !== previousControlledLayout) currentLayout = previousControlledLayout = next;
     return currentLayout;
   };
   const axis = (): PanelAxis => requirePanel(props.panels, 0).axis;
@@ -305,7 +311,6 @@ export function PanelGroup(props: PanelGroupProps) {
     setLayoutRevision((revision) => revision + 1);
     applyLayoutToDom();
   };
-  createEffect(() => updateLayout(props.layout()));
 
   const emit = (next: PanelGroupLayout, reason: PanelGroupLayoutChangeReason, panelId: string) => {
     updateLayout(next);
@@ -483,7 +488,8 @@ function renderPanelGroup(options: PanelGroupViewOptions) {
         {...stylex.attrs(
           styles.handleCell,
           panel.axis === "vertical" && styles.verticalHandleCell,
-          collapsed() && styles.collapsedHandleCell,
+            collapsed() && styles.collapsedHandleCell,
+            isNarrow() && styles.hidden,
         )}
         style={{ flex: `0 0 ${collapsed() ? 28 : 10}px` }}
         data-panel-group-handle-cell={panel.id}
@@ -511,6 +517,7 @@ function renderPanelGroup(options: PanelGroupViewOptions) {
           onPointerDown={(event) => startResize(panel, event)}
           onLostPointerCapture={(event) => resizeController.lostPointerCapture(event.pointerId)}
           onKeyDown={(event) => onSeparatorKeyDown(panel, event)}
+          onClick={() => { if (collapsed()) emit(togglePanelGroupPanel(props.panels, layout(), panel.id), "toggle", panel.id); }}
           onDblClick={() => emit(resetPanelGroupPanel(props.panels, layout(), panel.id), "reset", panel.id)}
         >
           <span {...stylex.attrs(styles.grip)} aria-hidden="true" data-panel-group-grip="">
@@ -533,7 +540,7 @@ function renderPanelGroup(options: PanelGroupViewOptions) {
       data-narrow={isNarrow() ? "true" : "false"}
     >
       <div
-        {...stylex.attrs(styles.modeSwitcher)}
+        {...stylex.attrs(styles.modeSwitcher, !isNarrow() && styles.hidden)}
         role="tablist"
         aria-label={props.narrowModeLabel ?? `${props.ariaLabel} panels`}
         aria-hidden={isNarrow() ? "false" : "true"}

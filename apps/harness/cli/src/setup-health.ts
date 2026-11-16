@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import path from "node:path";
 import type {
   AgentId,
@@ -449,7 +450,7 @@ async function probeRipgrep() {
   }
 
   try {
-    const process = Bun.spawn({
+    const process = spawnBackgroundProcess({
       cmd: ["rg", "--version"],
       env: {
         ...Bun.env,

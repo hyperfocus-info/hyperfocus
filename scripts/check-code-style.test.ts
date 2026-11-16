@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   collectCodeStyleEntries,
   collectLocalCodeStyleCounts,
-  createCodeStyleBaseline,
   findCodeStyleViolations,
   parseCodeStyleBaseline,
   ratchetCodeStyleBaseline
@@ -38,6 +37,27 @@ describe("local code style analysis", () => {
 });
 
 describe("repository code style analysis", () => {
+  test("checks every app root and nested dynamic imports without scanning generated output", () => {
+    const files = new Map([
+      ["packages/core/package.json", JSON.stringify({ sideEffects: false })],
+      ["packages/core/src/value.ts", "export const value = 1;"],
+      ["apps/pad-pilot/package.json", "{}"],
+      ["apps/pad-pilot/scripts/load.ts", "export async function load() { return import('../../../packages/core/src/value'); }"],
+      ["apps/pad-pilot-marketplace/src/store.ts", "class Store {}"],
+      ["apps/pad-pilot/ui/src/proto/generated/state.ts", "class Generated {}"],
+      ["apps/pad-pilot/build/artifact.ts", "class Generated {}"],
+      ["apps/engine-editor/website/examples/store/releases/v1/site/main.js", "class Generated {}"],
+      ["apps/engine-editor/website/examples/store/releases/v1/site/custom.js", "class Authored {}"]
+    ]);
+    const entries = new Map(collectCodeStyleEntries(files).map(entry => [entry.path, entry.counts]));
+    expect(entries.get("apps/pad-pilot/scripts/load.ts")?.crossOwnerRelativeImports).toBe(1);
+    expect(entries.get("apps/pad-pilot-marketplace/src/store.ts")?.classes).toBe(1);
+    expect(entries.has("apps/pad-pilot/ui/src/proto/generated/state.ts")).toBe(false);
+    expect(entries.has("apps/pad-pilot/build/artifact.ts")).toBe(false);
+    expect(entries.has("apps/engine-editor/website/examples/store/releases/v1/site/main.js")).toBe(false);
+    expect(entries.get("apps/engine-editor/website/examples/store/releases/v1/site/custom.js")?.classes).toBe(1);
+  });
+
   test("distinguishes public barrels from internal barrels and catches flattened imports", () => {
     const files = new Map([
       ["packages/core/package.json", JSON.stringify({
@@ -72,10 +92,7 @@ describe("repository code style analysis", () => {
 
 describe("code style baseline", () => {
   test("blocks new debt and asks for reductions to be ratcheted", () => {
-    const oldEntries = collectCodeStyleEntries(new Map([
-      ["packages/core/src/store.ts", "class One {}\nclass Two {}"]
-    ]));
-    const baseline = createCodeStyleBaseline(oldEntries);
+    const baseline = parseCodeStyleBaseline({ version: 1, entries: { "packages/core/src/store.ts": { classes: 2 } } });
     const reduced = collectCodeStyleEntries(new Map([
       ["packages/core/src/store.ts", "class One {}"]
     ]));
@@ -98,5 +115,46 @@ describe("code style baseline", () => {
       version: 1,
       entries: { "packages/core/src/store.ts": { mystery: 1 } }
     })).toThrow("invalid mystery count");
+  });
+
+  test("rejects every computed numeric literal without granting allowances", () => {
+    const filePath = "packages/core/src/settings.ts";
+    const oldEntries = collectCodeStyleEntries(new Map([[filePath, "export const delay = 15 * 3 * 0.1;"]]));
+    const baseline = parseCodeStyleBaseline({ version: 1, entries: {} });
+    expect(baseline.numericLiterals).toEqual({});
+    expect(findCodeStyleViolations(oldEntries, baseline)).toHaveLength(1);
+    const changed = collectCodeStyleEntries(new Map([[filePath, "export const delay = 15 * 4 * 0.1;"]]));
+    expect(changed[0]?.numericLiterals).toHaveLength(1);
+    expect(findCodeStyleViolations(changed, baseline)[0]).toContain("computed numeric literal");
+    const moved = collectCodeStyleEntries(new Map([["packages/core/src/new-settings.ts", "export const delay = 15 * 3 * 0.1;"]]));
+    expect(findCodeStyleViolations(moved, baseline)[0]).toContain("new-settings.ts");
+  });
+
+  test("reports each arithmetic occurrence despite comments and duplicates", () => {
+    const filePath = "apps/pad-pilot/ui/src/settings.ts";
+    const baseline = parseCodeStyleBaseline({ version: 1, entries: {} });
+    const edited = collectCodeStyleEntries(new Map([[filePath, "export const other = 7;\n\nexport const delay = 3 /* units */ * 4;"]]));
+    expect(findCodeStyleViolations(edited, baseline)).toHaveLength(1);
+    const copied = collectCodeStyleEntries(new Map([[filePath, "export const delay = 3 * 4;\nexport const delay = 3 * 4;"]]));
+    expect(findCodeStyleViolations(copied, baseline)).toHaveLength(2);
+  });
+
+  test("ratcheting preserves other limits without approving numeric debt", () => {
+    const filePath = "packages/core/src/settings.ts";
+    const baseline = parseCodeStyleBaseline({ version: 1, entries: { [filePath]: { classes: 1 } } });
+    const changed = collectCodeStyleEntries(new Map([[filePath, "class Legacy {}\nexport const delay = 3 * 5;"]]));
+    const ratcheted = ratchetCodeStyleBaseline(changed, baseline);
+    expect(ratcheted.entries).toEqual(baseline.entries);
+    expect(ratcheted.numericLiterals).toEqual({});
+    expect(findCodeStyleViolations(changed, ratcheted)).toHaveLength(1);
+    const clean = collectCodeStyleEntries(new Map([[filePath, "class Legacy {}\nexport const delay = 12;"]]));
+    expect(findCodeStyleViolations(clean, baseline)).toEqual([]);
+    expect(ratchetCodeStyleBaseline(clean, baseline).numericLiterals).toEqual({});
+  });
+
+  test("rejects numeric baseline allowances even with formerly valid occurrence IDs", () => {
+    expect(parseCodeStyleBaseline({ version: 1, entries: {} }).numericLiterals).toEqual({});
+    expect(() => parseCodeStyleBaseline({ version: 1, entries: {}, numericLiterals: { "scripts/test.ts": ["count"] } })).toThrow("must be empty");
+    expect(() => parseCodeStyleBaseline({ version: 1, entries: {}, numericLiterals: { "scripts/test.ts": ["a".repeat(64)] } })).toThrow("must be empty");
   });
 });

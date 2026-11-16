@@ -27,7 +27,7 @@ class ValidationResult:
 
 
 def read_file(path: Path) -> str:
-    return path.read_text(errors="ignore")
+    return path.read_bytes().decode("utf-8")
 
 
 # ---------- Extractors ----------
@@ -59,7 +59,6 @@ def extract_code_blocks(text):
         open_line = lines[i]
         block_lines = [open_line]
         i += 1
-        closed = False
         while i < n:
             close_m = FENCE_OPEN_REGEX.match(lines[i])
             if (
@@ -69,15 +68,11 @@ def extract_code_blocks(text):
                 and close_m.group(3).strip() == ""
             ):
                 block_lines.append(lines[i])
-                closed = True
                 i += 1
                 break
             block_lines.append(lines[i])
             i += 1
-        if closed:
-            blocks.append("\n".join(block_lines))
-        # Unclosed fences are silently skipped — they indicate malformed markdown
-        # and including them would cause false-positive validation failures.
+        blocks.append("\n".join(block_lines))
     return blocks
 
 
@@ -104,7 +99,7 @@ def validate_headings(orig, comp, result):
         result.add_error(f"Heading count mismatch: {len(h1)} vs {len(h2)}")
 
     if h1 != h2:
-        result.add_warning("Heading text/order changed")
+        result.add_error("Heading text/order changed")
 
 
 def validate_code_blocks(orig, comp, result):
@@ -128,7 +123,7 @@ def validate_paths(orig, comp, result):
     p2 = extract_paths(comp)
 
     if p1 != p2:
-        result.add_warning(f"Path mismatch: lost={p1 - p2}, added={p2 - p1}")
+        result.add_error(f"Path mismatch: lost={p1 - p2}, added={p2 - p1}")
 
 
 def validate_bullets(orig, comp, result):
@@ -152,6 +147,17 @@ def validate(original_path: Path, compressed_path: Path) -> ValidationResult:
 
     orig = read_file(original_path)
     comp = read_file(compressed_path)
+
+    if orig.strip() and not comp.strip():
+        result.add_error("Compressed content is empty")
+    frontmatter = re.compile(r"\A(?:\ufeff)?---\r?\n.*?(?:\r?\n(?:---|\.\.\.)(?:\r?\n|\Z))", re.DOTALL)
+    original_frontmatter = frontmatter.match(orig)
+    compressed_frontmatter = frontmatter.match(comp)
+    if (original_frontmatter.group() if original_frontmatter else None) != (compressed_frontmatter.group() if compressed_frontmatter else None):
+        result.add_error("YAML frontmatter not preserved exactly")
+    inline_code = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.DOTALL)
+    if [match.group() for match in inline_code.finditer(orig)] != [match.group() for match in inline_code.finditer(comp)]:
+        result.add_error("Inline code not preserved exactly")
 
     validate_headings(orig, comp, result)
     validate_code_blocks(orig, comp, result)
@@ -187,3 +193,4 @@ if __name__ == "__main__":
         print("\nWarnings:")
         for w in res.warnings:
             print(f"  - {w}")
+    sys.exit(0 if res.is_valid else 1)

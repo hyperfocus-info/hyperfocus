@@ -1,10 +1,10 @@
 /** @jsxImportSource solid-js */
-import { createSignal, For, Show, type JSX } from "solid-js";
+import { createSignal, Show, type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { ChevronDown, Eye, EyeOff } from "lucide-solid";
+import { SegmentedControl as SharedSegmentedControl } from "@hyperfocus/ui";
 import { ActionButton } from "../action-button";
-import { Button } from "../primitives/button";
-import { Input } from "../primitives/input";
+import { Input } from "@hyperfocus/ui";
 import { Tooltip } from "../primitives/tooltip";
 import { preferenceStyles } from "./preferences.styles";
 
@@ -12,8 +12,7 @@ export function PreferenceSection(props: { title: string; description: string; c
   return (
     <section class={stylex.attrs(preferenceStyles.grid, preferenceStyles.minWidth0, preferenceStyles.gap3).class}>
       <div class={stylex.attrs(preferenceStyles.minWidth0, preferenceStyles.borderBottom, preferenceStyles.borderDefault, preferenceStyles.paddingBottom3).class}>
-        <h3 class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.fontDisplay, preferenceStyles.textLg, preferenceStyles.fontSemibold, preferenceStyles.colorMuted).class}>{props.title}</h3>
-        <p class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.wrapText, preferenceStyles.textXs, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{props.description}</p>
+        <h3 class={stylex.attrs(preferenceStyles.wrapText, preferenceStyles.textLg, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>{props.title}</h3>
       </div>
       <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap3).class}>{props.children}</div>
     </section>
@@ -35,18 +34,19 @@ export function PreferenceRow(props: {
         preferenceStyles.grid,
         preferenceStyles.minWidth0,
         preferenceStyles.gap3,
-        preferenceStyles.overflowHidden,
-        preferenceStyles.roundedXl,
-        preferenceStyles.border,
+        preferenceStyles.borderBottom,
         preferenceStyles.borderDefault,
-        preferenceStyles.backgroundWhite55,
-        preferenceStyles.padding4,
+        preferenceStyles.paddingBlock3,
         props.layout === "wide-label" ? preferenceStyles.mdGridColumnsPreferenceWideLabel : preferenceStyles.mdGridColumnsPreference
       ).class}
     >
       <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
-        <h4 class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.text0585, preferenceStyles.fontSemibold, preferenceStyles.tracking018, preferenceStyles.colorMuted).class}>{props.title}</h4>
-        <p class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.wrapText, preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{props.description}</p>
+        <details>
+          <summary class={stylex.attrs(preferenceStyles.wrapText, preferenceStyles.textSm, preferenceStyles.fontSemibold, preferenceStyles.colorForeground, preferenceStyles.cursorPointer).class}>
+            <span role="heading" aria-level={4}>{props.title}</span>
+          </summary>
+          <p class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.wrapText, preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{props.description}</p>
+        </details>
       </div>
       <div class={stylex.attrs(preferenceStyles.minWidth0).class}>{props.children}</div>
     </section>
@@ -77,57 +77,15 @@ export function SegmentedControl<T extends string | number>(props: {
   options: Array<{ value: T; label: string; disabled?: boolean }>;
   onChange: (value: T) => void;
 }) {
-  const optionClass = stylex.attrs(
-    preferenceStyles.minHeight8,
-    preferenceStyles.minWidth0,
-    preferenceStyles.truncate,
-    preferenceStyles.roundedLg,
-    preferenceStyles.paddingInline2,
-    preferenceStyles.textXs,
-    preferenceStyles.fontMedium,
-    preferenceStyles.colorMuted,
-    preferenceStyles.transition,
-    preferenceStyles.hoverBackgroundSoftAccent,
-    preferenceStyles.hoverColorForeground,
-    preferenceStyles.cursorDisabled,
-    preferenceStyles.disabledFaded
-  ).class;
-  const selectedOptionClass = stylex.attrs(
-    preferenceStyles.minHeight8,
-    preferenceStyles.minWidth0,
-    preferenceStyles.truncate,
-    preferenceStyles.roundedLg,
-    preferenceStyles.paddingInline2,
-    preferenceStyles.textXs,
-    preferenceStyles.fontMedium,
-    preferenceStyles.colorMuted,
-    preferenceStyles.transition,
-    preferenceStyles.hoverBackgroundSoftAccent,
-    preferenceStyles.hoverColorForeground,
-    preferenceStyles.cursorDisabled,
-    preferenceStyles.disabledFaded,
-    preferenceStyles.segmentSelected
-  ).class;
-
   return (
-    <div role="group" aria-label={props.ariaLabel} class={stylex.attrs(preferenceStyles.grid, preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanelStrong, preferenceStyles.padding1).class} style={{ "grid-template-columns": `repeat(${props.options.length}, minmax(0, 1fr))` }}>
-      <For each={props.options}>
-        {(option) => (
-          <button
-            type="button"
-            class={props.value === option.value ? selectedOptionClass : optionClass}
-            disabled={option.disabled}
-            aria-pressed={props.value === option.value}
-            onClick={() => props.onChange(option.value)}
-          >
-            {option.label}
-          </button>
-        )}
-      </For>
-    </div>
+    <SharedSegmentedControl ariaLabel={props.ariaLabel} value={String(props.value)}
+      options={props.options.map(option => ({ ...option, value: String(option.value) }))}
+      onValueChange={value => {
+        const option = props.options.find(option => String(option.value) === value);
+        if (option) props.onChange(option.value);
+      }} />
   );
 }
-
 export function RangeControl(props: {
   label: string;
   value: number;
@@ -291,9 +249,9 @@ export function AdvancedDisclosure(props: { title: string; description?: string;
         aria-controls={contentId}
       >
         <span class={stylex.attrs(preferenceStyles.minWidth0).class}>
-          <span class={stylex.attrs(preferenceStyles.block, preferenceStyles.truncate, preferenceStyles.text0585, preferenceStyles.fontSemibold, preferenceStyles.tracking018, preferenceStyles.colorMuted).class}>{props.title}</span>
+          <span class={stylex.attrs(preferenceStyles.block, preferenceStyles.wrapText, preferenceStyles.textSm, preferenceStyles.fontSemibold, preferenceStyles.colorForeground).class}>{props.title}</span>
           <Show when={props.description}>
-            <span class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.block, preferenceStyles.truncate, preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{props.description}</span>
+            <span class={stylex.attrs(preferenceStyles.marginTop1, preferenceStyles.block, preferenceStyles.wrapText, preferenceStyles.text0675, preferenceStyles.colorMuted).class}>{props.description}</span>
           </Show>
         </span>
         <ChevronDown

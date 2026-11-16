@@ -1,12 +1,15 @@
-import { createRequestId, type AgentRunState, type AssistantLogEntry, type BackgroundJobRun, type ClientCommand,
-  type NotificationInboxItem } from "@hyperfocus/ai-core/protocol";
 import {
-  harnessStore,
-  type AssistantDetailTab,
-  type ChatPaneTab,
-  type HarnessLeftTab,
-  type HarnessViewState,
-  type PreferencesActiveSectionId
+createRequestId,type AgentRunState,type AssistantLogEntry,type ClientCommand,
+type NotificationInboxItem
+} from "@hyperfocus/ai-core/protocol";
+import { isRecord } from "@hyperfocus/utilities/records";
+import {
+harnessStore,
+type AssistantDetailTab,
+type ChatPaneTab,
+type HarnessLeftTab,
+type HarnessViewState,
+type PreferencesActiveSectionId
 } from "./harness-store";
 import { activateProjectThread } from "./project-thread-navigation";
 import { getBackgroundRunFilter } from "./store/background-jobs-pane-state";
@@ -268,9 +271,6 @@ function getRecord(value: unknown) {
   return isRecord(value) ? value : undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function readString(record: Record<string, unknown> | undefined, key: string) {
   const value = record?.[key];

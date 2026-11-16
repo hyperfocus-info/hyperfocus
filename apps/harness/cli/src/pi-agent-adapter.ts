@@ -1,23 +1,26 @@
-import {
-  AuthStorage,
-  createAgentSession,
-  DefaultResourceLoader,
-  defineTool,
-  getAgentDir,
-  ModelRegistry,
-  SessionManager,
-  SettingsManager,
-  type SessionStats,
-  type AgentSessionEvent
-} from "@mariozechner/pi-coding-agent";
-import { streamSimple, Type, type ImageContent, type SimpleStreamOptions } from "@mariozechner/pi-ai";
 import type { ComposerReasoningStrength } from "@hyperfocus/ai-core/protocol";
+import { registerThreadTools, type ThreadTools } from "./thread-tools";
+import { isRecord } from "@hyperfocus/utilities/records";
+import { streamSimple,Type,type ImageContent,type SimpleStreamOptions } from "@mariozechner/pi-ai";
+import {
+AuthStorage,
+createAgentSession,
+DefaultResourceLoader,
+defineTool,
+getAgentDir,
+ModelRegistry,
+SessionManager,
+SettingsManager,
+type AgentSessionEvent,
+type SessionStats
+} from "@mariozechner/pi-coding-agent";
 import { transformAnthropicCachePayload } from "./anthropic-cache-payload";
 import { isBrowserToolName } from "./browser-session-state";
-import { debugLog } from "./logging";
-import type { CacheableUserBlock } from "./prompt-cache-assembly";
-import { buildPromptCacheKey, extractCachedInputTokens, type PromptCacheIdentity } from "./prompt-cache";
 import { supportsGeminiExplicitCaching } from "./gemini-cached-contents";
+import { debugLog } from "./logging";
+import { createPiSdkExecutionController } from "./pi-agent/execution-controller";
+import { buildPromptCacheKey,type PromptCacheIdentity } from "./prompt-cache";
+import type { CacheableUserBlock } from "./prompt-cache-assembly";
 
 export type PiAgentPromptKind = "planner" | "executor" | "subagent" | "aggregator" | "merge-resolver";
 
@@ -33,6 +36,8 @@ export type PiAgentMemorySearchResult = {
 };
 
 export type PiAgentPromptRequest = {
+  qualityAgentId?: string;
+  qualityParentAgentId?: string;
   kind: PiAgentPromptKind;
   cwd: string;
   modelId: string;
@@ -48,6 +53,7 @@ export type PiAgentPromptRequest = {
   onTextDelta?: (delta: string) => void;
   onExecutionEvent?: (event: PiAgentExecutionEvent) => void;
   memorySearch?: (input: PiAgentMemorySearchInput) => Promise<PiAgentMemorySearchResult>;
+  threadTools?: ThreadTools;
   requestBrowserApproval?: (input: { toolCallId: string; toolName: string; args: unknown }) => Promise<{ approved: boolean }>;
 };
 
@@ -63,6 +69,8 @@ export type PiAgentPromptResult = {
 };
 
 export type PiAgentExecutionEvent =
+  | { type: "context-delivery"; boundary: "sdk-prompt" | "cli-stdin"; promptSha256: string; qualityContextSha256?: string }
+  | { type: "provider-capacity"; state: "queued" | "acquired" | "cancelled"; provider: string; waitMs: number }
   | { type: "session-created" }
   | { type: "activity" }
   | { type: "tool-start"; toolCallId: string; toolName: string; args: unknown }
@@ -70,6 +78,7 @@ export type PiAgentExecutionEvent =
   | { type: "tool-end"; toolCallId: string; toolName: string; result: unknown; isError: boolean };
 
 export interface PiAgentExecutionController {
+  steer?: (message: string) => Promise<void>;
   readonly result: Promise<PiAgentPromptResult>;
   continueWithPrompt(prompt?: string): Promise<PiAgentPromptResult>;
   abort(): Promise<void>;
@@ -85,7 +94,7 @@ export interface PiAgentAdapter {
 
 export type SerializablePiAgentPromptRequest = Omit<
   PiAgentPromptRequest,
-  "abortSignal" | "onTextDelta" | "onExecutionEvent" | "memorySearch" | "requestBrowserApproval"
+  "abortSignal" | "onTextDelta" | "onExecutionEvent" | "memorySearch" | "threadTools" | "requestBrowserApproval"
 >;
 
 export type PiSdkPromptWorkerRequest = {
@@ -113,6 +122,7 @@ export function toSerializablePromptRequest(request: PiAgentPromptRequest): Seri
     onTextDelta: _onTextDelta,
     onExecutionEvent: _onExecutionEvent,
     memorySearch: _memorySearch,
+    threadTools: _threadTools,
     requestBrowserApproval: _requestBrowserApproval,
     ...serializable
   } = request;
@@ -506,6 +516,7 @@ export function createPiSdkAgentAdapter(
         !request.onTextDelta &&
         !request.onExecutionEvent &&
         !request.memorySearch &&
+        !request.threadTools &&
         !request.requestBrowserApproval
     );
   }
@@ -519,7 +530,7 @@ export function createPiSdkAgentAdapter(
       compaction: buildPiAutoCompactionSettings(model.contextWindow, autoCompactContextThresholdPercent),
       retry: { enabled: true, maxRetries: 1 }
     });
-    const resourceLoader = request.requestBrowserApproval || request.memorySearch
+    const resourceLoader = request.requestBrowserApproval || request.memorySearch || request.threadTools
       ? await createResourceLoader(request, settingsManager) : undefined;
     const { session } = await createAgentSession({
       cwd: request.cwd,
@@ -606,6 +617,7 @@ async function createPiResourceLoader(request: PiAgentPromptRequest, settingsMan
     settingsManager,
     extensionFactories: [
       (pi) => {
+        if (request.threadTools) registerThreadTools(pi, request.threadTools, request.readOnly ?? false);
         const memorySearch = request.memorySearch;
         if (memorySearch) {
           pi.registerTool(defineTool({
@@ -661,168 +673,6 @@ async function createPiResourceLoader(request: PiAgentPromptRequest, settingsMan
   return loader;
 }
 
-function createPiSdkExecutionController(
-    session: Awaited<ReturnType<typeof createAgentSession>>["session"],
-    request: PiAgentPromptRequest,
-    contextWindow: number,
-    onSessionEvent: (event: AgentSessionEvent) => void
-  ) {
-    let disposed = false;
-    let lastSessionEventSummary = "session-created";
-    let running = false;
-    const unsubscribe = session.subscribe((event) => {
-      lastSessionEventSummary = summarizeSessionEvent(event);
-      onSessionEvent(event);
-    });
-    request.onExecutionEvent?.({ type: "session-created" });
-
-    const abortHandler = request.abortSignal
-      ? async () => {
-          await abort();
-        }
-      : undefined;
-
-    if (abortHandler) {
-      request.abortSignal?.addEventListener("abort", abortHandler, { once: true });
-    }
-
-  function continueWithPrompt(prompt: string = "continue") {
-    return run(prompt);
-  }
-
-  async function abort() {
-    debugLog("agent.abort", {
-      kind: request.kind,
-      modelId: request.modelId
-    });
-    await session.abort();
-  }
-
-  function dispose() {
-    if (disposed) {
-      return;
-    }
-
-    disposed = true;
-    if (abortHandler) {
-      request.abortSignal?.removeEventListener("abort", abortHandler);
-    }
-    unsubscribe();
-    session.dispose();
-  }
-
-  function run(prompt: string) {
-    if (disposed) {
-      return Promise.reject(new Error("Execution controller is disposed"));
-    }
-
-    if (running) {
-      return Promise.reject(new Error("Execution already running"));
-    }
-
-    running = true;
-    const currentResult = (async () => {
-      await promptSession(session, prompt, request.images, request.abortSignal, lastSessionEventSummary);
-      let text = session.getLastAssistantText()?.trim();
-
-      if (!text && prompt.trim().toLowerCase() !== "continue") {
-        await promptSession(session, "continue", request.images, request.abortSignal, lastSessionEventSummary);
-        text = session.getLastAssistantText()?.trim();
-      }
-
-      if (!text) {
-        const sessionStats = session.getSessionStats();
-        throw createPiExecutionError(
-          "empty-response",
-          "Pi agent returned an empty response",
-          lastSessionEventSummary,
-          sessionStats
-        );
-      }
-
-      const sessionStats = session.getSessionStats();
-      if (request.modelId.startsWith("anthropic/") && sessionStats.tokens.cacheWrite > 0) {
-        debugLog("agent.cache.creation", {
-          providerBrand: "claude",
-          modelId: request.modelId,
-          cacheCreationInputTokens: sessionStats.tokens.cacheWrite
-        });
-      }
-      const tokens = sessionStats.contextUsage?.tokens ?? undefined;
-      const cachedInputTokens = extractCachedInputTokens(sessionStats);
-      return {
-        text,
-        contextUsage: {
-          tokens,
-          contextWindow: contextWindow,
-          usagePercent: tokens === undefined ? undefined : Math.min(100, (tokens / contextWindow) * 100),
-          sessionStats,
-          cachedInputTokens
-        }
-      };
-    })().finally(() => {
-      running = false;
-    });
-
-    return currentResult;
-  }
-
-  const result = run(request.prompt);
-  return { result, continueWithPrompt, abort, dispose };
-}
-
-function summarizeSessionEvent(event: AgentSessionEvent) {
-  switch (event.type) {
-    case "message_update":
-      return `message_update:${event.assistantMessageEvent.type}`;
-    case "tool_execution_start":
-      return `tool_execution_start:${event.toolName}`;
-    case "tool_execution_update":
-      return `tool_execution_update:${event.toolName}`;
-    case "tool_execution_end":
-      return `tool_execution_end:${event.toolName}:${event.isError ? "error" : "ok"}`;
-    default:
-      return event.type;
-  }
-}
-
-function createPiExecutionError(
-  category: "empty-response" | "stream-disconnect" | "invalid-json" | "unknown",
-  message: string,
-  lastEvent: string,
-  sessionStats: SessionStats
-) {
-  const stats = sessionStats.contextUsage?.tokens;
-  return new Error(
-    `${message} [category=${category}] [last-event=${lastEvent}]${stats === undefined ? "" : ` [tokens=${stats}]`}`
-  );
-}
-
-async function promptSession(
-  session: Awaited<ReturnType<typeof createAgentSession>>["session"],
-  prompt: string,
-  images: PiAgentPromptRequest["images"],
-  abortSignal: AbortSignal | undefined,
-  lastEvent: string
-) {
-  try {
-    await session.prompt(prompt, { images });
-  } catch (error) {
-    if (abortSignal?.aborted || isAbortLikeError(error)) {
-      throw error;
-    }
-    throw createPiExecutionError("stream-disconnect", "Pi agent stream transport failed", lastEvent, session.getSessionStats());
-  }
-}
-
-function isAbortLikeError(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  const normalized = error.message.toLowerCase();
-  return error.name === "AbortError" || normalized.includes("abort") || normalized.includes("cancel");
-}
-
 function injectGeminiCachedContent(payload: unknown, model: { provider: string; api: string }, cachedContentName: string | undefined) {
   if (
     !cachedContentName ||
@@ -842,9 +692,6 @@ function injectGeminiCachedContent(payload: unknown, model: { provider: string; 
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 export const testExports = {
   createPiResourceLoader

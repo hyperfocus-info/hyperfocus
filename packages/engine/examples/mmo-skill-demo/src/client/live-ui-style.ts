@@ -25,6 +25,20 @@ export function toolbarIcons() {
   };
 }
 
+/** Only the authored path commands below become SVG; arbitrary icon strings stay text. */
+export function renderToolbarIcon(options: { action: { id: string }; document: Document }) {
+  const markup = Object.entries(toolbarIcons()).find(([id]) => id === options.action.id)?.[1];
+  if (!markup) return undefined;
+  const svg = options.document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  for (const [name, value] of Object.entries({ viewBox: "0 0 24 24", "aria-hidden": "true", focusable: "false", fill: "none", stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" })) svg.setAttribute(name, value);
+  for (const match of markup.matchAll(/<path d="([^"]+)"\/>/g)) {
+    const path = options.document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", match[1]!);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
 const LIVE_UI_STYLES = `
 #ui {
   inset: 18px 18px auto auto;
@@ -204,7 +218,7 @@ main::after {
   border: 1px solid rgba(216,181,106,0.34);
   border-radius: 999px;
   color: #e7d9b3;
-  font-size: 10px;
+  font-size: 0.75rem;
   font-weight: 900;
   padding: 2px 6px;
   white-space: nowrap;
@@ -243,7 +257,7 @@ main::after {
 .mmo-skill-meta,
 .mmo-text-list {
   color: #cfc3a9;
-  font-size: 11px;
+  font-size: 0.75rem;
   line-height: 1.28;
 }
 .mmo-item-count {
@@ -251,7 +265,7 @@ main::after {
   background: #d8b56a;
   border-radius: 999px;
   color: #14100d;
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 900;
   min-width: 28px;
   padding: 3px 6px;
@@ -290,7 +304,7 @@ main::after {
 }
 .mmo-stat-chip span:first-child {
   color: #b9a98e;
-  font-size: 10px;
+  font-size: 0.75rem;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -307,7 +321,7 @@ main::after {
   align-items: center;
   color: #e7d9bc;
   display: flex;
-  font-size: 11px;
+  font-size: 0.75rem;
   gap: 8px;
   justify-content: space-between;
 }

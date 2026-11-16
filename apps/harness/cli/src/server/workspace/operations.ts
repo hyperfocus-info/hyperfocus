@@ -12,7 +12,7 @@ import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
 import type { ExecutionPlan, ProjectId, ThreadId } from "@hyperfocus/ai-core/protocol";
 
 export async function presentCorrectivePlan(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -68,7 +68,7 @@ export async function presentCorrectivePlan(
 }
 
 export async function stopThreadActivityBeforeArchive(input: {
-  ws: Bun.ServerWebSocket<HarnessConnection>;
+  ws: import("../transport/events").ControlEventSocket;
   requestId: string;
   repository: WorkspaceRepository;
   runtime: WorkspaceRuntimeStore;

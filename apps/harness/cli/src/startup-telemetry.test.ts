@@ -262,7 +262,7 @@ describe("startup telemetry", () => {
 
     const oldFile = path.join(logDir, "old.jsonl");
     writeFileSync(oldFile, "{}\n");
-    const oldAgeMs = 8 * 24 * 60 * 60 * 1000;
+    const oldAgeMs = 691200000;
     const oldDate = new Date(clock.nowMs - oldAgeMs);
 
     for (let index = 0; index < 25; index += 1) {

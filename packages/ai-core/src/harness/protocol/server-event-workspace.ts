@@ -7,6 +7,10 @@ import { chatMessageSchema } from "./conversation";
 import { ideFilePathSchema, ideFileReadSchema, ideFileTreeEntrySchema, ideGitChangeSchema, ideSearchResultSchema, projectSearchResultSchema, projectThreadSummarySchema, workspaceFilePathPageSchema, workspaceProjectStateSchema, workspaceStateSchema } from "./workspace";
 
 export const workspaceServerEventSchemas = [
+  z.object({ type: z.literal("thread.inputRejected"), requestId: requestIdSchema,
+    payload: z.object({ projectId: projectIdSchema, threadId: threadIdSchema, deliveryId: z.string().uuid(), reason: z.string() }) }),
+  z.object({ type: z.literal("thread.inputAccepted"), requestId: requestIdSchema,
+    payload: z.object({ projectId: projectIdSchema, threadId: threadIdSchema, content: z.string(), deliveryId: z.string().uuid(), mode: z.enum(["queue", "steer"]) }) }),
   z.object({
     type: z.literal("project.opened"),
     requestId: requestIdSchema,

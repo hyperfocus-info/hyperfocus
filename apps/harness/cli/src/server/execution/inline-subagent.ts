@@ -64,6 +64,7 @@ export async function runInlineSubagentRetry(adapter: PiAgentAdapter, options: I
         kind: "subagent",
         subagentId: options.task.id,
         originalRequest: {
+          threadTools: options.callbacks.threadTools(options.task.id),
           kind: "subagent",
           cwd: options.cwd,
           modelId: subagentModelId,
@@ -89,6 +90,7 @@ export async function runInlineSubagentRetry(adapter: PiAgentAdapter, options: I
           }
         },
         continuationRequest: {
+          threadTools: options.callbacks.threadTools(options.task.id),
           kind: "subagent",
           cwd: options.cwd,
           modelId: subagentModelId,
@@ -152,6 +154,7 @@ export async function runInlineSubagentRetry(adapter: PiAgentAdapter, options: I
           sourceLabel: options.task.id,
           modelId: subagentModelId,
           tokens: response.contextUsage.tokens,
+          inputTokens: Math.max(0, response.contextUsage.sessionStats.tokens.total - response.contextUsage.sessionStats.tokens.output),
           contextWindow: response.contextUsage.contextWindow,
           usagePercent: response.contextUsage.usagePercent,
           totalProcessedTokens: response.contextUsage.sessionStats.tokens.total,

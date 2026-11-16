@@ -37,6 +37,9 @@ export function createPerformanceEvidenceReport<Config, StructuralEvidence, Meas
   options: PerformanceEvidenceReportOptions<Config, StructuralEvidence, Measurements>
 ): PerformanceEvidenceReport<Config, StructuralEvidence, Measurements> {
   if (!options.benchmark.trim()) throw new Error("Performance evidence requires a benchmark name.");
+  stableJson(options.config);
+  stableJson(options.structuralEvidence);
+  stableJson(options.measurements);
   return {
     schema: "hyperfocus-performance-evidence-v1",
     benchmark: options.benchmark,
@@ -58,6 +61,8 @@ export function comparePerformanceEvidence(
   }
 ): PerformanceEvidenceComparison {
   const { baseline, candidate } = options;
+  stableJson(baseline.evidence.calibration.measurements);
+  stableJson(candidate.evidence.calibration.measurements);
   const benchmarkMatches = baseline.benchmark === candidate.benchmark;
   const configMatches = stableJson(baseline.config) === stableJson(candidate.config);
   const structuralEvidenceMatches = stableJson(baseline.evidence.portable) === stableJson(candidate.evidence.portable);
@@ -83,8 +88,17 @@ function stableJson(value: unknown) {
   return JSON.stringify(sortValue(value));
 }
 
-function sortValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortValue);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortValue(Reflect.get(value, key))]));
+function sortValue(value: unknown, ancestors = new Set<object>()): unknown {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "object" || ancestors.has(value)) throw new TypeError("Performance evidence requires finite, acyclic JSON values.");
+  if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+    throw new TypeError("Performance evidence requires plain JSON objects.");
+  }
+  if (Object.getOwnPropertySymbols(value).length > 0) throw new TypeError("Performance evidence cannot contain symbol keys.");
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) return Array.from(value, (item) => sortValue(item, ancestors));
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortValue(Reflect.get(value, key), ancestors)]));
+  } finally { ancestors.delete(value); }
 }

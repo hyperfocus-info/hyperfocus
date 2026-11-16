@@ -1,31 +1,24 @@
 ---
 name: update-harness
-description: Harness-specific engineering routes for runtime, build, TypeScript, UI, and coverage work. Use when changing `apps/harness`, harness behavior in shared packages, or `docs/harness`; do not use for unrelated engine or editor work.
+description: Apply Harness runtime, protocol, UI, build, and coverage contracts when changing apps/harness or Harness behavior in shared packages and docs.
 ---
 
 # Update Harness
 
-Use this file only to choose references. Root `AGENTS.md` and
-`apps/harness/agents.md` own shared contributor policy.
+Read `apps/harness/README.md` and `apps/harness/agents.md` for the owning product.
+Choose only the reference needed by the change:
 
-## Scope
+- [Runtime architecture](references/runtime-architecture.md): provider boundaries,
+  typed run budgets, finalization, concurrency, and BranchFS ownership.
+- [TypeScript and build](references/typescript-build.md): build/watch integration
+  and the production-bundling test boundary.
+- [UI](references/ui.md): Harness composition, hotkeys, times and errors; use
+  `app-ui-standard` for shared design decisions.
+- [Testing and coverage](references/testing-docs-coverage.md): validation selection
+  and story/coverage changes.
+- [General conventions](references/general-conventions.md): local naming and
+  documentation ownership when those are the subject of the edit.
 
-- Use for `apps/harness/**`, harness contracts under `packages/ai-core`, reusable
-  harness presentation under `packages/ui`, `docs/harness/**`, and harness-facing
-  root build configuration.
-
-## Loading Rule
-
-- Load the smallest reference set that can safely guide the edit.
-- Do not read every reference by default.
-- Put new harness rules in the most specific owning reference file, not here.
-
-## Reference Index
-
-Read only the relevant file(s):
-
-- `references/general-conventions.md`: harness shape, naming, and documentation ownership.
-- `references/runtime-architecture.md`: backend runtime, websocket bridge, zod/provider boundaries, run lifecycle, BranchFS/subagents, server completion.
-- `references/typescript-build.md`: TypeScript style, Bun runtime/build command preferences, scripts, automation glue.
-- `references/ui.md`: harness-specific Solid/StyleX composition, shared UI ownership, hotkeys, and errors. Also use `app-ui-standard`.
-- `references/testing-docs-coverage.md`: test expectations, verification commands, README/docs, user stories, coverage matrix.
+Use judgment within these contracts and complete authorized implementation and
+validation. Ordinary changes do not require a separate product audit, research
+phase, or approval checkpoint. Keep new constraints with their narrowest owner.

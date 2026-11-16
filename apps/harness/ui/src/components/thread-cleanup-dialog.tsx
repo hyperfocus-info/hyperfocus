@@ -1,10 +1,11 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
+import { CheckboxField } from "@hyperfocus/ui";
 import type { WorkspaceProjectState } from "@hyperfocus/ai-core/protocol";
 import { getThreadCleanupCandidates, parseThreadCleanupDuration } from "../lib/thread-cleanup";
 import { Button } from "./primitives/button";
 import { Dialog } from "./primitives/dialog";
-import { Input } from "./primitives/input";
+import { Input } from "@hyperfocus/ui";
 import { miscellaneousSurfaceStyles as styles } from "./miscellaneous-surfaces.styles";
 
 type ThreadCleanupDialogProps = {
@@ -33,6 +34,7 @@ export function ThreadCleanupDialog(props: ThreadCleanupDialogProps) {
   });
   const selectedCount = createMemo(() => (allProjects() ? props.projects.length : selectedProjectIds().length));
   const submitDisabled = createMemo(() => !parsedDuration().ok || selectedCount() === 0 || candidates().length === 0);
+  const unavailableReason = () => durationError() ?? (selectedCount() === 0 ? "Select at least one project." : candidates().length === 0 ? "No inactive threads match this age and project selection." : undefined);
 
   createEffect(() => {
     if (!props.open) {
@@ -76,7 +78,7 @@ export function ThreadCleanupDialog(props: ThreadCleanupDialogProps) {
           <Button tooltip="Close thread cleanup without archiving" variant="secondary" onClick={props.onClose}>
             Cancel
           </Button>
-          <Button tooltip={submitDisabled() ? "No inactive threads match cleanup settings" : "Archive old inactive threads"} disabled={submitDisabled()} onClick={submit}>
+          <Button tooltip={unavailableReason() ?? "Archive old inactive threads"} disabled={submitDisabled()} onClick={submit}>
             Archive old threads
           </Button>
         </>
@@ -88,16 +90,16 @@ export function ThreadCleanupDialog(props: ThreadCleanupDialogProps) {
           <Input
             value={duration()}
             placeholder="30d"
+            aria-invalid={Boolean(durationError())}
+            aria-describedby="cleanup-duration-help"
             onInput={(event: InputEvent & { currentTarget: HTMLInputElement }) => setDuration(event.currentTarget.value)}
           />
         </label>
-        <Show when={durationError()}>
-          {(reason) => <div {...stylex.attrs(styles.cleanupError)}>{reason()}</div>}
-        </Show>
+        <div id="cleanup-duration-help" {...stylex.attrs(durationError() ? styles.cleanupError : styles.cleanupHint)} role={durationError() ? "alert" : undefined}>{durationError() ?? "Use days (30d), weeks (2w), hours (12h), or minutes (90m)."}</div>
 
         <div {...stylex.attrs(styles.cleanupProjects)}>
           <div {...stylex.attrs(styles.cleanupProjectTitle)}>Projects</div>
-          <label {...stylex.attrs(styles.cleanupProjectRow)}>
+          <CheckboxField label="All projects">
             <input
               type="checkbox"
               checked={allProjects()}
@@ -108,20 +110,18 @@ export function ThreadCleanupDialog(props: ThreadCleanupDialogProps) {
                 }
               }}
             />
-            <span>All projects</span>
-          </label>
+          </CheckboxField>
           <div {...stylex.attrs(styles.cleanupProjectList)}>
             <For each={props.projects}>
               {(project) => (
-                <label {...stylex.attrs(styles.cleanupProjectRow)}>
+                <CheckboxField label={project.name}>
                   <input
                     type="checkbox"
                     checked={!allProjects() && selectedProjectIds().includes(project.id)}
                     disabled={allProjects()}
                     onChange={() => toggleProject(project.id)}
                   />
-                  <span {...stylex.attrs(styles.truncate)}>{project.name}</span>
-                </label>
+                </CheckboxField>
               )}
             </For>
           </div>
@@ -130,6 +130,7 @@ export function ThreadCleanupDialog(props: ThreadCleanupDialogProps) {
         <div {...stylex.attrs(styles.cleanupSummary)}>
           <div {...stylex.attrs(styles.cleanupSummaryTitle)}>{candidates().length} threads match</div>
           <div>Active and final remaining threads are skipped</div>
+          <Show when={unavailableReason()}><p role="status">{unavailableReason()}</p></Show>
         </div>
       </div>
     </Dialog>

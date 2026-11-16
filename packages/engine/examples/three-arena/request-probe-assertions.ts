@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 const FOOT_SLIP_LIMIT_METERS = 0.02;
 const PLANTED_VERTICAL_ERROR_LIMIT_METERS = 1e-4;
 const TORSO_FOLD_LIMIT_RADIANS = 1.2;
@@ -189,9 +190,7 @@ function requiredRecord(value: unknown, label: string): UnknownRecord {
   return value;
 }
 
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function requiredBoolean(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") throw new TypeError(`${label} must be a boolean`);

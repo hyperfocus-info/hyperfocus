@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "touch-of-death",
+  "constitution": "../touch-of-death-art-constitution.md",
+  "corpus": "corpus.json",
+  "locks": [
+    {
+      "id": "v14-forearms",
+      "scope": "Forearm proportions and taper only; preserve geometry during locomotion repairs. Entire fighter and locomotion remain candidates.",
+      "evidence": [
+        {
+          "path": "repaired-character.87ce0024e987.png",
+          "sha256": "87ce0024e987323f4cf4ec5e3fe7b4c7ff062544a383c9521aa829dd9b41b07a"
+        },
+        {
+          "path": "forearm-approval.json",
+          "sha256": "b5d47f0f2a044a90f43449902907cbe51b13fd1d44fdfedc423e802216148266"
+        }
+      ],
+      "assets": [
+        {
+          "id": "art:actor:left-tapered-forearm",
+          "path": "locked-assets/art-actor-left-tapered-forearm.b5a04e815d25.glb",
+          "sha256": "b5a04e815d25aec8c1367de91d038acbf451153ef7eb8278c88c6d8373f388b4"
+        },
+        {
+          "id": "art:actor:right-tapered-forearm",
+          "path": "locked-assets/art-actor-right-tapered-forearm.b5a04e815d25.glb",
+          "sha256": "b5a04e815d25aec8c1367de91d038acbf451153ef7eb8278c88c6d8373f388b4"
+        },
+        {
+          "id": "art:actor-copy:left-tapered-forearm",
+          "path": "locked-assets/art-actor-copy-left-tapered-forearm.b5a04e815d25.glb",
+          "sha256": "b5a04e815d25aec8c1367de91d038acbf451153ef7eb8278c88c6d8373f388b4"
+        },
+        {
+          "id": "art:actor-copy:right-tapered-forearm",
+          "path": "locked-assets/art-actor-copy-right-tapered-forearm.b5a04e815d25.glb",
+          "sha256": "b5a04e815d25aec8c1367de91d038acbf451153ef7eb8278c88c6d8373f388b4"
+        }
+      ]
+    }
+  ]
+}

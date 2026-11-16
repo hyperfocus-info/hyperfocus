@@ -46,7 +46,7 @@ export const backgroundJobScheduleSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("interval"),
-    intervalSeconds: z.number().int().min(60).max(365 * 24 * 60 * 60),
+    intervalSeconds: z.number().int().min(60).max(31536000),
     nextRunAt: z.string().datetime().or(z.string().min(1)),
     sourceText: z.string().min(1).max(512)
   }),
@@ -87,7 +87,7 @@ export const backgroundJobShellDefinitionSchema = z.object({
   args: z.array(z.string().max(4096)).max(64),
   cwd: z.string().min(1).max(4096).optional(),
   envRefs: z.array(z.string().min(1).max(128)).max(32).optional(),
-  timeoutSeconds: z.number().int().min(1).max(24 * 60 * 60),
+  timeoutSeconds: z.number().int().min(1).max(86400),
   networkAccess: z.boolean().optional()
 });
 

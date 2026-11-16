@@ -1,5 +1,6 @@
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 import type { Database } from "bun:sqlite";
-import { createPageCursorError, decodePageCursor, encodePageCursor } from "./page-cursor-codec";
+import { createPageCursorError,decodePageCursor,encodePageCursor } from "./page-cursor-codec";
 
 type Kind = "background-jobs" | "background-runs" | "notifications";
 type Cursor = { v: 1; kind: Kind; owner: "workspace"; revision: string; updatedAt: string; id: string };
@@ -17,7 +18,7 @@ function decode(value: string | undefined, kind: Kind, revision: string) {
   if (!isRecord(position) || typeof position.updatedAt !== "string" || typeof position.id !== "string") throw invalidCursor();
   return { v: 1, kind, owner: "workspace" as const, revision, updatedAt: position.updatedAt, id: position.id };
 }
-function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null; }
+
 
 export function readTimestampPage<Row extends TimestampRow>(input: { db: Database; kind: Kind; select: string;
   scope?: string; cursor?: string; limit: number; revisionTimestamp?: string; revisionSalt?: string }) {

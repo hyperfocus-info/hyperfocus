@@ -1,0 +1,27 @@
+{
+  "name": "@hyperfocus/utilities",
+  "version": "0.0.1",
+  "description": "Framework-neutral numeric, text, record and scheduling primitives.",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "packageManager": "bun@1.4.0",
+  "sideEffects": false,
+  "exports": {
+    "./assert": "./src/assert.ts",
+    "./compare": "./src/compare.ts",
+    "./tuples": "./src/tuples.ts",
+    "./math": "./src/math.ts",
+    "./records": "./src/records.ts",
+    "./validation": "./src/validation.ts",
+    "./text": "./src/text.ts",
+    "./money": "./src/money.ts",
+    "./timing": "./src/timing.ts",
+    "./csv": "./src/csv.ts"
+  },
+  "files": ["src", "dist", "README.md", "LICENSE"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "bun build ./src/assert.ts ./src/compare.ts ./src/tuples.ts ./src/math.ts ./src/records.ts ./src/text.ts ./src/money.ts ./src/timing.ts ./src/csv.ts ./src/validation.ts --root ./src --outdir ./dist --target browser --format esm"
+  }
+}

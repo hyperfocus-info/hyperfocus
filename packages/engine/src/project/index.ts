@@ -1,3 +1,6 @@
+import { isPlainRecord } from "@hyperfocus/utilities/records";
+import { hashHyperfocusAsset } from './asset-hash.ts';
+export { hashHyperfocusAsset } from './asset-hash.ts';
 const ZIP_LOCAL_FILE = 0x04034b50;
 const ZIP_CENTRAL_FILE = 0x02014b50;
 const ZIP_END = 0x06054b50;
@@ -8,8 +11,8 @@ const ZIP_UTF8_FLAG = 0x0800;
 const ZIP_STORE = 0;
 const ZIP_DEFLATE = 8;
 const ZIP_VERSION = 20;
-const DEFAULT_MAX_ARCHIVE_BYTES = 1024 * 1024 * 1024;
-const DEFAULT_MAX_UNPACKED_BYTES = 2 * 1024 * 1024 * 1024;
+const DEFAULT_MAX_ARCHIVE_BYTES = 1073741824;
+const DEFAULT_MAX_UNPACKED_BYTES = 2147483648;
 const DEFAULT_MAX_ASSETS = 10_000;
 const MAX_JSON_DEPTH = 128;
 const OBJECT_PREFIX = "objects/sha256/";
@@ -22,6 +25,7 @@ export const HYPERFOCUS_ASSETS_PATH = `${HYPERFOCUS_DIRECTORY}/${HYPERFOCUS_ASSE
 export const HYPERFOCUS_PORTABLE_VERSION = 1;
 
 export * from "./editor.ts";
+export { sortJsonKeys } from './sectioned-serializer.ts';
 export * from "./standalone-playable.ts";
 
 export type HyperfocusCompression = "auto" | "deflate" | "none";
@@ -130,11 +134,7 @@ function assertText(value: unknown, label: string, maxLength: number): asserts v
   }
 }
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+
 
 function normalizeJson(value: unknown, ancestors = new Set<object>(), depth = 0): unknown {
   if (depth > MAX_JSON_DEPTH) throw new Error(`portable project JSON exceeds maximum depth ${MAX_JSON_DEPTH}`);
@@ -215,13 +215,6 @@ function bytesEqual(a: Uint8Array, b: Uint8Array) {
   if (a.byteLength !== b.byteLength) return false;
   for (let index = 0; index < a.byteLength; index += 1) if (a[index] !== b[index]) return false;
   return true;
-}
-
-export async function hashHyperfocusAsset(bytes: Uint8Array) {
-  if (!(bytes instanceof Uint8Array)) throw new Error("portable asset bytes must be Uint8Array");
-  const owned = new Uint8Array(bytes);
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", owned.buffer));
-  return [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 function objectPath(hash: string) {

@@ -1,5 +1,86 @@
 # Engine Performance Optimizations
 
+## 2026-11-07: bounded offline HTML encoding
+
+Owner: `src/project/standalone-playable.ts`. Large offline packs previously
+created four one-character string additions for every three bytes, retaining
+millions of rope nodes before JSON flattened them. A Chrome profile of an 8 MiB
+pack attributed about 425 ms of a 578 ms encoder/Blob operation to garbage
+collection. The encoder now uses native typed-array base64 when available and
+a portable 16 KiB ASCII-block fallback otherwise. Output format, padding and
+byte-view boundaries are unchanged; the public HTML API tests both paths.
+
+The [editor probe](../../../apps/engine-editor/verification/export-performance/README.md)
+compared frozen implementations through the real artifact call, including pack,
+branding and Blob creation, after project hydration. Two serial A/B/B/A cycles
+used one warmup and one measured export per fresh hidden browser. On Windows,
+Chrome 156 and an i9-13900HX, the 65,985,118-byte input archive produced identical
+90,695,541-byte HTML in all eight samples. Median export time fell from 12.801 s
+to 3.880 s (69.7%); ranges were 7.933–13.315 s and 3.365–4.223 s.
+
+Raw profiles, frozen bundles, input hashes and trials are temporary local evidence
+under `packages/engine/.local/engine-perf/standalone-export/`; retain until the
+associated loaded-editor export investigation is resolved, then prune or archive.
+Other task agents held expensive work during acceptance timing; power, thermals
+and unrelated system load were unrecorded. Four samples per implementation do
+not establish tail percentiles, and endpoint heap readings do not prove peak or
+retained memory savings. The isolated control also completed in seconds: this
+result alone does not establish the cause or resolution of the original
+180-second timeout after editing and Play. That journey needs its own verification.
+The subsequent editor investigation found a separate retained copy: readiness
+cached the legacy collector's base64 ropes even though artifact creation repacks
+original blobs. Editor readiness now requests metadata-only collection, retaining
+hash/size descriptors while preserving all byte and runtime validation. Structural
+tests prove payload omission and rejection by the embedding helper; the loaded
+editor journey remains the acceptance check for the stall.
+
+## 2026-09-30: bounded district geometry rendering
+
+Owner: Touch of Death city authoring and combat visual presentation. The expanded
+district pool used a new entity prefix and bypassed the existing conservative
+city prop culler. Include that pool in the same render-only rule. Authoring also
+shares equal trim materials within one support and source color; separate walls
+retain independent fade state. Physics, destruction and saved transforms remain
+unchanged. Camera-return, portrait, edge-geometry and owner-fade tests cover parity.
+
+The final exported game was compared serially with its unoptimized structural
+build in an A/B/B/A subsequence, with the old delivered arena bracketing that run.
+Each trial warmed for 12 seconds and sampled 600 native animation frames at
+1440×900. On the local RTX 4070 laptop, median trial p95 fell from 39.1 to 33.35 ms
+(14.7%); median draw submissions fell from 3,055 to 2,179 (28.7%). The previous
+arena's two p95 trials were 23.2 and 33.8 ms, so the larger city is not a claim of
+improved latency over the old content or a guaranteed 60 FPS target. Power and
+thermal state were unrecorded; timings are diagnostic, not a portable gate.
+
+Raw samples, browser/CPU details, artifact hashes and the shorter noisy run are
+under `.local/touch-of-death/arena-overhaul/`; the final performance report is also
+under `.local/engine-perf/tod-structural-city-2026-09-30/performance-culling.json`.
+The structural gates are unchanged gameplay state, correct camera return and
+independent owner fading, alongside the measured submission count reduction.
+
+## 2026-09-29: detached combat snapshots under parallel training
+
+Owner: portable combat simulation, `src/combat/simulation.ts`. Browser worker
+profiles identified structured cloning at 19.6% of sampled self time under
+32-worker city training. `capture()` now copies the schema's mutable fighter
+containers directly and reuses immutable configuration text. `restore()` keeps
+the already-detached, validated result of `readCombatSnapshot` instead of cloning
+it a second time. Neither API lends mutable state to callers.
+
+The capture-only single-worker ABBA result was borderline (~5%) and was not used
+as the acceptance claim. The combined change passed a serial 32-worker ABBA with
+the same 32 seeds, 600 warmup and 600 measured ticks per worker. Mean throughput
+rose from 724 to 938 ticks/s (+29.5%); median p95 tick time fell from 107.95 to
+84.25 ms (-22%). Complete progress/evidence matched for every worker. Separate
+complete-set parity and nested-mutation/JSON-restore tests cover snapshot ownership.
+
+Raw evidence, environment, flags and samples live in
+`.local/engine-perf/continuous-training/`. The controlled Chromium run disabled
+renderer backgrounding equally for control and candidate. CPU remained around
+42%; this is a throughput improvement, not proof of sustained 100% utilization.
+Timing remains local calibration, not a portable latency gate. Future mutable
+fighter schema fields must retain the detached-capture contract.
+
 Living scan date: 2026-08-28
 
 This is the overview doc for performance work that already exists in the engine, plus current opt-in flags and failed experiment learnings. Open hypotheses, future experiments, and target ideas live in ./docs/engine-performance-hypothesises.md.
@@ -12,6 +93,58 @@ This is the overview doc for performance work that already exists in the engine,
 - Demo-local means it proves a pattern in ./examples/mmo-skill-demo but is not necessarily stable engine API.
 
 ## Fast Map
+
+The 2026-09-29 bulk-training profile found full world/save snapshots created for
+each tick even though the worker needed only match status. Runtime/gameplay now
+offer `advance()` with the same fixed-tick behavior and no exported snapshot;
+`step()` composes advance plus snapshot for existing callers. Built-in-only
+gameplay also skips the unused custom-script context snapshot. `combatMatch()`
+returns detached match metadata. Combat's internal state reads remain unchanged.
+
+Evidence: `.local/engine-perf/training-throughput/comparison.json`, adjacent frozen
+control/candidate bundles and `parity.json`. Serial A/B/B/A runs of the same full
+city, seed 2203885041, 600 warmup and 1,200 measured ticks averaged 156.9 versus
+178.9 ticks/s; median trial p95 fell from 11.03 to 9.79 ms on Windows/Bun 1.4.2.
+This is local calibration, not a browser throughput guarantee. A complete city
+set at seed 2864158818 preserved its result, ticks and detailed report exactly.
+Portable tests cover full physical/checkpoint/audio parity, detached match reads,
+zero unused world snapshots and unchanged custom-script contexts. Engine runtime
+maintainers own these optional advance APIs; the bulk worker selects them.
+
+The 2026-09-28 Touch of Death profile identified AI detour and breach visibility
+edges repeatedly running exact sphere/box sweeps against distant city solids.
+The obstacle planner now computes conservative world X/Z bounds once per live
+box and rejects separated segment/slab pairs before the existing exact sweep.
+Tilted boxes include their vertical extent in those world bounds. Graph ordering,
+live wall invalidation, collision clearance, attack costs, and AI rules are
+unchanged; no persistent cache or simulation state was added.
+
+Evidence: `.local/engine-perf/tod-route-bounds/summary.json` and adjacent frozen
+control/candidate bundles and raw samples. Eight serial A/B/B/A/A/B/B/A trials of
+the same 116-entity level-nine combat fixture (including a breakable blocking
+wall, 25 local and 88 remote obstacles) reduced median trial gameplay p95 from
+55.63 to 15.35 ms and p99 from 62.28 to 16.71 ms. All final snapshot hashes match.
+This is shared Windows/Bun calibration, not a browser FPS guarantee. Seven
+focused tests cover physical breach/rollback, live removal/restoration, 3,000
+oriented sweep comparisons, grazing contacts, and remote narrow-phase rejection.
+Engine combat/environment maintainers own this default path; the graph remains
+O(corners squared times blockers), with cheaper conservative rejection of pairs.
+
+The 2026-09-27 Touch of Death city profile exposed optional physics lookups
+throwing for ordinary non-physical scenery. `resolveOptional` now checks missing
+IDs and stale generations directly; strict mutation errors remain unchanged.
+Runtime frame application indexes declared entities, material skinning checks scan
+instances only when the skinning flag changes, and environment/occlusion
+presentation indexes frame entities instead of repeatedly searching the city.
+These are default paths owned by the engine runtime/render maintainers.
+
+Evidence: `.local/engine-perf/tod-city-lookups/summary.json` and adjacent Chrome
+profiles. Serial A/B/B/A trials used the same 1,333-entity city, current minified
+runtime, 1-second warmup and 6-second samples at 1280×800. Practice presentation
+rose from 4–8 callbacks/second to 54–55; menus rose from 16–17 to about 57.
+This shared Windows/headless measurement is calibration, not a device FPS promise.
+Rigid-body stale-handle tests, renderer material compatibility tests, runtime
+frame tests and repeatable environmental presentation tests preserve behavior.
 
 | Area | Optimization | Status | Main Files |
 | --- | --- | --- | --- |
@@ -33,6 +166,8 @@ This is the overview doc for performance work that already exists in the engine,
 | Interest selection | Priority buckets and bounded heap before full sort | Default | ./src/server/interest-grid.ts |
 | Spatial hash | Packed numeric keys, reusable output arrays, dirty cells | Default API | ./src/server/replication/spatial-hash.ts |
 | Broadphase | Packed static queries and allocation-free sweep pairs | Default API | ./src/math/broadphase.ts, ./src/server/core/physics.ts |
+| Rigid 3D warm start | Previous-slot lookup plus lazy bounded pair index for 128+ contacts | Default | ./src/physics/rigid/contact-pair-index.ts, ./src/physics/rigid-3d-operations.ts |
+| Rigid 3D articulation | Shape inertia, off-center angular contact, swept effectors, anchored breakable joints, bounded pose motors and rest-pose angular envelopes | Opt-in API | ./src/physics/rigid-3d.ts, ./src/physics/rigid-3d-constraints.ts |
 | Map collision | Merged static rects and broadphase collision index | Default API | ./src/map/collision.ts |
 | Object pooling | Reusable object pools for hot transient records | Default API | ./src/runtime/object-pool.ts |
 | Retained cursor | Fixed-capacity stable records with explicit overwrite lifetime | Default API | ./src/runtime/retained-cursor.ts |
@@ -51,6 +186,21 @@ This is the overview doc for performance work that already exists in the engine,
 | WASM collision | Distinct scalar/SIMD artifacts, TS fallback, fixed scratch, and configurable batch dispatch | Default API | ./src/wasm/collision-kernel.ts, ./src/runtime/numeric-batch-policy.ts, ./assembly/collision-kernel.ts, ./assembly/collision-kernel-scalar.ts |
 | Post processing | Precomputed retro dither constants | Default prototype helper | ./src/canvas/post-processing.ts |
 | Package builds | Split/pruned browser root plus minified focused bundles with entry, reachable-graph, consumer, and aggregate byte budgets | Default | ./scripts/build-package.ts, ./scripts/bundle-size-budget.ts |
+
+The rigid-3D focused bundle has a temporary 38 KB raw cap, up from 34 KB, owned by the physics/rigid-3D boundary. The increase covers the first-party articulation primitives rather than unrelated content. Once the complete ragdoll controller shares quaternion and constraint math with the motion package, the removal target is at most 36 KB without removing behavior.
+
+## Rigid 3D Pair Lookup Evidence
+
+September 4, 2026: serial A/B/B/A full-step trials on an i9-13900HX, Windows 11,
+Bun 1.4.0 used four rounds, 120 warmup steps, and 100 samples per trial. At 2,048
+contacts, median trial p95 improved from 8.24 to 6.30 ms for persistent contacts
+and from 22.10 to 20.22 ms for dynamic contacts, with matching checkpoints and
+diagnostics. Thread cycles per step fell from 16.51 to 12.91 million and from
+46.02 to 42.13 million, respectively. A longer 64-contact dynamic check was
+essentially neutral; 512-contact dynamic p95 increased 4.6% while cycles decreased
+2.4%. This is a measured large-contact optimization, not a universal timing gate.
+Raw trials and replay scripts are under `.local/engine-perf/2026-09-04-audit/`
+(`fix-physics-final.json`, `fix-physics-small-final.json`, `prepare-fix-physics.ts`).
 
 ## Three Arena Client
 
@@ -604,6 +754,126 @@ Result: latest API-mode MMO render bench did not clear the win bar. `none` p95 m
 Learning: draw-data caches are real in microbench but workload-sensitive. Ship as explicit opt-in, not a demo default.
 
 ## Bench Commands
+
+### Touch of Death identity quaternion normalization (2026-09-29)
+
+`rigid-3d-operations.ts` recognizes exact unit identity rotations, including
+negative identity and signed zero, after finite validation. It skips the portable
+norm calculation without changing stored components. Touch of Death's city
+fixture had 542/542 static identity rotations; a CPU profile attributed roughly
+34% of samples to normalization.
+
+A serial ABBA run at seed 17001, 200 warmup and 1,200 measured ticks, increased
+aggregate throughput 12.85% (controls 182.19/202.31 ticks/s, candidates
+225.10/208.27). Median p95 improved 15.31%. Game checkpoint hashes and raw physics
+typed-array hashes match every 120 ticks; final outcome reports and match metadata
+match. The rigid suite covers invalid, identity, negative identity and arbitrary
+rotations. Evidence: `.local/engine-perf/tod-identity-quaternion/report.json` with
+frozen control/candidate bundles and reproducible bench. CPU: i9-13900HX, Bun
+1.4.2, Windows; power/thermal state unrecorded, other timing paused. This qualifies
+the existing city's fast path, not an across-map throughput guarantee.
+
+### Touch of Death city spatial work (2026-09-29)
+
+Frozen original controllers in both seats isolate physics from changed AI defaults.
+At seed 17001, serial ABBAABBA uses 200 warmup and 1,200 measured ticks per trial.
+Each comparison contains four control and four candidate trials; rendering is zero.
+Save/physics/audio verification every 120 ticks and restore/replay are outside
+tick timing. CPU totals include verification. Same Windows/i9-13900HX/Bun 1.4.2
+environment, other timing paused; power and thermal state unrecorded.
+
+| Candidate | Aggregate tick wall reduction | Decision |
+| --- | ---: | --- |
+| Conservative relative swept CCD pair bounds | 21.50% | Keep |
+| Spatial weapon-surface queries, authored tie ordering | 16.92% | Keep |
+| Reuse maintained static AABBs alone | 2.20% | Noisy alone |
+| All three | 42.81% (1.749× ticks/s) | Keep |
+| Static AABB reuse added to CCD + queries | 5.71% | Qualified incremental gain |
+
+All combined trials are faster (3.27–3.70 s versus 5.89–6.51 s). Median trial p95
+falls 11.697→7.105 ms (39.26%); median p99 falls 13.240→10.315 ms (22.09%).
+The incremental AABB comparison improves median p95 5.21%; its median p99 is
+0.77% higher with mixed individual tails, so that small tail change is unresolved.
+Typed-array body,
+contact and constraint bytes, saves, ordered audio, outcomes and rewinds match.
+Only `ccdAngularTests` may differ in the CCD comparison: discarded angular
+samples are intentionally fewer, and the source audit found no budget/policy
+reader. CCD pair budgets and other counters remain exact. The first rejected
+cull changed tiny angular velocities by skipping endpoint normalization; a retained
+reproduction led to normalizing the culled endpoints exactly as before.
+
+This skips unreachable pair tests and remote surface materialization, not distant
+simulation. Vehicles still move from 120 units away into the fighter lane, cause
+damage, and queue behind a real solid wreck. Traffic scenarios and rotated
+crossings pass every-frame save/audio/raw-physics/replay gates. Full-capacity query
+buffers avoid truncation; moved, removed and restored bodies use live bounds.
+
+Evidence: `.local/engine-perf/tod-city-source/report-{ccd-exact,surface-query,
+static-aabb,combined,incremental-static}.json`, frozen manifests and traffic
+fixtures. Reproduction is in the [evaluation runner](../examples/touch-of-death/host/tactical-evaluation/README.md).
+These are additional savings against the identity-optimized control, not additive
+percentage points. They prove this city fixture, not every map or browser render cost.
+
+Diagnostic sampling profiles show remaining obstacle-route `clearSegment` at
+21.21% inclusive samples, CCD at 24.01%, and `setQuaternion` at 17.37%; inclusive
+costs overlap. The followup below tests conservative route-envelope filtering and
+per-call narrowphase scratch reuse with exact geometry and invalidation.
+
+### Touch of Death route candidates rejected (2026-09-29)
+
+Both hypotheses passed correctness but failed repeatable timing acceptance.
+The original optimized city route is restored byte-for-byte (SHA-256
+`21520e99fdfd262cd72e1f018adea676738884be91451852d155939598bd7a79`).
+No runtime optimization from this experiment remains enabled.
+
+Envelope filtering keeps the direct query and complete original cache key, then
+rejects blockers separated from the rectangle containing every later endpoint,
+including hazard corners and the x+.001 corner probes. Retained bodies stay in
+original order. Buffer reuse allocates lazy per-segment origin/delta/hit storage,
+preserves quaternion expression order and resets sweep time/normals per box.
+The sweep reads initial time; carrying a previous hit time would be incorrect.
+
+Same isolated environment and city workload as above: seed 17001, ABBAABBA,
+200 warmup and 1,200 measured ticks per trial, four runs per variant, frozen
+original controllers in both seats, zero rendering, verification time excluded.
+Control is the already optimized city engine `f0e68cf…`, not the earlier city
+physics control. Power/thermal state is unrecorded; other tests/builds paused.
+Negative changes below mean lower time.
+
+| Candidate | Aggregate tick wall change | Median trial p95 change | Median trial p99 change |
+| --- | ---: | ---: | ---: |
+| Buffer reuse, first run | -6.11% | -4.73% | -2.39% |
+| Buffer reuse, fresh repeat | +1.12% | +2.17% | +2.39% |
+| Envelope filtering | +1.59% | +0.42% | -5.27% |
+| Combined | -2.39% | +0.76% | -1.52% |
+
+The initial buffer result did not repeat. Envelope preparation/filtering adds
+work, and this fixture did not show a net p95/wall gain. The combined version
+also misses acceptance. No speed claim or promotion follows a better p99 alone.
+Profiling an inclusive function does not establish which loop inside it dominates.
+Planner-owned buffers and direct counts of rejected bounds/sweeps remain untested
+refinements; the current data does not justify enabling them.
+
+All variants preserve every-frame traffic saves, ordered audio, all raw physics
+bytes and diagnostics, incoming/rotated vehicle hits, wreck queues and trusted
+rewind/replay. The city bench also preserves checkpoint/save/audio/outcome hashes
+and replay with no counter exception. A self-contained original-source fixture
+tests 145 mutation/query cases (435 fresh/cached/direct comparisons), including
+oversized remote-centered solids, rotated/thin geometry, inside/outward/grazing
+segments, shape/mask/remove/restore changes, actor height/radius, endpoint envelope
+growth, moving traffic and hazard changes. Directions/distances use `Object.is`;
+the source fixture hash normalizes CRLF/LF for fresh checkouts.
+
+Evidence: `.local/engine-perf/tod-route-source/summary.json`, four
+`report-{scratch-only,scratch-repeat,envelope-only,combined}.json` files, immutable
+source/manifests and three `traffic-*.json` files. Reproduction and summary commands
+are in the [evaluation runner](../examples/touch-of-death/host/tactical-evaluation/README.md).
+Engine owners retain `obstacle-parity.test.ts` and the immutable test fixture as
+the correctness boundary for future route experiments.
+After restoration, 201 environment/motion/rigid/evaluation tests pass across
+43 files (53,089 assertions), with engine test typecheck and targeted lint passing.
+The repository source guard has no new route/evaluation violations; its existing
+PadPilot directory failure remains outside this experiment.
 
 Use `bun.cmd` on Windows when PowerShell blocks `bun.ps1`.
 

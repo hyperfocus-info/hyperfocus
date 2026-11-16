@@ -1,3 +1,4 @@
+import { encodeValue, readValueFrame } from "@hyperfocus/serialization";
 import { afterEach, beforeEach, describe, expect } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -11,6 +12,21 @@ import { createHarnessTestTempPath } from "../../test-support/test-temp-root";
 import { createFastTestRuntimeRegistry, createSocket, openProject, startServerForTest, stopServerForTest, waitForCondition, waitForEvent } from "../support/server-test-client";
 import { createServerTestRegistrar, type ServerTestShardOptions } from "../support/server-test-sharding";
 const EXPECT_ATTACHMENTS_ENABLED = Boolean(Bun.env.UPLOADTHING_TOKEN?.trim());
+// Lifecycle tests own server reuse and handler scheduling; ui-build.test.ts
+// owns asset compilation, publication, and watcher behavior.
+function createLifecycleUiAssets() {
+    const calls: string[] = [];
+    return {
+        calls,
+        createManager: () => ({
+            async ensureBuilt() { calls.push("ensureBuilt"); },
+            startWatching() { calls.push("startWatching"); },
+            resolveAsset: () => undefined,
+            getLiveReloadState: () => ({ revision: 0, building: false, pending: false }),
+            dispose() { calls.push("dispose"); },
+        }),
+    };
+}
 function createFakeClock() {
     let nextTimerId = 1;
     let nowMs = 0;
@@ -170,8 +186,8 @@ function registerStartupConnectionTests(serverTest: ReturnType<typeof createServ
                 socket.send("not-json");
             });
             socket.addEventListener("message", (event) => {
-                if (typeof event.data !== "string") return;
-                const payload: unknown = JSON.parse(event.data);
+
+                const payload: unknown = readValueFrame(event.data);
                 if (payload !== null && typeof payload === "object" && Reflect.get(payload, "type") === "command.rejected") {
                     const details = Reflect.get(payload, "payload");
                     if (details === null || typeof details !== "object") throw new Error("Command rejection payload is invalid");
@@ -240,7 +256,7 @@ function registerStartupConnectionTests(serverTest: ReturnType<typeof createServ
             context.server = server;
         }
     });
-    serverTest("non-server-only startup includes ui-assets once with injected ui asset manager", async () => {
+    serverTest("non-live-reload startup verifies UI assets without starting source watchers", async () => {
         const context = getContext();
         let { server } = context;
         const { adapter, repository, extraProjectRoot } = context;
@@ -281,7 +297,7 @@ function registerStartupConnectionTests(serverTest: ReturnType<typeof createServ
                 }
             });
             expect(telemetry.events.filter((event) => event.kind === "phase-start" && event.phaseId === "ui-assets")).toHaveLength(1);
-            expect(uiAssetCalls).toEqual(["ensureBuilt", "startWatching"]);
+            expect(uiAssetCalls).toEqual(["ensureBuilt"]);
         }
         finally {
             context.server = server;
@@ -300,6 +316,7 @@ function registerStartupHotReloadLifecycleTests(serverTest: ReturnType<typeof cr
         const { adapter, repository, extraProjectRoot } = context;
         try {
             await stopServerForTest(server);
+            const assets = createLifecycleUiAssets();
             const openCalls: string[] = [];
             server = await startHarnessServer({
                 port: 0,
@@ -308,6 +325,7 @@ function registerStartupHotReloadLifecycleTests(serverTest: ReturnType<typeof cr
                 runtimeRegistry: createFastTestRuntimeRegistry(adapter),
                 pickFolder: async () => extraProjectRoot,
                 serverOnly: false,
+                uiAssetManagerFactory: assets.createManager,
                 devHotMode: true,
                 openBrowser: true,
                 browserLauncher: async (url) => {
@@ -321,6 +339,7 @@ function registerStartupHotReloadLifecycleTests(serverTest: ReturnType<typeof cr
                 runtimeRegistry: createFastTestRuntimeRegistry(adapter),
                 pickFolder: async () => extraProjectRoot,
                 serverOnly: false,
+                uiAssetManagerFactory: assets.createManager,
                 devHotMode: true,
                 openBrowser: true,
                 browserLauncher: async (url) => {
@@ -329,6 +348,7 @@ function registerStartupHotReloadLifecycleTests(serverTest: ReturnType<typeof cr
             });
             expect(reloadedServer).toBe(server);
             expect(openCalls).toHaveLength(1);
+            expect(assets.calls).toEqual(["ensureBuilt", "startWatching"]);
         }
         finally {
             context.server = server;
@@ -466,6 +486,7 @@ function registerStartupHotReloadApplyTests(serverTest: ReturnType<typeof create
                 backendHotReloadChangeDetector: () => true
             });
             const singletonAfterFailure = getDevHarnessServerSingleton<any, any, any, any>();
+            expect(refreshCount).toBe(2);
             expect(reloadedServer).toBe(firstServer);
             expect(await singletonAfterFailure?.state.pickFolder()).toBe(firstRoot);
         }
@@ -516,7 +537,7 @@ function registerStartupHotReloadApplyTests(serverTest: ReturnType<typeof create
                     };
                 }
             });
-            expect(receivedDebounceScheduleMs).toEqual([1000, 1500, 2000, 2500, 5000, 10000, 15000]);
+            expect(receivedDebounceScheduleMs).toEqual([2500, 5000, 10000, 15000]);
             expect(uiAssetCalls).toEqual(["ensureBuilt", "startWatching"]);
             expect(telemetry.events.filter((event) => event.kind === "phase-start" && event.phaseId === "ui-assets")).toHaveLength(1);
         }
@@ -531,6 +552,7 @@ function registerStartupHotReloadApplyTests(serverTest: ReturnType<typeof create
         const { adapter, repository } = context;
         try {
             await stopServerForTest(server);
+            const assets = createLifecycleUiAssets();
             const clock = createFakeClock();
             const firstRoot = fixture.createTempDir(`first-hot-root-${crypto.randomUUID()}`);
             const secondRoot = fixture.createTempDir(`second-hot-root-${crypto.randomUUID()}`);
@@ -541,6 +563,7 @@ function registerStartupHotReloadApplyTests(serverTest: ReturnType<typeof create
                 runtimeRegistry: createFastTestRuntimeRegistry(adapter),
                 pickFolder: async () => firstRoot,
                 serverOnly: false,
+                uiAssetManagerFactory: assets.createManager,
                 devHotMode: true,
                 hotReloadDebounceMs: 30000,
                 backendHotReloadChangeDetector: () => true,
@@ -558,6 +581,7 @@ function registerStartupHotReloadApplyTests(serverTest: ReturnType<typeof create
                 runtimeRegistry: createFastTestRuntimeRegistry(adapter),
                 pickFolder: async () => secondRoot,
                 serverOnly: false,
+                uiAssetManagerFactory: assets.createManager,
                 devHotMode: true,
                 hotReloadDebounceMs: 30000,
                 backendHotReloadChangeDetector: () => true,
@@ -574,6 +598,8 @@ function registerStartupHotReloadApplyTests(serverTest: ReturnType<typeof create
             await Promise.resolve();
             const singletonAfterDebounce = getDevHarnessServerSingleton<any, any, any, any>();
             expect(await singletonAfterDebounce?.state.pickFolder()).toBe(secondRoot);
+            // Each initialized candidate re-verifies the reused asset service.
+            expect(assets.calls).toEqual(Array.from({ length: 2 }, () => ["ensureBuilt", "startWatching"]).flat());
         }
         finally {
             context.server = server;
@@ -588,6 +614,7 @@ function registerStartupDebounceTests(serverTest: ReturnType<typeof createServer
         const { adapter, repository } = context;
         try {
             await stopServerForTest(server);
+            const assets = createLifecycleUiAssets();
             const clock = createFakeClock();
             const firstRoot = fixture.createTempDir(`first-hot-backoff-root-${crypto.randomUUID()}`);
             const secondRoot = fixture.createTempDir(`second-hot-backoff-root-${crypto.randomUUID()}`);
@@ -601,6 +628,7 @@ function registerStartupDebounceTests(serverTest: ReturnType<typeof createServer
                 serverOnly: false,
                 devHotMode: true,
                 backendHotReloadChangeDetector: () => true,
+                uiAssetManagerFactory: assets.createManager,
                 timerApi: {
                     setTimeout: clock.setTimeout,
                     clearTimeout: clock.clearTimeout
@@ -619,7 +647,7 @@ function registerStartupDebounceTests(serverTest: ReturnType<typeof createServer
                 pickFolder: async () => thirdRoot
             });
             const singletonDuringBackoff = getDevHarnessServerSingleton<any, any, any, any>();
-            clock.advanceBy(1499);
+            clock.advanceBy(4999);
             expect(await singletonDuringBackoff?.state.pickFolder()).toBe(firstRoot);
             clock.advanceBy(1);
             await Promise.resolve();
@@ -629,10 +657,14 @@ function registerStartupDebounceTests(serverTest: ReturnType<typeof createServer
                 ...hotOptions,
                 pickFolder: async () => fourthRoot
             });
-            clock.advanceBy(1000);
+            clock.advanceBy(2499);
+            expect(await singletonAfterBackoff?.state.pickFolder()).toBe(thirdRoot);
+            clock.advanceBy(1);
             await Promise.resolve();
             const singletonAfterReset = getDevHarnessServerSingleton<any, any, any, any>();
             expect(await singletonAfterReset?.state.pickFolder()).toBe(fourthRoot);
+            // Each initialized candidate re-verifies the reused asset service.
+            expect(assets.calls).toEqual(Array.from({ length: 4 }, () => ["ensureBuilt", "startWatching"]).flat());
         }
         finally {
             context.server = server;
@@ -645,6 +677,7 @@ function registerStartupDebounceTests(serverTest: ReturnType<typeof createServer
         const { adapter, repository } = context;
         try {
             await stopServerForTest(server);
+            const assets = createLifecycleUiAssets();
             const firstRoot = fixture.createTempDir(`first-hot-tracked-root-${crypto.randomUUID()}`);
             const secondRoot = fixture.createTempDir(`second-hot-tracked-root-${crypto.randomUUID()}`);
             server = await startHarnessServer({
@@ -654,6 +687,7 @@ function registerStartupDebounceTests(serverTest: ReturnType<typeof createServer
                 runtimeRegistry: createFastTestRuntimeRegistry(adapter),
                 pickFolder: async () => firstRoot,
                 serverOnly: false,
+                uiAssetManagerFactory: assets.createManager,
                 devHotMode: true,
                 hotReloadDebounceMs: 0
             });
@@ -664,12 +698,14 @@ function registerStartupDebounceTests(serverTest: ReturnType<typeof createServer
                 runtimeRegistry: createFastTestRuntimeRegistry(adapter),
                 pickFolder: async () => secondRoot,
                 serverOnly: false,
+                uiAssetManagerFactory: assets.createManager,
                 devHotMode: true,
                 hotReloadDebounceMs: 0,
                 backendHotReloadChangeDetector: () => false
             });
             const singletonAfterIgnoredReload = getDevHarnessServerSingleton<any, any, any, any>();
             expect(await singletonAfterIgnoredReload?.state.pickFolder()).toBe(firstRoot);
+            expect(assets.calls).toEqual(["ensureBuilt", "startWatching"]);
         }
         finally {
             context.server = server;
@@ -912,7 +948,7 @@ function registerStartupSingletonAndTelemetryTests(serverTest: ReturnType<typeof
         const opened = await openProject(socket, projectRoot, "req-setup-open");
         await activatedSetupPromise;
         const refreshedSetupPromise = waitForEvent(socket, "setup.updated", (event) => event.requestId === "req-setup-refresh");
-        socket.send(JSON.stringify({
+        socket.send(encodeValue({
             type: "setup.refresh",
             requestId: "req-setup-refresh"
         }));

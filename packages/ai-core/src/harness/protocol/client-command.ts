@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { z } from "zod";
 import { workspaceClientCommandSchema } from "./client-command-workspace";
 import { runClientCommandSchema } from "./client-command-runs";
@@ -37,8 +38,4 @@ export function getClientCommandRejectionMetadata(input: unknown, parseError?: u
 function hasInvalidCursorIssue(error: unknown) {
   if (!(error instanceof z.ZodError)) return false;
   return error.issues.some((issue) => issue.path.at(-1) === "cursor");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

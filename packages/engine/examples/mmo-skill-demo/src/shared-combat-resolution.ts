@@ -76,17 +76,17 @@ export function canDamageNpc(state: MmoSkillDemoState, player: PlayerEntity, tar
 }
 
 export const NPC_DAMAGE_STATUS_BITS = {
-  BOW_VULNERABLE: 1 << 0,
-  DEATHMARK: 1 << 1,
-  FRACTURED: 1 << 2,
-  SOULBOUND: 1 << 3,
-  HEX: 1 << 4
+  BOW_VULNERABLE: 1,
+  DEATHMARK: 2,
+  FRACTURED: 4,
+  SOULBOUND: 8,
+  HEX: 16
 } as const;
 
 export const PLAYER_DAMAGE_SOURCE_BITS = {
-  BLIND: 1 << 0,
-  WEAKENED: 1 << 1,
-  ENFEEBLED: 1 << 2
+  BLIND: 1,
+  WEAKENED: 2,
+  ENFEEBLED: 4
 } as const;
 
 export const NPC_DAMAGE_STATUS_MASK = {

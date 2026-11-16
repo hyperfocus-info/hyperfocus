@@ -1,22 +1,24 @@
-import { describe, expect, test } from "bun:test";
+import {
+createAssistantId,
+createAssistantLearningId,
+createAssistantQuestionId,
+createBackgroundJobId,
+createThreadId,
+type BackgroundJob,
+type BackgroundJobRun
+} from "@hyperfocus/ai-core/protocol";
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
+import { describe,expect,test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import {
-  createAssistantId,
-  createAssistantLearningId,
-  createAssistantQuestionId,
-  createBackgroundJobId,
-  createThreadId,
-  type BackgroundJob,
-  type BackgroundJobRun
-} from "@hyperfocus/ai-core/protocol";
-import {
-  executeBackgroundJobRun,
-  startBackgroundRunLivenessHeartbeat
+executeBackgroundJobRun,
+startBackgroundRunLivenessHeartbeat
 } from "./background-job-executor";
+import type { PiAgentAdapter,PiAgentExecutionController,PiAgentPromptRequest,PiAgentPromptResult } from "./pi-agent-adapter";
+import { plannerChoices } from "./test-support/fixtures/assistant-results";
 import { resolveHarnessTestTempRoot } from "./test-support/test-temp-root";
-import type { PiAgentAdapter, PiAgentExecutionController, PiAgentPromptRequest, PiAgentPromptResult } from "./pi-agent-adapter";
-import { createWorkspaceRepository, type WorkspaceRepository } from "./workspace-repository";
+import { createWorkspaceRepository,type WorkspaceRepository } from "./workspace-repository";
 
 function createTempDir() {
   const tempRoot = resolveHarnessTestTempRoot();
@@ -362,31 +364,6 @@ function createPartialSubagentRoutineAdapter(): PiAgentAdapter & { calls: PiAgen
   return { calls, runPrompt, startExecution, setApiKey() {}, hasApiKey: () => true };
 }
 
-function plannerChoices(answerText: string = "Use existing guidance.") {
-  return [
-    {
-      id: "choice-1",
-      label: "Use guidance",
-      description: "Use existing guidance.",
-      answerText,
-      recommended: true
-    },
-    {
-      id: "choice-2",
-      label: "Wait",
-      description: "Wait for user input.",
-      answerText: "Wait for user input.",
-      recommended: false
-    },
-    {
-      id: "choice-3",
-      label: "Skip",
-      description: "Skip this pass.",
-      answerText: "Skip this pass.",
-      recommended: false
-    }
-  ];
-}
 
 function createAutoQuestionThenReadyAdapter(): PiAgentAdapter & { calls: PiAgentPromptRequest[] } {
   const calls: PiAgentPromptRequest[] = [];
@@ -1090,7 +1067,7 @@ describe("executeBackgroundJobRun", () => {
     repository.setBackgroundJobRunStatus(run.id, "running", {
       controllerInstanceId: "controller-1",
       controllerLeaseId: "lease-1",
-      controllerLeaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      controllerLeaseExpiresAt: new Date(Date.now() + 900000).toISOString()
     });
     const adapter = createTerminalDuringExecutionAdapter(() => {
       const linkedRun = repository.getLatestThreadRun(project.id, savedJob.automationThreadId);
@@ -1148,7 +1125,7 @@ describe("executeBackgroundJobRun", () => {
     repository.setBackgroundJobRunStatus(run.id, "running", {
       controllerInstanceId: "controller-1",
       controllerLeaseId: "lease-1",
-      controllerLeaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      controllerLeaseExpiresAt: new Date(Date.now() + 900000).toISOString()
     });
 
     const result = await executeBackgroundJobRun({
@@ -1174,7 +1151,7 @@ describe("executeBackgroundJobRun", () => {
     const repository = createRepository();
     const projectRoot = path.join(createTempDir(), `repo-${crypto.randomUUID()}`);
     mkdirSync(projectRoot, { recursive: true });
-    Bun.spawnSync({ cmd: ["git", "init"], cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
+    spawnBackgroundProcessSync({ cmd: ["git", "init"], cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
     const project = repository.addProject(projectRoot);
     const now = new Date().toISOString();
     const job = createAssistantRoutineJob(project.id, saveAssistant(repository, project.id), createThreadId(), now);
@@ -1196,7 +1173,7 @@ describe("executeBackgroundJobRun", () => {
     repository.setBackgroundJobRunStatus(run.id, "running", {
       controllerInstanceId: "controller-1",
       controllerLeaseId: "lease-1",
-      controllerLeaseExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      controllerLeaseExpiresAt: new Date(Date.now() + 900000).toISOString()
     });
     const adapter = createTerminalBeforeSubagentCompleteAdapter(() => {
       const linkedRun = repository.getLatestThreadRun(project.id, savedJob.automationThreadId);
@@ -1235,7 +1212,7 @@ describe("executeBackgroundJobRun", () => {
     const repository = createRepository();
     const projectRoot = path.join(createTempDir(), `repo-${crypto.randomUUID()}`);
     mkdirSync(projectRoot, { recursive: true });
-    Bun.spawnSync({ cmd: ["git", "init"], cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
+    spawnBackgroundProcessSync({ cmd: ["git", "init"], cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
     const project = repository.addProject(projectRoot);
     const now = new Date().toISOString();
     const job = createAssistantRoutineJob(project.id, saveAssistant(repository, project.id), createThreadId(), now);
@@ -1270,7 +1247,8 @@ describe("executeBackgroundJobRun", () => {
     const linkedRun = repository.getRun(project.id, result.linkedAgentRunId!);
     const refreshedJob = repository.getBackgroundJob(job.id)!;
     expect(result.status).toBe("partial-complete");
-    expect(result.summary).toBe("Partial aggregate summary.");
+    expect(result.summary).toContain("Partial aggregate summary.");
+    expect(result.summary).toContain("Verification unverified");
     expect(result.failureMessage).toBe("Some subagent work failed.");
     expect(result.failureCategory).toBeUndefined();
     expect(result.events.some((event) => event.stage === "partial-complete")).toBe(true);
@@ -1483,7 +1461,7 @@ describe("executeBackgroundJobRun", () => {
     expect(savedJob.intentContract?.objective).toBe("Build a usable billing web app slice with tests.");
     expect(adapter.calls[0]?.prompt).toContain("# INTENT CONTRACT");
     expect(adapter.calls[0]?.prompt).toContain("Objective: Build a usable billing web app slice with tests.");
-    expect(adapter.calls[0]?.prompt).toContain("Runtime instruction: treat the IntentContract as authority.");
+    expect(adapter.calls[0]?.prompt).toContain("Runtime instruction: explicit user requirements and exclusions");
     expect(adapter.calls[0]?.prompt).toContain("Description: Build a usable billing web app slice with tests.");
     expect(adapter.calls[0]?.prompt).toContain("Definition prompt: Update docs about SaaS ideas.");
     expect(adapter.calls[0]?.prompt).toContain("# ACTIVE MISSION (The Request)\nUpdate docs about SaaS ideas.");

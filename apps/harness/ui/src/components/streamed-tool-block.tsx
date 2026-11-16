@@ -1,3 +1,4 @@
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 /** @jsxImportSource solid-js */
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
@@ -9,7 +10,6 @@ import {
   formatToolActivityCopyText,
   formatToolActivityOwner,
   formatToolActivitySnippet,
-  formatToolActivityTooltip,
   formatToolInvocationDescription,
   formatToolMetadata,
   getToolActivityDetailSections
@@ -29,9 +29,9 @@ type StreamedToolBlockProps = {
 const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
 
 const styles = stylex.create({
-  root: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "1rem", borderStyle: "solid", borderWidth: "1px", backgroundColor: "rgb(255 255 255 / 0.55)", },
-  header: { gap: "0.75rem", alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", },
-  heading: { gap: "0.5rem", alignItems: "center", color: "var(--muted)", display: "flex", fontSize: "0.585rem", fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", minWidth: 0, },
+  root: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "1rem", borderStyle: "solid", borderWidth: "1px", backgroundColor: tokens.panel, containerType: "inline-size", },
+  header: { gap: "0.75rem", alignItems: "center", display: "flex", flexWrap: "wrap", justifyContent: "space-between", marginBottom: "0.5rem", },
+  heading: { gap: "0.5rem", alignItems: "center", color: "var(--muted)", display: "flex", fontSize: tokens.fontCaption, fontWeight: 600, letterSpacing: "normal", textTransform: "none", minWidth: 0, },
   icon: { height: "0.875rem", width: "0.875rem" },
   truncate: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   actions: { gap: "0.5rem", alignItems: "center", display: "flex", flexShrink: 0, },
@@ -43,11 +43,11 @@ const styles = stylex.create({
  paddingBlock: '0.375rem',
  paddingInline: '0.5rem',
  alignItems: "start",
- backgroundColor: { default: "transparent", ":hover": "rgb(255 255 255 / 0.8)" },
+ backgroundColor: { default: "transparent", ":hover": tokens.panelRaised },
  color: "var(--foreground)",
  display: "grid",
- fontSize: "0.65rem",
- gridTemplateColumns: "auto minmax(0, 1fr) auto auto",
+ fontSize: tokens.fontCaption,
+ gridTemplateColumns: { default: "auto minmax(0, 1fr) auto", "@container (max-width: 18rem)": "auto minmax(0, 1fr)" },
  textAlign: "left",
  width: "100%", },
   activityDescription: { borderRadius: "0.5rem", outline: { default: "none", ":focus-visible": "none" }, boxShadow: { default: "none", ":focus-visible": "0 0 0 2px var(--ring)" }, cursor: "pointer", minWidth: 0, },
@@ -55,7 +55,7 @@ const styles = stylex.create({
   activityOwner: { overflow: "hidden", fontWeight: 600, textOverflow: "ellipsis", whiteSpace: "nowrap", },
   muted: { color: "var(--muted)" },
   activityToolName: { overflow: "hidden", color: "var(--muted)", textOverflow: "ellipsis", whiteSpace: "nowrap", },
-  invocationDescription: { overflow: "hidden", color: "var(--muted)", display: "block", fontSize: "0.62rem", lineHeight: "1rem", textOverflow: "ellipsis", whiteSpace: "nowrap", },
+  invocationDescription: { color: "var(--muted)", display: "block", fontSize: tokens.fontCaption, lineHeight: 1.5, overflowWrap: "anywhere", whiteSpace: "normal", },
   toolCallSnippet: { borderColor: "var(--border)",
  borderRadius: "0.5rem",
  borderStyle: "solid",
@@ -68,35 +68,36 @@ const styles = stylex.create({
  backgroundColor: "var(--panel-strong)",
  color: "var(--foreground)",
  display: "-webkit-box",
- fontSize: "0.62rem",
+ fontSize: tokens.fontCaption,
  letterSpacing: 0,
  lineHeight: 1.45,
  overflowWrap: "anywhere",
  marginTop: "0.25rem",
  maxWidth: "100%", },
-  activityStatus: { color: "var(--accent-strong)", flexShrink: 0, letterSpacing: "0.12em", textTransform: "uppercase" },
-  detailButton: { flexShrink: 0, height: "1.75rem", width: "1.75rem", },
-  footer: { gap: "0.75rem", alignItems: "center", color: "var(--muted)", display: "flex", fontSize: "0.575rem", justifyContent: "space-between", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: "0.5rem", },
+  activityStatus: { gridColumn: "2", gridRow: "2", color: "var(--accent-strong)", flexShrink: 0, letterSpacing: "normal", textTransform: "none" },
+  detailButton: { flexShrink: 0 },
+  detailAction: { gridColumn: { default: "3", "@container (max-width: 18rem)": "2" }, gridRow: { default: "1 / span 2", "@container (max-width: 18rem)": "3" } },
+  footer: { gap: "0.75rem", alignItems: "center", color: "var(--muted)", display: "flex", flexWrap: "wrap", fontSize: tokens.fontCaption, justifyContent: "space-between", letterSpacing: "normal", textTransform: "none", marginTop: "0.5rem", },
   dialog: { maxWidth: "64rem" },
   dialogContent: { maxHeight: "85vh" },
   dialogBody: { gap: "0.75rem", display: "flex", flexDirection: "column", fontSize: "0.75rem", },
-  dialogSummary: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", gap: "0.75rem", alignItems: "start", backgroundColor: "rgb(255 255 255 / 0.7)", display: "flex", flexWrap: "wrap", justifyContent: "space-between", },
+  dialogSummary: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", gap: "0.75rem", alignItems: "start", backgroundColor: tokens.panelRaised, display: "flex", flexWrap: "wrap", justifyContent: "space-between", },
   dialogSummaryCopy: { color: "var(--muted)",
- flexBasis: '0%',
+ flexBasis: '16rem',
  flexGrow: '1',
  flexShrink: '1',
  lineHeight: "1.25rem",
  minWidth: 0, },
-  detailBlock: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", backgroundColor: "rgb(255 255 255 / 0.7)", },
-  detailHeader: { gap: "0.75rem", alignItems: "center", display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", },
-  detailTitle: { color: "var(--muted)", fontSize: "0.58rem", fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase" },
-  detailValue: { overflow: "visible", fontSize: "0.7rem", lineHeight: "1.25rem", overflowWrap: "break-word", whiteSpace: "pre-wrap", },
+  detailBlock: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.75rem", borderStyle: "solid", borderWidth: "1px", backgroundColor: tokens.panelRaised, },
+  detailHeader: { gap: "0.75rem", alignItems: "center", display: "flex", flexWrap: "wrap", justifyContent: "space-between", marginBottom: "0.5rem", },
+  detailTitle: { color: "var(--muted)", fontSize: tokens.fontCaption, fontWeight: 600, letterSpacing: "normal", textTransform: "none" },
+  detailValue: { overflow: "visible", fontSize: tokens.fontCaption, lineHeight: "1.25rem", overflowWrap: "anywhere", whiteSpace: "pre-wrap", },
   monospace: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" },
-  danger: { color: "rgb(190 18 60)" },
+  danger: { color: tokens.danger },
   foreground: { color: "var(--foreground)" },
   spinning: { animationDuration: "1s", animationIterationCount: "infinite", animationName: spin, animationTimingFunction: "linear", },
-  success: { color: "rgb(5 150 105)" },
-  failure: { color: "rgb(225 29 72)" }
+  success: { color: tokens.success },
+  failure: { color: tokens.danger }
 });
 
 export function StreamedToolBlock(props: StreamedToolBlockProps) {
@@ -172,7 +173,6 @@ export function StreamedToolBlock(props: StreamedToolBlockProps) {
           {(activity) => (
             <article
               {...stylex.attrs(styles.activityRow)}
-              title={formatToolActivityTooltip(activity)}
               onClick={(event) => {
                 if (shouldIgnoreActivityRowClick(event.target)) {
                   return;
@@ -204,16 +204,18 @@ export function StreamedToolBlock(props: StreamedToolBlockProps) {
                   <span {...stylex.attrs(styles.activityToolName)}>{activity.toolName}</span>
                 </span>
                 <span {...stylex.attrs(styles.invocationDescription)}>
-                  {formatToolInvocationDescription(activity)}
+                  <FileLinkedText text={formatToolInvocationDescription(activity)} fileLinks={props.fileLinks} />
                 </span>
-                <span {...stylex.attrs(styles.toolCallSnippet)}>
-                  <FileLinkedText text={formatToolActivitySnippet(activity)} fileLinks={props.fileLinks} />
-                </span>
+                <Show when={activity.status === "failed"}>
+                  <span {...stylex.attrs(styles.toolCallSnippet)}>
+                    <FileLinkedText text={activity.outputPreview ?? activity.stderrPreview ?? formatToolActivitySnippet(activity)} fileLinks={props.fileLinks} />
+                  </span>
+                </Show>
               </div>
               <span {...stylex.attrs(styles.activityStatus)}>
                 {activity.exitCode === undefined ? activity.status : `${activity.status} ${activity.exitCode}`}
               </span>
-              <ActionButton
+              <div {...stylex.attrs(styles.detailAction)}><ActionButton
                 tooltip="Show tool call details"
                 icon={<Logs {...stylex.attrs(styles.icon)} />}
                 size="icon"
@@ -224,7 +226,7 @@ export function StreamedToolBlock(props: StreamedToolBlockProps) {
                   event.stopPropagation();
                   openActivityDetails(activity.id);
                 }}
-              />
+              /></div>
             </article>
           )}
         </For>

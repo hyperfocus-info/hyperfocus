@@ -42,6 +42,21 @@ export function createToastStoreForProvider(options: CreateToastStoreOptions = {
       return;
     }
 
+    const duplicate = toasts.find((entry) =>
+      entry.title === toast.title &&
+      entry.description === toast.description &&
+      entry.tone === toast.tone
+    );
+    if (duplicate) {
+      cancelByToastId.get(duplicate.id)?.();
+      cancelByToastId.delete(duplicate.id);
+      setToasts((items) => items.map((entry) =>
+        entry.id === duplicate.id ? { id: duplicate.id, ...toast } : entry
+      ));
+      cancelByToastId.set(duplicate.id, scheduler.schedule(() => dismiss(duplicate.id), autoDismissMs));
+      return;
+    }
+
     const id = crypto.randomUUID();
     setToasts((items) => [...items, { id, ...toast }]);
     const cancel = scheduler.schedule(() => dismiss(id), autoDismissMs);

@@ -1,3 +1,6 @@
+import { finiteOr as finite } from "@hyperfocus/utilities/math";
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 import type { MmoVec2 } from "./types.ts";
 
 export type MmoRect = {
@@ -51,9 +54,7 @@ export type MmoTeleportToTileResult = {
   y: number;
 };
 
-function finite(value: number, fallback = 0) {
-  return Number.isFinite(value) ? value : fallback;
-}
+
 
 function requireFinite(value: number, label: string) {
   if (!Number.isFinite(value)) throw new RangeError(`${label} must be finite`);
@@ -78,9 +79,7 @@ function requireRect(rect: MmoRect, label: string): MmoRect {
   return checked;
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+
 
 function rectsOverlap(a: MmoRect, b: MmoRect) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -192,11 +191,11 @@ export function moveMmoCircle<TEntity extends MmoCircle>(
   tester: MmoOccupancyTester,
   options: MmoMoveCircleOptions = {}
 ): MmoMoveCircleResult {
-  const startX = finite(entity.x);
-  const startY = finite(entity.y);
-  const radius = requireNonNegativeFinite(finite(options.radius ?? entity.radius ?? 0), "movement radius");
-  let moveX = finite(dx);
-  let moveY = finite(dy);
+  const startX = finite(entity.x, 0);
+  const startY = finite(entity.y, 0);
+  const radius = requireNonNegativeFinite(finite(options.radius ?? entity.radius ?? 0, 0), "movement radius");
+  let moveX = finite(dx, 0);
+  let moveY = finite(dy, 0);
   const maxDistance = options.maxDistance;
   if (maxDistance !== undefined) {
     requireNonNegativeFinite(maxDistance, "movement maxDistance");
@@ -236,7 +235,7 @@ export function teleportMmoEntityToTile<TEntity extends MmoCircle>(
   const x = tileX * tileSize + tileSize / 2;
   const y = tileY * tileSize + tileSize / 2;
   if (!Number.isFinite(x) || !Number.isFinite(y)) throw new RangeError("teleport destination must be finite");
-  const radius = requireNonNegativeFinite(finite(options.radius ?? entity.radius ?? 0), "teleport radius");
+  const radius = requireNonNegativeFinite(finite(options.radius ?? entity.radius ?? 0, 0), "teleport radius");
   if (tester?.blockedAt(x, y, radius)) return { ok: false, x: entity.x, y: entity.y };
   entity.x = x;
   entity.y = y;

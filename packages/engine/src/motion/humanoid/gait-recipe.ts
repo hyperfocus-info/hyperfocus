@@ -13,6 +13,13 @@ export type CanonicalHumanoidGaitKeyPose = Readonly<CanonicalHumanoidGaitSample 
   phase: number;
 }>;
 
+export type CanonicalHumanoidGaitWindow = Readonly<{
+  foot: "left" | "right";
+  kind: "support" | "step";
+  frameOffset: number;
+  durationFrames: number;
+}>;
+
 /**
  * Normalized semantic gait data. Distances are fractions of leg length and
  * rotations are radians. The recipe contains no mesh-specific joint names.
@@ -81,6 +88,36 @@ export function normalizeGaitPhase(phase: number) {
   return ((phase % 1) + 1) % 1;
 }
 
+/**
+ * Quantizes the shared procedural gait cycle into portable, editable contact
+ * windows. Sampling frame centers keeps arbitrary-range authoring deterministic
+ * and avoids zero-duration contacts at exact phase boundaries.
+ */
+export function planCanonicalHumanoidGaitWindows(options: {
+  durationFrames: number;
+  cycleFrames: number;
+  initialPhase?: number;
+  stanceRatio?: number;
+}): CanonicalHumanoidGaitWindow[] {
+  if (!Number.isSafeInteger(options.durationFrames) || options.durationFrames <= 0) throw new RangeError("durationFrames must be a positive integer");
+  if (!Number.isSafeInteger(options.cycleFrames) || options.cycleFrames < 4) throw new RangeError("cycleFrames must be an integer of at least 4");
+  const initialPhase = options.initialPhase ?? 0, stanceRatio = options.stanceRatio ?? .6;
+  if (!Number.isFinite(initialPhase)) throw new TypeError("initialPhase must be finite");
+  if (!Number.isFinite(stanceRatio) || stanceRatio <= 0 || stanceRatio >= 1) throw new RangeError("stanceRatio must be between 0 and 1");
+  const windows: CanonicalHumanoidGaitWindow[] = [];
+  for (const [foot, offset] of [["left", 0], ["right", .5]] as const) {
+    let start = 0, previous = gaitWindowKind(initialPhase, offset, .5, options.cycleFrames, stanceRatio);
+    for (let frame = 1; frame <= options.durationFrames; frame++) {
+      const current = frame < options.durationFrames ? gaitWindowKind(initialPhase, offset, frame + .5, options.cycleFrames, stanceRatio) : undefined;
+      if (current === previous) continue;
+      windows.push({ foot, kind: previous, frameOffset: start, durationFrames: frame - start });
+      start = frame;
+      if (current) previous = current;
+    }
+  }
+  return windows.sort((a, b) => a.frameOffset - b.frameOffset || a.foot.localeCompare(b.foot));
+}
+
 export function sampleCanonicalHumanoidGait(
   phase: number,
   out: CanonicalHumanoidGaitSample = createCanonicalHumanoidGaitSample(),
@@ -112,4 +149,8 @@ function cyclicCatmullRom(previous: number, current: number, next: number, after
     + (2 * previous - 5 * current + 4 * next - afterNext) * amountSquared
     + (-previous + 3 * current - 3 * next + afterNext) * amountCubed
   );
+}
+
+function gaitWindowKind(initialPhase: number, footOffset: number, frameCenter: number, cycleFrames: number, stanceRatio: number): "support" | "step" {
+  return normalizeGaitPhase(initialPhase + footOffset + frameCenter / cycleFrames) < stanceRatio ? "support" : "step";
 }

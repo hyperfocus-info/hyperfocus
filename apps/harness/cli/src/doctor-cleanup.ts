@@ -2,7 +2,7 @@ import { access, readdir, rm, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const DEFAULT_LOCAL_MAX_BYTES = 1024 * 1024 * 1024;
+const DEFAULT_LOCAL_MAX_BYTES = 1073741824;
 
 export type DoctorCleanupResult =
   | {

@@ -1,62 +1,20 @@
-import { For, Show, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type JSX } from "solid-js";
+import {     type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import {
-  DragDropProvider,
-  DragDropSensors,
-  SortableProvider,
+
+
   createSortable,
-  transformStyle,
-  type DragEventHandler
+  transformStyle
 } from "@thisbeyond/solid-dnd";
-import { createRequestId, type BulkOperationTarget } from "@hyperfocus/ai-core/protocol";
 import {
-  getActiveProject,
-  harnessStore,
+
+
   type ProjectSidebarGrouping,
   type ProjectSidebarProjectSort,
   type ProjectSidebarThreadSort
 } from "../../harness-store";
-import { truncateMiddle } from "../../lib/utils";
-import { normalizeAppHotkeyPreferences } from "../../lib/app-hotkeys";
-import { tooltipWithPrimaryHotkey } from "../../lib/hotkey-hints";
-import { registerCurrentTabItemSelector } from "../../lib/current-tab-item-hotkeys";
-import { buildProjectChatSearchResults, type ProjectChatSearchResult } from "../../lib/project-chat-search";
-import { openIdeWindow } from "../../lib/ide-window";
-import { activateProjectThread } from "../../project-thread-navigation";
-import { useHarnessStore } from "../../store-providers";
-import { ActionButton } from "../action-button";
-import { Input } from "../primitives/input";
-import { Button } from "../primitives/button";
-import { ButtonGroup, type ButtonGroupItem } from "../primitives/button-group";
-import type { ContextMenuAction } from "../primitives/context-menu";
-import { LeftPaneEmptyState, LeftPaneFilterBlock, LeftPaneHeader, LeftPaneSearchInput, LeftPaneSearchMenu, LeftPaneShell } from "../primitives/left-pane";
-import { StatusChip, type StatusChipTone } from "../primitives/status-chip";
-import { Tooltip } from "../primitives/tooltip";
+import {  type StatusChipTone } from "../primitives/status-chip";
 import { projectNavigationStyles as styles } from "../project-navigation.styles";
-import { ThreadCleanupDialog } from "../thread-cleanup-dialog";
-import { VirtualList, type VirtualListHandle } from "../primitives/virtual-list";
-import { rightAlignedNumbersEnabled } from "../../lib/visual-flags";
-import {
-  ArrowDown,
-  ArrowUp,
-  Calendar,
-  ChevronDown,
-  ChevronRight,
-  CheckSquare2,
-  Clock3,
-  Code2,
-  Edit3,
-  Folder,
-  GripVertical,
-  GitFork,
-  Plus,
-  Pin,
-  Square,
-  Trash2,
-  FolderOpenDot,
-  Layers,
-  Shredder
-} from "lucide-solid";
 
 export function toggleSelectionId(ids: string[], id: string) {
   return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];

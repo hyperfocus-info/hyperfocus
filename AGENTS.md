@@ -1,107 +1,105 @@
-# Hyperfocus repository guidance
+# Hyperfocus
 
-This file is the root instruction entrypoint. Keep it short: read only this file,
-the nearest README, and the task-specific links below before opening broader docs.
-Linked documents are routes, not a preload list.
+Local-first Bun/TypeScript monorepo: `apps/*` owns the editor, Harness, PadPilot
+(including C++/CMake), and marketplace; `packages/*` owns reusable contracts and
+runtimes. Engine examples and `spikes/` are bounded experiments.
 
-## Decision order
+## Global invariants
 
-When tradeoffs conflict, prefer:
+- Keep the engine and public engine-facing packages framework-agnostic: no Solid,
+  React, DOM globals, StyleX, or app preferences. `packages/ui` owns reusable
+  presentation; hosts own privileged adapters, credentials, and persistence.
+- Prefer simplicity, then measured performance, then tooling convenience. Extract
+  shared infrastructure for named real consumers, a recurring failure/manual
+  workflow, or a measured bottleneck.
+- Select storage and transport codecs using [serialization guidance](docs/serialization.md).
+  Prefer measured protobuf benefits; preserve specialized binary paths and require A/B evidence before migrations.
+- Keep docs simple and concise. State each rule or decision once in its owning
+  document and link to it. Split substantial, distinct topics when needed; keep
+  the entrypoint short and move run history out of current instructions.
+- Preserve unrelated work in a dirty tree. Local implementation, disposable-fixture
+  tests, inspection, and repairs caused by the change are authorized parts of the
+  task; continue through relevant verification without requesting each next step.
+- Put temporary artifacts (albums, captures, review packets, audit runs and scratch
+  files) in the nearest `.local/` directory. Temporary prose ends in `.tmp.md` and
+  names its owner and pruning condition; promote durable decisions before pruning.
+- Before writing a helper in `.local/`, search existing skills, scripts and package
+  utilities. Extend their owning implementation for reusable functionality; keep
+  only run inputs, outputs and truly one-off probes local. Do not maintain parallel
+  temporary implementations of repository tools.
+- Publication, deployment, destructive data changes, credential changes, and
+  production operations need authorization covering that action. Existing
+  authorization persists; preparing a candidate is not permission to publish it.
+- Background processes must create no visible terminal windows. Use
+  `@hyperfocus/desktop-runtime/process` and owned headless `/automation` browsers;
+  retain cleanup ownership. Process changes use [lifecycle guidance](docs/development.md#process-and-browser-lifecycle)
+  and `bun run check:process-policy`.
+- User preference (2026-10-17): local development-server restarts are authorized
+  without another permission request. Use the managed supervisor and hidden
+  processes. Task-specific file-only or workload-protection constraints still
+  take precedence; this permission does not authorize interrupting games or
+  starting local tests, builds or benchmarks during such a task.
 
-1. Simplicity: the smallest correct model, API, and dependency graph.
-2. Performance: optimize measured bottlenecks without obscuring the baseline.
-3. Developer experience: add tooling or convenience after the first two remain clear.
+## Find the owner
 
-All software must have an easy baseline path and may expose advanced configuration
-without making that path harder. Public or user-facing entry functions accept one
-plain options object with named fields and defaults. Leaf functions at the bottom of
-the call stack do the heavy work with a small positional argument list; do not allocate
-options objects in hot inner paths. Keep domain objects intact when splitting them
-would make the call less clear.
+Load guidance for the actual task, not every linked document. The nearest README
+owns local commands and behavior; search its relevant section. Scoped `AGENTS.md`
+files add local constraints. [README.md](README.md) maps products;
+[docs/README.md](docs/README.md) maps topics.
 
-## Architecture boundary
+| Task | Route |
+| --- | --- |
+| Code conventions | [Code style](docs/code-style.md); existing style/source-structure baselines may only ratchet down |
+| Package boundaries or extraction | [Architecture](docs/architecture.md); [package testing](docs/package-testing.md) for affected public contracts |
+| Serialization, persistence or transport | [Codec selection, compatibility and A/B evidence](docs/serialization.md) |
+| First-party UI | [app-ui-standard](.agents/skills/app-ui-standard/SKILL.md); [DESIGN.md](DESIGN.md) owns contracts and `packages/ui` owns controls |
+| Engine | [Engine guidance](packages/engine/AGENTS.md) |
+| Game visual assets / reference-driven 3D reconstruction | [game-art-direction](.agents/skills/game-art-direction/SKILL.md); use approved references, measured geometry constraints and scoped locks |
+| Editor implementation / project automation | [Editor guidance](apps/engine-editor/AGENTS.md) / [hyperfocus-editor-agent](.agents/skills/hyperfocus-editor-agent/SKILL.md) |
+| Harness source | [Contributor guidance](apps/harness/agents.md); [update-harness](.agents/skills/update-harness/SKILL.md) for engineering routes |
+| Remote engineering swarms / candidate comparisons | [swarm-engineering](.agents/skills/swarm-engineering/SKILL.md) and [swarm contracts](docs/harness/swarm.md) |
+| PadPilot / marketplace | [Plugin guidance](apps/pad-pilot/AGENTS.md) / [service guidance](apps/pad-pilot-marketplace/AGENTS.md) |
+| Run an app or inspect runtime errors | [dev-server](.agents/skills/dev-server/SKILL.md); use the managed server's returned URL |
+| Release candidate | [ship-readiness](.agents/skills/ship-readiness/SKILL.md) and its selected product gate |
+| Docs, rules, or skills | [Documentation governance](docs/documentation-governance.md) |
 
-Keep `packages/engine/` and public engine-facing packages framework-agnostic. They must not
-depend on Solid, React, DOM globals, StyleX, or application preferences.
+Other skills are selected by their descriptions: audits, queue delivery, and style
+modes are specialized tasks, not prerequisites for ordinary edits. Root skills
+govern this repository. `apps/harness/runtime-agents.md` and its `.agents/` tree
+ship to user projects and must work without this monorepo. Example skills apply
+only to their example.
 
-First-party applications live in `apps/*`. Reusable presentation lives in
-`packages/ui`; portable AI and workspace contracts live in `packages/ai-core` and
-`packages/workspace`. Host apps own privileged runtime adapters and persistence.
-See [the architecture map](docs/architecture.md) only when changing a boundary.
+## Finish at the task's boundary
 
-## Documentation graph
+For substantial work, keep request, intent, outcome, experience, evidence,
+constraints and budget distinct in the existing task/plan. Use
+[outcome engineering](docs/agent-outcomes.md) for the compact contract, boundary
+decisions and required executive summary. Trivial edits need no form. Choose the
+smallest effective intervention; a tractable subproblem must not replace the goal.
+Start from the strongest relevant prior result and its known failures; use the
+owning implementation and evidence rather than restarting from a generic template.
+The same execution rules apply in every agent host. Outside Harness, run substantial
+bounded work through `bun run inspect:outcome --execute <task.json> '--' <command> [args...]`:
+the [shared boundary](docs/agent-outcomes.md#one-execution-path-for-every-agent) runs
+prerequisites, work and acceptance together. Do not manually skip steps or substitute
+a successful subprocess for acceptance. Trivial edits and read-only discovery need no wrapper.
 
-- Start at [README.md](README.md) for product shape and commands, then use
-  [docs/README.md](docs/README.md) to choose one topic.
-- Follow [repository code style](docs/code-style.md) for imports, type modeling,
-  assertions, composition, classes, and component declaration order.
-- Follow [documentation governance](docs/documentation-governance.md) for canonical
-  doc ownership, duplicate-doc cleanup, temporary docs, and drift control.
-- Use [user story inventories](docs/user-stories.md) for first-party UI surfaces,
-  and [package testing](docs/package-testing.md) for shared library verification.
-- Read the nearest package or application README before editing that area.
-- Keep each fact in one canonical document. Other docs should link to it and add
-  only the context needed for their own scope.
-- Put concepts, decisions, and navigation in Markdown. Put repeatable procedures in
-  scripts, and keep code examples next to the API or workflow that owns them.
-- When behavior changes, update its canonical doc and repair inbound or outbound
-  links. Do not copy the new explanation into several READMEs.
-- New docs need a clear owner, an incoming link from an index or nearby README, and
-  a short "Related" route when the next source is not obvious.
-- Tracked temporary Markdown files must use the `.tmp.md` suffix.
+Scale verification to what changed. A tiny fix needs focused evidence. A changed
+user flow needs the running result inspected and exercised, defects repaired, and
+affected checks rerun. Architecture work must demonstrate real consumer use.
+Release work must verify the delivered artifact and its acceptance conditions;
+tests alone are not publication. Keep experiments local until delivery is the task.
+Keep technical verification, outcome verification and human/domain acceptance
+distinct. Report missing evidence; child completion is evidence, not parent success.
 
-## Instruction and skill hierarchy
+Use `bun run inspect:impact --summary --path <file>` for validation candidates and
+`bun run inspect:project --root <directory>` for declared tasks. `bun run check`
+is the broad repository gate; `bun run ship-check --list` and
+`bun run ship-check <target> --plan` expose release gates. Use `bun.cmd` when
+PowerShell blocks `bun.ps1`.
 
-| Scope | Location | Purpose |
-| --- | --- | --- |
-| Repository | `AGENTS.md`, `.agents/skills/*` | Rules and workflows for changing this monorepo. |
-| Engine | `packages/engine/AGENTS.md`, `packages/engine/docs/README.md` | Engine-only performance, portability, and verification guidance. |
-| Harness source | `apps/harness/agents.md` | Contributor rules for the harness application. |
-| Harness release | `apps/harness/runtime-agents.md`, `apps/harness/.agents/skills/*` | Generic rules and skills copied into the portable launcher. Do not put repository-only policy here. |
-| Example project | `packages/engine/examples/*/.agents.md`, `packages/engine/examples/*/.agents/skills/*` | Rules and skills that apply only when that example is the active project. |
-
-Use the narrowest applicable skill. Root skills may route to detailed references;
-load only the referenced branch needed for the task. Harness release skills must be
-self-contained after packaging. Example skills must not redefine root or engine rules.
-
-Task routes:
-
-- First-party UI: read [DESIGN.md](DESIGN.md), then use `app-ui-standard`.
-- First-party goal-driven product audit and fix loops across apps, launchers, and
-  public code/API surfaces: use `user-audit`; route resulting implementation through
-  the owning product skill and `app-ui-standard` for UI.
-- Harness architecture or implementation: use `update-harness`.
-- Editor project automation: use `hyperfocus-editor-agent`.
-- Branch or commit review: use `analyze-pr`; isolated current-worktree execution:
-  use `branchfs`.
-- Harness findings and delivery: `correctness-scan` audits,
-  `next-gap` closes the top finding, `next-todo` ships the top roadmap item, and
-  `market-research` supplies external product evidence.
-- Engine work: follow [packages/engine/AGENTS.md](packages/engine/AGENTS.md) and select one topic from
-  [packages/engine/docs/README.md](packages/engine/docs/README.md).
-
-The launcher-bundled tree contains user-project workflows, not monorepo policy:
-`assistant-actions` and `db-data-harnessing` operate Harness state; `screenshot`,
-`ui-audit`, and `improve-ux` cover visual work; progression and asset
-utilities support game projects; `caveman*` and `grill-me` are opt-in communication
-utilities. Keep overlapping phases explicit in each skill description.
-
-## Working rules
-
-- Explore repository facts before asking the user. Ask only about ambiguity that
-  changes the outcome and cannot be resolved locally.
-- Prefer targeted `rg` and nearby files. Batch independent reads and do not reread
-  material already inspected in the same run.
-- Keep source files and declarations within `check:source-structure` limits. Existing
-  exceptions may only ratchet downward; do not raise a baseline without documenting
-  its owner, boundary, reason, and removal target.
-- Preserve unrelated work in a dirty tree. Stop when the requested behavior and
-  proportionate verification are complete.
-- Repository-owned scripts, including root skill helpers, should be TypeScript and
-  run with Bun. Keep launcher-bundled Harness/user-project automation
-  self-contained; this repository script policy does not apply to people using the
-  packaged Harness.
-- Before handoff, check for documentation drift in the touched area and update the
-  nearest README, story inventory, coverage matrix, or package testing route when
-  behavior or verification changed.
-- Use `bun.cmd` when PowerShell blocks `bun.ps1`.
+Reuse approved examples before asking for consequential taste decisions; keep
+approval and reusable learning with the [owning decision](docs/documentation-governance.md#subjective-decisions).
+Promote recurring failures into code or regression checks before adding prose.
+At delegation, expensive execution, repeated repair and completion, decide whether
+evidence supports continuing, redirecting, stopping or escalating within scope.

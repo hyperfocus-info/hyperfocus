@@ -1,14 +1,16 @@
+import { handleUsageCommand } from "./usage";
+import { probeCodexLimits } from "../../usage/codex-limits";
 import { checkCliUpdates, installCliUpdate } from "../../cli-update-checker";
 import { emitNotificationsUpdatedToAll } from "../automation/background-events";
 import type { ServerCommandContext } from "./context";
 import { releaseDeferredExecutionState } from "../execution/deferred-execution";
-import { createEmptyTokenUsageTotals, emitAgentRuntimeUpdatedToAll, emitExecutionControlUpdatedToAll, emitUsageUpdatedToAll, sendEvent } from "../transport/events";
+import { emitAgentRuntimeUpdatedToAll, emitExecutionControlUpdatedToAll, sendEvent } from "../transport/events";
 import { createCliUpdateNotification, getCliUpdateTargetLabel, saveCliUpdateNotifications } from "../automation/notifications";
 import { defaultAgentCatalog } from "@hyperfocus/ai-core/agent-catalog";
 import type { ClientCommand } from "@hyperfocus/ai-core/protocol";
 import { fitBoundedPage } from "../transport/bounded-page";
 
-type SystemCommandContext = Pick<ServerCommandContext, "ws" | "runtime" | "repository" | "adapter" | "runtimeRegistry" | "assistantManager" | "emitSetupRefresh" | "connections" | "backgroundRunControllers" | "scheduler" | "tokenUsageSession">;
+type SystemCommandContext = Pick<ServerCommandContext, "launchMode" | "ws" | "runtime" | "repository" | "adapter" | "runtimeRegistry" | "assistantManager" | "emitSetupRefresh" | "connections" | "backgroundRunControllers" | "scheduler" | "tokenUsageSession"> & { codexUsageProbe?: typeof probeCodexLimits };
 
 export async function handleSystemCommand(command: ClientCommand, context: SystemCommandContext) {
   const { ws, runtime, repository, adapter, runtimeRegistry, assistantManager, emitSetupRefresh, connections, backgroundRunControllers, scheduler, tokenUsageSession } = context;
@@ -66,7 +68,7 @@ case "cli-updates.check": {
       return;
     }
 case "cli-updates.install": {
-      const output = await installCliUpdate(command.payload.agentId);
+      const output = await installCliUpdate(command.payload.agentId, context.launchMode);
       const agentRuntimes = await runtimeRegistry.refreshAll();
       emitAgentRuntimeUpdatedToAll(connections, command.requestId, agentRuntimes);
       await emitSetupRefresh(command.requestId);
@@ -114,13 +116,8 @@ case "agent.list": {
       });
       return;
     }
-case "usage.reset": {
-      const resetAt = new Date().toISOString();
-      Object.assign(tokenUsageSession, createEmptyTokenUsageTotals());
-      repository.resetTokenUsageLifetime(resetAt);
-      emitUsageUpdatedToAll(connections, command.requestId, repository.getTokenUsageState(tokenUsageSession));
-      return;
-    }
+case "usage.refresh":
+case "usage.reset": return handleUsageCommand(command, context);
 case "agent.runtime.refresh": {
       const agentRuntimes = await runtimeRegistry.refreshAll();
       emitAgentRuntimeUpdatedToAll(connections, command.requestId, agentRuntimes);

@@ -1,3 +1,4 @@
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 import { createInterestGrid, createSpatialHash, type AuthoritativeRoom } from "@hyperfocus/engine/server";
 import { type LogicSpatialEntity, type MmoSkillDemoInput, type MmoSkillDemoState } from "./shared-contracts.ts";
 import { type ZoneRuntime } from "./shared-runtime-contracts.ts";
@@ -5,9 +6,7 @@ import { createMmoSkillDemoCollisionKernel } from "./shared-world-runtime.ts";
 
 const runtimeByRoom = new Map<string, ZoneRuntime>();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
-}
+
 
 function isMmoSkillDemoState(value: unknown): value is MmoSkillDemoState {
   if (!isRecord(value)) return false;

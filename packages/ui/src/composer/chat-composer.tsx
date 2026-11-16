@@ -1,13 +1,23 @@
 import * as stylex from "@stylexjs/stylex";
-import { For, type JSX } from "solid-js";
+import { Show, type JSX } from "solid-js";
 import { tokens } from "../theme/tokens.stylex";
 import { Button } from "../primitives/button";
+import { SelectControl } from "../primitives/selection/select-control";
 
-export type ComposerOption = { id: string; label: string; disabled?: boolean };
+export type ComposerOption = {
+  id: string;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+  keywords?: readonly string[];
+  tags?: readonly string[];
+};
 
 export type ChatComposerProps = {
   value: string;
+  ariaLabel?: string;
   placeholder?: string;
+  modeLabel?: string;
   disabled?: boolean;
   options?: {
     agents?: readonly ComposerOption[];
@@ -34,16 +44,19 @@ const styles = stylex.create({
     flexDirection: "column",
   },
   input: {
-    padding: "0.8rem",
+    padding: tokens.space3,
     borderWidth: 0,
     outline: "none",
     backgroundColor: "transparent",
+    boxSizing: "border-box",
     color: tokens.foreground,
     fontFamily: "inherit",
-    fontSize: "0.84rem",
+    fontSize: tokens.fontBody,
     lineHeight: 1.55,
     resize: "vertical",
-    minHeight: "5.5rem",
+    height: { default: "min(5.5rem, 18dvh)", "@media (max-width: 900px), (max-height: 640px)": "min(4rem, 12dvh)" },
+    maxHeight: "30dvh",
+    minHeight: "min(3rem, 12dvh)",
   },
   footer: {
     padding: "0.45rem",
@@ -51,8 +64,8 @@ const styles = stylex.create({
     borderStyle: "solid",
     gap: "0.5rem",
     alignItems: "center",
-    display: "flex",
-    justifyContent: "space-between",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
     borderBottomWidth: "0",
     borderLeftWidth: "0",
     borderRightWidth: "0",
@@ -65,24 +78,14 @@ const styles = stylex.create({
     flexWrap: "wrap",
     minWidth: 0,
   },
-  selectLabel: {
+  selectGroup: {
     gap: "0.3rem",
     alignItems: "center",
     color: tokens.muted,
     display: "flex",
-    fontSize: "0.65rem",
+    fontSize: tokens.fontCaption,
   },
-  select: {
-    padding: "0.3rem",
-    borderColor: tokens.border,
-    borderRadius: "6px",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    backgroundColor: tokens.panelRaised,
-    color: tokens.foreground,
-    fontSize: "0.7rem",
-    maxWidth: "9rem",
-  },
+  select: { maxWidth: "10rem" },
 });
 
 export function ChatComposer(props: ChatComposerProps) {
@@ -94,6 +97,7 @@ export function ChatComposer(props: ChatComposerProps) {
   return (
     <section {...stylex.attrs(styles.root)} data-test-chat-composer="">
       <textarea
+        aria-label={props.ariaLabel ?? "Message"}
         {...stylex.attrs(styles.input)}
         value={props.value}
         placeholder={props.placeholder ?? "Ask about this workspace…"}
@@ -118,7 +122,7 @@ export function ChatComposer(props: ChatComposerProps) {
             onChange={(id) => props.onSelect?.("provider", id)}
           />
           <ComposerSelect
-            label="Mode"
+            label={props.modeLabel ?? "Mode"}
             value={props.selected?.mode}
             options={props.options?.modes}
             onChange={(id) => props.onSelect?.("mode", id)}
@@ -130,7 +134,7 @@ export function ChatComposer(props: ChatComposerProps) {
             onChange={(id) => props.onSelect?.("model", id)}
           />
         </div>
-        <Button
+        <Button variant="primary"
           tooltip={
             props.disabled
               ? "AI is unavailable"
@@ -152,23 +156,25 @@ function ComposerSelect(props: {
   options?: readonly ComposerOption[];
   onChange: (id: string) => void;
 }) {
-  if (!props.options?.length) return null;
   return (
-    <label {...stylex.attrs(styles.selectLabel)}>
+    <Show when={props.options?.length ? props.options : undefined}>{(options) =>
+    <div {...stylex.attrs(styles.selectGroup)}>
       <span>{props.label}</span>
-      <select
-        {...stylex.attrs(styles.select)}
-        value={props.value}
-        onChange={(event) => props.onChange(event.currentTarget.value)}
-      >
-        <For each={props.options}>
-          {(option) => (
-            <option value={option.id} disabled={option.disabled}>
-              {option.label}
-            </option>
-          )}
-        </For>
-      </select>
-    </label>
+      <SelectControl
+        ariaLabel={`Select ${props.label.toLocaleLowerCase()}`}
+        class={stylex.attrs(styles.select).class}
+        value={props.value ?? options()[0]!.id}
+        options={options().map((option) => ({
+          value: option.id,
+          label: option.label,
+          description: option.description,
+          disabled: option.disabled,
+          keywords: option.keywords,
+          tags: option.tags,
+        }))}
+        onChange={props.onChange}
+      />
+    </div>
+    }</Show>
   );
 }

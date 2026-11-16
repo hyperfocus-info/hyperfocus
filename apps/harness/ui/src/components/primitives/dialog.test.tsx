@@ -6,11 +6,49 @@ import { clearBrowserStateForTests } from "../../utils/tests/store-test-utils";
 import { Dialog } from "./dialog";
 import { clearOverlayStackForTests } from "./overlay-stack";
 import { Popover } from "./popover";
+import { ContextMenu } from "./context-menu";
+import { createSignal } from "solid-js";
 
 createUiTest("Dialog", () => {
   beforeEach(() => {
     clearBrowserStateForTests();
     clearOverlayStackForTests();
+  });
+
+  it("keeps a nested context menu keyboard-owned and closes it before its dialog", async () => {
+    const [open, setOpen] = createSignal(false);
+    let closedDialog = false;
+    render(() => <Dialog open title="Context owner" onClose={() => { closedDialog = true; }}>
+      <button onClick={() => setOpen(true)}>Open actions</button>
+      <ContextMenu open={open()} x={10} y={10} ariaLabel="Actions" onClose={() => setOpen(false)} actions={[
+        { id: "first", label: "First action", onSelect: () => undefined },
+        { id: "disabled", label: "Unavailable action", disabled: true, onSelect: () => undefined },
+        { id: "last", label: "Last action", onSelect: () => undefined },
+      ]} />
+    </Dialog>);
+    await Promise.resolve();
+    const trigger = screen.getByRole("button", { name: "Open actions" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    await Promise.resolve();
+    expect(document.activeElement?.textContent).toBe("First action");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(document.activeElement?.textContent).toBe("Last action");
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    expect(document.activeElement?.textContent).toBe("First action");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(Boolean(screen.queryByRole("menu", { name: "Actions" }))).toBe(false);
+    expect(closedDialog).toBe(false);
+    expect(document.activeElement === trigger).toBe(true);
+  });
+
+  it("constructs nested dialog children only once", () => {
+    let constructions = 0;
+    function Nested() { constructions++; return <Dialog open title="Nested confirmation">Confirm</Dialog>; }
+    render(() => <Dialog open title="Parent"><Nested /></Dialog>);
+    expect(constructions).toBe(1);
+    expect(screen.getAllByRole("dialog", { name: "Nested confirmation" })).toHaveLength(1);
   });
 
   it("renders nothing when closed", () => {

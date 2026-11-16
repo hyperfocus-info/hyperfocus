@@ -1,0 +1,2690 @@
+{
+  "maxStamina": 100,
+  "staminaRegen": 0.6075,
+  "idleStaminaRegen": 0.759375,
+  "airStaminaRegen": 0.2025,
+  "hitstunStaminaRegen": 0.405,
+  "parryStaminaRestore": 6,
+  "directionalInfluence": 0.495,
+  "lateInfluenceFrames": 3,
+  "landingRecoveryFrames": 5,
+  "maxHealth": 100,
+  "hurtRadius": 0.6,
+  "inputBufferFrames": 10,
+  "commandWindowFrames": 20,
+  "parryFrames": 6,
+  "guardArcDegrees": 120,
+  "chipRatio": 0.35,
+  "maxGuard": 100,
+  "guardBreakFrames": 600,
+  "parryPushback": 3,
+  "parryGuardRestore": 0.25,
+  "parryFollowupFrames": 24,
+  "parryRecoveryFrames": 20,
+  "escapeCharges": 1,
+  "techWindowFrames": 6,
+  "techLockoutFrames": 12,
+  "techProtectionFrames": 12,
+  "moves": [
+    {
+      "id": "jab",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 14,
+      "activeFrames": 3,
+      "recoveryFrames": 16,
+      "damage": 8,
+      "hitstunFrames": 22,
+      "blockstunFrames": 18,
+      "impulse": 1.404,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 2,
+      "steering": 0.2,
+      "direction": "neutral",
+      "drive": false,
+      "staminaCost": 9,
+      "contactRefund": 6,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "drive-jab",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 16,
+      "activeFrames": 19,
+      "recoveryFrames": 38,
+      "damage": 4,
+      "hitstunFrames": 62,
+      "blockstunFrames": 8,
+      "impulse": 0.3375,
+      "hitRadius": 0.35,
+      "reach": 1.2,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 10,
+      "movementSpeed": 4.5,
+      "steering": 0.2,
+      "direction": "neutral",
+      "drive": true,
+      "staminaCost": 30,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "strikeFrames": [
+        0,
+        6,
+        12,
+        18
+      ],
+      "groundedHitstunFrames": 33,
+      "startupTracking": 0.045,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "jab-toward",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 14,
+      "activeFrames": 3,
+      "recoveryFrames": 16,
+      "damage": 8,
+      "hitstunFrames": 22,
+      "blockstunFrames": 18,
+      "impulse": 2.106,
+      "hitRadius": 0.35,
+      "reach": 1.5,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 17,
+          "toFrame": 24,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 7,
+      "steering": 0.2,
+      "direction": "toward",
+      "drive": false,
+      "staminaCost": 9,
+      "contactRefund": 6,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "verticalImpulse": 0,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "drive-jab-toward",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 16,
+      "activeFrames": 19,
+      "recoveryFrames": 38,
+      "damage": 4,
+      "hitstunFrames": 62,
+      "blockstunFrames": 8,
+      "impulse": 1.35,
+      "hitRadius": 0.35,
+      "reach": 1.2,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 10,
+      "movementSpeed": 6,
+      "steering": 0.2,
+      "direction": "toward",
+      "drive": true,
+      "staminaCost": 30,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "verticalImpulse": 0,
+      "strikeFrames": [
+        0,
+        6,
+        12,
+        18
+      ],
+      "groundedHitstunFrames": 33,
+      "startupTracking": 0.045,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "jab-away",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 17,
+      "activeFrames": 3,
+      "recoveryFrames": 16,
+      "damage": 6,
+      "hitstunFrames": 22,
+      "blockstunFrames": 18,
+      "impulse": 4.104,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 6,
+      "steering": 0.2,
+      "direction": "away",
+      "drive": false,
+      "staminaCost": 9,
+      "contactRefund": 6,
+      "movementAngle": 3.141592653589793,
+      "impulseAngle": 0,
+      "verticalImpulse": 0,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "drive-jab-away",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 16,
+      "activeFrames": 19,
+      "recoveryFrames": 38,
+      "damage": 4,
+      "hitstunFrames": 62,
+      "blockstunFrames": 8,
+      "impulse": 1.35,
+      "hitRadius": 0.35,
+      "reach": 1.2,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 10,
+      "movementSpeed": 2,
+      "steering": 0.2,
+      "direction": "away",
+      "drive": true,
+      "staminaCost": 30,
+      "contactRefund": 12,
+      "movementAngle": 3.141592653589793,
+      "impulseAngle": 0,
+      "verticalImpulse": 0,
+      "strikeFrames": [
+        0,
+        6,
+        12,
+        18
+      ],
+      "groundedHitstunFrames": 33,
+      "startupTracking": 0.045,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "heavy",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 28,
+      "activeFrames": 3,
+      "recoveryFrames": 47,
+      "damage": 24,
+      "hitstunFrames": 110,
+      "blockstunFrames": 40,
+      "impulse": 1.692,
+      "hitRadius": 0.7,
+      "reach": 1.3,
+      "cancels": [
+        {
+          "moveId": "feint",
+          "fromFrame": 6,
+          "toFrame": 22
+        }
+      ],
+      "guardDamage": 38,
+      "verticalImpulse": 9.4,
+      "movementSpeed": 3,
+      "steering": 0.15,
+      "direction": "neutral",
+      "drive": false,
+      "staminaCost": 20,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "hitRecoveryFrames": 12
+    },
+    {
+      "id": "drive-heavy",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 32,
+      "activeFrames": 3,
+      "recoveryFrames": 60,
+      "damage": 24,
+      "hitstunFrames": 110,
+      "blockstunFrames": 40,
+      "impulse": 1.692,
+      "hitRadius": 1,
+      "reach": 1.3,
+      "cancels": [
+        {
+          "moveId": "feint",
+          "fromFrame": 6,
+          "toFrame": 26
+        }
+      ],
+      "guardDamage": 38,
+      "verticalImpulse": 12.22,
+      "movementSpeed": 3,
+      "steering": 0.15,
+      "direction": "neutral",
+      "drive": true,
+      "staminaCost": 28,
+      "contactRefund": 18,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "hitHeight": 0.9,
+      "startupTracking": 0.025,
+      "hitRecoveryFrames": 16
+    },
+    {
+      "id": "heavy-toward",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 24,
+      "activeFrames": 3,
+      "recoveryFrames": 45,
+      "damage": 30,
+      "hitstunFrames": 103,
+      "blockstunFrames": 40,
+      "impulse": 9,
+      "hitRadius": 0.7,
+      "reach": 1.5,
+      "cancels": [
+        {
+          "moveId": "feint",
+          "fromFrame": 6,
+          "toFrame": 18
+        }
+      ],
+      "guardDamage": 38,
+      "verticalImpulse": 3,
+      "movementSpeed": 7,
+      "steering": 0.15,
+      "direction": "toward",
+      "drive": false,
+      "staminaCost": 20,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "hitRecoveryFrames": 12
+    },
+    {
+      "id": "drive-heavy-toward",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 30,
+      "activeFrames": 16,
+      "recoveryFrames": 47,
+      "damage": 24,
+      "hitstunFrames": 142,
+      "blockstunFrames": 40,
+      "impulse": 2.538,
+      "hitRadius": 1,
+      "reach": 1.65,
+      "cancels": [
+        {
+          "moveId": "feint",
+          "fromFrame": 6,
+          "toFrame": 24
+        }
+      ],
+      "guardDamage": 38,
+      "verticalImpulse": 0,
+      "movementSpeed": 2,
+      "steering": 0.08,
+      "direction": "toward",
+      "drive": true,
+      "staminaCost": 28,
+      "contactRefund": 18,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "hitHeight": 0,
+      "startupTracking": 0.04,
+      "startupMovementSpeed": 0,
+      "activeMovementSpeed": 12.6,
+      "chargeFrames": 30,
+      "chargeSpeedScale": 0.68,
+      "diveAngle": -0.35,
+      "downwardImpulse": 11.28,
+      "groundedHitstunFrames": 142,
+      "hitRecoveryFrames": 16
+    },
+    {
+      "id": "heavy-away",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 18,
+      "activeFrames": 3,
+      "recoveryFrames": 34,
+      "damage": 12,
+      "hitstunFrames": 123,
+      "blockstunFrames": 20,
+      "impulse": 6.642,
+      "hitRadius": 0.7,
+      "reach": 1.5,
+      "cancels": [
+        {
+          "moveId": "feint",
+          "fromFrame": 6,
+          "toFrame": 12
+        }
+      ],
+      "guardDamage": 20,
+      "verticalImpulse": 0,
+      "movementSpeed": 3,
+      "steering": 0.15,
+      "direction": "away",
+      "drive": false,
+      "staminaCost": 20,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "groundedHitstunFrames": 70,
+      "armorFrames": 21,
+      "hitRecoveryFrames": 12
+    },
+    {
+      "id": "drive-heavy-away",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 22,
+      "activeFrames": 19,
+      "recoveryFrames": 51,
+      "damage": 22,
+      "hitstunFrames": 74,
+      "blockstunFrames": 12,
+      "impulse": 0.9936,
+      "hitRadius": 1,
+      "reach": 1.5,
+      "cancels": [
+        {
+          "moveId": "feint",
+          "fromFrame": 6,
+          "toFrame": 16
+        }
+      ],
+      "guardDamage": 9,
+      "verticalImpulse": 1.84,
+      "movementSpeed": 1,
+      "steering": 0.08,
+      "direction": "away",
+      "drive": true,
+      "staminaCost": 28,
+      "contactRefund": 18,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "groundedHitstunFrames": 74,
+      "hitHeight": 0.8,
+      "startupTracking": 0.04,
+      "pose": "wheel-kick",
+      "startupMovementSpeed": -8,
+      "activeMovementSpeed": 12,
+      "hitRecoveryFrames": 16
+    },
+    {
+      "id": "jab-link",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 5,
+      "activeFrames": 3,
+      "recoveryFrames": 16,
+      "damage": 10,
+      "hitstunFrames": 66,
+      "blockstunFrames": 18,
+      "impulse": 1.44,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 2,
+      "steering": 0.2,
+      "direction": "neutral",
+      "drive": false,
+      "staminaCost": 9,
+      "contactRefund": 6,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "stringOnly": true,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "drive-jab-link",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 10,
+      "activeFrames": 19,
+      "recoveryFrames": 38,
+      "damage": 4.8,
+      "hitstunFrames": 67,
+      "blockstunFrames": 8,
+      "impulse": 0.342,
+      "hitRadius": 0.35,
+      "reach": 1.2,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 10,
+      "movementSpeed": 4.5,
+      "steering": 0.2,
+      "direction": "neutral",
+      "drive": true,
+      "staminaCost": 30,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "strikeFrames": [
+        0,
+        6,
+        12,
+        18
+      ],
+      "groundedHitstunFrames": 32,
+      "startupTracking": 0.045,
+      "stringOnly": true,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "jab-toward-link",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 5,
+      "activeFrames": 3,
+      "recoveryFrames": 16,
+      "damage": 10,
+      "hitstunFrames": 66,
+      "blockstunFrames": 18,
+      "impulse": 2.16,
+      "hitRadius": 0.35,
+      "reach": 1.5,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 7,
+      "steering": 0.2,
+      "direction": "toward",
+      "drive": false,
+      "staminaCost": 9,
+      "contactRefund": 6,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "verticalImpulse": 0,
+      "stringOnly": true,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "drive-jab-toward-link",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 10,
+      "activeFrames": 19,
+      "recoveryFrames": 38,
+      "damage": 4.8,
+      "hitstunFrames": 67,
+      "blockstunFrames": 8,
+      "impulse": 1.368,
+      "hitRadius": 0.35,
+      "reach": 1.2,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 10,
+      "movementSpeed": 6,
+      "steering": 0.2,
+      "direction": "toward",
+      "drive": true,
+      "staminaCost": 30,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "verticalImpulse": 0,
+      "strikeFrames": [
+        0,
+        6,
+        12,
+        18
+      ],
+      "groundedHitstunFrames": 32,
+      "startupTracking": 0.045,
+      "stringOnly": true,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "jab-away-link",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 5,
+      "activeFrames": 3,
+      "recoveryFrames": 16,
+      "damage": 8,
+      "hitstunFrames": 66,
+      "blockstunFrames": 18,
+      "impulse": 4.212,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 8,
+          "toFrame": 15,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 6,
+      "steering": 0.2,
+      "direction": "away",
+      "drive": false,
+      "staminaCost": 9,
+      "contactRefund": 6,
+      "movementAngle": 3.141592653589793,
+      "impulseAngle": 0,
+      "verticalImpulse": 0,
+      "stringOnly": true,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "drive-jab-away-link",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 10,
+      "activeFrames": 19,
+      "recoveryFrames": 38,
+      "damage": 4.8,
+      "hitstunFrames": 67,
+      "blockstunFrames": 8,
+      "impulse": 1.368,
+      "hitRadius": 0.35,
+      "reach": 1.2,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 29,
+          "toFrame": 38,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 10,
+      "movementSpeed": 2,
+      "steering": 0.2,
+      "direction": "away",
+      "drive": true,
+      "staminaCost": 30,
+      "contactRefund": 12,
+      "movementAngle": 3.141592653589793,
+      "impulseAngle": 0,
+      "verticalImpulse": 0,
+      "strikeFrames": [
+        0,
+        6,
+        12,
+        18
+      ],
+      "groundedHitstunFrames": 32,
+      "startupTracking": 0.045,
+      "stringOnly": true,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "flurry",
+      "command": [
+        "flurry"
+      ],
+      "startupFrames": 16,
+      "activeFrames": 19,
+      "recoveryFrames": 38,
+      "damage": 4,
+      "hitstunFrames": 62,
+      "blockstunFrames": 8,
+      "impulse": 0.3375,
+      "hitRadius": 0.35,
+      "reach": 1.2,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 35,
+          "toFrame": 44,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 10,
+      "movementSpeed": 4.5,
+      "steering": 0.2,
+      "staminaCost": 30,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "strikeFrames": [
+        0,
+        6,
+        12,
+        18
+      ],
+      "groundedHitstunFrames": 33,
+      "startupTracking": 0.045,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "escape",
+      "command": [
+        "escape"
+      ],
+      "startupFrames": 16,
+      "activeFrames": 4,
+      "recoveryFrames": 67,
+      "damage": 12,
+      "hitstunFrames": 41,
+      "blockstunFrames": 5,
+      "impulse": 8.856,
+      "hitRadius": 1.2,
+      "reach": 0.5,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 20,
+          "toFrame": 27,
+          "hitOnly": true
+        }
+      ],
+      "armoredEscape": true,
+      "armorFrames": 20,
+      "steering": 0.1,
+      "staminaCost": 0,
+      "contactRefund": 0,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "evade",
+      "command": [
+        "evade"
+      ],
+      "startupFrames": 4,
+      "activeFrames": 2,
+      "recoveryFrames": 29,
+      "damage": 5,
+      "hitstunFrames": 18,
+      "blockstunFrames": 5,
+      "impulse": 1.35,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [],
+      "special": true,
+      "movementSpeed": 9,
+      "steering": 1,
+      "staminaCost": 14,
+      "contactRefund": 9,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "followup",
+      "command": [
+        "followup"
+      ],
+      "startupFrames": 3,
+      "activeFrames": 2,
+      "recoveryFrames": 20,
+      "damage": 6,
+      "hitstunFrames": 22,
+      "blockstunFrames": 5,
+      "impulse": 1.368,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [],
+      "movementSpeed": 3,
+      "steering": 0.4,
+      "parryFollowup": true,
+      "staminaCost": 14,
+      "contactRefund": 9,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "sidestep",
+      "command": [
+        "sidestep"
+      ],
+      "startupFrames": 0,
+      "activeFrames": 1,
+      "recoveryFrames": 13,
+      "damage": 0,
+      "hitstunFrames": 0,
+      "blockstunFrames": 0,
+      "impulse": 0,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [],
+      "guardDamage": 0,
+      "movementSpeed": 12,
+      "steering": 1,
+      "parryFollowup": true,
+      "staminaCost": 14,
+      "contactRefund": 9
+    },
+    {
+      "id": "feint",
+      "command": [
+        "feint"
+      ],
+      "startupFrames": 0,
+      "activeFrames": 1,
+      "recoveryFrames": 19,
+      "damage": 0,
+      "hitstunFrames": 0,
+      "blockstunFrames": 0,
+      "impulse": 0,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [],
+      "guardDamage": 0,
+      "movementSpeed": 1,
+      "steering": 0.5,
+      "staminaCost": 6,
+      "contactRefund": 0
+    },
+    {
+      "id": "evasive",
+      "command": [
+        "evasive"
+      ],
+      "startupFrames": 5,
+      "activeFrames": 3,
+      "recoveryFrames": 20,
+      "damage": 8,
+      "hitstunFrames": 28,
+      "blockstunFrames": 5,
+      "impulse": 1.404,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [],
+      "movementSpeed": 8,
+      "steering": 1,
+      "parryFollowup": true,
+      "staminaCost": 14,
+      "contactRefund": 9,
+      "hitRecoveryFrames": 8
+    },
+    {
+      "id": "dash-jab-toward",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 12,
+      "activeFrames": 4,
+      "recoveryFrames": 36,
+      "damage": 10,
+      "hitstunFrames": 48,
+      "blockstunFrames": 18,
+      "impulse": 2.16,
+      "hitRadius": 0.35,
+      "reach": 1.5,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 16,
+          "toFrame": 25,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 2,
+      "steering": 0.08,
+      "direction": "toward",
+      "drive": false,
+      "staminaCost": 9,
+      "contactRefund": 6,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "jolt",
+      "startupMovementSpeed": 10,
+      "activeMovementSpeed": 8,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "dash-heavy-toward",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 26,
+      "activeFrames": 4,
+      "recoveryFrames": 51,
+      "damage": 24,
+      "hitstunFrames": 110,
+      "blockstunFrames": 40,
+      "impulse": 1.269,
+      "hitRadius": 0.7,
+      "reach": 1.5,
+      "cancels": [],
+      "guardDamage": 38,
+      "verticalImpulse": 0,
+      "movementSpeed": 1,
+      "steering": 0.08,
+      "direction": "toward",
+      "drive": false,
+      "staminaCost": 20,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "liver-punch",
+      "groundedHitstunFrames": 110,
+      "startupMovementSpeed": 5,
+      "activeMovementSpeed": 6,
+      "hitRecoveryFrames": 14
+    },
+    {
+      "id": "dash-jab-away",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 14,
+      "activeFrames": 4,
+      "recoveryFrames": 32,
+      "damage": 8,
+      "hitstunFrames": 43,
+      "blockstunFrames": 18,
+      "impulse": 2.808,
+      "hitRadius": 0.95,
+      "reach": 1.6,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 18,
+          "toFrame": 27,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 0,
+      "steering": 0.08,
+      "direction": "away",
+      "drive": false,
+      "staminaCost": 9,
+      "contactRefund": 6,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "retreat-jab",
+      "startupMovementSpeed": -6,
+      "activeMovementSpeed": -3,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "dash-heavy-away",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 18,
+      "activeFrames": 4,
+      "recoveryFrames": 47,
+      "damage": 22,
+      "hitstunFrames": 94,
+      "blockstunFrames": 40,
+      "impulse": 4.968,
+      "hitRadius": 0.7,
+      "reach": 1.6,
+      "cancels": [],
+      "guardDamage": 38,
+      "verticalImpulse": 0,
+      "movementSpeed": 1,
+      "steering": 0.08,
+      "direction": "away",
+      "drive": false,
+      "staminaCost": 20,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "reelback-armor",
+      "armorFrames": 22,
+      "startupMovementSpeed": -7,
+      "activeMovementSpeed": 13,
+      "hitRecoveryFrames": 14
+    },
+    {
+      "id": "dash-drive-jab-toward",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 8,
+      "activeFrames": 5,
+      "recoveryFrames": 38,
+      "damage": 11.2,
+      "hitstunFrames": 66,
+      "blockstunFrames": 18,
+      "impulse": 2.268,
+      "hitRadius": 0.35,
+      "reach": 1.45,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 13,
+          "toFrame": 22,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 2,
+      "steering": 0.08,
+      "direction": "toward",
+      "drive": true,
+      "staminaCost": 20,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "gazelle",
+      "verticalImpulse": 3.36,
+      "startupHopSpeed": 3,
+      "startupMovementSpeed": 13,
+      "activeMovementSpeed": 10,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "dash-drive-heavy-toward",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 10,
+      "activeFrames": 22,
+      "recoveryFrames": 47,
+      "damage": 24,
+      "hitstunFrames": 142,
+      "blockstunFrames": 40,
+      "impulse": 2.538,
+      "hitRadius": 0.7,
+      "reach": 1.65,
+      "cancels": [],
+      "guardDamage": 38,
+      "verticalImpulse": 0,
+      "movementSpeed": 2,
+      "steering": 0.08,
+      "direction": "toward",
+      "drive": true,
+      "staminaCost": 28,
+      "contactRefund": 18,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "dive",
+      "groundedHitstunFrames": 142,
+      "hitHeight": 0,
+      "startupMovementSpeed": 12,
+      "activeMovementSpeed": 10.8,
+      "chargeMode": "travel",
+      "chargeFrames": 30,
+      "chargeSpeedScale": 0.68,
+      "diveAngle": -0.35,
+      "downwardImpulse": 11.28,
+      "hitRecoveryFrames": 16
+    },
+    {
+      "id": "dash-drive-jab-away",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 12,
+      "activeFrames": 5,
+      "recoveryFrames": 38,
+      "damage": 9.6,
+      "hitstunFrames": 62,
+      "blockstunFrames": 18,
+      "impulse": 5.166,
+      "hitRadius": 1.1,
+      "reach": 1.6,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 17,
+          "toFrame": 26,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 0,
+      "steering": 0.08,
+      "direction": "away",
+      "drive": true,
+      "staminaCost": 20,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "hook",
+      "verticalImpulse": 1.64,
+      "startupMovementSpeed": -8,
+      "activeMovementSpeed": -4,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "dash-drive-heavy-away",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 4,
+      "activeFrames": 1,
+      "recoveryFrames": 50,
+      "damage": 0,
+      "hitstunFrames": 0,
+      "blockstunFrames": 0,
+      "impulse": 0,
+      "hitRadius": 0.7,
+      "reach": 1.3,
+      "cancels": [
+        {
+          "moveId": "dash-wheel-kick",
+          "fromFrame": 6,
+          "toFrame": 28
+        }
+      ],
+      "guardDamage": 0,
+      "verticalImpulse": 0,
+      "movementSpeed": 0,
+      "steering": 0.08,
+      "direction": "away",
+      "drive": true,
+      "staminaCost": 28,
+      "contactRefund": 0,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "back-hop",
+      "startupHopSpeed": 6,
+      "startupMovementSpeed": -10,
+      "activeMovementSpeed": -10
+    },
+    {
+      "id": "dash-jab-neutral",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 12,
+      "activeFrames": 3,
+      "recoveryFrames": 29,
+      "damage": 8,
+      "hitstunFrames": 43,
+      "blockstunFrames": 18,
+      "impulse": 1.404,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 15,
+          "toFrame": 24,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 0,
+      "steering": 0.08,
+      "direction": "neutral",
+      "drive": false,
+      "staminaCost": 9,
+      "contactRefund": 6,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "stopping-straight",
+      "startupMovementSpeed": 1,
+      "activeMovementSpeed": 1,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "dash-heavy-neutral",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 22,
+      "activeFrames": 4,
+      "recoveryFrames": 45,
+      "damage": 22,
+      "hitstunFrames": 112,
+      "blockstunFrames": 40,
+      "impulse": 1.242,
+      "hitRadius": 0.7,
+      "reach": 1.3,
+      "cancels": [],
+      "guardDamage": 38,
+      "verticalImpulse": 9.2,
+      "movementSpeed": 0,
+      "steering": 0.08,
+      "direction": "neutral",
+      "drive": false,
+      "staminaCost": 20,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "uppercut",
+      "startupMovementSpeed": 1,
+      "activeMovementSpeed": 2,
+      "hitRecoveryFrames": 14
+    },
+    {
+      "id": "dash-drive-jab-neutral",
+      "command": [
+        "jab"
+      ],
+      "startupFrames": 12,
+      "activeFrames": 7,
+      "recoveryFrames": 39,
+      "damage": 4.8,
+      "hitstunFrames": 64,
+      "blockstunFrames": 12,
+      "impulse": 1.026,
+      "hitRadius": 0.35,
+      "reach": 0.8,
+      "cancels": [
+        {
+          "moveId": "jab-link",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-link",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-toward-link",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-toward-link",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "jab-away-link",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-jab-away-link",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-toward",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-toward",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "heavy-away",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        },
+        {
+          "moveId": "drive-heavy-away",
+          "fromFrame": 19,
+          "toFrame": 28,
+          "hitOnly": true
+        }
+      ],
+      "guardDamage": 12,
+      "movementSpeed": 0,
+      "steering": 0.08,
+      "direction": "neutral",
+      "drive": true,
+      "staminaCost": 20,
+      "contactRefund": 12,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "body-blows",
+      "strikeFrames": [
+        0,
+        6
+      ],
+      "startupMovementSpeed": 3,
+      "activeMovementSpeed": 3,
+      "hitRecoveryFrames": 10
+    },
+    {
+      "id": "dash-drive-heavy-neutral",
+      "command": [
+        "heavy"
+      ],
+      "startupFrames": 20,
+      "activeFrames": 5,
+      "recoveryFrames": 51,
+      "damage": 22,
+      "hitstunFrames": 112,
+      "blockstunFrames": 40,
+      "impulse": 1.656,
+      "hitRadius": 0.7,
+      "reach": 1.3,
+      "cancels": [],
+      "guardDamage": 38,
+      "verticalImpulse": 11.04,
+      "movementSpeed": 0,
+      "steering": 0.08,
+      "direction": "neutral",
+      "drive": true,
+      "staminaCost": 28,
+      "contactRefund": 18,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "dashAttack": true,
+      "dashTransitionFrames": 6,
+      "startupTracking": 0.025,
+      "pose": "rising-knee",
+      "hitHeight": 1.8,
+      "startupHopSpeed": 4,
+      "startupMovementSpeed": 1.5,
+      "activeMovementSpeed": 2,
+      "hitRecoveryFrames": 16
+    },
+    {
+      "id": "dash-wheel-kick",
+      "command": [
+        "drive"
+      ],
+      "startupFrames": 8,
+      "activeFrames": 19,
+      "recoveryFrames": 45,
+      "damage": 22,
+      "hitstunFrames": 74,
+      "blockstunFrames": 12,
+      "impulse": 0.9936,
+      "hitRadius": 0.7,
+      "reach": 1.4,
+      "cancels": [],
+      "guardDamage": 9,
+      "verticalImpulse": 5.52,
+      "movementSpeed": 1,
+      "steering": 0.15,
+      "staminaCost": 14,
+      "contactRefund": 9,
+      "movementAngle": 0,
+      "impulseAngle": 0,
+      "stringOnly": true,
+      "pose": "wheel-kick",
+      "hitHeight": 2,
+      "startupHopSpeed": 6,
+      "startupMovementSpeed": 3,
+      "activeMovementSpeed": 9,
+      "hitRecoveryFrames": 14
+    }
+  ],
+  "directionMode": "forward-back"
+}

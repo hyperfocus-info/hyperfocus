@@ -1,3 +1,4 @@
+import { typography } from "@hyperfocus/ui";
 import { For, Show, createMemo, createSignal } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { createRequestId, type MemoryEntry } from "@hyperfocus/ai-core/protocol";
@@ -9,10 +10,10 @@ import { chatPanelStyles as styles } from "../components/chat-panel.styles";
 import { chatUtilityStyles } from "../components/chat-panel.utilities";
 import { MarkdownContent, type MarkdownContentProps } from "../components/markdown-content";
 import { Button } from "../components/primitives/button";
-import { Input } from "../components/primitives/input";
 import { Textarea } from "../components/primitives/textarea";
 import { VirtualList } from "../components/primitives/virtual-list";
 import { buildMemoryAudit, isSemanticMemoryTag, parseSemanticMemoryTags } from "./memory-model";
+import { Disclosure, Input, SelectControl, TagPicker } from "@hyperfocus/ui";
 
 type MemoryPaneProps = {
   projectId: string;
@@ -28,6 +29,17 @@ export function MemoryPane(props: MemoryPaneProps) {
   const [validationMessage, setValidationMessage] = createSignal<string>();
   const [deleteArmedMemoryId, setDeleteArmedMemoryId] = createSignal<string>();
   const audit = createMemo(() => buildMemoryAudit(props.entries));
+  const [query, setQuery] = createSignal("");
+  const [selectedTags, setSelectedTags] = createSignal<string[]>([]);
+  const [status, setStatus] = createSignal("all");
+  const [pinnedOnly, setPinnedOnly] = createSignal(false);
+  const tagOptions = createMemo(() => [...new Set(props.entries.flatMap(entry => entry.tags))].sort().map(value => ({ value, label: value })));
+  const visibleEntries = createMemo(() => props.entries.filter(entry =>
+    (status() === "all" || entry.status === status()) && (!pinnedOnly() || entry.pinned)
+    && selectedTags().every(tag => entry.tags.includes(tag))
+    && `${entry.title} ${entry.summary} ${entry.tags.join(" ")}`.toLowerCase().includes(query().trim().toLowerCase())));
+  const filtered = () => Boolean(query().trim() || selectedTags().length || status() !== "all" || pinnedOnly());
+  const clearFilters = () => { setQuery(""); setSelectedTags([]); setStatus("all"); setPinnedOnly(false); };
 
   function handleCreateMemory(event: SubmitEvent) {
     event.preventDefault();
@@ -97,63 +109,73 @@ export function MemoryPane(props: MemoryPaneProps) {
       <section class={stylex.attrs(chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class} aria-label="Memory audit">
         <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
           <div>
-            <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>Intentional project notes</div>
-            <div class={stylex.attrs(chatUtilityStyles.pt2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
+            <div class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>Intentional project notes</div>
+            <div class={stylex.attrs(chatUtilityStyles.pt2, typography.body, chatUtilityStyles.textVariableMuted).class}>
               Tool-capable Pi sessions pull matching notes explicitly. Notes are never inserted into prompts automatically.
             </div>
           </div>
         </div>
-        <div class={stylex.attrs(chatUtilityStyles.pt2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
+        <div class={stylex.attrs(chatUtilityStyles.pt2, typography.body, chatUtilityStyles.textVariableMuted).class}>
           {audit().activeCount} active / {audit().archivedCount} archived / {audit().neverRetrievedCount} never retrieved / {audit().staleCount} stale / {audit().cleanupCandidateIds.length} cleanup candidates
         </div>
       </section>
 
+      <Disclosure title="Add a focused note">
       <form class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class} onSubmit={handleCreateMemory}>
-        <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>Add a focused note</div>
-        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, chatUtilityStyles.text0675rem, chatUtilityStyles.fontSemibold).class}>
+        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, typography.body, chatUtilityStyles.fontSemibold).class}>
           Note title
           <Input value={title()} maxlength={120} onInput={(event) => setTitle(event.currentTarget.value)} />
         </label>
-        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, chatUtilityStyles.text0675rem, chatUtilityStyles.fontSemibold).class}>
+        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, typography.body, chatUtilityStyles.fontSemibold).class}>
           Focused context
           <Textarea value={summary()} maxlength={600} rows="4" onInput={(event) => setSummary(event.currentTarget.value)} />
         </label>
-        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, chatUtilityStyles.text0675rem, chatUtilityStyles.fontSemibold).class}>
+        <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, typography.body, chatUtilityStyles.fontSemibold).class}>
           Semantic tags
           <Input placeholder="feature:frontend-refactor, area:harness" value={tagsDraft()} onInput={(event) => setTagsDraft(event.currentTarget.value)} />
         </label>
+        <TagPicker ariaLabel="Choose existing semantic tags" options={tagOptions()} value={parseSemanticMemoryTags(tagsDraft())} onChange={values => setTagsDraft(values.join(", "))} />
         <Show when={validationMessage()}>
-          <div role="alert" class={stylex.attrs(chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableWarningStrong).class}>{validationMessage()}</div>
+          <div role="alert" class={stylex.attrs(typography.body, chatUtilityStyles.textVariableWarningStrong).class}>{validationMessage()}</div>
         </Show>
         <div>
           <Button type="submit" tooltip="Save this project note">Save note</Button>
         </div>
       </form>
+      </Disclosure>
 
+      <section aria-label="Filter project notes" class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
+        <Input aria-label="Search project notes" placeholder="Search notes" value={query()} onInput={event => setQuery(event.currentTarget.value)} />
+        <TagPicker ariaLabel="Filter notes by semantic tags" options={tagOptions()} value={selectedTags()} onChange={setSelectedTags} />
+        <SelectControl ariaLabel="Note status" value={status()} onChange={setStatus} options={[{ value: "all", label: "All notes" }, { value: "active", label: "Active" }, { value: "archived", label: "Archived" }]} />
+        <Button variant={pinnedOnly() ? "default" : "secondary"} aria-label="Show pinned notes only" tooltip="Show pinned notes only" aria-pressed={pinnedOnly()} onClick={() => setPinnedOnly(value => !value)}>Pinned</Button>
+        <Show when={filtered()}><Button variant="secondary" aria-label="Clear note filters" tooltip="Clear note filters" onClick={clearFilters}>Clear filters</Button></Show>
+      </section>
+      <Show when={filtered() && visibleEntries().length === 0}><p role="status">No notes match these filters.</p></Show>
       <VirtualList
         class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}
         contentClass={stylex.attrs(styles.virtualContent).class}
         itemClass={stylex.attrs(styles.virtualItem).class}
-        items={props.entries}
+        items={visibleEntries()}
         getKey={(entry) => entry.id}
         estimateSize={220}
         pagination={{ kind: "reverse", initialCount: 80, batchSize: 80 }}
         empty={
-          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH56, chatUtilityStyles.flex1, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite40, chatUtilityStyles.p8, chatUtilityStyles.textCenter, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
-            No project notes yet. Add one only when durable context is worth retrieving later.
+          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH56, chatUtilityStyles.flex1, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite40, chatUtilityStyles.p8, chatUtilityStyles.textCenter, typography.body, chatUtilityStyles.textVariableMuted).class}>
+            {filtered() ? "Clear filters to see more project notes." : "No project notes yet. Add one only when durable context is worth retrieving later."}
           </div>
         }
       >
-        {(entry, index) => (
+        {(entry) => (
           <article class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
             <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
               <div>
-                <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>{entry.kind}</div>
+                <div class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>{entry.kind}</div>
                 <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>{entry.title}</div>
               </div>
               <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
-                <ActionButton tooltip="Move note earlier in retrieval priority" disabled={index === 0} disabledReason="Already highest priority note" icon={<ArrowUp class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />} size="icon" variant="secondary" ariaLabel="Move memory up" onClick={() => handleReorderMemory(entry.id, "up")} />
-                <ActionButton tooltip="Move note later in retrieval priority" disabled={index === props.entries.length - 1} disabledReason="Already lowest priority note" icon={<ArrowDown class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />} size="icon" variant="secondary" ariaLabel="Move memory down" onClick={() => handleReorderMemory(entry.id, "down")} />
+                <ActionButton tooltip="Move note earlier in retrieval priority" disabled={filtered() || props.entries[0]?.id === entry.id} disabledReason={filtered() ? "Clear filters to reorder notes" : "Already highest priority note"} icon={<ArrowUp class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />} size="icon" variant="secondary" ariaLabel="Move memory up" onClick={() => handleReorderMemory(entry.id, "up")} />
+                <ActionButton tooltip="Move note later in retrieval priority" disabled={filtered() || props.entries.at(-1)?.id === entry.id} disabledReason={filtered() ? "Clear filters to reorder notes" : "Already lowest priority note"} icon={<ArrowDown class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />} size="icon" variant="secondary" ariaLabel="Move memory down" onClick={() => handleReorderMemory(entry.id, "down")} />
                 <ActionButton tooltip={entry.pinned ? "Unpin project note" : "Pin project note"} size="sm" variant="secondary" onClick={() => handleUpdateMemory(entry.id, { pinned: !entry.pinned })}>{entry.pinned ? "Unpin" : "Pin"}</ActionButton>
                 <ActionButton tooltip={entry.status === "active" ? "Archive project note" : "Restore project note"} size="sm" variant="secondary" onClick={() => handleUpdateMemory(entry.id, { status: entry.status === "active" ? "archived" : "active" })}>{entry.status === "active" ? "Archive" : "Restore"}</ActionButton>
                 <ActionButton tooltip="Permanently delete this memory entry" size="sm" variant="secondary" onClick={() => handleDeleteMemory(entry.id)}>{deleteArmedMemoryId() === entry.id ? "Confirm delete" : "Delete"}</ActionButton>
@@ -163,8 +185,8 @@ export function MemoryPane(props: MemoryPaneProps) {
               priority {entry.priority} / {entry.confidence} / {entry.freshness} / hits {entry.hitCount} / last used {formatShortTimestamp(entry.lastHitAt)}
             </div>
             <Show when={entry.tags.length > 0}>
-              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2, chatUtilityStyles.pt2, chatUtilityStyles.text0585rem, chatUtilityStyles.textVariableAccentStrong).class}>
-                <For each={entry.tags}>{(tag) => <span>{tag}</span>}</For>
+              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2, chatUtilityStyles.pt2, typography.caption, chatUtilityStyles.textVariableAccentStrong).class}>
+                <For each={entry.tags}>{(tag) => <Button variant={selectedTags().includes(tag) ? "default" : "secondary"} aria-label={`Filter notes by ${tag}`} tooltip={`Filter notes by ${tag}`} aria-pressed={selectedTags().includes(tag)} onClick={() => setSelectedTags(values => values.includes(tag) ? values.filter(value => value !== tag) : [...values, tag])}>{tag}</Button>}</For>
               </div>
             </Show>
             <div class={stylex.attrs(chatUtilityStyles.pt2).class}>

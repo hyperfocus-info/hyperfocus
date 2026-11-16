@@ -1,27 +1,14 @@
-import { beforeEach, expect, test } from "bun:test";
-import { createWorkspaceProjectState, type ClientCommand, type IdeFileRead } from "@hyperfocus/ai-core/protocol";
-import { createUiTest } from "../utils/tests/test-harness";
-import { captureDispatchedCommands, clearBrowserStateForTests } from "../utils/tests/store-test-utils";
+import { createWorkspaceProjectState,type ClientCommand } from "@hyperfocus/ai-core/protocol";
+import { beforeEach,expect,test } from "bun:test";
 import { harnessStore } from "../harness-store";
+import { captureDispatchedCommands,clearBrowserStateForTests } from "../utils/tests/store-test-utils";
+import { createUiTest } from "../utils/tests/test-harness";
+import { filePayload } from "../utils/tests/transport-fixtures";
 import { ideStore } from "./ide-store";
 
 const projectA = createWorkspaceProjectState({ id: "project-a", name: "Project A", rootPath: "C:\\project-a" });
 const projectB = createWorkspaceProjectState({ id: "project-b", name: "Project B", rootPath: "C:\\project-b" });
 
-function filePayload(projectId: string, path: string, content: string): IdeFileRead {
-  return {
-    projectId,
-    path,
-    name: path.split("/").at(-1) ?? path,
-    language: "TypeScript",
-    encoding: "UTF-8",
-    sizeBytes: content.length,
-    lineCount: content.split("\n").length,
-    isBinary: false,
-    tooLarge: false,
-    content
-  };
-}
 
 function requireLatestCommand<TType extends ClientCommand["type"]>(commands: ClientCommand[], type: TType) {
   for (let index = commands.length - 1; index >= 0; index -= 1) {

@@ -1,6 +1,15 @@
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
+import { isWebsiteArchiveCode } from './source-artifacts';
+import {
+  collectNumericLiteralSource,
+  isNumericLiteralSourcePath,
+  numericLiteralMessage,
+  parseNumericLiteralBaseline,
+  type NumericLiteralBaseline
+} from "./numeric-literals/policy";
 
 export const CODE_STYLE_BASELINE_PATH = "scripts/code-style-baseline.json";
 export const CODE_STYLE_RULES = [
@@ -26,14 +35,11 @@ const RULE_LABELS = {
 };
 const SOURCE_PATTERN = /\.(?:[cm]?[jt]s|[jt]sx)$/i;
 const DECLARATION_PATTERN = /\.d\.(?:[cm]?ts|tsx)$/i;
-const GENERATED_PATH_PATTERN = /(?:^|\/)(?:browser|coverage|dist|node_modules|\.git|\.local)(?:\/|$)|\.generated\.[^/]+$/i;
+const GENERATED_PATH_PATTERN = /(?:^|\/)(?:browser|coverage|dist|node_modules|\.git|\.local)(?:\/|$)|^apps\/pad-pilot\/build\/|^apps\/pad-pilot-marketplace\/data\/|\/proto\/generated\/|\.generated\.[^/]+$/i;
 const SOURCE_ROOT_PATTERNS = [
   /^packages\/(?!engine\/)/,
   /^packages\/engine\/(?:src|scripts|examples)\//,
-  /^apps\/harness\/cli\/src\//,
-  /^apps\/harness\/scripts\//,
-  /^apps\/harness\/ui\/src\//,
-  /^apps\/engine-editor\//,
+  /^apps\//,
   /^scripts\//
 ];
 
@@ -53,8 +59,11 @@ function createCounts() {
 export type CodeStyleCounts = ReturnType<typeof createCounts>;
 export type CodeStyleRule = (typeof CODE_STYLE_RULES)[number];
 
-function createBaselineShape(entries: Record<string, Partial<CodeStyleCounts>> = {}) {
-  return { version: 1 as const, entries };
+function createBaselineShape(
+  entries: Record<string, Partial<CodeStyleCounts>> = {},
+  numericLiterals: NumericLiteralBaseline = {}
+) {
+  return { version: 1 as const, entries, numericLiterals };
 }
 
 export type CodeStyleBaseline = ReturnType<typeof createBaselineShape>;
@@ -129,17 +138,18 @@ export function collectCodeStyleEntries(files: ReadonlyMap<string, string>) {
   }
 
   return [...entries]
-    .map(([filePath, counts]) => ({ path: filePath, counts }))
+    .map(([filePath, counts]) => ({
+      path: filePath,
+      counts,
+      numericLiterals: isNumericLiteralSourcePath(filePath)
+        ? collectNumericLiteralSource(filePath, normalizedFiles.get(filePath) ?? "") : []
+    }))
+    .concat([...normalizedFiles]
+      .filter(([filePath]) => isNumericLiteralSourcePath(filePath) && !entries.has(filePath))
+      .map(([filePath, source]) => ({
+        path: filePath, counts: createCounts(), numericLiterals: collectNumericLiteralSource(filePath, source)
+      })))
     .sort((left, right) => left.path.localeCompare(right.path));
-}
-
-export function createCodeStyleBaseline(entries: ReturnType<typeof collectCodeStyleEntries>) {
-  const baseline = createBaselineShape();
-  for (const entry of entries) {
-    const counts = compactCounts(entry.counts);
-    if (Object.keys(counts).length) baseline.entries[entry.path] = counts;
-  }
-  return baseline;
 }
 
 export function findCodeStyleViolations(
@@ -162,6 +172,11 @@ export function findCodeStyleViolations(
       } else if (count < limit) {
         violations.push(`${filePath} reduced ${RULE_LABELS[rule]} from ${limit} to ${count}; ratchet the baseline`);
       }
+    }
+  }
+  for (const entry of entries) {
+    for (const expression of entry.numericLiterals) {
+      violations.push(`${entry.path}:${expression.line}:${expression.column} computed numeric literal: ${numericLiteralMessage(expression.expression, expression.value)}`);
     }
   }
   return violations;
@@ -207,7 +222,7 @@ export function parseCodeStyleBaseline(value: unknown) {
     if (!Object.keys(counts).length) throw new Error(`Code style baseline entry is empty: ${filePath}`);
     entries[filePath] = counts;
   }
-  return createBaselineShape(entries);
+  return createBaselineShape(entries, parseNumericLiteralBaseline(value.numericLiterals));
 }
 
 export async function collectRepositoryCodeStyle(
@@ -216,7 +231,7 @@ export async function collectRepositoryCodeStyle(
 ) {
   const candidates = paths
     .map(normalizeCodeStylePath)
-    .filter((filePath) => isSourcePath(filePath) || isScopedManifest(filePath));
+    .filter((filePath) => isSourcePath(filePath) || isNumericLiteralSourcePath(filePath) || isScopedManifest(filePath));
   const loaded = await Promise.all(candidates.map(async (filePath) => {
     try {
       return [filePath, await readSource(filePath)] as const;
@@ -229,7 +244,10 @@ export async function collectRepositoryCodeStyle(
 }
 
 async function main() {
-  const result = Bun.spawnSync({
+  for (const argument of process.argv.slice(2)) {
+    if (argument !== "--ratchet") throw new Error(`Unknown code-style option: ${argument}`);
+  }
+  const result = spawnBackgroundProcessSync({
     cmd: ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
     stdout: "pipe",
     stderr: "inherit"
@@ -237,16 +255,6 @@ async function main() {
   if (result.exitCode !== 0) throw new Error("Could not enumerate Git candidates");
   const paths = result.stdout.toString().split("\0").filter(Boolean);
   const entries = await collectRepositoryCodeStyle(paths);
-
-  if (process.argv.includes("--initialize")) {
-    if (await Bun.file(CODE_STYLE_BASELINE_PATH).exists()) {
-      throw new Error(`${CODE_STYLE_BASELINE_PATH} already exists; initialization is one-time only`);
-    }
-    const baseline = createCodeStyleBaseline(entries);
-    await writeBaseline(baseline);
-    console.log(`Initialized code style baseline with ${Object.keys(baseline.entries).length} debt-bearing files.`);
-    return;
-  }
 
   const baseline = parseCodeStyleBaseline(JSON.parse(await readFile(CODE_STYLE_BASELINE_PATH, "utf8")));
   const currentBaseline = process.argv.includes("--ratchet")
@@ -271,6 +279,7 @@ function parseSource(filePath: string, source: string) {
 
 function isSourcePath(filePath: string) {
   return SOURCE_PATTERN.test(filePath)
+    && !isWebsiteArchiveCode(filePath)
     && !DECLARATION_PATTERN.test(filePath)
     && !GENERATED_PATH_PATTERN.test(filePath)
     && SOURCE_ROOT_PATTERNS.some((pattern) => pattern.test(filePath));
@@ -364,14 +373,15 @@ function isPureBarrel(sourceFile: ts.SourceFile) {
 
 function collectRelativeModuleSpecifiers(sourceFile: ts.SourceFile) {
   const specifiers: string[] = [];
-  for (const statement of sourceFile.statements) {
-    if ((ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))
-      && statement.moduleSpecifier
-      && ts.isStringLiteral(statement.moduleSpecifier)
-      && statement.moduleSpecifier.text.startsWith(".")) {
-      specifiers.push(statement.moduleSpecifier.text);
-    }
+  function visit(node: ts.Node) {
+    const source = ts.isImportDeclaration(node) || ts.isExportDeclaration(node)
+      ? node.moduleSpecifier
+      : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+        ? node.arguments[0] : undefined;
+    if (source && ts.isStringLiteral(source) && source.text.startsWith(".")) specifiers.push(source.text);
+    ts.forEachChild(node, visit);
   }
+  visit(sourceFile);
   return specifiers;
 }
 
@@ -445,21 +455,11 @@ function requireCounts(entries: Map<string, CodeStyleCounts>, filePath: string) 
   return counts;
 }
 
-function compactCounts(counts: CodeStyleCounts) {
-  const compact: Partial<CodeStyleCounts> = {};
-  for (const rule of CODE_STYLE_RULES) {
-    if (counts[rule]) compact[rule] = counts[rule];
-  }
-  return compact;
-}
-
 function isCodeStyleRule(value: string): value is CodeStyleRule {
   return CODE_STYLE_RULES.some((rule) => rule === value);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import { isRecord } from '@hyperfocus/utilities/records';
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";

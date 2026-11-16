@@ -39,7 +39,7 @@ const styles = stylex.create({
   main: { overflow: "hidden", minHeight: 0, minWidth: 0 },
   inspector: { overflow: "auto", minHeight: 0, minWidth: 0 },
   bottom: { overflow: "auto", minHeight: 0, minWidth: 0 },
-  status: { paddingInline: "0.6rem", alignItems: "center", backgroundColor: tokens.panelRaised, display: "flex", fontSize: "0.68rem", minWidth: 0 },
+  status: { paddingInline: "0.6rem", alignItems: "center", backgroundColor: tokens.panelRaised, display: "flex", fontSize: tokens.fontCaption, minWidth: 0 },
   handleCell: { backgroundColor: tokens.background, position: "relative", zIndex: 4, minHeight: 0, minWidth: 0, },
   horizontalHandleCell: { minHeight: 0, minWidth: 0 },
   collapsedHandleCell: { backgroundColor: tokens.panel },
@@ -59,7 +59,7 @@ const styles = stylex.create({
   },
   horizontalHandle: { cursor: "row-resize" },
   collapsedHandle: { color: tokens.accent, cursor: "pointer" },
-  grip: { fontFamily: tokens.fontMono, fontSize: "0.8rem", fontWeight: 800, pointerEvents: "none" },
+  grip: { fontFamily: tokens.fontMono, fontSize: tokens.fontControl, fontWeight: 800, pointerEvents: "none" },
 });
 
 export function WorkbenchShell(props: WorkbenchShellProps) {

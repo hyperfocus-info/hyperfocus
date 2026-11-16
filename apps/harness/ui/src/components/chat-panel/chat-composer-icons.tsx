@@ -1,39 +1,15 @@
 import * as stylex from "@stylexjs/stylex";
 import {
-  Activity,
-  AlertTriangle,
-  Brain,
-  Bot,
-  Briefcase,
-  CalendarClock,
-  ClipboardList,
-  Clipboard,
-  Cpu,
-  Edit3,
-  FolderOpen,
-  Folder,
-  Gauge,
-  LoaderCircle,
-  MessageSquareMore,
-  Orbit,
-  Paperclip,
-  Pause,
-  Play,
-  RefreshCcw,
-  Plus,
-  ArrowDown,
-  Check,
+
+
+
+
+
   File,
   FileCode,
   FileJson,
   FileText,
-  Image,
-  SendHorizontal,
-  Settings,
-  Terminal,
-  WandSparkles,
-  X,
-  Split
+  Image
 } from "lucide-solid";
 import { chatPanelStyles as styles } from "../chat-panel.styles";
 

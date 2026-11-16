@@ -1,3 +1,4 @@
+import { modulo } from "@hyperfocus/utilities/math";
 import {
   authoredZoneForMmoSkillDemoTile,
   buildMmoSkillDemoRegionTiles,
@@ -74,9 +75,7 @@ function hash(value: string) {
   return h >>> 0;
 }
 
-function modulo(value: number, max: number) {
-  return ((value % max) + max) % max;
-}
+
 
 function tileAt(tileX: number, tileY: number) {
   if (tileX < 0 || tileY < 0 || tileX >= MAP_WIDTH || tileY >= MAP_HEIGHT) return TILE_WATER;

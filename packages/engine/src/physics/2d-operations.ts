@@ -4,6 +4,7 @@ import type {
   PhysicsRevoluteJoint2DDefinition,
   PhysicsWorld2DDiagnostics,
 } from "./2d.ts";
+import type { createPhysics2DHandles } from './lifecycle/handles-2d.ts';
 import {
   BODY_DYNAMIC,
   BODY_KINEMATIC,
@@ -57,12 +58,14 @@ export type Physics2DOperationContext = {
     jointFree: Int32Array; jointIds: Array<string | undefined>; jointIndexById: Map<string, number>; nonCollidingJointPairs: Map<string, number>;
   };
   diagnostics: PhysicsWorld2DDiagnostics;
+  bodyHandles: ReturnType<typeof createPhysics2DHandles>;
+  jointHandles: ReturnType<typeof createPhysics2DHandles>;
   state: Physics2DMutableState;
   resolveIndex(indexOrId: number | string): number;
 };
 
 export function createPhysics2DLifecycleOperations(context: Physics2DOperationContext) {
-  const { config, bodies, contactStorage, joints, state, resolveIndex } = context;
+  const { config, bodies, contactStorage, joints, state, resolveIndex, bodyHandles, jointHandles } = context;
   const { capacity, maxJoints, sleepAfterSeconds } = config;
   const { alive, bodyType, shapeKind, flags, sleeping, sleepTime, x, y, velocityX, velocityY, angle, angularVelocity, inverseMass, inverseInertia, extentX, extentY, restitution, friction, gravityScale, layer, mask, ids, indexById, free } = bodies;
   const {  } = contactStorage;
@@ -71,7 +74,6 @@ export function createPhysics2DLifecycleOperations(context: Physics2DOperationCo
       if (!definition.id || definition.id.length > 256) throw new RangeError("Physics body id must contain 1-256 characters");
       if (indexById.has(definition.id)) throw new Error(`Physics body id already exists: ${definition.id}`);
       if (state.freeCount === 0) throw new RangeError(`Physics body capacity ${capacity} is exhausted`);
-      const index = free[--state.freeCount]!;
       const type = definition.type ?? "dynamic";
       const typeCode = type === "static" ? BODY_STATIC : type === "dynamic" ? BODY_DYNAMIC : type === "kinematic" ? BODY_KINEMATIC : -1;
       if (typeCode < 0) throw new TypeError(`Unsupported physics body type: ${String(type)}`);
@@ -80,6 +82,13 @@ export function createPhysics2DLifecycleOperations(context: Physics2DOperationCo
       if (typeCode === BODY_DYNAMIC && mass <= 0) throw new RangeError("Dynamic body mass must be greater than zero");
       const bodyLayer = unsignedBits(definition.collisionLayer ?? DEFAULT_LAYER, "collisionLayer");
       const bodyMask = unsignedBits(definition.collisionMask ?? DEFAULT_MASK, "collisionMask");
+      const px = finite(definition.x ?? 0, "x"), py = finite(definition.y ?? 0, "y");
+      const vx = finite(definition.velocityX ?? 0, "velocityX"), vy = finite(definition.velocityY ?? 0, "velocityY");
+      const rotation = finite(definition.angle ?? 0, "angle"), spin = finite(definition.angularVelocity ?? 0, "angularVelocity");
+      const bounce = unitInterval(definition.restitution ?? 0, "restitution");
+      const drag = nonnegative(definition.friction ?? 0.5, "friction");
+      const gravity = finite(definition.gravityScale ?? 1, "gravityScale");
+      const index = free[--state.freeCount]!;
   
       alive[index] = 1;
       bodyType[index] = typeCode;
@@ -87,25 +96,25 @@ export function createPhysics2DLifecycleOperations(context: Physics2DOperationCo
       flags[index] = (definition.trigger ? 1 : 0) | (definition.continuous ? 2 : 0) | (definition.allowSleep === false ? 4 : 0);
       sleeping[index] = 0;
       sleepTime[index] = 0;
-      x[index] = finite(definition.x ?? 0, "x");
-      y[index] = finite(definition.y ?? 0, "y");
-      velocityX[index] = finite(definition.velocityX ?? 0, "velocityX");
-      velocityY[index] = finite(definition.velocityY ?? 0, "velocityY");
-      angle[index] = finite(definition.angle ?? 0, "angle");
-      angularVelocity[index] = finite(definition.angularVelocity ?? 0, "angularVelocity");
+      x[index] = px;
+      y[index] = py;
+      velocityX[index] = vx;
+      velocityY[index] = vy;
+      angle[index] = rotation;
+      angularVelocity[index] = spin;
       inverseMass[index] = typeCode === BODY_DYNAMIC ? 1 / mass : 0;
       extentX[index] = shape.kind === "box" ? shape.halfWidth : shape.radius;
       extentY[index] = shape.kind === "box" ? shape.halfHeight : shape.radius;
       const inertia = shape.kind === "box" ? mass * (shape.halfWidth * shape.halfWidth + shape.halfHeight * shape.halfHeight) / 3 : mass * shape.radius * shape.radius / 2;
       inverseInertia[index] = typeCode === BODY_DYNAMIC && !definition.fixedRotation ? 1 / inertia : 0;
-      restitution[index] = unitInterval(definition.restitution ?? 0, "restitution");
-      friction[index] = nonnegative(definition.friction ?? 0.5, "friction");
-      gravityScale[index] = finite(definition.gravityScale ?? 1, "gravityScale");
+      restitution[index] = bounce;
+      friction[index] = drag;
+      gravityScale[index] = gravity;
       layer[index] = bodyLayer;
       mask[index] = bodyMask;
       ids[index] = definition.id;
       indexById.set(definition.id, index);
-      return index;
+      return bodyHandles.at(index);
     }
   function removeBody(id: string) {
       const index = indexById.get(id);
@@ -118,13 +127,14 @@ export function createPhysics2DLifecycleOperations(context: Physics2DOperationCo
       indexById.delete(id);
       ids[index] = undefined;
       alive[index] = 0;
+      state.contacts = 0;
       flags[index] = 0;
       sleeping[index] = 0;
       sleepTime[index] = 0;
       velocityX[index] = 0;
       velocityY[index] = 0;
       angularVelocity[index] = 0;
-      free[state.freeCount++] = index;
+      if (bodyHandles.retire(index)) free[state.freeCount++] = index;
       return true;
     }
   function addDistanceJoint(definition: PhysicsDistanceJoint2DDefinition) {
@@ -152,7 +162,7 @@ export function createPhysics2DLifecycleOperations(context: Physics2DOperationCo
       jointIndexById.set(definition.id, index);
       state.activeJoints += 1;
       if (!definition.collideConnected) incrementPair(nonCollidingJointPairs, bodyPairKey(a, b));
-      return index;
+      return jointHandles.at(index);
     }
   function addRevoluteJoint(definition: PhysicsRevoluteJoint2DDefinition) {
       if (!definition.id || definition.id.length > 256) throw new RangeError("Physics joint id must contain 1-256 characters");
@@ -190,7 +200,7 @@ export function createPhysics2DLifecycleOperations(context: Physics2DOperationCo
       jointIndexById.set(definition.id, index);
       state.activeJoints += 1;
       if (!definition.collideConnected) incrementPair(nonCollidingJointPairs, bodyPairKey(a, b));
-      return index;
+      return jointHandles.at(index);
     }
   function removeJoint(id: string) {
       const index = jointIndexById.get(id);
@@ -199,7 +209,7 @@ export function createPhysics2DLifecycleOperations(context: Physics2DOperationCo
       jointIndexById.delete(id);
       jointIds[index] = undefined;
       jointAlive[index] = 0;
-      jointFree[state.jointFreeCount++] = index;
+      if (jointHandles.retire(index)) jointFree[state.jointFreeCount++] = index;
       state.activeJoints -= 1;
       return true;
     }

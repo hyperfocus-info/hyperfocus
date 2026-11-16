@@ -1,3 +1,7 @@
+import { finiteOr as finiteNumberOr } from "@hyperfocus/utilities/math";
+import { clampLowerFirst as clamp, clamp01Or as clamp01 } from "@hyperfocus/utilities/math";
+
+import { atan2, cos, hypot, sin } from '../math/simulation.ts';
 import { forceDurationMs, forceHandle, inactiveForceHandle, type MutableForce } from "./3d-force.ts";
 import { groundYAt } from "./3d-overlap.ts";
 
@@ -299,7 +303,7 @@ export function createHeightFieldRaycast3D(
     const dx = vecX(rayDirection);
     const dy = vecY(rayDirection);
     const dz = vecZ(rayDirection);
-    const length = Math.hypot(dx, dy, dz);
+    const length = hypot(dx, dy, dz);
     if (length <= EPSILON) throw new Error("3D ray direction must have non-zero length");
     const nx = dx / length;
     const ny = dy / length;
@@ -633,7 +637,7 @@ function normalizeVec3(value: Vec3Input, out: Vec3, fallback: Vec3Input) {
   const x = vecX(value);
   const y = vecY(value);
   const z = vecZ(value);
-  const length = Math.hypot(x, y, z);
+  const length = hypot(x, y, z);
   if (length <= EPSILON) return setVec3(out, fallback);
   out.x = x / length;
   out.y = y / length;
@@ -645,7 +649,7 @@ function clampVec3Length(value: Vec3Input, maxLength: number, out: Vec3) {
   const x = vecX(value);
   const y = vecY(value);
   const z = vecZ(value);
-  const length = Math.hypot(x, y, z);
+  const length = hypot(x, y, z);
   if (length <= maxLength || length <= EPSILON) {
     out.x = x;
     out.y = y;
@@ -663,7 +667,7 @@ function approachVec3(current: Vec3, target: Vec3Input, maxDelta: number) {
   const dx = vecX(target) - current.x;
   const dy = vecY(target) - current.y;
   const dz = vecZ(target) - current.z;
-  const distance = Math.hypot(dx, dy, dz);
+  const distance = hypot(dx, dy, dz);
   if (distance <= maxDelta || distance <= EPSILON) return setVec3(current, target);
   const scale = maxDelta / distance;
   current.x += dx * scale;
@@ -675,11 +679,11 @@ function approachVec3(current: Vec3, target: Vec3Input, maxDelta: number) {
 function horizontalDirection(value: Vec3Input, fallback: Vec3Input, out: Vec3 = vec3()) {
   const x = vecX(value);
   const z = vecZ(value);
-  const length = Math.hypot(x, z);
+  const length = hypot(x, z);
   if (length <= EPSILON) {
     const fallbackX = vecX(fallback);
     const fallbackZ = vecZ(fallback);
-    const fallbackLength = Math.hypot(fallbackX, fallbackZ);
+    const fallbackLength = hypot(fallbackX, fallbackZ);
     out.x = fallbackLength <= EPSILON ? 0 : fallbackX / fallbackLength;
     out.y = 0;
     out.z = fallbackLength <= EPSILON ? 1 : fallbackZ / fallbackLength;
@@ -697,10 +701,10 @@ function rotateFacingToward(current: Vec3, desired: Vec3Input, maxTurnRate: numb
   const targetZ = vecZ(desired);
   const cross = current.x * targetZ - current.z * targetX;
   const dot = clamp(current.x * targetX + current.z * targetZ, -1, 1);
-  const angle = Math.atan2(cross, dot);
+  const angle = atan2(cross, dot);
   const applied = clamp(angle, -maxTurnRate * dt, maxTurnRate * dt);
-  const cosine = Math.cos(applied);
-  const sine = Math.sin(applied);
+  const cosine = cos(applied);
+  const sine = sin(applied);
   const x = current.x * cosine - current.z * sine;
   const z = current.x * sine + current.z * cosine;
   current.x = x;
@@ -970,10 +974,7 @@ function isVec3Tuple(value: Vec3Input): value is Vec3ArrayLike {
   return Array.isArray(value) || ArrayBuffer.isView(value);
 }
 
-function finiteOr(value: unknown, fallback: number) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
+function finiteOr(value: unknown, fallback: number) { return finiteNumberOr(Number(value), fallback); }
 
 function assertFinite(value: unknown, label: string) {
   const number = Number(value);
@@ -981,10 +982,8 @@ function assertFinite(value: unknown, label: string) {
   return number;
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
 
-function clamp01(value: number) {
-  return clamp(finiteOr(value, 0), 0, 1);
-}
+
+
+export { capsuleIntersectsSphere3D, capsuleIntersectsBox3D, capsuleIntersectsTriangle3D } from './collision3d/capsule.ts';
+export { createStaticTriangleQueries3D, createHeightfieldQueries3D } from './collision3d/static-mesh.ts';

@@ -7,7 +7,8 @@
     "paths": {
       "@hyperfocus/engine": ["./src/index.ts"],
       "@hyperfocus/engine/tooling/*": ["./tooling/*"],
-      "@hyperfocus/engine/*": ["./src/*"]
+      "@hyperfocus/engine/*": ["./src/*"],
+      "#project-starter": ["./tooling/create-project-runtime.ts"]
     },
     "noEmit": true,
     "skipLibCheck": true,

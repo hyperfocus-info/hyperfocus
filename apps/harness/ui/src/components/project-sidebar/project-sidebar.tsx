@@ -1,69 +1,32 @@
-import { For, Show, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type Accessor, type Setter, type JSX } from "solid-js";
+import { createRequestId,type BulkOperationTarget } from "@hyperfocus/ai-core/protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
-  DragDropProvider,
-  DragDropSensors,
-  SortableProvider,
-  createSortable,
-  transformStyle,
-  type DragEventHandler
+type DragEventHandler
 } from "@thisbeyond/solid-dnd";
-import { createRequestId, type BulkOperationTarget } from "@hyperfocus/ai-core/protocol";
+import { createEffect,createMemo,createSignal,getOwner,onCleanup,onMount,runWithOwner,type Accessor,type Setter } from "solid-js";
+import { usePaneNavigation } from "../../app/pane-navigation";
 import {
-  getActiveProject,
-  harnessStore,
-  type ProjectSidebarGrouping,
-  type ProjectSidebarProjectSort,
-  type ProjectSidebarThreadSort
+getActiveProject,
+harnessStore,
+type ProjectSidebarGrouping,
+type ProjectSidebarProjectSort,
+type ProjectSidebarThreadSort
 } from "../../harness-store";
-import { truncateMiddle } from "../../lib/utils";
-import { normalizeAppHotkeyPreferences } from "../../lib/app-hotkeys";
-import { tooltipWithPrimaryHotkey } from "../../lib/hotkey-hints";
 import { registerCurrentTabItemSelector } from "../../lib/current-tab-item-hotkeys";
-import { buildProjectChatSearchResults, type ProjectChatSearchResult } from "../../lib/project-chat-search";
 import { openIdeWindow } from "../../lib/ide-window";
+import { buildProjectChatSearchResults,type ProjectChatSearchResult } from "../../lib/project-chat-search";
 import { activateProjectThread } from "../../project-thread-navigation";
 import { useHarnessStore } from "../../store-providers";
-import { ActionButton } from "../action-button";
-import { Input } from "../primitives/input";
-import { Button } from "../primitives/button";
-import { ButtonGroup, type ButtonGroupItem } from "../primitives/button-group";
 import type { ContextMenuAction } from "../primitives/context-menu";
-import { LeftPaneEmptyState, LeftPaneFilterBlock, LeftPaneHeader, LeftPaneSearchInput, LeftPaneSearchMenu, LeftPaneShell } from "../primitives/left-pane";
-import { StatusChip, type StatusChipTone } from "../primitives/status-chip";
-import { Tooltip } from "../primitives/tooltip";
+import { type VirtualListHandle } from "../primitives/virtual-list";
 import { projectNavigationStyles as styles } from "../project-navigation.styles";
-import { ThreadCleanupDialog } from "../thread-cleanup-dialog";
-import { VirtualList, type VirtualListHandle } from "../primitives/virtual-list";
-import { rightAlignedNumbersEnabled } from "../../lib/visual-flags";
-import {
-  ArrowDown,
-  ArrowUp,
-  Calendar,
-  ChevronDown,
-  ChevronRight,
-  CheckSquare2,
-  Clock3,
-  Code2,
-  Edit3,
-  Folder,
-  GripVertical,
-  GitFork,
-  Plus,
-  Pin,
-  Square,
-  Trash2,
-  FolderOpenDot,
-  Layers,
-  Shredder
-} from "lucide-solid";
-import { applyDeleteButtonTone, projectActionAriaLabel, formatProjectSortLabel, formatThreadSortLabel, formatProjectGroupingLabel, SortableProjectCard, createStaticProjectCardSortableState, sortThreads, compareProjects, groupProjectCards, flattenProjectSidebarRows, estimateProjectSidebarRowSize, getLatestIso, getEarliestIso, maxIso, compareIsoAsc, compareIsoDesc, getPathBasename, getParentPath, moveId, badgeLabel, threadBadgeTone, toggleSelectionId, mergeProjectRangeSelection } from "./project-sidebar-model";
-import type { ProjectCard, ProjectThreadCard, ProjectGroup, ProjectSidebarRow, ProjectCardSortableState } from "./project-sidebar-model";
+import type { ProjectCard,ProjectSidebarRow,ProjectThreadCard } from "./project-sidebar-model";
+import { compareProjects,flattenProjectSidebarRows,getEarliestIso,getLatestIso,groupProjectCards,maxIso,mergeProjectRangeSelection,moveId,sortThreads,toggleSelectionId } from "./project-sidebar-model";
 import { ProjectSidebarView } from "./project-sidebar-view";
+import { ProjectSidebarProvider } from "./state/panel-context";
 
 type ProjectSidebarProps = {
   compact?: boolean;
-  onNavigate?: () => void;
 };
 
 type ProjectSidebarStore = ReturnType<typeof useHarnessStore>;
@@ -110,7 +73,10 @@ function projectRemoveDisabledReason(project: ProjectCard) {
   }
 
 function createProjectSidebarOrganizationActions(options: ProjectSidebarOrganizationOptions) {
-  const { store, state, sendCommand, visibleProjectIds, manualSortActive, editingThreadId, setEditingThreadId, threadTitleDraft, setThreadTitleDraft } = options;
+  const {
+    store, state, sendCommand, visibleProjectIds, manualSortActive, setEditingThreadId,
+    threadTitleDraft, setThreadTitleDraft,
+  } = options;
 function setProjectSort(projectSort: ProjectSidebarProjectSort) {
     store.setProjectSidebarPreferences({ projectSort });
   }
@@ -719,7 +685,7 @@ const { setProjectSort, setThreadSort, setGrouping, persistManualOrder, setProje
 const navigationActions = createProjectSidebarNavigationActions({
     state,
     sendCommand,
-    onNavigate: props.onNavigate,
+    onNavigate: usePaneNavigation(),
     setProjectCollapsed,
     setProjectChatSearch,
     setProjectChatSearchIndex
@@ -833,5 +799,6 @@ return {
 export type ProjectSidebarController = ReturnType<typeof createProjectSidebarController>;
 
 export function ProjectSidebar(props: ProjectSidebarProps) {
-  return <ProjectSidebarView controller={createProjectSidebarController(props)} />;
+  const controller = createProjectSidebarController(props);
+  return <ProjectSidebarProvider value={controller}><ProjectSidebarView /></ProjectSidebarProvider>;
 }

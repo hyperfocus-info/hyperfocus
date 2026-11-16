@@ -119,7 +119,7 @@ export function createPoseInertializer(template: PoseBuffer, mask: CompiledPoseM
   const translationOffsets = new Float32Array(template.translations.length);
   const translationVelocities = new Float32Array(template.translations.length);
   let initialized = false;
-  let previousDeltaSeconds = 1 / 60;
+  let previousDeltaSeconds = 0.016666666666666666;
 
   function snapshot(output: PoseBuffer, target: PoseBuffer, deltaSeconds: number) {
     previousOutputRotations.set(output.rotations);

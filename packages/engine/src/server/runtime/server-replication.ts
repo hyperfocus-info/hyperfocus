@@ -51,6 +51,7 @@ type ReplicationControllerOptions = {
   rooms: Map<string, AuthoritativeRoom>;
   metrics: ServerMetrics;
   leavePlayer(playerId: string, reason: string): Promise<boolean>;
+  onTransportFailure?(socket: EngineServerWebSocket<unknown>): Promise<void>;
   log(level: "warn" | "error", message: string, data?: unknown): void;
   directScheduledCursor: boolean;
 };
@@ -165,7 +166,10 @@ export function createServerReplication(options: ReplicationControllerOptions) {
       options.metrics.record("replication.candidate_error", 1, { roomId: candidate.room.id });
       options.log("warn", "replication candidate failed", { roomId: candidate.room.id, playerId: candidate.player.id, error });
     }
-    if (result.failed) await options.leavePlayer(candidate.player.id, "replication-send-failed");
+    if (result.failed) {
+      if (options.onTransportFailure && candidate.clientState.socket) await options.onTransportFailure(candidate.clientState.socket);
+      else await options.leavePlayer(candidate.player.id, "replication-send-failed");
+    }
     return result;
   }
 

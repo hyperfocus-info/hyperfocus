@@ -1,18 +1,30 @@
 @layer reset {
   *, *::before, *::after { box-sizing: border-box; }
+  button, [role="button"], summary, a[href] { cursor: pointer; }
+}
+
+/* Native controls inside the canonical field scale with their reserved column.
+   Custom controls retain their own rendering and event ownership. */
+@layer hyperfocus-controls {
+  [data-hf-checkbox-field] input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: var(--hf-color-accent);
+  }
 }
 
 @layer hyperfocus-theme {
   :root {
     color-scheme: dark;
-    --hf-color-canvas: #071014;
-    --hf-color-surface: #0c181e;
-    --hf-color-surface-raised: #11232a;
-    --hf-color-overlay: #09151a;
-    --hf-color-border: #263840;
-    --hf-color-border-strong: #3a5661;
-    --hf-color-text: #e9f5f4;
-    --hf-color-text-muted: #91a6aa;
+    --hf-color-canvas: #09090b;
+    --hf-color-surface: #111113;
+    --hf-color-surface-raised: #19191c;
+    --hf-color-overlay: #141416;
+    --hf-color-border: #2d2d31;
+    --hf-color-border-strong: #48484f;
+    --hf-color-text: #f4f4f5;
+    --hf-color-text-muted: #a1a1aa;
     --hf-color-accent: #30d6c8;
     --hf-color-accent-strong: #16a99d;
     --hf-color-accent-foreground: #03100f;
@@ -23,7 +35,7 @@
     --hf-color-warning: #ffbd62;
     --hf-color-danger: #ff667a;
     --hf-color-danger-foreground: #160408;
-    --hf-color-disabled: #61757a;
+    --hf-color-disabled: #71717a;
     --hf-color-scrim: rgb(0 0 0 / 58%);
     --hf-font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --hf-font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -42,14 +54,14 @@
 
   :root[data-hf-theme="light"] {
     color-scheme: light;
-    --hf-color-canvas: #eef2f4;
-    --hf-color-surface: #fbfcfd;
+    --hf-color-canvas: #f7f7f5;
+    --hf-color-surface: #ffffff;
     --hf-color-surface-raised: #ffffff;
     --hf-color-overlay: #ffffff;
-    --hf-color-border: #ccd4d6;
-    --hf-color-border-strong: #9caeb2;
-    --hf-color-text: #17202a;
-    --hf-color-text-muted: #68737d;
+    --hf-color-border: #deded9;
+    --hf-color-border-strong: #adada7;
+    --hf-color-text: #18181b;
+    --hf-color-text-muted: #66666f;
     --hf-color-accent: #0f766e;
     --hf-color-accent-strong: #0b5f59;
     --hf-color-accent-foreground: #ffffff;
@@ -99,4 +111,17 @@
   outline-offset: 4px !important;
   position: relative;
   z-index: 9999 !important;
+}
+
+/* A variable lets shared Button opacity respect disclosure without specificity overrides. */
+[data-hf-contextual-action] {
+  --hf-contextual-opacity: 1;
+  opacity: var(--hf-contextual-opacity);
+  transition: opacity var(--hf-motion-fast, 120ms) ease-out;
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-hf-reveal-group] [data-hf-contextual-action] { --hf-contextual-opacity: 0; pointer-events: none; }
+  [data-hf-reveal-group]:hover [data-hf-contextual-action],
+  [data-hf-reveal-group]:focus-within [data-hf-contextual-action],
+  [data-hf-reveal-group] [data-hf-contextual-action][aria-pressed="true"] { --hf-contextual-opacity: 1; pointer-events: auto; }
 }

@@ -3,7 +3,10 @@ import type { PoseBuffer } from "../pose-buffer.ts";
 import type { CompiledSemanticRig } from "../rig.ts";
 import type { FootPlantSolver } from "../solvers/foot-plant.ts";
 import type { RecoilSolver } from "../solvers/recoil.ts";
+import { createHumanoidActionPoseRecipe, type HumanoidActionPoseRecipe } from "./action-pose.ts";
 import type { HumanoidMotionController, HumanoidMotionState } from "./controller.ts";
+import { planHumanoidLocomotionIntent, type HumanoidLocomotionIntent, type HumanoidLocomotionPace, type HumanoidLocomotionPosture } from "./locomotion-intent.ts";
+import { planHumanoidPunchIntent, type HumanoidPunchIntent, type HumanoidPunchIntentPlan } from "./punch-intent.ts";
 
 export type HumanoidControlState = {
   basePose: PoseBuffer | null;
@@ -16,6 +19,16 @@ export type HumanoidControlState = {
   hasRightHandTarget: boolean;
   actionId: string | null;
   actionPhase: number;
+  actionPose: HumanoidActionPoseRecipe | null;
+  locomotionPace: HumanoidLocomotionPace | null;
+  locomotionPosture: HumanoidLocomotionPosture;
+  locomotionCycleDistanceScale: number | null;
+  punchPlan: HumanoidPunchIntentPlan | null;
+  punchElapsedSeconds: number;
+  readonly punchStartTarget: Float32Array;
+  readonly punchGuardStartTarget: Float32Array;
+  hasPunchStartTarget: boolean;
+  hasPunchGuardStartTarget: boolean;
 };
 
 type HumanoidControllerCommandsOptions = {
@@ -27,6 +40,7 @@ type HumanoidControllerCommandsOptions = {
   rightFootPlant: FootPlantSolver | null;
   recoilSolver: RecoilSolver | null;
   update(deltaSeconds: number): HumanoidMotionState;
+  updateFromPhysics(sample: Parameters<HumanoidMotionController["updateFromPhysics"]>[0]): HumanoidMotionState;
   reset(): HumanoidMotionState;
 };
 
@@ -42,12 +56,30 @@ export function createHumanoidControlState(): HumanoidControlState {
     hasRightHandTarget: false,
     actionId: null,
     actionPhase: 0,
+    actionPose: null,
+    locomotionPace: null,
+    locomotionPosture: "upright",
+    locomotionCycleDistanceScale: null,
+    punchPlan: null,
+    punchElapsedSeconds: 0,
+    punchStartTarget: new Float32Array(3),
+    punchGuardStartTarget: new Float32Array(3),
+    hasPunchStartTarget: false,
+    hasPunchGuardStartTarget: false,
   };
 }
 
 export function resetHumanoidControlState(controls: HumanoidControlState) {
   controls.actionId = null;
   controls.actionPhase = 0;
+  controls.actionPose = null;
+  controls.locomotionPace = null;
+  controls.locomotionPosture = "upright";
+  controls.locomotionCycleDistanceScale = null;
+  controls.punchPlan = null;
+  controls.punchElapsedSeconds = 0;
+  controls.hasPunchStartTarget = false;
+  controls.hasPunchGuardStartTarget = false;
   controls.aimWeight = 0;
   controls.handTargetWeight = 0;
   controls.hasLeftHandTarget = false;
@@ -63,10 +95,25 @@ export function createHumanoidControllerCommands(
     motor,
     state,
     move(velocity) {
+      controls.locomotionPace = null;
+      controls.locomotionPosture = "upright";
+      controls.locomotionCycleDistanceScale = null;
       motor.move(velocity);
       return state;
     },
+    setLocomotionIntent(intent: HumanoidLocomotionIntent) {
+      const plan = planHumanoidLocomotionIntent(intent);
+      controls.locomotionPace = plan.pace;
+      controls.locomotionPosture = plan.posture;
+      // The ordinary path lets accepted speed continuously blend cadence.
+      // Only an explicitly authored scale overrides that physical relationship.
+      controls.locomotionCycleDistanceScale = intent.cycleDistanceScale ?? null;
+      motor.move(plan.velocity);
+      if (intent.faceTravel !== false && plan.speedMetersPerSecond > 0) motor.setFacing(plan.direction);
+      return state;
+    },
     update: options.update,
+    updateFromPhysics: options.updateFromPhysics,
     teleport(position) {
       motor.teleport(position);
       leftFootPlant?.reset();
@@ -101,6 +148,26 @@ export function createHumanoidControllerCommands(
       if (actionId !== null && typeof actionId !== "string") throw new TypeError("actionId must be a string or null");
       controls.actionId = actionId;
       controls.actionPhase = finiteNonNegative(actionPhase, "actionPhase");
+      controls.punchPlan = null;
+      return state;
+    },
+    setActionPose(intent) {
+      controls.actionPose = intent ? createHumanoidActionPoseRecipe(intent) : null;
+      controls.punchPlan = null;
+      return state;
+    },
+    punch(intent: HumanoidPunchIntent) {
+      const plan = planHumanoidPunchIntent(intent);
+      controls.punchPlan = plan;
+      controls.punchElapsedSeconds = 0;
+      controls.hasPunchStartTarget = false;
+      controls.hasPunchGuardStartTarget = false;
+      controls.actionId = `punch-${plan.intent.hand}-${plan.intent.style}`;
+      controls.actionPhase = 0;
+      controls.actionPose = createHumanoidActionPoseRecipe({ style: plan.intent.style, effector: `${plan.intent.hand}-hand`, power: plan.intent.power });
+      controls.hasLeftHandTarget = false;
+      controls.hasRightHandTarget = false;
+      controls.handTargetWeight = 0;
       return state;
     },
     setActionPhase(actionPhase) {

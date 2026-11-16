@@ -8,7 +8,13 @@ if (process.env.HARNESS_TEST_SKIP_UI_PRELOAD !== "1") {
     import("solid-js/web/dist/web.js")
   ]);
   if (!globalThis.__padPilotHappyDomRegistered) {
+    // The root preload also runs HTTP/socket tests; DOM shims are not Bun transports.
+    const nativeTransport = ['WebSocket', 'fetch', 'Request', 'Response', 'Headers', 'AbortController', 'AbortSignal']
+      .map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const);
     GlobalRegistrator.register();
+    for (const [name, descriptor] of nativeTransport) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+    }
     globalThis.__padPilotHappyDomRegistered = true;
   }
 

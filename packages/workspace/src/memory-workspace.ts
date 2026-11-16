@@ -28,26 +28,38 @@ type UnsequencedWorkspaceEvent =
 /** Creates a deterministic CAS-capable adapter for tests, local tools, and examples. */
 export function createMemoryWorkspaceFileSystem(options: MemoryWorkspaceFileSystemOptions = {}): MemoryWorkspaceFileSystem {
   const files = new Map<string, WorkspaceFileSnapshot>();
+  const directories = new Map<string, number>();
   const latestRevisions = new Map<string, number>();
   const listeners = new Set<(event: WorkspaceFileChangeEvent) => void>();
   let sequence = 0;
+  const events: WorkspaceFileChangeEvent[] = [];
+  let delivering = false;
 
   for (const [inputPath, contents] of Object.entries(options.initialFiles ?? {})) {
     const path = requireFilePath(inputPath);
     if (files.has(path)) throw new Error(`Initial workspace files contain duplicate normalized path: ${path}`);
     const snapshot = { path, contents, revision: 1 };
     files.set(path, snapshot);
+    updateDirectoryCounts(directories, path, 1);
     latestRevisions.set(path, 1);
   }
+  validateFileHierarchy(new Set(files.keys()));
 
-  const emit = (event: UnsequencedWorkspaceEvent) => {
-    const nextSequence = ++sequence;
-    const sequenced: WorkspaceFileChangeEvent = event.type === "invalidated"
-      ? { ...event, sequence: nextSequence }
-      : { ...event, sequence: nextSequence };
-    for (const listener of listeners) {
-      try { listener(sequenced); }
-      catch { /* Watch consumers are isolated from committed filesystem state. */ }
+  const emit = (changes: readonly UnsequencedWorkspaceEvent[]) => {
+    for (const event of changes) events.push(Object.freeze({ ...event, sequence: ++sequence }));
+    if (delivering) return;
+    delivering = true;
+    try {
+      for (let index = 0; index < events.length; index++) {
+        const event = events[index]!; // The queue only grows during delivery.
+        for (const listener of [...listeners]) {
+          try { listener(event); }
+          catch { /* Watch consumers are isolated from committed filesystem state. */ }
+        }
+      }
+    } finally {
+      events.length = 0;
+      delivering = false;
     }
   };
 
@@ -58,6 +70,13 @@ export function createMemoryWorkspaceFileSystem(options: MemoryWorkspaceFileSyst
       if (uniquePaths.has(write.path)) throw new Error(`Atomic writes must contain unique paths: ${write.path}`);
       uniquePaths.add(write.path);
       validateExpectedRevision(write.expectedRevision);
+    }
+    for (const filePath of uniquePaths) {
+      if (directories.has(filePath)) throw new Error(`Workspace path is both a file and a directory: ${filePath}`);
+      for (let slash = filePath.indexOf("/"); slash >= 0; slash = filePath.indexOf("/", slash + 1)) {
+        const parent = filePath.slice(0, slash);
+        if (files.has(parent) || uniquePaths.has(parent)) throw new Error(`Workspace path is both a file and a directory: ${parent}`);
+      }
     }
     const conflicts = normalizedWrites.flatMap((write) => {
       const conflict = findConflict(write, files.get(write.path));
@@ -74,10 +93,11 @@ export function createMemoryWorkspaceFileSystem(options: MemoryWorkspaceFileSyst
         revision: (latestRevisions.get(write.path) ?? 0) + 1
       };
       files.set(write.path, snapshot);
+      if (!current) updateDirectoryCounts(directories, write.path, 1);
       latestRevisions.set(write.path, snapshot.revision);
       changes.push({ type: current ? "changed" : "created", snapshot: copySnapshot(snapshot) });
     }
-    for (const change of changes) emit({ type: change.type, path: change.snapshot.path, revision: change.snapshot.revision });
+    emit(changes.map((change) => ({ type: change.type, path: change.snapshot.path, revision: change.snapshot.revision })));
     return { status: "written", snapshots: changes.map((change) => change.snapshot) };
   };
 
@@ -101,8 +121,9 @@ export function createMemoryWorkspaceFileSystem(options: MemoryWorkspaceFileSyst
       if (!current) return { status: "missing", path };
       const revision = current.revision + 1;
       files.delete(path);
+      updateDirectoryCounts(directories, path, -1);
       latestRevisions.set(path, revision);
-      emit({ type: "deleted", path, revision });
+      emit([{ type: "deleted", path, revision }]);
       return { status: "deleted", path, revision };
     },
     async listFiles(options = {}) {
@@ -113,7 +134,7 @@ export function createMemoryWorkspaceFileSystem(options: MemoryWorkspaceFileSyst
       return () => listeners.delete(callback);
     },
     $invalidate({ reason }) {
-      emit({ type: "invalidated", reason, resnapshot: true });
+      emit([{ type: "invalidated", reason, resnapshot: true }]);
     }
   };
 }
@@ -159,4 +180,22 @@ function validateExpectedRevision(revision: number | undefined) {
 
 function copySnapshot(snapshot: WorkspaceFileSnapshot): WorkspaceFileSnapshot {
   return { ...snapshot };
+}
+
+function validateFileHierarchy(paths: ReadonlySet<string>) {
+  for (const path of paths) {
+    for (let slash = path.indexOf("/"); slash >= 0; slash = path.indexOf("/", slash + 1)) {
+      const parent = path.slice(0, slash);
+      if (paths.has(parent)) throw new Error(`Workspace path is both a file and a directory: ${parent}`);
+    }
+  }
+}
+
+function updateDirectoryCounts(directories: Map<string, number>, path: string, delta: number) {
+  for (let slash = path.indexOf("/"); slash >= 0; slash = path.indexOf("/", slash + 1)) {
+    const parent = path.slice(0, slash);
+    const count = (directories.get(parent) ?? 0) + delta;
+    if (count === 0) directories.delete(parent);
+    else directories.set(parent, count);
+  }
 }

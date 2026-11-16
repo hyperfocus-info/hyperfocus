@@ -24,6 +24,8 @@ export type AuthResult =
 
 export type AuthAdapter = {
   verify(token: string): Promise<AuthResult>;
+  /** Recheck verified identity after asynchronous admission; never consumes its token again. */
+  isCurrent?(identity: Extract<AuthResult, { ok: true }>): boolean | Promise<boolean>;
   refresh?(sessionId: string): Promise<AuthResult>;
 };
 
@@ -41,11 +43,16 @@ export type RoomBroadcastDurability = "transient" | "durable";
 
 export type RoomBroadcastOptions = {
   durability?: RoomBroadcastDurability;
+  /** Current room player IDs only; captured at enqueue. Empty means no delivery. */
+  recipients?: readonly string[];
 };
 
 export type RoomBroadcast<TEvent = unknown> = {
   event: TEvent;
   durability: RoomBroadcastDurability;
+  recipients?: readonly string[];
+  /** Internal enqueue-time connection identities; never encoded or persisted. */
+  recipientConnections?: ReadonlyMap<string, unknown>;
 };
 
 export type MetricsSink = {
@@ -66,6 +73,8 @@ export type AuthoritativePlayer = {
   joinedAt: number;
   lastInputAt: number;
   connection?: unknown;
+  /** Transport recovery deadline in the host's now() clock. Seat remains reserved. */
+  reconnectUntil?: number;
   data?: unknown;
 };
 

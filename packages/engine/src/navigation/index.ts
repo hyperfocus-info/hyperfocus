@@ -1,4 +1,10 @@
 export { createGridNavigator } from "./grid.ts";
+export { createActorAutonomy } from "../actors/autonomy.ts";
+export type { AutonomousActor, ActorPerception } from "../actors/autonomy.ts";
+export { chooseActorAction } from "./actor-choice.ts";
+export type { ActorAction, ActorChoice, ActorOpportunity } from "./actor-choice.ts";
+export { createRoamNavigator3D } from './roam3d/graph.ts';
+export type { RoamWaypoint3D, RoamLink3D } from './roam3d/graph.ts';
 export type { GridNavigator, GridNavigatorOptions, GridPathResult, GridPathStatus } from "./grid.ts";
 export { createPathPredictor } from "./path-predictor.ts";
 export type { PathPredictor, PathPredictorOptions, PredictedPathResult, PredictedPathStatus } from "./path-predictor.ts";

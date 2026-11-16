@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import { tokens } from '@hyperfocus/ui/tokens.stylex';
 
 /** Atomic layout declarations shared across the integrated terminal surfaces. */
 export const terminalUtilities = stylex.create({
@@ -151,7 +152,7 @@ export const terminalStyles = stylex.create({
   muted: { color: "var(--muted)" },
   foreground: { color: "var(--foreground)" },
   hoverSurface: { backgroundColor: { default: "transparent", ":hover": "var(--row)" } },
-  selectionSurface: { backgroundColor: "var(--accent)", color: "var(--foreground)" },
+  selectionSurface: { borderColor: "var(--accent)", backgroundColor: tokens.selection, color: "var(--foreground)", },
   idleSession: { backgroundColor: { default: "transparent", ":hover": "var(--row)" }, color: "var(--muted)" },
   action: { backgroundColor: { default: "transparent", ":hover": "var(--row)" }, color: { default: "var(--muted)", ":hover": "var(--foreground)" } },
   emphasizedAction: { borderColor: "var(--border)", backgroundColor: { default: "var(--row)", ":hover": "var(--accent)" }, color: "var(--foreground)", },

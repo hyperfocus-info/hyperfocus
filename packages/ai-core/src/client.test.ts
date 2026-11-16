@@ -1,3 +1,5 @@
+import { parseClientCommand } from "./harness/protocol/client-command";
+import { encodeValue, readValueFrame } from "@hyperfocus/serialization";
 import { describe, expect, test } from "bun:test";
 import { createHarnessClient, normalizeHarnessEndpoint, type HarnessWebSocket } from "./client";
 
@@ -17,6 +19,20 @@ describe("harness endpoint normalization", () => {
 });
 
 describe("harness client lifecycle", () => {
+  test("explicit protobuf comparison negotiates binary commands and accepts binary readiness", async () => {
+    resetFakeSockets();
+    const client = createClient({ encoding: "protobuf" });
+    try {
+      const ready = client.connect(), socket = fakeSockets[0]!;
+      expect(new URL(socket.url).searchParams.get("encoding")).toBe("protobuf");
+      socket.open();
+      socket.message(encodeValue(connectionReadyEvent()));
+      await ready;
+      expect(client.send({ type: "agent.list", requestId: "binary-1" }).status).toBe("sent");
+      expect(socket.sent[0]).toBeInstanceOf(Uint8Array);
+      expect(parseClientCommand(readValueFrame(socket.sent[0])).requestId).toBe("binary-1");
+    } finally { client.disconnect(); }
+  });
   test("waits for ready and flushes commands queued while connecting", async () => {
     resetFakeSockets();
     const client = createClient();
@@ -30,7 +46,8 @@ describe("harness client lifecycle", () => {
     socket.message(JSON.stringify(connectionReadyEvent()));
     await ready;
     expect(client.getSnapshot().state).toBe("connected");
-    expect(socket.sent.map((value) => JSON.parse(value).requestId)).toEqual(["queued-1"]);
+    expect(typeof socket.sent[0]).toBe("string");
+    expect(socket.sent.map((value) => parseClientCommand(readValueFrame(value)).requestId)).toEqual(["queued-1"]);
     client.disconnect();
   });
 
@@ -53,7 +70,7 @@ describe("harness client lifecycle", () => {
     second.message(JSON.stringify(connectionReadyEvent()));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(client.getSnapshot().workspace?.activeProjectId).toBe("project-1");
-    expect(second.sent.map((value) => JSON.parse(value).requestId)).toEqual(["during-recovery"]);
+    expect(second.sent.map((value) => parseClientCommand(readValueFrame(value)).requestId)).toEqual(["during-recovery"]);
     client.disconnect();
   });
 
@@ -68,7 +85,7 @@ describe("harness client lifecycle", () => {
 
     const result = client.sendChat({ content: "hello" });
     expect(result.delivery).toEqual({ status: "sent" });
-    expect(JSON.parse(socket.sent[0]!).requestId).toBe(result.requestId);
+    expect(parseClientCommand(readValueFrame(socket.sent[0]!)).requestId).toBe(result.requestId);
     client.disconnect();
   });
 
@@ -100,7 +117,7 @@ function createClient(overrides: Partial<Parameters<typeof createHarnessClient>[
 
 type FakeSocket = HarnessWebSocket & {
   readonly url: string;
-  readonly sent: string[];
+  readonly sent: Array<string | Uint8Array>;
   open(): void;
   message(data: unknown): void;
 };
@@ -112,7 +129,7 @@ function resetFakeSockets() {
 
 function createFakeWebSocket(url: string): FakeSocket {
   const listeners = new Map<string, Set<(event: { data?: unknown }) => void>>();
-  const sent: string[] = [];
+  const sent: Array<string | Uint8Array> = [];
   const socket = {
     url,
     sent,
@@ -122,7 +139,7 @@ function createFakeWebSocket(url: string): FakeSocket {
       registered.add(listener);
       listeners.set(type, registered);
     },
-    send(value: string) {
+    send(value: string | Uint8Array) {
       if (socket.readyState !== 1) throw new Error("not open");
       socket.sent.push(value);
     },

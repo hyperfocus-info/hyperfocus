@@ -82,84 +82,57 @@ export function registerServerRuntimeBudgetTests(options: ServerTestShardOptions
       await stopServerForTest(server);
     });
 
-    serverTest("run.complete emits run.updated and chat.complete then rejects terminal repeat", async () => {
+    serverTest("client completion cannot finish ready, running, or terminal runs", async () => {
       const projectRoot = await fixture.createRepoClone("run-complete");
+      const release = Promise.withResolvers<void>();
+      const started = Promise.withResolvers<void>();
+      const startExecution = adapter.startExecution;
+      adapter.startExecution = async (request) => {
+        const controller = await startExecution(request);
+        return { ...controller, result: controller.result.then(async (result) => {
+          started.resolve();
+          await release.promise;
+          return result;
+        }) };
+      };
       const { server, port } = await startServerForTest({ port: 0, adapter, repository });
       const socket = createSocket(port);
-      await waitForEvent(socket, "connection.ready");
-      const opened = await openProject(socket, projectRoot, "req-complete-open");
-
-      const readyPromise = waitForEvent(socket, "run.updated", (event) => event.payload.run.status === "ready");
-      socket.send(
-        JSON.stringify({
-          type: "chat.send",
-          requestId: "req-complete-send",
-          payload: {
-            projectId: opened.payload.project.id,
-            threadId: opened.payload.project.activeThreadId,
-            agentId: "pi",
-            content: "Prepare completion"
-          }
-        })
-      );
-      const ready = await readyPromise;
-
-      const staleThreadRejectedPromise = waitForEvent(socket, "command.rejected", (event) => event.requestId === "req-complete-stale-thread");
-      socket.send(
-        JSON.stringify({
-          type: "run.complete",
-          requestId: "req-complete-stale-thread",
-          payload: {
-            projectId: opened.payload.project.id,
-            threadId: "thread-stale-complete",
-            runId: ready.payload.run.id,
-            assistantMessageContent: "wrong thread"
-          }
-        })
-      );
-      const staleThreadRejected = await staleThreadRejectedPromise;
-      expect(staleThreadRejected.payload.detail).toContain("not active for project");
-
-      const completedPromise = waitForEvent(
-        socket,
-        "run.updated",
-        (event) => event.payload.run.id === ready.payload.run.id && event.payload.run.status === "completed"
-      );
-      const chatCompletePromise = waitForEvent(socket, "chat.complete");
-      socket.send(
-        JSON.stringify({
-          type: "run.complete",
-          requestId: "req-complete-command",
-          payload: {
-            projectId: opened.payload.project.id,
-            threadId: opened.payload.project.activeThreadId,
-            runId: ready.payload.run.id,
-            assistantMessageContent: "Completed by lifecycle command."
-          }
-        })
-      );
-
-      await completedPromise;
-      const complete = await chatCompletePromise;
-      expect(complete.payload.assistantMessage.content).toBe("Completed by lifecycle command.");
-
-      const rejectedPromise = waitForEvent(socket, "command.rejected", (event) => event.requestId === "req-complete-repeat");
-      socket.send(
-        JSON.stringify({
-          type: "run.complete",
-          requestId: "req-complete-repeat",
-          payload: {
-            projectId: opened.payload.project.id,
-            threadId: opened.payload.project.activeThreadId,
-            runId: ready.payload.run.id,
-            assistantMessageContent: "repeat"
-          }
-        })
-      );
-      const rejected = await rejectedPromise;
-      expect(rejected.payload.detail).toContain("already terminal");
-      socket.close();
-      await stopServerForTest(server);
+      try {
+        await waitForEvent(socket, "connection.ready");
+        const opened = await openProject(socket, projectRoot, "req-complete-open");
+        const projectId = opened.payload.project.id;
+        const threadId = opened.payload.project.activeThreadId;
+        const readyPromise = waitForEvent(socket, "run.updated", (event) => event.payload.run.status === "ready");
+        socket.send(JSON.stringify({ type: "chat.send", requestId: "req-complete-send",
+          payload: { projectId, threadId, agentId: "pi", content: "Prepare completion", modeId: "plan", modeLocked: true } }));
+        const ready = await readyPromise;
+        const runId = ready.payload.run.id;
+        async function rejectCompletion(requestId: string, targetThread = threadId) {
+          const rejected = waitForEvent(socket, "command.rejected", (event) => event.requestId === requestId);
+          socket.send(JSON.stringify({ type: "run.complete", requestId,
+            payload: { projectId, threadId: targetThread, runId, assistantMessageContent: "Forged completion" } }));
+          return (await rejected).payload.detail;
+        }
+        expect(await rejectCompletion("stale-thread", "thread-stale-complete")).toContain("not active for project");
+        expect(await rejectCompletion("ready-complete")).toContain("owned by execution");
+        expect(repository.getRun(projectId, runId)?.status).toBe("ready");
+        const completed = waitForEvent(socket, "chat.complete");
+        socket.send(JSON.stringify({ type: "run.execute", requestId: "execute-owned", payload: { projectId, threadId, runId } }));
+        await started.promise;
+        expect(await rejectCompletion("running-complete")).toContain("owned by execution");
+        expect(repository.getRun(projectId, runId)?.status).toBe("running-main");
+        release.resolve();
+        const result = await completed;
+        expect(result.payload.assistantMessage.content).toContain("main execution result");
+        expect(repository.getRun(projectId, runId)?.status).toBe("completed");
+        expect(await rejectCompletion("terminal-complete")).toContain("owned by execution");
+        expect(repository.getThreadMessages(projectId, threadId).some((message) => message.content === "Forged completion")).toBe(false);
+      } finally {
+        release.resolve();
+        socket.close();
+        await stopServerForTest(server);
+        repository.close();
+      }
     });
   });
 }

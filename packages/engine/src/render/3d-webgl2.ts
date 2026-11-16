@@ -1,21 +1,37 @@
+import type { InternalWebGl2Renderer3D, WebGl2RendererFields3D } from './webgl2/renderer-state.ts';
+import { sortTransparentInstances3D } from './webgl2/transparency.ts';
+import { createCommandViews3D } from './webgl2/command-views.ts';
+import { cutawayMesh3D, uploadCutawayEdges3D } from './webgl2/cutaway-mesh.ts';
+import { deleteMeshResources3D, uploadFloatMeshAttribute3D } from './webgl2/mesh-attributes.ts';
 import {
   BoundedScene3D,
-  LIGHT_KIND_AMBIENT_3D,
-  LIGHT_KIND_DIRECTIONAL_3D,
   MATERIAL_FLAG_ALPHA_MASK_3D,
+  MATERIAL_FLAG_ALPHA_BLEND_3D,
+  MATERIAL_FLAG_ADDITIVE_3D,
+  MATERIAL_FLAG_CUTAWAY_3D,
   MATERIAL_FLAG_DOUBLE_SIDED_3D,
+  MATERIAL_FLAG_EMISSIVE_TEXTURED_3D,
   MATERIAL_FLAG_LIT_3D,
+  MATERIAL_FLAG_METALLIC_ROUGHNESS_TEXTURED_3D,
+  MATERIAL_FLAG_NORMAL_TEXTURED_3D,
+  MATERIAL_FLAG_OCCLUSION_TEXTURED_3D,
+  MATERIAL_FLAG_SHADER_HOLOGRAM_3D,
+  MATERIAL_FLAG_SHADER_RETRO_3D,
+  MATERIAL_FLAG_SHADER_TOON_3D,
   MATERIAL_FLAG_SKINNED_3D,
   MATERIAL_FLAG_TEXTURED_3D,
   MATERIAL_FLOAT_STRIDE_3D,
+  MATERIAL_TEXTURE_STRIDE_3D,
   RENDER_COMMAND_FLAG_SKINNED_3D,
   RenderCommandBuffer3D,
   type MeshGeometry3D,
   type TextureResource3D
 } from "./3d-scene.ts";
 import { isWebGl2Context } from "./webgl2/context-capabilities.ts";
+import { bindInstanceAppearance3D, uploadInstanceAppearance3D } from './webgl2/instance-appearance.ts';
 import {
   colorComponent,
+  createFallbackTexture3D,
   createWebGl2FrameStats3D,
   finiteComponent,
   matrixData,
@@ -24,6 +40,7 @@ import {
   positiveInteger,
   requiredUniform,
   validateCommands,
+  uploadInstanceMatrices3D,
   type MainGpuResources3D,
   type MeshGpuRecord3D,
   type ShadowGpuResources3D,
@@ -37,15 +54,15 @@ import {
   shadowVertexShaderSource,
   vertexShaderSource,
 } from "./webgl2/shaders.ts";
-
+import { initializeMaterialSamplers3D, materialDataChanged3D, requireMaterialUniforms3D } from "./webgl2/material-uniforms.ts";
+import { renderDirectionalShadowPass3D, renderToonOutlinePass3D } from "./webgl2/render-passes.ts";
+import { createFrameLighting, requirePointLightUniforms } from './webgl2/lighting.ts';
 export type WebGl2DiagnosticLevel3D = "info" | "warning" | "error";
-
 export interface WebGl2Diagnostic3D {
   level: WebGl2DiagnosticLevel3D;
   code: "context-lost" | "context-restored" | "restore-failed" | "shader-compile" | "program-link";
   message: string;
 }
-
 export interface WebGl2Canvas3D {
   width: number;
   height: number;
@@ -55,50 +72,39 @@ export interface WebGl2Canvas3D {
   addEventListener(type: string, listener: EventListenerOrEventListenerObject): void;
   removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void;
 }
-
 export interface WebGl2ContextCapability3D {
   drawArraysInstanced(...args: never[]): unknown;
 }
-
 export interface WebGl2RendererOptions3D {
   canvas: WebGl2Canvas3D;
   scene: BoundedScene3D;
-  /** Explicit upper bound for matrices uploaded each frame. */
-  maxInstances: number;
+  maxInstances: number; // Explicit upper bound for matrices uploaded each frame.
   contextAttributes?: WebGLContextAttributes;
-  /** Injection boundary for tests or an already-created context. */
-  context?: WebGl2ContextCapability3D;
+  context?: WebGl2ContextCapability3D; // Injection boundary for tests or an already-created context.
   clearColor?: ArrayLike<number>;
   pixelRatio?: number | (() => number);
   maxDevicePixelRatio?: number;
   maxDrawingBufferWidth?: number;
   maxDrawingBufferHeight?: number;
-  /** Additional software cap, clamped to the driver MAX_TEXTURE_SIZE. */
-  maxTextureSize?: number;
-  /** Shader palette capacity. Defaults to the scene jointsPerSkeleton stride. */
-  maxJointsPerSkeleton?: number;
-  /** Slow driver error checks for acceptance/debug builds. */
-  validateGlErrors?: boolean;
-  /** Enables a bounded directional depth map. Omit to allocate no shadow resources. */
-  directionalShadowMapSize?: number;
+  maxTextureSize?: number; // Additional software cap, clamped to the driver MAX_TEXTURE_SIZE.
+  maxJointsPerSkeleton?: number; // Shader palette capacity. Defaults to the scene jointsPerSkeleton stride.
+  validateGlErrors?: boolean; // Slow driver error checks for acceptance/debug builds.
+  /** Opt-in stable camera culling keeps full shadow work and resource validation.
+   * Measure the full loop: mostly visible or unsupported/deforming packets add overhead. */
+  cameraCulling?: boolean;
+  directionalShadowMapSize?: number; // Enables a bounded directional depth map. Omit to allocate no shadow resources.
   onDiagnostic?: (diagnostic: WebGl2Diagnostic3D) => void;
 }
-
-export interface WebGl2ResizeOptions3D {
-  cssWidth?: number;
-  cssHeight?: number;
-  pixelRatio?: number;
-}
-
+export interface WebGl2ResizeOptions3D { cssWidth?: number; cssHeight?: number; pixelRatio?: number; }
 export interface WebGl2RenderOptions3D extends WebGl2ResizeOptions3D {
+  /** Per-submission diagnostic ablations; omitted flags retain normal rendering. */
+  features?: { scene?: boolean; shadows?: boolean; outlines?: boolean; lighting?: boolean; materialFeatures?: boolean; shadowSampling?: boolean; cameraCulling?: boolean };
   clear?: boolean;
-  /** World-space eye used by metallic-roughness specular lighting. */
-  cameraPosition?: ArrayLike<number>;
-  /** Directional-light view-projection matrix. Requires directionalShadowMapSize at creation. */
-  shadowViewProjection?: ArrayLike<number>;
+  cameraPosition?: ArrayLike<number>; // World-space eye used by metallic-roughness specular lighting.
+  shadowViewProjection?: ArrayLike<number>; // Directional-light view-projection matrix. Requires shadow resources.
+  shadowCommands?: RenderCommandBuffer3D; // Independently culled casters, including those outside the camera view.
   shadowBias?: number;
 }
-
 export type WebGl2Renderer3D = {
   readonly canvas: WebGl2Canvas3D;
   readonly scene: BoundedScene3D;
@@ -111,81 +117,11 @@ export type WebGl2Renderer3D = {
   isContextLost(): boolean;
   isDisposed(): boolean;
 };
-
 type WebGl2Renderer3DFactory = {
   (options: WebGl2RendererOptions3D): WebGl2Renderer3D;
   new(options: WebGl2RendererOptions3D): WebGl2Renderer3D;
   readonly prototype: object;
 };
-
-type WebGl2RendererFields3D = {
-  canvas: WebGl2Canvas3D;
-  scene: BoundedScene3D;
-  maxInstances: number;
-  maxJointsPerSkeleton: number;
-  stats: WebGl2FrameStats3D;
-  gl: WebGL2RenderingContext;
-  clearColor: Float32Array;
-  pixelRatioSource: number | (() => number) | undefined;
-  maxDevicePixelRatio: number;
-  maxWidth: number;
-  maxHeight: number;
-  maxTextureSize: number;
-  shadowMapSize: number;
-  onDiagnostic: ((diagnostic: WebGl2Diagnostic3D) => void) | undefined;
-  validateGlErrors: boolean;
-  meshCache: Map<number, MeshGpuRecord3D>;
-  textureCache: Map<number, TextureGpuRecord3D>;
-  mainResources: MainGpuResources3D | undefined;
-  shadowResources: ShadowGpuResources3D | undefined;
-  contextLost: boolean;
-  disposed: boolean;
-  generation: number;
-  width: number;
-  height: number;
-  pixelRatio: number;
-  boundMaterial: number;
-  boundSkeleton: number;
-  handleContextLost(event: Event): void;
-  handleContextRestored(): void;
-};
-
-type WebGl2RendererPrivateMethods3D = {
-  renderShadowPass(commands: RenderCommandBuffer3D, viewProjection: Float32Array): void;
-  initializeGpuResources(): void;
-  compileShader(type: number, source: string, label: "vertex" | "fragment"): WebGLShader;
-  initializeShadowResources(): ShadowGpuResources3D;
-  meshRecord(handle: number, mesh: MeshGeometry3D): MeshGpuRecord3D;
-  bindInstanceRange(firstInstance: number): void;
-  bindMaterial(handle: number, meshHandle: number, mesh: MeshGeometry3D): void;
-  bindMorphWeights(mesh: MeshGeometry3D): void;
-  bindFrameLights(commands: RenderCommandBuffer3D): void;
-  bindSkinning(
-    commands: RenderCommandBuffer3D,
-    command: number,
-    meshHandle: number,
-    mesh: MeshGeometry3D,
-    materialHandle: number
-  ): void;
-  requireTexture(handle: number, material: number): TextureResource3D;
-  textureRecord(handle: number, source: TextureResource3D): TextureGpuRecord3D;
-  createFallbackTexture(): WebGLTexture;
-  requireMesh(handle: number, command: number): MeshGeometry3D;
-  readPixelRatio(): number;
-  resetFrameStats(): void;
-  deleteMesh(mesh: MeshGpuRecord3D): void;
-  deleteTexture(texture: TextureGpuRecord3D): void;
-  deleteGpuResources(): void;
-  abandonGpuResources(): void;
-  requireMainResources(): MainGpuResources3D;
-  requireShadowResources(): ShadowGpuResources3D;
-  assertUsable(): void;
-  checkGlError(stage: string): void;
-  emit(level: WebGl2DiagnosticLevel3D, code: WebGl2Diagnostic3D["code"], message: string): void;
-};
-
-type InternalWebGl2Renderer3D = WebGl2Renderer3D & WebGl2RendererFields3D & WebGl2RendererPrivateMethods3D;
-
 const webGl2PublicMethods = {
 resize(this: InternalWebGl2Renderer3D, options: WebGl2ResizeOptions3D = {}): boolean {
     this.assertUsable();
@@ -214,8 +150,8 @@ resize(this: InternalWebGl2Renderer3D, options: WebGl2ResizeOptions3D = {}): boo
     this.stats.pixelRatio = this.pixelRatio;
     return changed;
   },
-
 render(this: InternalWebGl2Renderer3D, commands: RenderCommandBuffer3D, viewProjection: ArrayLike<number>, options: WebGl2RenderOptions3D = {}): WebGl2FrameStats3D {
+    this.features = options.features;
     this.assertUsable();
     if (viewProjection.length < 16) throw new RangeError("viewProjection needs at least 16 elements.");
     this.resize(options);
@@ -226,6 +162,24 @@ render(this: InternalWebGl2Renderer3D, commands: RenderCommandBuffer3D, viewProj
       return this.stats;
     }
     validateCommands(commands, this.maxInstances);
+    if (options.shadowCommands) {
+      if (!options.shadowViewProjection) throw new Error('shadowCommands requires shadowViewProjection.');
+      validateCommands(options.shadowCommands, this.maxInstances);
+    }
+    commands = sortTransparentInstances3D(this.scene, commands, viewProjection);
+    const fullCommands = commands;
+    if (options.features?.cameraCulling ?? this.cameraCulling) {
+      this.commandViews ??= createCommandViews3D(this.scene, commands, this.maxInstances, { maxTextureSize: this.maxTextureSize });
+      commands = this.commandViews(commands, viewProjection).commands;
+    }
+    // Camera visibility never changes the shadow caster stream or its ordering.
+    const shadowCommands = options.shadowCommands ?? (options.shadowViewProjection && commands !== fullCommands ? fullCommands : undefined);
+    // Revoked/replaced images may no longer be drawn. Release their GPU copies anyway.
+    for (const [handle, cached] of this.textureCache) {
+      if (!this.scene.isTextureActive(handle) || this.scene.getTexture(handle) !== cached.source) {
+        this.deleteTexture(cached);this.textureCache.delete(handle);
+      }
+    }
     const gl = this.gl;
     const resources = this.requireMainResources();
     const program = resources.program;
@@ -242,6 +196,7 @@ render(this: InternalWebGl2Renderer3D, commands: RenderCommandBuffer3D, viewProj
     gl.clearColor(this.clearColor[0], this.clearColor[1], this.clearColor[2], this.clearColor[3]);
     gl.clearDepth(1);
     if (options.clear !== false) gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    if (options.features?.scene === false) return this.stats;
     gl.uniformMatrix4fv(resources.viewProjection, false, viewMatrix);
     const camera = options.cameraPosition;
     const cameraX = finiteComponent(camera, 0, 0, "cameraPosition");
@@ -252,24 +207,24 @@ render(this: InternalWebGl2Renderer3D, commands: RenderCommandBuffer3D, viewProj
     this.boundMaterial = -1;
     this.boundSkeleton = -2;
     this.checkGlError("frame setup");
-    gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    if (commands.instanceCount > 0) {
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, commands.instanceMatrices, 0, commands.instanceCount * 16);
-      this.stats.uploadedBytes += commands.instanceCount * 16 * Float32Array.BYTES_PER_ELEMENT;
+    if (!shadowCommands) {
+      this.stats.uploadedBytes += uploadInstanceMatrices3D(gl, instanceBuffer, commands);
     }
-    const shadowMatrix = options.shadowViewProjection;
+    this.stats.uploadedBytes += uploadInstanceAppearance3D(gl, resources, commands);
+    const shadowMatrix = options.features?.shadows === false ? undefined : options.shadowViewProjection;
     if (shadowMatrix && this.shadowMapSize === 0) throw new Error("shadowViewProjection requires directionalShadowMapSize at renderer creation.");
     if (shadowMatrix) {
       if (shadowMatrix.length < 16) throw new RangeError("shadowViewProjection needs at least 16 elements.");
       const shadowMatrixData = matrixData(shadowMatrix);
       const shadowResources = this.requireShadowResources();
-      this.renderShadowPass(commands, shadowMatrixData);
+      if (shadowCommands) this.stats.uploadedBytes += uploadInstanceMatrices3D(gl, instanceBuffer, shadowCommands);
+      this.renderShadowPass(shadowCommands ?? commands, shadowMatrixData);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, this.stats.width, this.stats.height); gl.colorMask(true, true, true, true);
       gl.useProgram(program); gl.uniformMatrix4fv(resources.viewProjection, false, viewMatrix);
       gl.uniformMatrix4fv(resources.shadowViewProjection, false, shadowMatrixData);
       const shadowBias = finiteComponent([options.shadowBias ?? 0.001], 0, 0.001, "shadowBias");
       if (shadowBias < 0 || shadowBias > 0.05) throw new RangeError(`shadowBias must be from 0 through 0.05; received ${shadowBias}.`);
-      gl.uniform1i(resources.shadowEnabled, 1); gl.uniform1f(resources.shadowBias, shadowBias);
+      gl.uniform1i(resources.shadowEnabled, options.features?.shadowSampling === false ? 0 : 1); gl.uniform1f(resources.shadowBias, shadowBias);
       gl.activeTexture(gl.TEXTURE0 + 1); gl.bindTexture(gl.TEXTURE_2D, shadowResources.texture); gl.activeTexture(gl.TEXTURE0);
       gl.uniform3f(resources.cameraPosition, cameraX, cameraY, cameraZ); this.bindFrameLights(commands);
       this.boundMaterial = -1; this.boundSkeleton = -2;
@@ -278,43 +233,59 @@ render(this: InternalWebGl2Renderer3D, commands: RenderCommandBuffer3D, viewProj
       gl.uniformMatrix4fv(resources.shadowViewProjection, false, viewMatrix);
     }
 
-    for (let command = 0; command < commands.commandCount; command += 1) {
-      const instanceCount = commands.commandInstanceCounts[command];
-      if (instanceCount === 0) continue;
-      const meshHandle = commands.commandMeshHandles[command];
-      const materialHandle = commands.commandMaterialHandles[command];
-      const mesh = this.requireMesh(meshHandle, command);
-      this.bindMaterial(materialHandle, meshHandle, mesh);
-      this.bindMorphWeights(mesh);
-      this.checkGlError(`command ${command} material bind`);
-      this.bindSkinning(commands, command, meshHandle, mesh, materialHandle);
-      this.checkGlError(`command ${command} skeleton bind`);
-      const gpuMesh = this.meshRecord(meshHandle, mesh);
-      this.checkGlError(`command ${command} mesh bind`);
-      gl.bindVertexArray(gpuMesh.vao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-      this.bindInstanceRange(commands.commandFirstInstances[command]);
-      if (gpuMesh.indexBuffer) {
-        gl.drawElementsInstanced(gpuMesh.mode, gpuMesh.indexCount, gpuMesh.indexType, 0, instanceCount);
-      } else {
-        gl.drawArraysInstanced(gpuMesh.mode, 0, gpuMesh.vertexCount, instanceCount);
+    if (shadowCommands) this.stats.uploadedBytes += uploadInstanceMatrices3D(gl, instanceBuffer, commands);
+
+    gl.uniform1i(resources.instanceAppearanceEnabled, 0);
+    // All samplers stay complete. Unused maps need no per-material rebinding;
+    // their uniforms disable sampling, including after textured draws.
+    for (const unit of [0, 2, 3, 4, 5]) { gl.activeTexture(gl.TEXTURE0 + unit);gl.bindTexture(gl.TEXTURE_2D, resources.fallbackTexture);this.stats.textureBindings++; }
+    gl.activeTexture(gl.TEXTURE0);
+    if (options.features?.outlines !== false) this.renderOutlinePass(commands);
+    gl.uniform1i(resources.instanceAppearanceEnabled, commands.instanceAppearance ? 1 : 0);
+    gl.uniform1i(resources.outlinePass, 0); gl.cullFace(gl.BACK);
+    this.boundMaterial = -1; this.boundSkeleton = -2;
+    // Opaque first: later-authored scenery must not erase blended FX, which do not write depth. Keep each pass stable.
+    for (let transparentPass = 0; transparentPass < 2; transparentPass += 1) {
+      for (let command = 0; command < commands.commandCount; command += 1) {
+        const instanceCount = commands.commandInstanceCounts[command];
+        if (instanceCount === 0) continue;
+        const meshHandle = commands.commandMeshHandles[command], materialHandle = commands.commandMaterialHandles[command];
+        const transparent = (this.scene.materialFlags[materialHandle] & MATERIAL_FLAG_ALPHA_BLEND_3D) !== 0;
+        if (transparent !== (transparentPass === 1)) continue;
+        const mesh = this.requireMesh(meshHandle, command);
+        this.bindMaterial(materialHandle, meshHandle, mesh);
+        this.bindMorphWeights(mesh);
+        this.checkGlError(`command ${command} material bind`);
+        this.bindSkinning(commands, command, meshHandle, mesh, materialHandle);
+        this.checkGlError(`command ${command} skeleton bind`);
+        const cutaway = options.features?.materialFeatures !== false && transparent && (this.scene.materialFlags[materialHandle]! & MATERIAL_FLAG_CUTAWAY_3D) !== 0 && mesh.topology !== 'line-list';
+        const gpuMesh = this.meshRecord(cutaway ? -meshHandle - 1 : meshHandle, cutaway ? cutawayMesh3D(mesh) : mesh);
+        this.checkGlError(`command ${command} mesh bind`);
+        gl.bindVertexArray(gpuMesh.vao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+        this.bindInstanceRange(commands.commandFirstInstances[command], gpuMesh);
+        bindInstanceAppearance3D(gl, resources.appearanceBuffer, commands.commandFirstInstances[command], Boolean(commands.instanceAppearance));
+        if (gpuMesh.indexBuffer) {
+          gl.drawElementsInstanced(gpuMesh.mode, gpuMesh.indexCount, gpuMesh.indexType, 0, instanceCount);
+        } else {
+          gl.drawArraysInstanced(gpuMesh.mode, 0, gpuMesh.vertexCount, instanceCount);
+        }
+        this.checkGlError(`command ${command} draw`);
+        this.stats.drawCalls += 1;
+        this.stats.instances += instanceCount;
+        if ((commands.commandFlags[command] & RENDER_COMMAND_FLAG_SKINNED_3D) !== 0) {
+          this.stats.skinnedDrawCalls += 1;
+          this.stats.skinnedInstances += instanceCount;
+        }
+        const primitives = (gpuMesh.indexBuffer ? gpuMesh.indexCount : gpuMesh.vertexCount) / (gpuMesh.mode === gl.LINES ? 2 : 3) * instanceCount;
+        if (gpuMesh.mode === gl.LINES) this.stats.lines += primitives;
+        else this.stats.triangles += primitives;
       }
-      this.checkGlError(`command ${command} draw`);
-      this.stats.drawCalls += 1;
-      this.stats.instances += instanceCount;
-      if ((commands.commandFlags[command] & RENDER_COMMAND_FLAG_SKINNED_3D) !== 0) {
-        this.stats.skinnedDrawCalls += 1;
-        this.stats.skinnedInstances += instanceCount;
-      }
-      const primitives = (gpuMesh.indexBuffer ? gpuMesh.indexCount : gpuMesh.vertexCount) / (gpuMesh.mode === gl.LINES ? 2 : 3) * instanceCount;
-      if (gpuMesh.mode === gl.LINES) this.stats.lines += primitives;
-      else this.stats.triangles += primitives;
     }
     gl.bindVertexArray(null);
     this.stats.contextGeneration = this.generation;
     return this.stats;
   },
-
 dispose(this: InternalWebGl2Renderer3D): void {
     if (this.disposed) return;
     this.canvas.removeEventListener("webglcontextlost", this.handleContextLost);
@@ -323,37 +294,16 @@ dispose(this: InternalWebGl2Renderer3D): void {
     else this.abandonGpuResources();
     this.disposed = true;
   },
-
 isContextLost(this: InternalWebGl2Renderer3D): boolean { return this.contextLost; },
-
 isDisposed(this: InternalWebGl2Renderer3D): boolean { return this.disposed; },
 };
-
 const webGl2GpuMethods = {
-renderShadowPass(this: InternalWebGl2Renderer3D, commands: RenderCommandBuffer3D, viewProjection: Float32Array): void {
-    const gl = this.gl, resources = this.requireShadowResources(), mainResources = this.requireMainResources();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, resources.framebuffer); gl.viewport(0, 0, this.shadowMapSize, this.shadowMapSize);
-    gl.colorMask(false, false, false, false); gl.clearDepth(1); gl.clear(gl.DEPTH_BUFFER_BIT); gl.useProgram(resources.program);
-    gl.uniformMatrix4fv(resources.viewProjection, false, viewProjection);
-    let boundSkeleton = -2;
-    for (let command = 0; command < commands.commandCount; command += 1) {
-      const count = commands.commandInstanceCounts[command]; if (count === 0) continue;
-      const meshHandle = commands.commandMeshHandles[command], mesh = this.requireMesh(meshHandle, command);
-      const weights = mesh.morphWeights;
-      gl.uniform4f(resources.morphWeights, finiteComponent(weights, 0, 0, "morphWeights"), finiteComponent(weights, 1, 0, "morphWeights"), finiteComponent(weights, 2, 0, "morphWeights"), finiteComponent(weights, 3, 0, "morphWeights"));
-      const skeleton = commands.commandSkeletonHandles[command];
-      if ((commands.commandFlags[command] & RENDER_COMMAND_FLAG_SKINNED_3D) !== 0) {
-        gl.uniform1i(resources.skinningEnabled, 1);
-        if (boundSkeleton !== skeleton) {
-          const jointCount = this.scene.skeletonJointCounts[skeleton];
-          gl.uniformMatrix4fv(resources.jointPalette, false, this.scene.skeletonMatrices, this.scene.skeletonMatrixOffset(skeleton), jointCount * 16); boundSkeleton = skeleton;
-        }
-      } else { gl.uniform1i(resources.skinningEnabled, 0); boundSkeleton = -1; }
-      const gpu = this.meshRecord(meshHandle, mesh); gl.bindVertexArray(gpu.vao); gl.bindBuffer(gl.ARRAY_BUFFER, mainResources.instanceBuffer);
-      this.bindInstanceRange(commands.commandFirstInstances[command]);
-      if (gpu.indexBuffer) gl.drawElementsInstanced(gpu.mode, gpu.indexCount, gpu.indexType, 0, count); else gl.drawArraysInstanced(gpu.mode, 0, gpu.vertexCount, count);
-      this.stats.shadowDrawCalls += 1;
-    }
+  renderShadowPass(this: InternalWebGl2Renderer3D, commands: RenderCommandBuffer3D, viewProjection: Float32Array): void {
+    renderDirectionalShadowPass3D(this, commands, viewProjection);
+  },
+
+  renderOutlinePass(this: InternalWebGl2Renderer3D, commands: RenderCommandBuffer3D): void {
+    renderToonOutlinePass3D(this, commands);
   },
 
 initializeGpuResources(this: InternalWebGl2Renderer3D): void {
@@ -381,18 +331,14 @@ initializeGpuResources(this: InternalWebGl2Renderer3D): void {
       gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, this.maxInstances * MATRIX_BYTE_STRIDE, gl.DYNAMIC_DRAW);
       const viewProjection = requiredUniform(gl, program, "u_viewProjection");
-      const baseColor = requiredUniform(gl, program, "u_baseColor");
-      const emissive = requiredUniform(gl, program, "u_emissive");
-      const metallic = requiredUniform(gl, program, "u_metallic");
-      const roughness = requiredUniform(gl, program, "u_roughness");
-      const alphaCutoff = requiredUniform(gl, program, "u_alphaCutoff");
-      const useTexture = requiredUniform(gl, program, "u_useTexture");
-      const lit = requiredUniform(gl, program, "u_lit");
+      const materialUniforms = requireMaterialUniforms3D(gl, program);
       const ambientColor = requiredUniform(gl, program, "u_ambientColor");
-      const directionalDirection = requiredUniform(gl, program, "u_directionalDirection");
-      const directionalColor = requiredUniform(gl, program, "u_directionalColor");
+      const directionalDirection0 = requiredUniform(gl, program, "u_directionalDirection0");
+      const directionalColor0 = requiredUniform(gl, program, "u_directionalColor0");
+      const directionalDirection1 = requiredUniform(gl, program, "u_directionalDirection1");
+      const directionalColor1 = requiredUniform(gl, program, "u_directionalColor1");
+      const directionalCount = requiredUniform(gl, program, "u_directionalCount");
       const cameraPosition = requiredUniform(gl, program, "u_cameraPosition");
-      const baseColorTexture = requiredUniform(gl, program, "u_baseColorTexture");
       const skinningEnabled = requiredUniform(gl, program, "u_skinningEnabled");
       const jointPalette = requiredUniform(gl, program, "u_jointPalette[0]");
       const morphWeights = requiredUniform(gl, program, "u_morphWeights");
@@ -400,11 +346,12 @@ initializeGpuResources(this: InternalWebGl2Renderer3D): void {
       const shadowViewProjection = requiredUniform(gl, program, "u_shadowViewProjection");
       const shadowMap = requiredUniform(gl, program, "u_shadowMap");
       const shadowBias = requiredUniform(gl, program, "u_shadowBias");
-      fallbackTexture = this.createFallbackTexture();
+      fallbackTexture = createFallbackTexture3D(gl);
       gl.useProgram(program);
-      gl.uniform1i(baseColorTexture, 0);
+      initializeMaterialSamplers3D(gl, materialUniforms);
       gl.uniform1i(skinningEnabled, 0);
       gl.uniform4f(morphWeights, 0, 0, 0, 0);
+      gl.uniform1i(materialUniforms.outlinePass, 0);
       gl.uniform1i(shadowEnabled, 0); gl.uniform1i(shadowMap, 1); gl.uniform1f(shadowBias, 0.001);
       // A disabled integer attribute must still have an integer generic value.
       // Leaving JOINTS_0 at WebGL's float generic default makes static VAOs
@@ -416,18 +363,17 @@ initializeGpuResources(this: InternalWebGl2Renderer3D): void {
       this.mainResources = {
         program,
         instanceBuffer,
+        instanceAppearanceEnabled: requiredUniform(gl, program, 'u_instanceAppearanceEnabled'),
         fallbackTexture,
         viewProjection,
-        baseColor,
-        emissive,
-        metallic,
-        roughness,
-        alphaCutoff,
-        useTexture,
-        lit,
+        ...materialUniforms,
         ambientColor,
-        directionalDirection,
-        directionalColor,
+        directionalDirection0,
+        directionalColor0,
+        directionalDirection1,
+        directionalColor1,
+        directionalCount,
+        ...requirePointLightUniforms(gl, program),
         cameraPosition,
         skinningEnabled,
         jointPalette,
@@ -435,6 +381,7 @@ initializeGpuResources(this: InternalWebGl2Renderer3D): void {
         shadowEnabled,
         shadowViewProjection,
         shadowBias,
+        shadowMap,
       };
       this.shadowResources = shadowResources;
       this.meshCache.clear();
@@ -482,7 +429,7 @@ initializeShadowResources(this: InternalWebGl2Renderer3D): ShadowGpuResources3D 
       if (!texture || !framebuffer) throw new Error("WebGL2 failed to allocate directional shadow resources.");
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, this.shadowMapSize, this.shadowMapSize, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
       gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, texture, 0);
@@ -494,6 +441,7 @@ initializeShadowResources(this: InternalWebGl2Renderer3D): ShadowGpuResources3D 
         texture,
         framebuffer,
         viewProjection: requiredUniform(gl, program, "u_shadowViewProjection"),
+        opacity: requiredUniform(gl, program, 'u_shadowOpacity'),
         skinningEnabled: requiredUniform(gl, program, "u_skinningEnabled"),
         jointPalette: requiredUniform(gl, program, "u_jointPalette[0]"),
         morphWeights: requiredUniform(gl, program, "u_morphWeights"),
@@ -506,7 +454,10 @@ initializeShadowResources(this: InternalWebGl2Renderer3D): ShadowGpuResources3D 
 meshRecord(this: InternalWebGl2Renderer3D, handle: number, mesh: MeshGeometry3D): MeshGpuRecord3D {
     const cached = this.meshCache.get(handle);
     if (cached?.source === mesh) return cached;
-    if (cached) this.deleteMesh(cached);
+    if (cached) {
+      this.deleteMesh(cached);
+      this.meshCache.delete(handle);
+    }
     const gl = this.gl;
     const vao = gl.createVertexArray();
     const positionBuffer = gl.createBuffer();
@@ -516,6 +467,7 @@ meshRecord(this: InternalWebGl2Renderer3D, handle: number, mesh: MeshGeometry3D)
       throw new Error(`WebGL2 failed to allocate GPU resources for mesh ${handle}.`);
     }
     let indexBuffer: WebGLBuffer | undefined;
+    let edgeBuffer: WebGLBuffer | undefined;
     let normalBuffer: WebGLBuffer | undefined;
     let uvBuffer: WebGLBuffer | undefined;
     let jointBuffer: WebGLBuffer | undefined;
@@ -523,10 +475,9 @@ meshRecord(this: InternalWebGl2Renderer3D, handle: number, mesh: MeshGeometry3D)
     const morphBuffers: WebGLBuffer[] = [];
     try {
       gl.bindVertexArray(vao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, mesh.positions, gl.STATIC_DRAW);
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+      for (let location = 1; location <= 4; location++) { gl.enableVertexAttribArray(location);gl.vertexAttribDivisor(location, 1); }
+      uploadFloatMeshAttribute3D(gl, positionBuffer, mesh.positions, 0, 3);
+      edgeBuffer = uploadCutawayEdges3D(gl, mesh);
       if (mesh.indices) {
         indexBuffer = gl.createBuffer() ?? undefined;
         if (!indexBuffer) throw new Error(`WebGL2 failed to allocate the index buffer for mesh ${handle}.`);
@@ -536,18 +487,12 @@ meshRecord(this: InternalWebGl2Renderer3D, handle: number, mesh: MeshGeometry3D)
       if (mesh.normals) {
         normalBuffer = gl.createBuffer() ?? undefined;
         if (!normalBuffer) throw new Error(`WebGL2 failed to allocate the normal buffer for mesh ${handle}.`);
-        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, mesh.normals, gl.STATIC_DRAW);
-        gl.enableVertexAttribArray(5);
-        gl.vertexAttribPointer(5, 3, gl.FLOAT, false, 12, 0);
+        uploadFloatMeshAttribute3D(gl, normalBuffer, mesh.normals, 5, 3);
       }
       if (mesh.uvs) {
         uvBuffer = gl.createBuffer() ?? undefined;
         if (!uvBuffer) throw new Error(`WebGL2 failed to allocate the UV buffer for mesh ${handle}.`);
-        gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, mesh.uvs, gl.STATIC_DRAW);
-        gl.enableVertexAttribArray(6);
-        gl.vertexAttribPointer(6, 2, gl.FLOAT, false, 8, 0);
+        uploadFloatMeshAttribute3D(gl, uvBuffer, mesh.uvs, 6, 2);
       }
       if (mesh.joints && mesh.weights) {
         jointBuffer = gl.createBuffer() ?? undefined;
@@ -557,27 +502,21 @@ meshRecord(this: InternalWebGl2Renderer3D, handle: number, mesh: MeshGeometry3D)
         gl.bufferData(gl.ARRAY_BUFFER, mesh.joints, gl.STATIC_DRAW);
         gl.enableVertexAttribArray(7);
         gl.vertexAttribIPointer(7, 4, mesh.joints instanceof Uint16Array ? gl.UNSIGNED_SHORT : gl.UNSIGNED_BYTE, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, weightBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, mesh.weights, gl.STATIC_DRAW);
-        gl.enableVertexAttribArray(8);
-        gl.vertexAttribPointer(8, 4, gl.FLOAT, false, 16, 0);
+        uploadFloatMeshAttribute3D(gl, weightBuffer, mesh.weights, 8, 4);
       }
       for (const [target, values] of (mesh.morphPositions ?? []).entries()) {
         const buffer = gl.createBuffer();
         if (!buffer) throw new Error(`WebGL2 failed to allocate morph target ${target} for mesh ${handle}.`);
         morphBuffers.push(buffer);
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        gl.bufferData(gl.ARRAY_BUFFER, values, gl.STATIC_DRAW);
-        gl.enableVertexAttribArray(9 + target);
-        gl.vertexAttribPointer(9 + target, 3, gl.FLOAT, false, 12, 0);
+        uploadFloatMeshAttribute3D(gl, buffer, values, 9 + target, 3);
       }
       const record: MeshGpuRecord3D = {
-        source: mesh, vao, positionBuffer, indexBuffer, normalBuffer, uvBuffer, jointBuffer, weightBuffer, morphBuffers,
+        source: mesh, vao, positionBuffer, indexBuffer, normalBuffer, uvBuffer, jointBuffer, weightBuffer, morphBuffers, edgeBuffer,
         vertexCount: mesh.positions.length / 3,
         indexCount: mesh.indices?.length ?? 0,
         indexType: mesh.indices instanceof Uint32Array ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT,
         mode: mesh.topology === "line-list" ? gl.LINES : gl.TRIANGLES,
-        byteLength: mesh.positions.byteLength + (mesh.indices?.byteLength ?? 0) + (mesh.normals?.byteLength ?? 0)
+        byteLength: (edgeBuffer ? mesh.positions.byteLength : 0) + mesh.positions.byteLength + (mesh.indices?.byteLength ?? 0) + (mesh.normals?.byteLength ?? 0)
           + (mesh.uvs?.byteLength ?? 0) + (mesh.joints?.byteLength ?? 0) + (mesh.weights?.byteLength ?? 0)
           + (mesh.morphPositions?.reduce((total, values) => total + values.byteLength, 0) ?? 0)
       };
@@ -586,63 +525,98 @@ meshRecord(this: InternalWebGl2Renderer3D, handle: number, mesh: MeshGeometry3D)
       this.stats.uploadedBytes += record.byteLength;
       return record;
     } catch (error) {
-      gl.deleteVertexArray(vao);
-      gl.deleteBuffer(positionBuffer);
-      if (indexBuffer) gl.deleteBuffer(indexBuffer);
-      if (normalBuffer) gl.deleteBuffer(normalBuffer);
-      if (uvBuffer) gl.deleteBuffer(uvBuffer);
-      if (jointBuffer) gl.deleteBuffer(jointBuffer);
-      if (weightBuffer) gl.deleteBuffer(weightBuffer);
-      for (const buffer of morphBuffers) gl.deleteBuffer(buffer);
+      deleteMeshResources3D(gl, { vao, positionBuffer, edgeBuffer, indexBuffer, normalBuffer, uvBuffer, jointBuffer, weightBuffer, morphBuffers });
       throw error;
     }
   },
 };
 
 const webGl2BindingMethods = {
-bindInstanceRange(this: InternalWebGl2Renderer3D, firstInstance: number): void {
-    const gl = this.gl;
-    const byteOffset = firstInstance * MATRIX_BYTE_STRIDE;
+bindInstanceRange(this: InternalWebGl2Renderer3D, firstInstance: number, mesh: MeshGpuRecord3D): void {
+    if (mesh.firstInstance === firstInstance) return;
+    const gl = this.gl, byteOffset = firstInstance * MATRIX_BYTE_STRIDE;
     for (let column = 0; column < 4; column += 1) {
       const location = column + 1;
-      gl.enableVertexAttribArray(location);
       gl.vertexAttribPointer(location, 4, gl.FLOAT, false, MATRIX_BYTE_STRIDE, byteOffset + column * 16);
-      gl.vertexAttribDivisor(location, 1);
     }
+    mesh.firstInstance = firstInstance;
   },
-
 bindMaterial(this: InternalWebGl2Renderer3D, handle: number, meshHandle: number, mesh: MeshGeometry3D): void {
     const offset = handle * MATERIAL_FLOAT_STRIDE_3D;
     if (!this.scene.isMaterialActive(handle) || offset + MATERIAL_FLOAT_STRIDE_3D > this.scene.materialData.length) {
       throw new RangeError(`render command references inactive material handle ${handle}.`);
     }
-    const flags = this.scene.materialFlags[handle];
+    const sourceFlags = this.scene.materialFlags[handle];
+    const featureMask = MATERIAL_FLAG_CUTAWAY_3D | MATERIAL_FLAG_NORMAL_TEXTURED_3D | MATERIAL_FLAG_METALLIC_ROUGHNESS_TEXTURED_3D | MATERIAL_FLAG_OCCLUSION_TEXTURED_3D | MATERIAL_FLAG_EMISSIVE_TEXTURED_3D;
+    const flags = sourceFlags & (this.features?.lighting === false ? ~MATERIAL_FLAG_LIT_3D : -1) & (this.features?.materialFeatures === false ? ~featureMask : -1);
     if ((flags & MATERIAL_FLAG_LIT_3D) !== 0 && !mesh.normals) {
       throw new Error(`lit material ${handle} requires normals on mesh ${meshHandle}${mesh.label ? ` (${mesh.label})` : ""}.`);
     }
-    if ((flags & MATERIAL_FLAG_TEXTURED_3D) !== 0 && !mesh.uvs) {
+    if ((flags & (MATERIAL_FLAG_TEXTURED_3D | MATERIAL_FLAG_METALLIC_ROUGHNESS_TEXTURED_3D | MATERIAL_FLAG_NORMAL_TEXTURED_3D | MATERIAL_FLAG_OCCLUSION_TEXTURED_3D | MATERIAL_FLAG_EMISSIVE_TEXTURED_3D)) !== 0 && !mesh.uvs) {
       throw new Error(`textured material ${handle} requires UVs on mesh ${meshHandle}${mesh.label ? ` (${mesh.label})` : ""}.`);
     }
     if (handle === this.boundMaterial) return;
-    const data = this.scene.materialData;
+    const data = this.scene.materialData, previous = this.boundMaterial < 0 ? -1 : this.boundMaterial * MATERIAL_FLOAT_STRIDE_3D;
+    const previousFlags = this.boundMaterial < 0 ? -1 : this.scene.materialFlags[this.boundMaterial]!;
+    const flagsChanged = (mask: number) => previous < 0 || (previousFlags & mask) !== (flags & mask);
     const resources = this.requireMainResources();
-    this.gl.uniform4f(resources.baseColor, data[offset], data[offset + 1], data[offset + 2], data[offset + 3]);
-    this.gl.uniform3f(resources.emissive, data[offset + 4], data[offset + 5], data[offset + 6]);
-    this.gl.uniform1f(resources.metallic, data[offset + 7]);
-    this.gl.uniform1f(resources.roughness, data[offset + 8]);
-    this.gl.uniform1f(resources.alphaCutoff, flags & MATERIAL_FLAG_ALPHA_MASK_3D ? data[offset + 9] : -1);
-    this.gl.uniform1i(resources.lit, flags & MATERIAL_FLAG_LIT_3D ? 1 : 0);
-    const textureHandle = this.scene.materialTextureHandles[handle];
+    const uniform = (location: WebGLUniformLocation, index: number, components = 1) => {
+      if (!materialDataChanged3D(data, offset, previous, index, components)) return;
+      const start = offset + index, gl = this.gl;
+      if (components === 1) gl.uniform1f(location, data[start]);
+      else if (components === 3) gl.uniform3f(location, data[start], data[start + 1], data[start + 2]);
+      else gl.uniform4f(location, data[start], data[start + 1], data[start + 2], data[start + 3]);
+    };
+    if (flagsChanged(MATERIAL_FLAG_CUTAWAY_3D)) this.gl.uniform1i(resources.cutaway, flags & MATERIAL_FLAG_CUTAWAY_3D ? 1 : 0);
+    uniform(resources.baseColor, 0, 4);
+    uniform(resources.emissive, 4, 3);
+    uniform(resources.metallic, 7);
+    uniform(resources.roughness, 8);
+    uniform(resources.uvTransform, 10, 4);
+    uniform(resources.uvRotation, 14);
+    if (flagsChanged(MATERIAL_FLAG_SHADER_HOLOGRAM_3D | MATERIAL_FLAG_SHADER_RETRO_3D | MATERIAL_FLAG_SHADER_TOON_3D)) this.gl.uniform1i(resources.shaderStyle, flags & MATERIAL_FLAG_SHADER_HOLOGRAM_3D ? 3 : flags & MATERIAL_FLAG_SHADER_RETRO_3D ? 2 : flags & MATERIAL_FLAG_SHADER_TOON_3D ? 1 : 0);
+    uniform(resources.toonBands, 15);
+    uniform(resources.toonShadowColor, 16, 3);
+    uniform(resources.toonRimColor, 19, 3);
+    uniform(resources.toonRimStrength, 22);
+    uniform(resources.outlineWidth, 23);
+    uniform(resources.outlineColor, 24, 4);
+    if (materialDataChanged3D(data, offset, previous, 9) || flagsChanged(MATERIAL_FLAG_ALPHA_MASK_3D)) this.gl.uniform1f(resources.alphaCutoff, flags & MATERIAL_FLAG_ALPHA_MASK_3D ? data[offset + 9] : -1);
+    if (flagsChanged(MATERIAL_FLAG_LIT_3D)) this.gl.uniform1i(resources.lit, flags & MATERIAL_FLAG_LIT_3D ? 1 : 0);
+    const textureOffset = handle * MATERIAL_TEXTURE_STRIDE_3D;
+    const textureHandle = this.scene.materialTextureHandles[textureOffset];
     const textured = (flags & MATERIAL_FLAG_TEXTURED_3D) !== 0;
-    this.gl.uniform1i(resources.useTexture, textured ? 1 : 0);
-    this.gl.activeTexture(this.gl.TEXTURE0);
+    if (flagsChanged(MATERIAL_FLAG_TEXTURED_3D)) this.gl.uniform1i(resources.useTexture, textured ? 1 : 0);
     if (textured) {
+      this.gl.activeTexture(this.gl.TEXTURE0);
       const texture = this.requireTexture(textureHandle, handle);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.textureRecord(textureHandle, texture).texture);
-    } else this.gl.bindTexture(this.gl.TEXTURE_2D, resources.fallbackTexture);
-    this.stats.textureBindings += 1;
-    if (flags & MATERIAL_FLAG_DOUBLE_SIDED_3D) this.gl.disable(this.gl.CULL_FACE);
+      this.stats.textureBindings += 1;
+    }
+    const mapFlags = [MATERIAL_FLAG_METALLIC_ROUGHNESS_TEXTURED_3D, MATERIAL_FLAG_NORMAL_TEXTURED_3D, MATERIAL_FLAG_OCCLUSION_TEXTURED_3D, MATERIAL_FLAG_EMISSIVE_TEXTURED_3D] as const;
+    if (flagsChanged(MATERIAL_FLAG_METALLIC_ROUGHNESS_TEXTURED_3D | MATERIAL_FLAG_NORMAL_TEXTURED_3D | MATERIAL_FLAG_OCCLUSION_TEXTURED_3D | MATERIAL_FLAG_EMISSIVE_TEXTURED_3D)) this.gl.uniform4f(resources.textureMapFlags, flags & mapFlags[0] ? 1 : 0, flags & mapFlags[1] ? 1 : 0, flags & mapFlags[2] ? 1 : 0, flags & mapFlags[3] ? 1 : 0);
+    for (let slot = 1; slot < MATERIAL_TEXTURE_STRIDE_3D; slot += 1) {
+      const mapHandle = this.scene.materialTextureHandles[textureOffset + slot];
+      if (mapHandle === -1) continue;
+      this.gl.activeTexture(this.gl.TEXTURE0 + slot + 1);
+      this.gl.bindTexture(this.gl.TEXTURE_2D, this.textureRecord(mapHandle, this.requireTexture(mapHandle, handle)).texture);
+      this.stats.textureBindings += 1;
+    }
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    // A cutaway must retain its edges when the camera crosses inside the solid.
+    if (flags & (MATERIAL_FLAG_DOUBLE_SIDED_3D | MATERIAL_FLAG_CUTAWAY_3D)) this.gl.disable(this.gl.CULL_FACE);
     else this.gl.enable(this.gl.CULL_FACE);
+    if (flags & MATERIAL_FLAG_ALPHA_BLEND_3D) {
+      const gl = this.gl, additive = (flags & MATERIAL_FLAG_ADDITIVE_3D) !== 0;
+      gl.enable(gl.BLEND);
+      // Source-over coverage is As + Ad * (1 - As). Multiplying As by
+      // itself makes an opaque canvas translucent behind blended geometry.
+      // Retain the existing additive convention and both RGB equations.
+      gl.blendFuncSeparate(gl.SRC_ALPHA, additive ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA,
+        additive ? gl.SRC_ALPHA : gl.ONE, additive ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+    }
+    else { this.gl.disable(this.gl.BLEND); this.gl.depthMask(true); }
     this.boundMaterial = handle;
     this.stats.materialBindings += 1;
   },
@@ -655,31 +629,7 @@ bindMorphWeights(this: InternalWebGl2Renderer3D, mesh: MeshGeometry3D): void {
   },
 
 bindFrameLights(this: InternalWebGl2Renderer3D, commands: RenderCommandBuffer3D): void {
-    let ambientR = 0, ambientG = 0, ambientB = 0;
-    let directionX = 0, directionY = -1, directionZ = 0;
-    let directionalR = 0, directionalG = 0, directionalB = 0;
-    let hasDirectional = false;
-    for (let light = 0; light < commands.lightCount; light += 1) {
-      const offset = light * 16, type = commands.lightTypes[light], intensity = commands.lightData[offset + 11];
-      if (type === LIGHT_KIND_AMBIENT_3D) {
-        ambientR += commands.lightData[offset + 8] * intensity;
-        ambientG += commands.lightData[offset + 9] * intensity;
-        ambientB += commands.lightData[offset + 10] * intensity;
-        this.stats.ambientLightsUsed += 1;
-      } else if (type === LIGHT_KIND_DIRECTIONAL_3D && !hasDirectional) {
-        directionX = commands.lightData[offset + 4]; directionY = commands.lightData[offset + 5]; directionZ = commands.lightData[offset + 6];
-        directionalR = commands.lightData[offset + 8] * intensity;
-        directionalG = commands.lightData[offset + 9] * intensity;
-        directionalB = commands.lightData[offset + 10] * intensity;
-        hasDirectional = true;
-        this.stats.directionalLightsUsed = 1;
-      } else this.stats.unsupportedLights += 1;
-    }
-    const gl = this.gl;
-    const resources = this.requireMainResources();
-    gl.uniform3f(resources.ambientColor, ambientR, ambientG, ambientB);
-    gl.uniform3f(resources.directionalDirection, directionX, directionY, directionZ);
-    gl.uniform3f(resources.directionalColor, directionalR, directionalG, directionalB);
+    this.frameLighting.bind(this.gl, this.requireMainResources(), commands, this.stats);
   },
 
 bindSkinning(this: InternalWebGl2Renderer3D,
@@ -735,14 +685,17 @@ requireTexture(this: InternalWebGl2Renderer3D, handle: number, material: number)
 textureRecord(this: InternalWebGl2Renderer3D, handle: number, source: TextureResource3D): TextureGpuRecord3D {
     const cached = this.textureCache.get(handle);
     if (cached?.source === source) return cached;
-    if (cached) this.deleteTexture(cached);
+    if (cached) {
+      this.deleteTexture(cached);
+      this.textureCache.delete(handle);
+    }
     if (source.width > this.maxTextureSize || source.height > this.maxTextureSize) {
       throw new RangeError(`texture ${handle} dimensions ${source.width}x${source.height} exceed WebGL2 limit ${this.maxTextureSize}.`);
     }
     const gl = this.gl, texture = gl.createTexture();
     if (!texture) throw new Error(`WebGL2 failed to allocate texture ${handle}.`);
     try {
-      gl.activeTexture(gl.TEXTURE0);
+      // bindMaterial selected this map's sampler unit; uploading must preserve it.
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, source.flipY === false ? 0 : 1);
@@ -764,17 +717,6 @@ textureRecord(this: InternalWebGl2Renderer3D, handle: number, source: TextureRes
     }
   },
 
-createFallbackTexture(this: InternalWebGl2Renderer3D): WebGLTexture {
-    const gl = this.gl, texture = gl.createTexture();
-    if (!texture) throw new Error("WebGL2 failed to allocate the fallback white texture.");
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    return texture;
-  },
-
 requireMesh(this: InternalWebGl2Renderer3D, handle: number, command: number): MeshGeometry3D {
     try {
       return this.scene.getMesh(handle);
@@ -787,33 +729,25 @@ requireMesh(this: InternalWebGl2Renderer3D, handle: number, command: number): Me
 readPixelRatio(this: InternalWebGl2Renderer3D): number {
     if (typeof this.pixelRatioSource === "function") return this.pixelRatioSource();
     if (typeof this.pixelRatioSource === "number") return this.pixelRatioSource;
-    return typeof globalThis.devicePixelRatio === "number" ? globalThis.devicePixelRatio : 1;
+    return 1;
   },
 
 resetFrameStats(this: InternalWebGl2Renderer3D): void {
     this.stats.drawCalls = 0; this.stats.instances = 0; this.stats.triangles = 0; this.stats.lines = 0;
     this.stats.meshUploads = 0; this.stats.materialBindings = 0; this.stats.textureUploads = 0; this.stats.textureBindings = 0;
-    this.stats.ambientLightsUsed = 0; this.stats.directionalLightsUsed = 0; this.stats.unsupportedLights = 0;
+    this.stats.ambientLightsUsed = 0; this.stats.directionalLightsUsed = 0; this.stats.pointLightsUsed = 0; this.stats.unsupportedLights = 0;
     this.stats.paletteUploads = 0; this.stats.paletteMatrices = 0;
     this.stats.skinnedDrawCalls = 0; this.stats.skinnedInstances = 0;
-    this.stats.shadowDrawCalls = 0;
+    this.stats.shadowDrawCalls = 0; this.stats.outlineDrawCalls = 0;
     this.stats.uploadedBytes = 0; this.stats.contextGeneration = this.generation;
     this.stats.contextLost = this.contextLost; this.stats.skipped = false;
   },
 
 deleteMesh(this: InternalWebGl2Renderer3D, mesh: MeshGpuRecord3D): void {
-    this.gl.deleteVertexArray(mesh.vao);
-    this.gl.deleteBuffer(mesh.positionBuffer);
-    if (mesh.indexBuffer) this.gl.deleteBuffer(mesh.indexBuffer);
-    if (mesh.normalBuffer) this.gl.deleteBuffer(mesh.normalBuffer);
-    if (mesh.uvBuffer) this.gl.deleteBuffer(mesh.uvBuffer);
-    if (mesh.jointBuffer) this.gl.deleteBuffer(mesh.jointBuffer);
-    if (mesh.weightBuffer) this.gl.deleteBuffer(mesh.weightBuffer);
-    for (const buffer of mesh.morphBuffers ?? []) this.gl.deleteBuffer(buffer);
+    deleteMeshResources3D(this.gl, mesh);
   },
 
 deleteTexture(this: InternalWebGl2Renderer3D, texture: TextureGpuRecord3D): void { this.gl.deleteTexture(texture.texture); },
-
 deleteGpuResources(this: InternalWebGl2Renderer3D): void {
     for (const mesh of this.meshCache.values()) this.deleteMesh(mesh);
     this.meshCache.clear();
@@ -822,6 +756,7 @@ deleteGpuResources(this: InternalWebGl2Renderer3D): void {
     const main = this.mainResources;
     if (main) {
       this.gl.deleteBuffer(main.instanceBuffer);
+      if (main.appearanceBuffer) this.gl.deleteBuffer(main.appearanceBuffer);
       this.gl.deleteProgram(main.program);
       this.gl.deleteTexture(main.fallbackTexture);
     }
@@ -868,7 +803,7 @@ emit(this: InternalWebGl2Renderer3D, level: WebGl2DiagnosticLevel3D, code: WebGl
 };
 
 const webGl2RendererPrototype = Object.assign({}, webGl2PublicMethods, webGl2GpuMethods, webGl2BindingMethods, webGl2LifecycleMethods);
-const webGl2RendererMethodNames = ["resize", "render", "dispose", "renderShadowPass", "isContextLost", "isDisposed", "initializeGpuResources", "compileShader", "initializeShadowResources", "meshRecord", "bindInstanceRange", "bindMaterial", "bindMorphWeights", "bindFrameLights", "bindSkinning", "requireTexture", "textureRecord", "createFallbackTexture", "requireMesh", "readPixelRatio", "resetFrameStats", "deleteMesh", "deleteTexture", "deleteGpuResources", "abandonGpuResources", "requireMainResources", "requireShadowResources", "assertUsable", "checkGlError", "emit"];
+const webGl2RendererMethodNames = ["resize", "render", "dispose", "renderShadowPass", "renderOutlinePass", "isContextLost", "isDisposed", "initializeGpuResources", "compileShader", "initializeShadowResources", "meshRecord", "bindInstanceRange", "bindMaterial", "bindMorphWeights", "bindFrameLights", "bindSkinning", "requireTexture", "textureRecord", "requireMesh", "readPixelRatio", "resetFrameStats", "deleteMesh", "deleteTexture", "deleteGpuResources", "abandonGpuResources", "requireMainResources", "requireShadowResources", "assertUsable", "checkGlError", "emit"];
 
 function isInternalWebGl2Renderer(value: unknown): value is InternalWebGl2Renderer3D {
   return typeof value === "object" && value !== null
@@ -933,6 +868,7 @@ function createWebGl2RendererInstance(options: WebGl2RendererOptions3D): WebGl2R
     stats: createWebGl2FrameStats3D(),
     gl: context,
     clearColor,
+    frameLighting: createFrameLighting(),
     pixelRatioSource: options.pixelRatio,
     maxDevicePixelRatio,
     maxWidth,
@@ -941,6 +877,9 @@ function createWebGl2RendererInstance(options: WebGl2RendererOptions3D): WebGl2R
     shadowMapSize,
     onDiagnostic: options.onDiagnostic,
     validateGlErrors: options.validateGlErrors === true,
+    cameraCulling: options.cameraCulling === true,
+    features: undefined,
+    commandViews: undefined,
     meshCache: new Map(),
     textureCache: new Map(),
     mainResources: undefined,

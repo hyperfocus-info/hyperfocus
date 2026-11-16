@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dev servers"
+  short_description: "Reuse and operate repository development servers"
+  default_prompt: "Use $dev-server to start or reuse the correct development surface and inspect its errors."

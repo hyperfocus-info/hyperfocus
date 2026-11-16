@@ -12,6 +12,7 @@
 ## Selected Next Todo
 
 - Ship a run ledger and proof bundle v1 before adding more runtime breadth: every run should show stop reason, last verified state, waiting-on state, next action, key diff or branch links, terminal/test/browser evidence, approval history, and usage/context spikes in one durable review surface
+- Apply that priority to remote Swarm through the [campaign repair plan](swarm-campaign-repair-plan.md): cloud ownership and phone continuity, visible progress, measured fast startup, then adaptive campaigns with aggregate budgets and real laptop-off acceptance.
 
 ## April 2026 Market Signals
 

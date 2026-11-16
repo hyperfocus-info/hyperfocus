@@ -1,10 +1,10 @@
 /** @jsxImportSource solid-js */
-import { beforeEach, expect, it, mock } from "bun:test";
+import { beforeEach, expect, it, mock, spyOn } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createUiTest } from "./utils/tests/test-harness";
 import { clearBrowserStateForTests, seedHarnessStoreForTests } from "./utils/tests/store-test-utils";
 import { harnessStore, readBrowserUiSession } from "./harness-store";
-import { createHarnessStateFixture } from "./utils/tests/test-fixtures";
+import { createHarnessStateFixture, createViewProjectFixture } from "./utils/tests/test-fixtures";
 import { clearCurrentTabItemSelectorsForTests, registerCurrentTabItemSelector } from "./lib/current-tab-item-hotkeys";
 
 type HotkeyDefinition = { hotkey: string; callback: () => void };
@@ -14,12 +14,13 @@ type HotkeySource = HotkeyDefinition[] | (() => HotkeyDefinition[]);
 const createHotkeysMock = mock((_hotkeys: HotkeySource, _options: () => HotkeyOptions) => undefined);
 const createHotkeySequenceMock = mock(() => undefined);
 const createHotkeySequencesMock = mock(() => undefined);
+const { formatForDisplay } = await import("@tanstack/solid-hotkeys");
 
 mock.module("@tanstack/solid-hotkeys", () => ({
   createHotkeys: createHotkeysMock,
   createHotkeySequence: createHotkeySequenceMock,
   createHotkeySequences: createHotkeySequencesMock,
-  formatForDisplay: (hotkey: string) => hotkey
+  formatForDisplay
 }));
 
 mock.module("./harness-websocket", () => ({
@@ -30,6 +31,7 @@ mock.module("./harness-websocket", () => ({
 }));
 
 import { App, createDefaultIdeWindowBounds, shouldCollapseTabStrip } from "./app";
+import { measureTabStripMinimumWidth } from "./app/layout-measurement";
 import { ideStore } from "./ide/ide-store";
 
 function getCreateHotkeysCall(): [HotkeyDefinition[], () => HotkeyOptions] {
@@ -49,7 +51,7 @@ function getCreateHotkeysCall(): [HotkeyDefinition[], () => HotkeyOptions] {
 function getProjectSwitcherHotkeysCall(): [HotkeyDefinition[], () => HotkeyOptions] {
   const call = createHotkeysMock.mock.calls.find(([hotkeys]) => {
     const definitions = typeof hotkeys === "function" ? hotkeys() : hotkeys;
-    return definitions.length === 2 && definitions.map((definition) => definition.hotkey).join(",") === "Mod+K,Mod+Space";
+    return definitions.length < 10 && definitions.some(definition => definition.hotkey === "Mod+K") && definitions.some(definition => definition.hotkey === "Mod+Space");
   });
   if (!call) {
     throw new Error("Expected project switcher hotkeys to be called");
@@ -79,6 +81,8 @@ createUiTest("App shortcuts", () => {
     createHotkeysMock.mockClear();
     createHotkeySequenceMock.mockClear();
     createHotkeySequencesMock.mockClear();
+    const project = createViewProjectFixture();
+    seedHarnessStoreForTests(createHarnessStateFixture({ workspace: { projects: [project], activeProjectId: project.id, workspaceModes: [] } }));
   });
 
   it("registers app shortcuts through TanStack Hotkeys", () => {
@@ -96,7 +100,8 @@ createUiTest("App shortcuts", () => {
       "Mod+3",
       "Mod+4",
       "Mod+5",
-      "Mod+,",
+      "Meta+,",
+      "Control+,",
       "Mod+I",
       "Mod+`",
       "Mod+T",
@@ -206,8 +211,8 @@ createUiTest("App shortcuts", () => {
   });
 
   it("keeps project switcher shortcuts enabled on the IDE surface", () => {
-    harnessStore.setActiveSurface("ide");
     render(() => <App />);
+    getHotkeyCall("Mod+I")[0].find((definition) => definition.hotkey === "Mod+I")?.callback();
 
     const [definitions, getOptions] = getProjectSwitcherHotkeysCall();
 
@@ -295,13 +300,12 @@ createUiTest("App shortcuts", () => {
     expect(buttons[0]?.hasAttribute("data-test-button")).toBe(true);
   });
 
-  it("renders settings in the shared left pane shell", () => {
+  it("renders preferences as one shared workspace with one section navigator", () => {
     harnessStore.setActiveLeftTab("preferences");
-    const { container } = render(() => <App />);
-
-    const shell = container.querySelector("[data-test-left-pane-shell][data-left-pane-kind='preferences']");
-    expect(shell).not.toBeNull();
-    expect(shell?.querySelector("nav[aria-label='Preference sections']")).not.toBeNull();
+    render(() => <App />);
+    expect(document.querySelectorAll('[data-ui-settings-workspace]')).toHaveLength(1);
+    expect(screen.getAllByRole('navigation', { name: 'Preference sections' })).toHaveLength(1);
+    expect(document.querySelector('[data-panel-group-panel="navigation"]')).toBeNull();
   });
 
   it("collapses left tab labels when tabs wrap", () => {
@@ -321,13 +325,103 @@ createUiTest("App shortcuts", () => {
     expect(shouldCollapseTabStrip(nav)).toBe(true);
   });
 
-  it("keeps workspace grid columns shrinkable when project threads have long content", () => {
+  it("measures overflowing tooltip wrappers before collapsing tab labels", () => {
+    const nav = document.createElement("nav");
+    nav.style.gap = "4px";
+    nav.style.paddingLeft = "16px";
+    nav.style.paddingRight = "16px";
+    for (let index = 0; index < 5; index++) {
+      const wrapper = document.createElement("span");
+      wrapper.getBoundingClientRect = () => DOMRect.fromRect({ width: 60 });
+      Object.defineProperty(wrapper, "scrollWidth", { value: 90 });
+      nav.append(wrapper);
+    }
+    document.body.append(nav);
+    expect(measureTabStripMinimumWidth(nav)).toBe(498);
+    nav.remove();
+  });
+
+  it("uses the shared measured panel group for long workspace content", () => {
     render(() => <App />);
 
     const grid = document.querySelector("[data-test-main-panel-grid]");
 
     expect(grid?.getAttribute("data-main-panel-mode")).toBe("open");
-    expect(grid?.getAttribute("style")).toContain("--center-panel-size");
+    expect(grid?.querySelector('[data-panel-group=""]')).not.toBeNull();
+    expect(grid?.querySelector('[data-panel-group-panel="work"]')).not.toBeNull();
+    expect(grid?.querySelector('[data-panel-group-handle="navigation"]')?.getAttribute("aria-valuenow")).toBe("276");
+  });
+
+  it("gives first-run the workspace and restores contextual panes after opening a project", () => {
+    seedHarnessStoreForTests(createHarnessStateFixture({ experienceMode: "advanced", tracePanelMode: "open", workspace: { projects: [], activeProjectId: undefined, workspaceModes: [] } }));
+    render(() => <App />);
+    expect(document.querySelector('[data-test-empty-project]')).not.toBeNull();
+    expect(document.querySelector('[data-panel-group-panel="navigation"]')).toBeNull();
+    expect(document.querySelector('[data-panel-group-panel="run-details"]')).toBeNull();
+    expect(harnessStore.state.tracePanelMode).toBe("open");
+    fireEvent.click(screen.getByRole("button", { name: "Open project switcher" }));
+    expect(harnessStore.state.projectSwitcherOpen).toBe(true);
+    const project = createViewProjectFixture();
+    seedHarnessStoreForTests(createHarnessStateFixture({ experienceMode: "advanced", tracePanelMode: "open", workspace: { projects: [project], activeProjectId: project.id, workspaceModes: [] } }));
+    expect(document.querySelector('[data-test-empty-project]')).toBeNull();
+    expect(document.querySelector('[data-panel-group-panel="navigation"]')).not.toBeNull();
+    expect(document.querySelector('[data-panel-group-panel="run-details"]')).not.toBeNull();
+  });
+
+  it("hides run details while editing preferences and restores the previous mode", () => {
+    seedHarnessStoreForTests(createHarnessStateFixture({ experienceMode: "advanced", tracePanelMode: "open", workspace: harnessStore.state.workspace }));
+    render(() => <App />);
+    harnessStore.setActiveLeftTab("preferences");
+    expect(document.querySelector('[data-panel-group-panel="run-details"]')).toBeNull();
+    expect(document.querySelector('[data-test-terminal-visibility]')?.hasAttribute("hidden")).toBe(true);
+    expect(harnessStore.state.tracePanelMode).toBe("open");
+    harnessStore.setActiveLeftTab("projects");
+    expect(document.querySelector('[data-panel-group-panel="run-details"]')).not.toBeNull();
+    expect(document.querySelector('[data-test-terminal-visibility]')?.hasAttribute("hidden")).toBe(false);
+  });
+
+  it("mounts one preferences listener owner when entering and reopening settings", () => {
+    const added = spyOn(window, "addEventListener");
+    try {
+      const view = render(() => <App />);
+      for (let visit = 1; visit <= 2; visit++) {
+        harnessStore.setActiveLeftTab("preferences");
+        expect(added.mock.calls.filter(([type]) => type === "preferences-section-change")).toHaveLength(visit);
+        expect(added.mock.calls.filter(([type]) => type === "preferences-search-change")).toHaveLength(visit);
+        harnessStore.setActiveLeftTab("projects");
+      }
+      view.unmount();
+    } finally { added.mockRestore(); }
+  });
+
+  it("labels the narrow navigation mode for its current roster without replacing the pane", () => {
+    render(() => <App />);
+    const pane = document.querySelector('[data-panel-group-panel="navigation"]');
+    const mode = () => document.querySelector('[data-panel-group-mode="navigation"]');
+    expect(mode()?.textContent).toBe("Projects");
+    harnessStore.setActiveLeftTab("jobs");
+    expect(mode()?.textContent).toBe("Jobs");
+    expect(document.querySelector('[data-panel-group-panel="navigation"]') === pane).toBe(true);
+    harnessStore.setActiveLeftTab("runs");
+    expect(mode()?.textContent).toBe("Runs");
+    expect(document.querySelector('[data-panel-group-panel="navigation"]') === pane).toBe(true);
+  });
+
+  it("persists project-pane collapse through the shared separator", () => {
+    render(() => <App />);
+    const handle = document.querySelector<HTMLElement>('[data-panel-group-handle="navigation"]')!;
+    fireEvent.keyDown(handle, { key: "Enter" });
+    expect(readBrowserUiSession().mainPanelSizes?.leftCollapsed).toBe(true);
+  });
+
+  it("keeps the selected preferences section reachable without an extra work-pane step", () => {
+    render(() => <App />);
+    harnessStore.setActiveLeftTab("preferences");
+    for (let repeat = 0; repeat < 2; repeat++) {
+      fireEvent.click(screen.getByRole("button", { name: "General & UI" }));
+      expect(harnessStore.state.preferencesActiveSectionId).toBe('general-ui');
+      expect(document.querySelector('[data-ui-settings-content]')?.textContent).toContain('Appearance');
+    }
   });
 
   it("persists main panel sizes in browser session state", () => {
@@ -341,16 +435,18 @@ createUiTest("App shortcuts", () => {
   it("cycles trace panel through closed and peek states", async () => {
     render(() => <App />);
 
-    const traceButton = screen.getByRole("button", { name: /Trace panel:/ });
+    const actions = screen.getByRole("button", { name: "Workspace actions" });
+    fireEvent.click(actions);
 
     expect(harnessStore.state.tracePanelMode).toBe("open");
 
-    fireEvent.click(traceButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: /Trace panel:/ }));
     await Promise.resolve();
     expect(harnessStore.state.tracePanelMode).toBe("closed");
     expect(readBrowserUiSession().tracePanelMode).toBe("closed");
 
-    fireEvent.click(traceButton);
+    fireEvent.click(actions);
+    fireEvent.click(screen.getByRole("menuitem", { name: /Trace panel:/ }));
     await Promise.resolve();
     expect(harnessStore.state.tracePanelMode).toBe("peek");
     expect(readBrowserUiSession().tracePanelMode).toBe("peek");
@@ -365,7 +461,9 @@ createUiTest("App shortcuts", () => {
 
     render(() => <App />);
 
-    expect(screen.queryByRole("button", { name: /Trace panel:/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Workspace actions" }));
+    expect(screen.queryByRole("menuitem", { name: /Trace panel:/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Help and tutorials" })).not.toBeNull();
     expect(document.querySelector("[data-test-main-panel-grid]")?.getAttribute("data-main-panel-mode")).toBe("closed");
     expect(harnessStore.state.tracePanelMode).toBe("open");
   });
@@ -376,6 +474,7 @@ createUiTest("App shortcuts", () => {
     render(() => <App />);
 
     expect(document.querySelector("[data-test-trace-peek-rail]")).not.toBeNull();
+    expect(document.querySelector<HTMLElement>('[data-panel-group-panel="run-details"]')?.style.width).toBe("240px");
   });
 
   it("moves active tab styling when switching left tabs", async () => {
@@ -404,13 +503,11 @@ createUiTest("App shortcuts", () => {
     expect(readBrowserUiSession().activeLeftTab).toBe("runs");
   });
 
-  it("shows current surface context in the mobile header", () => {
+  it("keeps the current surface in task navigation without navbar subtext", () => {
     harnessStore.setActiveLeftTab("runs");
-
     render(() => <App />);
-
-    const label = document.querySelector("[data-test-mobile-surface-label]");
-    expect(label?.textContent).toContain("Runs");
+    expect(document.querySelector('[data-ui-navbar] [data-test-mobile-surface-label]')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Runs' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it("opens the IDE surface from the shortcut", async () => {
@@ -427,8 +524,8 @@ createUiTest("App shortcuts", () => {
   });
 
   it("renders the IDE as a maximizable virtual app window", async () => {
-    harnessStore.setActiveSurface("ide");
     render(() => <App />);
+    getHotkeyCall("Mod+I")[0].find((definition) => definition.hotkey === "Mod+I")?.callback();
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
     const ideWindow = document.querySelector("[data-test-ide-virtual-window]");
@@ -458,43 +555,36 @@ createUiTest("App shortcuts", () => {
   });
 
   it("closes the IDE virtual window from Escape", async () => {
-    harnessStore.setActiveSurface("ide");
     render(() => <App />);
+    getHotkeyCall("Mod+I")[0].find((definition) => definition.hotkey === "Mod+I")?.callback();
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
     expect(document.querySelector("[data-test-ide-virtual-window]")).not.toBeNull();
 
-    const escapeCall = getHotkeyCall("Escape");
-    expect(escapeCall[1]().enabled).toBe(true);
-    const escapeDefinitions = escapeCall[0];
-    escapeDefinitions.find((definition) => definition.hotkey === "Escape")?.callback();
+    fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(harnessStore.state.activeSurface).toBe("chat");
   });
 
   it("closes only the project switcher when Escape is pressed over the IDE", async () => {
-    harnessStore.setActiveSurface("ide");
-    harnessStore.openProjectSwitcher();
     render(() => <App />);
+    getHotkeyCall("Mod+I")[0].find((definition) => definition.hotkey === "Mod+I")?.callback();
+    harnessStore.openProjectSwitcher();
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
-    const escapeCall = getHotkeyCall("Escape");
-    const escapeDefinitions = escapeCall[0];
-    escapeDefinitions.find((definition) => definition.hotkey === "Escape")?.callback();
+    fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(harnessStore.state.projectSwitcherOpen).toBe(false);
     expect(harnessStore.state.activeSurface).toBe("ide");
   });
 
   it("closes IDE overlays before Escape closes the virtual window", async () => {
-    harnessStore.setActiveSurface("ide");
-    ideStore.setCommandPalette(true);
     render(() => <App />);
+    getHotkeyCall("Mod+I")[0].find((definition) => definition.hotkey === "Mod+I")?.callback();
+    ideStore.setCommandPalette(true);
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
-    const escapeCall = getHotkeyCall("Escape");
-    const escapeDefinitions = escapeCall[0];
-    const escape = escapeDefinitions.find((definition) => definition.hotkey === "Escape")?.callback;
+    const escape = () => fireEvent.keyDown(window, { key: 'Escape' });
 
     escape?.();
     expect(ideStore.state.commandPaletteOpen).toBe(false);

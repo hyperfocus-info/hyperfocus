@@ -1,3 +1,7 @@
+import type { RectItem, PointItem } from "./bench/spatial-workload.ts";
+import { rects, points, queries, checksumIds, overlapsStrict, pairChecksum, key } from "./bench/spatial-workload.ts";
+import { roundDecimal } from "@hyperfocus/utilities/math";
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 import { dirname, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import Flatbush from "flatbush";
@@ -20,17 +24,6 @@ type BenchResult = {
   samples: BenchSample[];
 };
 
-type RectItem = CollisionAabb & {
-  id: number;
-};
-
-type PointItem = {
-  id: number;
-  x: number;
-  y: number;
-  radius?: number;
-};
-
 type RbushItem = RectItem;
 
 type RbushLike = {
@@ -43,9 +36,7 @@ type RbushLike = {
 const outputArg = process.argv.find((arg) => arg.startsWith("--out="));
 const outputPath = outputArg?.slice("--out=".length) ?? ".local/engine-perf/2026-06-09/spatial-index-bench.json";
 
-function round(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
+function round(value: number) { return roundDecimal(value, 3); }
 
 function createRbush(maxEntries?: number): RbushLike {
   const tree: unknown = Reflect.construct(RBushModule, maxEntries === undefined ? [] : [maxEntries]);
@@ -59,10 +50,6 @@ function createRbush(maxEntries?: number): RbushLike {
     remove(item) { Reflect.apply(tree.remove, tree, [item]); },
     search(bounds) { return Reflect.apply(tree.search, tree, [bounds]); },
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function median(values: readonly number[]) {
@@ -99,60 +86,6 @@ function assertSame(name: string, samples: BenchSample[]) {
   }
 }
 
-function rects(count: number) {
-  const out: RectItem[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const x = ((i * 37) % 4096) + ((i % 7) * 0.25);
-    const y = (Math.floor((i * 91) % 4096)) + ((i % 5) * 0.25);
-    const w = 8 + (i % 11);
-    const h = 8 + ((i * 3) % 13);
-    out.push({ id: i, minX: x, minY: y, maxX: x + w, maxY: y + h });
-  }
-  return out;
-}
-
-function points(count: number) {
-  const out: PointItem[] = [];
-  for (let i = 0; i < count; i += 1) {
-    out.push({
-      id: i,
-      x: ((i * 53) % 8192) + ((i % 3) * 0.125),
-      y: ((i * 97) % 8192) + ((i % 5) * 0.125)
-    });
-  }
-  return out;
-}
-
-function queries(count: number, worldSize: number, radius: number) {
-  const out: CollisionAabb[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const x = (i * 131) % worldSize;
-    const y = (i * 197) % worldSize;
-    out.push({ minX: x - radius, minY: y - radius, maxX: x + radius, maxY: y + radius });
-  }
-  return out;
-}
-
-function checksumIds(ids: Iterable<number>) {
-  let sum = 0;
-  let count = 0;
-  for (const id of ids) {
-    count += 1;
-    sum = (sum + ((id + 1) * 2654435761)) >>> 0;
-  }
-  return sum ^ count;
-}
-
-function overlapsStrict(a: CollisionAabb, b: CollisionAabb) {
-  return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;
-}
-
-function pairChecksum(a: number, b: number) {
-  const low = Math.min(a, b);
-  const high = Math.max(a, b);
-  return ((low + 1) * 31 + (high + 1)) >>> 0;
-}
-
 function benchStaticBroadphase() {
   const items = rects(40_000);
   const queryBoxes = queries(2_000, 4096, 24);
@@ -184,7 +117,7 @@ function benchStaticBroadphase() {
   const grid = sample("fixed grid static rect queries", () => {
     const cellSize = 32;
     const buckets = new Map<string, number[]>();
-    const key = (x: number, y: number) => `${x},${y}`;
+
     for (const item of items) {
       const minX = Math.floor(item.minX / cellSize);
       const maxX = Math.floor(item.maxX / cellSize);

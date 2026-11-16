@@ -1,4 +1,5 @@
 import { BOUNDED_PAGE_CURSOR_MAX_LENGTH } from "@hyperfocus/ai-core/protocol";
+import { isRecord } from "@hyperfocus/utilities/records";
 
 export type PageCursorError = Error & { code: "invalid-cursor" };
 
@@ -45,8 +46,4 @@ export function decodePageCursor(input: {
     if (isPageCursorError(error)) throw error;
     throw createPageCursorError();
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

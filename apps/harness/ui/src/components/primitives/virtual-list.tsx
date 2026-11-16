@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, splitProps, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, For, Show } from "solid-js";
 import { createVirtualizer, measureElement as measureVirtualElement } from "@tanstack/solid-virtual";
 import * as stylex from "@stylexjs/stylex";
 import { recordUiTelemetry } from "../../lib/ui-telemetry";
@@ -6,32 +6,9 @@ import { cn } from "../../lib/utils";
 
 import {
   DEFAULT_OVERSCAN,
-  DEFAULT_VISIBLE_COUNT,
-  NEAR_END_PX,
-  NO_RESIZE_OBSERVER_ROW_SETTLE_FRAMES,
-  PAGINATION_SCROLL_THROTTLE_MS,
-  VIEWPORT_MEASUREMENT_SETTLE_FRAMES,
-  anchorsEqual,
-  clampLoadedCount,
-  estimateVirtualListOffset,
-  estimateVirtualListSize,
-  getListAnchor,
   getVirtualListContentSize,
-  getVirtualListNextLoadedCount,
-  getVirtualListReverseScrollTop,
-  getVirtualListScrollTarget,
-  getVirtualListStickToEndScrollTop,
   isVirtualListDebugEnabled,
-  parseCssPixels,
-  readWindowItems,
-  resolveBatchSize,
-  resolveInitialCount,
-  resolveThresholdPx,
-  shouldResizeVirtualListRow,
   type EstimatedVirtualItem,
-  type ListAnchor,
-  type ViewWindow,
-  type ViewportMeasurementOptions,
   type VirtualListHandle,
   type VirtualListProps,
 } from "./virtual-list/model";
@@ -66,7 +43,7 @@ const styles = stylex.create({
 import {
   createVirtualListDebugRuntime, createVirtualListMeasurementRuntime, createVirtualListModel,
   createVirtualListPaginationRuntime, createVirtualListSizeEstimator, createVirtualListViewportRuntime,
-  getVirtualListRowElementIndex, registerVirtualListLifecycle,
+  getVirtualListRowElementIndex, observeVirtualListOffset, registerVirtualListLifecycle,
 } from "./virtual-list/runtime";
 
 function VirtualListLoadingRow(props: { size: number }) {
@@ -82,16 +59,13 @@ function VirtualListLoadingRow(props: { size: number }) {
 export function VirtualList<T>(props: VirtualListProps<T>) {
   const model = createVirtualListModel(props);
   const {
-    local, rest, runtime, rowObservers, observedRowElements, measuredRowSizes, items,
-    loadedCount, setLoadedCount, lastAnchor, setLastAnchor, stuckToEnd, setStuckToEnd,
-    itemSignature, setItemSignature, measurementVersion, setMeasurementVersion,
-    viewWindow, keyIndex,
+    local, rest, runtime, measuredRowSizes, items, loadedCount, measurementVersion,
+    setMeasurementVersion, viewWindow, keyIndex,
   } = model;
   const estimator = createVirtualListSizeEstimator(model);
   const {
-    getVirtualRowKey, estimateBaseSizeForIndex, estimateWindowTotalSize,
-    estimateAverageSize, estimateWindowContentSize, estimateOffsetForIndex,
-    estimateVirtualItemForIndex,
+    getVirtualRowKey, estimateBaseSizeForIndex, estimateWindowTotalSize, estimateAverageSize,
+    estimateWindowContentSize, estimateOffsetForIndex,
   } = estimator;
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
@@ -99,6 +73,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       return viewWindow().items.length;
     },
     getScrollElement: () => runtime.viewport ?? null,
+    observeElementOffset: (instance, onChange) => observeVirtualListOffset(model, instance, onChange),
     estimateSize: (index) => estimateBaseSizeForIndex(index),
     getItemKey: (index) => getVirtualRowKey(index),
     overscan: local.overscan ?? DEFAULT_OVERSCAN,
@@ -111,10 +86,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     }
   });
   const debug = createVirtualListDebugRuntime(model, virtualizer, getVirtualListRowElementIndex);
-  const {
-    debugRowStyle, debugContentStyle, debugTraceRowMeasurement,
-    debugTraceVirtualOffsets, debugForceRepaint, debugTrace,
-  } = debug;
+  const { debugRowStyle, debugContentStyle, debugTrace } = debug;
   const viewportRuntime = createVirtualListViewportRuntime(model, virtualizer, {
     measureObservedRows: () => measurement.measureObservedRows(),
     queueObservedRowsMeasurement: () => measurement.queueObservedRowsMeasurement(),
@@ -142,6 +114,8 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     }
     return estimateVisibleVirtualItems();
   });
+  const virtualItemsByIndex = createMemo(() => new Map(virtualItems().map((item) => [item.index, item])));
+  const visibleIndexes = createMemo(() => virtualItems().map((item) => item.index));
   createEffect(() => {
     const count = viewWindow().items.length;
     virtualizer.setOptions({
@@ -201,22 +175,23 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     >
       <Show when={items().length > 0} fallback={local.empty}>
         <div class={cn(stylex.attrs(styles.content).class, local.contentClass)} style={debugContentStyle(totalContentSize())}>
-          <For each={virtualItems()}>
-            {(virtualRow) => {
-              const item = () => viewWindow().items[virtualRow.index];
-              const absoluteIndex = () => viewWindow().absoluteStart + virtualRow.index;
+          <For each={visibleIndexes()}>
+            {(index) => {
+              const virtualRow = () => virtualItemsByIndex().get(index);
+              const item = () => viewWindow().items[index];
+              const absoluteIndex = () => viewWindow().absoluteStart + index;
               return (
                 <div
-                  ref={(element) => setRowElement(element, virtualRow.index, getVirtualRowKey(virtualRow.index))}
-                  data-index={virtualRow.index}
-                  data-virtual-start={virtualRow.start}
-                  data-virtual-size={virtualRow.size}
-                  data-virtual-key={getVirtualRowKey(virtualRow.index)}
+                  ref={(element) => setRowElement(element, index, getVirtualRowKey(index))}
+                  data-index={index}
+                  data-virtual-start={virtualRow()?.start}
+                  data-virtual-size={virtualRow()?.size}
+                  data-virtual-key={getVirtualRowKey(index)}
                   data-test-virtual-list-item=""
                   class={cn(stylex.attrs(styles.item).class, local.itemClass)}
-                  style={debugRowStyle(virtualRow.start)}
+                  style={debugRowStyle(virtualRow()?.start ?? 0)}
                 >
-                  <Show when={item()} keyed fallback={<VirtualListLoadingRow size={virtualRow.size} />}>
+                  <Show when={item()} keyed fallback={<VirtualListLoadingRow size={virtualRow()?.size ?? 0} />}>
                     {(resolvedItem) => local.children(resolvedItem, absoluteIndex())}
                   </Show>
                 </div>

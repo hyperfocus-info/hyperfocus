@@ -1,19 +1,31 @@
+import { usePreferencesPanel } from "./state/panel-context";
 /** @jsxImportSource solid-js */
-import { For, Show } from "solid-js";
+import { Input } from "@hyperfocus/ui";
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
-import { AlertTriangle, HelpCircle, Keyboard, Plus, RotateCcw, Search, X } from "lucide-solid";
-import { appHotkeySettings, DEFAULT_APP_HOTKEY_PREFERENCES, isValidAppHotkey, normalizeAppHotkeyPreferences } from "../../lib/app-hotkeys";
-import type { PreferencesPanelModel } from "../preferences-modal";
+import { AlertTriangle,Keyboard,Plus,RotateCcw,Search,X } from "lucide-solid";
+import { For,Index,Show } from "solid-js";
+import { appHotkeySettings,DEFAULT_APP_HOTKEY_PREFERENCES,isValidAppHotkey,normalizeAppHotkeyPreferences } from "../../lib/app-hotkeys";
 import { ActionButton } from "../action-button";
-import { Input } from "../primitives/input";
 import { PreferenceSection } from "./preferences-controls";
-import type { PreferencesHotkeyActions } from "./preferences-hotkey-actions";
-import { chordsMatch, formatHotkeyForDisplay, formatRecordedChord, keybindRowElementId } from "./preferences-hotkey-utils";
+import { chordsMatch,formatHotkeyForDisplay,formatRecordedChord,keybindRowElementId } from "./preferences-hotkey-utils";
 import { preferenceStyles } from "./preferences.styles";
 
-export function PreferencesKeybinds(props: { model: PreferencesPanelModel; actions: PreferencesHotkeyActions; handleSave: () => void }) {
-  const { state, store, keybindSearchQuery, setKeybindSearchQuery, setHotkeyDrafts } = props.model;
-  const { handleSave } = props;
+const keybindStyles = stylex.create({
+  row: { paddingBlock: tokens.space3, borderBottomColor: tokens.border, borderBottomStyle: "solid", borderBottomWidth: tokens.borderWidth },
+  layout: { gap: tokens.space3, display: "grid", minWidth: 0, },
+  title: { fontSize: tokens.fontBody, fontWeight: 600, overflowWrap: "anywhere" },
+  description: { color: tokens.muted, fontSize: tokens.fontCaption, overflowWrap: "anywhere", },
+  error: { color: tokens.danger, flexBasis: "100%", fontSize: tokens.fontCaption, overflowWrap: "anywhere", },
+  chip: { borderColor: tokens.border, borderRadius: tokens.radiusSmall, borderStyle: "solid", borderWidth: tokens.borderWidth, alignItems: "center", backgroundColor: tokens.panelRaised, display: "inline-flex", maxWidth: "100%", minWidth: 0 },
+  input: { borderWidth: 0, paddingInline: tokens.space2, backgroundColor: "transparent", boxShadow: "none", textAlign: "center", minWidth: 0 },
+  remove: { padding: 0, borderRadius: tokens.radiusSmall, flexShrink: 0, minWidth: tokens.controlCompact },
+});
+
+export function PreferencesKeybinds() {
+  const panel = usePreferencesPanel();
+  const { state, store, keybindSearchQuery, setKeybindSearchQuery, setHotkeyDrafts } = panel.model;
+  const { handleSave } = panel.persistence;
     const preferences = () => normalizeAppHotkeyPreferences(state.appHotkeyPreferences);
     const filteredSettings = () => {
       const query = keybindSearchQuery().trim().toLowerCase();
@@ -28,12 +40,12 @@ export function PreferencesKeybinds(props: { model: PreferencesPanelModel; actio
     };
 
     return (
-      <PreferenceSection title="Keybinds" description="Customize app and IDE hotkeys for this browser.">
+      <PreferenceSection title="Keybinds" description="Customize app and IDE hotkeys for this browser. Focus a binding and press a combination to save it. Tab moves on; Escape restores the saved binding.">
         <div id="keyboard-shortcuts" tabIndex={-1} class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap4).class}>
           <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.flexWrap, preferenceStyles.itemsCenter, preferenceStyles.justifyBetween, preferenceStyles.gap3, preferenceStyles.borderBottom, preferenceStyles.borderDefault, preferenceStyles.paddingBottom3).class}>
             <div class={stylex.attrs(preferenceStyles.text0675, preferenceStyles.leading5, preferenceStyles.colorMuted).class}>{filteredSettings().length} keybindings</div>
             <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.flexWrap, preferenceStyles.itemsCenter, preferenceStyles.gap2).class}>
-              <label class={stylex.attrs(preferenceStyles.relative, preferenceStyles.minWidth48, preferenceStyles.flex1).class}>
+              <label class={stylex.attrs(preferenceStyles.relative, preferenceStyles.minWidth0, preferenceStyles.flex1).class}>
                 <Search class={stylex.attrs(preferenceStyles.pointerEventsNone, preferenceStyles.absolute, preferenceStyles.left3, preferenceStyles.topHalf, preferenceStyles.height35, preferenceStyles.width35, preferenceStyles.translateYHalfNegative, preferenceStyles.colorMuted).class} />
                 <Input
                   class={stylex.attrs(preferenceStyles.height9, preferenceStyles.paddingLeft8).class}
@@ -47,8 +59,9 @@ export function PreferencesKeybinds(props: { model: PreferencesPanelModel; actio
           </div>
 
           <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap4).class}>
-            <PreferencesHotkeyGroup title="App keybinds" settings={filteredSettings().filter((setting) => setting.scope !== "ide")} model={props.model} actions={props.actions} />
-            <PreferencesHotkeyGroup title="IDE keybinds" settings={filteredSettings().filter((setting) => setting.scope === "ide")} model={props.model} actions={props.actions} />
+            <Show when={filteredSettings().length === 0}><p role="status">No shortcuts match. Try a command name or key combination.</p></Show>
+            <PreferencesHotkeyGroup title="App keybinds" settings={filteredSettings().filter((setting) => setting.scope !== "ide")} />
+            <PreferencesHotkeyGroup title="IDE keybinds" settings={filteredSettings().filter((setting) => setting.scope === "ide")} />
           </div>
 
           <div>
@@ -72,15 +85,16 @@ export function PreferencesKeybinds(props: { model: PreferencesPanelModel; actio
     );
   }
 
-function PreferencesHotkeyGroup(props: { title: string; settings: typeof appHotkeySettings; model: PreferencesPanelModel; actions: PreferencesHotkeyActions }) {
-  const { title, settings } = props;
-  const { state, hotkeyDrafts } = props.model;
-  const { saveHotkeyPreference, addHotkeyDraft, updateHotkeyDraft, deleteHotkeyPreference } = props.actions;
+function PreferencesHotkeyGroup(props: { title: string; settings: typeof appHotkeySettings; }) {
+  const panel = usePreferencesPanel();
+  const { title } = props;
+  const { state, hotkeyDrafts } = panel.model;
+  const { saveHotkeyPreference, addHotkeyDraft, updateHotkeyDraft, deleteHotkeyPreference } = panel.hotkeys;
     const preferences = () => normalizeAppHotkeyPreferences(state.appHotkeyPreferences);
     return (
       <section class={stylex.attrs(preferenceStyles.grid, preferenceStyles.gap2).class} data-test-keybind-group={title.toLowerCase().replace(/\s+/g, "-")}>
         <div class={stylex.attrs(preferenceStyles.text062, preferenceStyles.fontSemibold, preferenceStyles.uppercase, preferenceStyles.tracking018, preferenceStyles.colorMuted).class}>{title}</div>
-        <For each={settings}>
+        <For each={props.settings}>
               {(setting) => {
                 const draftValue = () => hotkeyDrafts()[setting.id];
                 const duplicate = () =>
@@ -99,45 +113,47 @@ function PreferencesHotkeyGroup(props: { title: string; settings: typeof appHotk
                     id={keybindRowElementId(setting.id)}
                     data-test-keybind-row={setting.id}
                     tabIndex={-1}
-                    class={stylex.attrs(preferenceStyles.rounded2xl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite55, preferenceStyles.paddingInline4, preferenceStyles.paddingBlock3, preferenceStyles.shadowSm, preferenceStyles.transition, preferenceStyles.hoverBackgroundWhite70).class}
+                    class={stylex.attrs(keybindStyles.row).class}
                   >
-                    <div class={stylex.attrs(preferenceStyles.grid, preferenceStyles.itemsCenter, preferenceStyles.gap4, preferenceStyles.mdGridColumnsKeybind).class}>
+                    <div class={stylex.attrs(keybindStyles.layout).class}>
                       <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
                         <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.itemsCenter, preferenceStyles.gap2).class}>
                           <Keyboard class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35, preferenceStyles.shrink0, preferenceStyles.colorMuted).class} />
-                          <h4 class={stylex.attrs(preferenceStyles.truncate, preferenceStyles.text062, preferenceStyles.fontSemibold, preferenceStyles.tracking016, preferenceStyles.colorMuted).class}>{setting.label}</h4>
-                          <ActionButton
-                            tooltip={setting.description}
-                            ariaLabel={`${setting.label} description`}
-                            variant="ghost"
-                            size="icon"
-                            class={stylex.attrs(preferenceStyles.height6, preferenceStyles.width6, preferenceStyles.roundedLg, preferenceStyles.colorMuted).class}
-                            icon={<HelpCircle class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
-                          />
+                          <h4 class={stylex.attrs(keybindStyles.title).class}>{setting.label}</h4>
                         </div>
+                        <p class={stylex.attrs(keybindStyles.description).class}>{setting.description}</p>
                       </div>
                       <div class={stylex.attrs(preferenceStyles.minWidth0).class}>
                         <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.flexWrap, preferenceStyles.itemsCenter, preferenceStyles.gap25).class}>
-                          <For each={draftValue()}>
-                            {(hotkey, index) => (
-                              <label class={stylex.attrs(preferenceStyles.relative, preferenceStyles.inlineFlex, preferenceStyles.minWidth0, preferenceStyles.roundedXl).class}>
+                          <Index each={draftValue()}>
+                            {(hotkey, index) => (<>
+                              <div class={stylex.attrs(keybindStyles.chip).class} role="group" aria-label={`${setting.label} binding`}>
                                 <Input
                                   aria-label={`${setting.label} hotkey`}
-                                  value={formatHotkeyForDisplay(hotkey)}
+                                  aria-invalid={Boolean(hotkey() && !isValidAppHotkey(hotkey())) || undefined}
+                                  aria-describedby={hotkey() && !isValidAppHotkey(hotkey()) ? `${keybindRowElementId(setting.id)}-invalid-${index}` : undefined}
+                                  value={formatHotkeyForDisplay(hotkey())}
                                   placeholder="Press keys..."
-                                  class={stylex.attrs(preferenceStyles.height10, preferenceStyles.roundedXl, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite, preferenceStyles.paddingInline4, preferenceStyles.paddingRight8, preferenceStyles.textCenter, preferenceStyles.text072, preferenceStyles.fontSemibold, preferenceStyles.shadowMd).class}
-                                  style={{ width: `${Math.max(9, formatHotkeyForDisplay(hotkey).length + 4)}ch`, "min-width": "7.5rem" }}
+                                  class={stylex.attrs(keybindStyles.input).class}
+                                  style={{ width: `${Math.max(9, formatHotkeyForDisplay(hotkey()).length + 2)}ch` }}
                                   onKeyDown={(event) => {
+                                    if (event.key === "Tab") return;
+                                    if (event.key === "Escape") {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      updateHotkeyDraft(setting.id, index, preferences()[setting.id][index] ?? "");
+                                      return;
+                                    }
                                     event.preventDefault();
                                     event.stopPropagation();
                                     const chord = formatRecordedChord(event);
-                                    updateHotkeyDraft(setting.id, index(), chord);
-                                    saveHotkeyPreference(setting.id, index(), chord);
+                                    updateHotkeyDraft(setting.id, index, chord);
+                                    saveHotkeyPreference(setting.id, index, chord);
                                   }}
-                                  onInput={(event) => updateHotkeyDraft(setting.id, index(), event.currentTarget.value)}
+                                  onInput={(event) => updateHotkeyDraft(setting.id, index, event.currentTarget.value)}
                                   onBlur={(event) => {
                                     if (isValidAppHotkey(event.currentTarget.value)) {
-                                      saveHotkeyPreference(setting.id, index(), event.currentTarget.value);
+                                      saveHotkeyPreference(setting.id, index, event.currentTarget.value);
                                     }
                                   }}
                                 />
@@ -146,19 +162,20 @@ function PreferencesHotkeyGroup(props: { title: string; settings: typeof appHotk
                                   ariaLabel={`Delete ${setting.label} keybinding`}
                                   variant="ghost"
                                   size="icon"
-                                  class={stylex.attrs(preferenceStyles.absolute, preferenceStyles.rightNegative2, preferenceStyles.topNegative2, preferenceStyles.height5, preferenceStyles.width5, preferenceStyles.roundedFull, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundPanel, preferenceStyles.padding0, preferenceStyles.shadowSm).class}
+                                  class={stylex.attrs(keybindStyles.remove).class}
                                   icon={<X class={stylex.attrs(preferenceStyles.height3, preferenceStyles.width3).class} />}
-                                  onClick={() => deleteHotkeyPreference(setting.id, index())}
+                                  onClick={() => deleteHotkeyPreference(setting.id, index)}
                                 />
-                              </label>
-                            )}
-                          </For>
+                              </div>
+                              <Show when={hotkey() && !isValidAppHotkey(hotkey())}><p class={stylex.attrs(keybindStyles.error).class} id={`${keybindRowElementId(setting.id)}-invalid-${index}`} role="alert">Press a complete key combination, or Escape to restore.</p></Show>
+                            </>)}
+                          </Index>
                           <ActionButton
                             tooltip={`Add ${setting.label} keybinding`}
                             ariaLabel={`Add ${setting.label} keybinding`}
                             variant="secondary"
                             size="icon"
-                            class={stylex.attrs(preferenceStyles.height10, preferenceStyles.width10, preferenceStyles.roundedXl, preferenceStyles.shadowSm).class}
+                            class={stylex.attrs(preferenceStyles.height10, preferenceStyles.width10).class}
                             icon={<Plus class={stylex.attrs(preferenceStyles.height35, preferenceStyles.width35).class} />}
                             onClick={() => addHotkeyDraft(setting.id)}
                           />
@@ -167,8 +184,8 @@ function PreferencesHotkeyGroup(props: { title: string; settings: typeof appHotk
                       <div class={stylex.attrs(preferenceStyles.flex, preferenceStyles.minWidth0, preferenceStyles.itemsCenter, preferenceStyles.justifyEnd, preferenceStyles.gap2).class}>
                         <Show when={duplicate()}>
                           <AlertTriangle class={stylex.attrs(preferenceStyles.height4, preferenceStyles.width4, preferenceStyles.colorAmber600).class} />
+                          <span class={stylex.attrs(keybindStyles.description).class}>Shared shortcut: another command may handle it first.</span>
                         </Show>
-                        <div class={stylex.attrs(preferenceStyles.roundedXl, preferenceStyles.border, preferenceStyles.borderDefault, preferenceStyles.backgroundWhite60, preferenceStyles.paddingInline3, preferenceStyles.paddingBlock2, preferenceStyles.text0675, preferenceStyles.fontMedium, preferenceStyles.colorMuted).class}>Always</div>
                       </div>
                     </div>
                   </div>
@@ -178,4 +195,3 @@ function PreferencesHotkeyGroup(props: { title: string; settings: typeof appHotk
       </section>
     );
   }
-

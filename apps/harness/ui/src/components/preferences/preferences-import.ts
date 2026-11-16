@@ -19,5 +19,7 @@ const preferencesImportSchema = z.object({
 });
 
 export function parsePreferencesImport(text: string) {
-  return preferencesImportSchema.parse(JSON.parse(text));
+  const parsed = preferencesImportSchema.parse(JSON.parse(text));
+  if (!Object.keys(parsed).length) throw new Error("No recognized preferences found. Export a preferences file from Harness, then try again.");
+  return parsed;
 }

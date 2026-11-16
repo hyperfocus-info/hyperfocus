@@ -1,5 +1,8 @@
+import { launchHeadlessBrowser } from "@hyperfocus/desktop-runtime/automation";
 import { existsSync, readdirSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import puppeteer, { type Browser } from "puppeteer-core";
 import { worldAreaCaptureAnchors } from "../src/data/world-landmarks.ts";
 
 function argValue(name: string) {
@@ -44,33 +47,34 @@ const rootDir = resolve(import.meta.dir, "../../..");
 const browserPath = process.env.CHROME_PATH ?? findFirst(join(process.env.LOCALAPPDATA ?? "", "ms-playwright"), "chrome-headless-shell.exe");
 const areas = worldAreaCaptureAnchors.filter((area) => !only || area.id === only);
 if (!areas.length) throw new Error(`Unknown world area: ${only}`);
-const args = [
-  "run",
-  "screenshot",
-  "--",
-  "--base-url",
-  `${url.protocol}//${url.host}`,
-  "--viewport",
-  `${width}x${height}`,
-  ...areas.flatMap((area) => ["--route", `${url.pathname}?login=visual-${area.id}#area=${area.id}`])
-];
-
 if (!browserPath || (resolve(browserPath) === browserPath && !existsSync(browserPath))) {
   throw new Error("No headless browser found. Set CHROME_PATH to an existing executable.");
 }
 
-const proc = Bun.spawn([process.execPath, ...args], {
-  cwd: rootDir,
-  stdout: "pipe",
-  stderr: "pipe",
-  env: { ...process.env, CHROME_PATH: browserPath }
-});
-const [stdout, stderr, exitCode] = await Promise.all([
-  new Response(proc.stdout).text(),
-  new Response(proc.stderr).text(),
-  proc.exited
-]);
-
-if (stdout) process.stdout.write(stdout);
-if (stderr) process.stderr.write(stderr);
-if (exitCode !== 0) process.exit(exitCode);
+const outputDir = resolve(rootDir, ".local", "screenshots", `world-areas-${Date.now()}`);
+await mkdir(outputDir, { recursive: true });
+const chrome = await launchHeadlessBrowser({ executable: browserPath });
+let browser: Browser | undefined;
+try {
+  browser = await puppeteer.connect({ browserURL: `http://127.0.0.1:${chrome.port}` });
+  const page = await browser.newPage();
+  await page.setViewport({ width, height, deviceScaleFactor: 1 });
+  const captures: { area: string; url: string; screenshot: string }[] = [];
+  for (const area of areas) {
+    const route = new URL(url);
+    route.search = `login=visual-${area.id}`;
+    route.hash = `area=${area.id}`;
+    await page.goto(route.href, { waitUntil: "networkidle0", timeout: 30_000 });
+    await page.waitForSelector("canvas", { timeout: 15_000 });
+    const screenshot = join(outputDir, `${area.id}.png`);
+    await page.screenshot({ path: screenshot });
+    captures.push({ area: area.id, url: route.href, screenshot });
+  }
+  const report = { width, height, captures };
+  const index = join(outputDir, "captures.json");
+  await writeFile(index, `${JSON.stringify(report, null, 2)}\n`);
+  console.log(JSON.stringify({ index, ...report }, null, 2));
+} finally {
+  try { await browser?.disconnect(); }
+  finally { await chrome.close(); }
+}

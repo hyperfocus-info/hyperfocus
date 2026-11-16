@@ -1,97 +1,24 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import {
-  createRequestId,
-  type AssistantActionMessageMetadata,
-  type AgentRunState,
-  type AgentRunSummary,
-  type ChatAttachment,
-  type ChatMessage,
-  type ProviderBrand,
-  type SetupAction
-} from "@hyperfocus/ai-core/protocol";
-import {
-  canSelectProviderBrand,
-  COMPOSER_REASONING_STRENGTHS,
-  getEffectiveProviderBrandForAgent,
-  getActiveMode,
-  getCapabilityTags,
-  getBlockingSetupCheck,
-  getComposerControlState,
-  getExecutionModelOptionsForAgent,
-  getFallbackExecutionModelIdForAgent,
-  getModelCapability,
-  getResolvedModes,
-  harnessStore,
-  hasUsableApiKeyForProvider,
-  persistMergedLocalPreferences,
-  resolveUsablePiProviderBrand,
-  shouldShowSetupChecklist,
-  type ChatPaneTab,
-  type ViewProjectState
-} from "../../harness-store";
-import { ActionButton, ActionStatus } from "../action-button";
-import { CliSessionPanel } from "../cli-session-panel";
-import { MarkdownContent } from "../markdown-content";
-import { MemoryPane } from "../../memory/memory-pane";
-import { ModeEditorPanel } from "../mode-editor-panel";
-import { DropdownControl } from "../primitives/dropdown";
-import { ScrollArea } from "../primitives/scroll-area";
-import { Textarea } from "../primitives/textarea";
-import { Tooltip } from "../primitives/tooltip";
-import { VirtualList } from "../primitives/virtual-list";
-import { Button } from "../primitives/button";
-import {
-  Activity,
-  AlertTriangle,
-  Brain,
-  Bot,
-  Briefcase,
-  CalendarClock,
-  ClipboardList,
-  Clipboard,
-  Cpu,
-  Edit3,
-  FolderOpen,
-  Folder,
-  Gauge,
-  LoaderCircle,
-  MessageSquareMore,
-  Orbit,
-  Paperclip,
-  Pause,
-  Play,
-  RefreshCcw,
-  Plus,
-  ArrowDown,
-  Check,
-  File,
-  FileCode,
-  FileJson,
-  FileText,
-  Image,
-  SendHorizontal,
-  Settings,
-  Terminal,
-  WandSparkles,
-  X,
-  Split
+AlertTriangle,
+RefreshCcw
 } from "lucide-solid";
+import { For,Match,Show,Switch } from "solid-js";
+import { MemoryPane } from "../../memory/memory-pane";
+import { ActionButton } from "../action-button";
 import { chatPanelStyles as styles } from "../chat-panel.styles";
 import { chatUtilityStyles } from "../chat-panel.utilities";
-import type { ChatPanelController } from "../chat-panel";
+import { Button } from "../primitives/button";
+import { ChatTranscriptEvents,ChatTranscriptMessages,ChatTranscriptPlan,ChatTranscriptRun } from "./chat-transcript-states";
+import { useChatPanel } from "./state/panel-context";
 
-export function ChatTranscriptSurface(props: { controller: ChatPanelController }) {
+export function ChatTranscriptSurface() {
+  const controller = useChatPanel();
   const {
-    activeMode, activeProject, activeThreadIsStreaming, chatFileLinks, currentBackgroundRun,
-    currentExecutionPlan, currentRun, currentTab, executionPauseReason, executionPaused,
-    experimentRun, failedSubtaskCount, handleDiscardExperiment, handleInspectExperiment, handleModeSelect,
-    handleOpenCurrentRunJob, handlePromoteExperiment, handlePromoteScheduledRun, handleResume, handleSaveProjectContext,
-    handleSelectPaneTab, isAutoModeSelected, modeDropdownOptions, project, projectRulesDraft,
-    projectTraces, refs, renderPlanRunAction, renderTranscriptRow, resumableRun,
-    runDetailRecovery, runSubtasks, scrollToBottom, selectedModeValue, sendCommand,
-    setProjectRulesDraft, state, stickToBottom, transcriptRows, updateScrollLock, visibleTabs,
-  } = props.controller;
+    activeProject, activeThreadIsStreaming, chatFileLinks, currentTab, executionPauseReason,
+    executionPaused, failedSubtaskCount, handleResume, handleSelectPaneTab, project, resumableRun,
+    state, visibleTabs,
+  } = controller;
   return <div {...stylex.attrs(styles.paneBody)}>
             <Show when={currentTab()} keyed>
               {(selectedTab) => (
@@ -161,10 +88,10 @@ export function ChatTranscriptSurface(props: { controller: ChatPanelController }
                   </Show>
 
                   <Switch>
-<ChatTranscriptMessages controller={props.controller} selectedTab={selectedTab} />
-<ChatTranscriptPlan controller={props.controller} selectedTab={selectedTab} />
-<ChatTranscriptRun controller={props.controller} selectedTab={selectedTab} />
-<ChatTranscriptEvents controller={props.controller} selectedTab={selectedTab} />
+<ChatTranscriptMessages selectedTab={selectedTab} />
+<ChatTranscriptPlan selectedTab={selectedTab} />
+<ChatTranscriptRun selectedTab={selectedTab} />
+<ChatTranscriptEvents selectedTab={selectedTab} />
                     <Match when={selectedTab === "memory"}>
                       <MemoryPane
                         projectId={project().id}
@@ -178,5 +105,3 @@ export function ChatTranscriptSurface(props: { controller: ChatPanelController }
             </Show>
             </div>;
 }
-import { CHAT_EVENT_LIMIT, CHAT_RUN_SUBTASK_LIMIT, CHAT_TRANSCRIPT_LIMIT, RunLedgerCompact, RunProofBundleCompact, estimateTranscriptRowSize } from "./chat-transcript-helpers";
-import { ChatTranscriptEvents, ChatTranscriptMessages, ChatTranscriptPlan, ChatTranscriptRun } from "./chat-transcript-states";

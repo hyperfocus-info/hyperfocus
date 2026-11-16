@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { resolveHarnessDbPath } from "./harness-db-path";
 
@@ -8,8 +8,7 @@ type MaintenanceAction =
   | "rebootstrap"
   | "pause-assistants"
   | "resume-assistants"
-  | "start-jobs"
-  | "reconcile-orrn-todos";
+  | "start-jobs";
 
 export type AssistantMaintenanceOptions = {
   dbPath: string;
@@ -34,18 +33,17 @@ type Row = Record<string, unknown>;
 const HELP_TEXT = `assistant-maintenance.ts
 
 Usage:
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action <remove-jobs|remove-project-assistants|rebootstrap|pause-assistants|resume-assistants|start-jobs|reconcile-orrn-todos> [--assistant <name-or-id>] [--project <name-or-id-or-root>] [--all] [--db <path>] [--execute] [--json]
+  bun "<skill>/scripts/assistant-maintenance.ts" --action <remove-jobs|remove-project-assistants|rebootstrap|pause-assistants|resume-assistants|start-jobs> [--assistant <name-or-id>] [--project <name-or-id-or-root>] [--all] [--db <path>] [--execute] [--json]
 
 Examples:
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action remove-jobs --assistant "Release watcher" --project "Docs" --execute
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action remove-project-assistants --project "Docs" --execute
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action rebootstrap --assistant "Release watcher" --project "Docs" --execute
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action rebootstrap --project "Docs" --execute
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action pause-assistants --project "Docs" --execute
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action resume-assistants --project "Docs" --execute
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action pause-assistants --all --execute
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action start-jobs --assistant "Release watcher" --project "Docs" --execute --url http://localhost:8787
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action reconcile-orrn-todos --assistant "Orrn" --project "context" --execute
+  bun "<skill>/scripts/assistant-maintenance.ts" --action remove-jobs --assistant "Release watcher" --project "Docs" --execute
+  bun "<skill>/scripts/assistant-maintenance.ts" --action remove-project-assistants --project "Docs" --execute
+  bun "<skill>/scripts/assistant-maintenance.ts" --action rebootstrap --assistant "Release watcher" --project "Docs" --execute
+  bun "<skill>/scripts/assistant-maintenance.ts" --action rebootstrap --project "Docs" --execute
+  bun "<skill>/scripts/assistant-maintenance.ts" --action pause-assistants --project "Docs" --execute
+  bun "<skill>/scripts/assistant-maintenance.ts" --action resume-assistants --project "Docs" --execute
+  bun "<skill>/scripts/assistant-maintenance.ts" --action pause-assistants --all --execute
+  bun "<skill>/scripts/assistant-maintenance.ts" --action start-jobs --assistant "Release watcher" --project "Docs" --execute --url http://localhost:8787
 
 Options:
   --action <value>     Maintenance action to plan or execute
@@ -211,9 +209,9 @@ export function runAssistantMaintenance(options: AssistantMaintenanceOptions) {
   }
 }
 
-export function renderAssistantMaintenanceResult(result: Row) {
-  const lookup = result.lookup as Row;
-  const plan = result.plan as Row;
+export function renderAssistantMaintenanceResult(result: ReturnType<typeof runAssistantMaintenance> | Awaited<ReturnType<typeof runLiveAssistantMaintenance>>) {
+  const lookup = result.lookup;
+  const plan = result.plan;
   const lines = [
     `assistant-maintenance ${lookup.action}`,
     `status: ${lookup.status}`,
@@ -230,7 +228,7 @@ export function renderAssistantMaintenanceResult(result: Row) {
     `jobs to start: ${plan.jobsToStartCount}`
   ];
 
-  if (plan.liveCommandCount) {
+  if ("liveCommandCount" in plan && plan.liveCommandCount) {
     lines.push(`live commands sent: ${plan.liveCommandCount}`);
   }
 
@@ -239,7 +237,7 @@ export function renderAssistantMaintenanceResult(result: Row) {
     lines.push("No changes applied. Re-run with --execute to mutate the DB.");
   }
 
-  const assistants = result.assistants as Row[] | undefined;
+  const assistants = result.assistants;
   if (assistants && assistants.length > 0) {
     lines.push("");
     lines.push("matched assistants:");
@@ -248,7 +246,7 @@ export function renderAssistantMaintenanceResult(result: Row) {
     }
   }
 
-  const jobsToStart = plan.jobsToStart as Row[] | undefined;
+  const jobsToStart = plan.jobsToStart;
   if (jobsToStart && jobsToStart.length > 0) {
     lines.push("");
     lines.push("jobs to start:");
@@ -279,7 +277,6 @@ function buildPlan(db: Database, options: AssistantMaintenanceOptions, project: 
     assistantsToPauseCount: options.action === "pause-assistants" ? assistants.length : 0,
     assistantsToResumeCount: options.action === "resume-assistants" ? assistants.length : 0,
     jobsToStartCount: jobsToStart.length,
-    todoMutationCount: options.action === "reconcile-orrn-todos" ? 10 : 0,
     jobsToStart
   };
 }
@@ -307,9 +304,6 @@ function applyPlan(db: Database, action: MaintenanceAction, assistants: Row[], n
     if (action === "resume-assistants") {
       resumeAssistants(db, assistantIds, timestamp);
     }
-    if (action === "reconcile-orrn-todos") {
-      reconcileOrrnTodos(db, assistantIds, timestamp);
-    }
   });
   tx();
 }
@@ -320,14 +314,14 @@ function resolveMaintenanceAssistants(db: Database, action: MaintenanceAction, a
       throw new Error("--project is required for remove-project-assistants");
     }
     return db
-      .query(
+      .query<Row, SQLQueryBindings[]>(
         `SELECT a.id, a.name, a.scope, a.project_id, a.run_state, a.bootstrap_state, a.deleted_at, p.name AS project_name
          FROM assistants a
          LEFT JOIN projects p ON p.id = a.project_id
          WHERE a.deleted_at IS NULL AND a.scope = 'project' AND a.project_id = ?1
          ORDER BY a.updated_at DESC`
       )
-      .all(String(project.id)) as Row[];
+      .all(String(project.id));
   }
 
   if (assistantSelectors.length > 0) {
@@ -336,38 +330,38 @@ function resolveMaintenanceAssistants(db: Database, action: MaintenanceAction, a
 
   if ((action === "pause-assistants" || action === "resume-assistants" || action === "start-jobs") && project) {
     return db
-      .query(
+      .query<Row, SQLQueryBindings[]>(
         `SELECT a.id, a.name, a.scope, a.project_id, a.run_state, a.bootstrap_state, a.deleted_at, p.name AS project_name
          FROM assistants a
          LEFT JOIN projects p ON p.id = a.project_id
          WHERE a.deleted_at IS NULL AND a.scope = 'project' AND a.project_id = ?1
          ORDER BY a.updated_at DESC`
       )
-      .all(String(project.id)) as Row[];
+      .all(String(project.id));
   }
 
   if ((action === "pause-assistants" || action === "resume-assistants" || action === "start-jobs") && all) {
     return db
-      .query(
+      .query<Row, SQLQueryBindings[]>(
         `SELECT a.id, a.name, a.scope, a.project_id, a.run_state, a.bootstrap_state, a.deleted_at, p.name AS project_name
          FROM assistants a
          LEFT JOIN projects p ON p.id = a.project_id
          WHERE a.deleted_at IS NULL
          ORDER BY a.updated_at DESC`
       )
-      .all() as Row[];
+      .all();
   }
 
   if (action === "rebootstrap" && project) {
     return db
-      .query(
+      .query<Row, SQLQueryBindings[]>(
         `SELECT a.id, a.name, a.scope, a.project_id, a.run_state, a.bootstrap_state, a.deleted_at, p.name AS project_name
          FROM assistants a
          LEFT JOIN projects p ON p.id = a.project_id
          WHERE a.deleted_at IS NULL AND a.scope = 'project' AND a.project_id = ?1
          ORDER BY a.updated_at DESC`
       )
-      .all(String(project.id)) as Row[];
+      .all(String(project.id));
   }
 
   if (action === "pause-assistants" || action === "resume-assistants" || action === "start-jobs") {
@@ -380,13 +374,13 @@ function resolveMaintenanceAssistants(db: Database, action: MaintenanceAction, a
 function resolveAssistants(db: Database, assistant: string, projectId: string | undefined) {
   const needle = assistant.trim().toLowerCase();
   const rows = db
-    .query(
+    .query<Row, SQLQueryBindings[]>(
       `SELECT a.id, a.name, a.scope, a.project_id, a.run_state, a.bootstrap_state, a.deleted_at, p.name AS project_name
        FROM assistants a
        LEFT JOIN projects p ON p.id = a.project_id
        WHERE a.deleted_at IS NULL`
     )
-    .all() as Row[];
+    .all();
   const scopedRows = projectId ? rows.filter((row) => row.scope === "global" || row.project_id === projectId) : rows;
   const exact = scopedRows.filter((row) => String(row.id).toLowerCase() === needle || String(row.name).toLowerCase() === needle);
   const matches = exact.length > 0 ? exact : scopedRows.filter((row) => String(row.name).toLowerCase().includes(needle));
@@ -398,7 +392,7 @@ function resolveAssistants(db: Database, assistant: string, projectId: string | 
 
 function resolveProject(db: Database, project: string) {
   const needle = project.trim().toLowerCase();
-  const rows = db.query(`SELECT id, name, root_path FROM projects ORDER BY last_opened_at DESC, created_at ASC`).all() as Row[];
+  const rows = db.query<Row, SQLQueryBindings[]>(`SELECT id, name, root_path FROM projects ORDER BY last_opened_at DESC, created_at ASC`).all();
   const exact = rows.filter(
     (row) =>
       String(row.id).toLowerCase() === needle ||
@@ -414,31 +408,31 @@ function resolveProject(db: Database, project: string) {
 
 function countByAssistantIds(db: Database, table: string, assistantIds: string[]) {
   let count = 0;
-  const query = db.query(`SELECT COUNT(*) AS count FROM ${table} WHERE assistant_id = ?1`);
+  const query = db.query<Row, SQLQueryBindings[]>(`SELECT COUNT(*) AS count FROM ${table} WHERE assistant_id = ?1`);
   for (const assistantId of assistantIds) {
-    const row = query.get(assistantId) as { count?: number } | null;
-    count += row?.count ?? 0;
+    const row = query.get(assistantId);
+    count += typeof row?.count === "number" ? row.count : 0;
   }
   return count;
 }
 
 function countActiveRunsByAssistantIds(db: Database, assistantIds: string[]) {
   let count = 0;
-  const query = db.query(
+  const query = db.query<Row, SQLQueryBindings[]>(
     `SELECT COUNT(*) AS count
      FROM background_job_runs
      WHERE assistant_id = ?1 AND status IN ('queued', 'awaiting-approval', 'awaiting-user-input', 'running')`
   );
   for (const assistantId of assistantIds) {
-    const row = query.get(assistantId) as { count?: number } | null;
-    count += row?.count ?? 0;
+    const row = query.get(assistantId);
+    count += typeof row?.count === "number" ? row.count : 0;
   }
   return count;
 }
 
 function listStartableJobsByAssistantIds(db: Database, assistantIds: string[]) {
   const rows: Row[] = [];
-  const query = db.query(
+  const query = db.query<Row, SQLQueryBindings[]>(
     `SELECT j.id, j.project_id, j.assistant_id, j.status, j.name, a.name AS assistant_name, p.name AS project_name
      FROM background_jobs j
      LEFT JOIN assistants a ON a.id = j.assistant_id
@@ -446,15 +440,15 @@ function listStartableJobsByAssistantIds(db: Database, assistantIds: string[]) {
      WHERE j.assistant_id = ?1 AND COALESCE(j.status, 'enabled') != 'disabled'
      ORDER BY p.name ASC, a.name ASC, j.updated_at DESC`
   );
-  const activeQuery = db.query(
+  const activeQuery = db.query<Row, SQLQueryBindings[]>(
     `SELECT COUNT(*) AS count
      FROM background_job_runs
      WHERE job_id = ?1 AND status IN ('queued', 'awaiting-approval', 'awaiting-user-input', 'running')`
   );
   for (const assistantId of assistantIds) {
-    for (const row of query.all(assistantId) as Row[]) {
-      const active = activeQuery.get(String(row.id)) as { count?: number } | null;
-      if ((active?.count ?? 0) > 0) {
+    for (const row of query.all(assistantId)) {
+      const active = activeQuery.get(String(row.id));
+      if ((typeof active?.count === "number" ? active.count : 0) > 0) {
         continue;
       }
       rows.push(row);
@@ -464,7 +458,7 @@ function listStartableJobsByAssistantIds(db: Database, assistantIds: string[]) {
 }
 
 function cancelActiveRuns(db: Database, assistantIds: string[], now: string, action: MaintenanceAction) {
-  const query = db.query(
+  const query = db.query<Row, SQLQueryBindings[]>(
     `UPDATE background_job_runs
      SET status = 'cancelled',
          failure_message = ?2,
@@ -478,21 +472,21 @@ function cancelActiveRuns(db: Database, assistantIds: string[], now: string, act
 }
 
 function deleteJobs(db: Database, assistantIds: string[]) {
-  const query = db.query(`DELETE FROM background_jobs WHERE assistant_id = ?1`);
+  const query = db.query<Row, SQLQueryBindings[]>(`DELETE FROM background_jobs WHERE assistant_id = ?1`);
   for (const assistantId of assistantIds) {
     query.run(assistantId);
   }
 }
 
 function softDeleteAssistants(db: Database, assistantIds: string[], now: string) {
-  const query = db.query(`UPDATE assistants SET deleted_at = ?2, run_state = 'paused', updated_at = ?2 WHERE id = ?1`);
+  const query = db.query<Row, SQLQueryBindings[]>(`UPDATE assistants SET deleted_at = ?2, run_state = 'paused', updated_at = ?2 WHERE id = ?1`);
   for (const assistantId of assistantIds) {
     query.run(assistantId, now);
   }
 }
 
 function markAssistantsForRebootstrap(db: Database, assistantIds: string[], now: string) {
-  const query = db.query(
+  const query = db.query<Row, SQLQueryBindings[]>(
     `UPDATE assistants
      SET bootstrap_state = 'pending',
          bootstrap_attempt_id = NULL,
@@ -514,14 +508,14 @@ function markAssistantsForRebootstrap(db: Database, assistantIds: string[], now:
 }
 
 function pauseAssistants(db: Database, assistantIds: string[], now: string) {
-  const query = db.query(`UPDATE assistants SET run_state = 'paused', updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL`);
+  const query = db.query<Row, SQLQueryBindings[]>(`UPDATE assistants SET run_state = 'paused', updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL`);
   for (const assistantId of assistantIds) {
     query.run(assistantId, now);
   }
 }
 
 function resumeAssistants(db: Database, assistantIds: string[], now: string) {
-  const query = db.query(
+  const query = db.query<Row, SQLQueryBindings[]>(
     `UPDATE assistants
      SET run_state = 'active',
          pending_reprioritize_reason = 'manual-resume',
@@ -534,62 +528,6 @@ function resumeAssistants(db: Database, assistantIds: string[], now: string) {
   }
 }
 
-function reconcileOrrnTodos(db: Database, assistantIds: string[], now: string) {
-  const missingEngineBlocker =
-    "Current checkout has no ./engine directory, so this remains blocked until Orrn is pointed at the engine workspace or ./engine is restored.";
-  const staleEngineReason =
-    "Current project path and repository root have no ./engine directory; stale engine-specific task cannot be implemented from this checkout.";
-  const updateTodo = db.query(
-    `UPDATE assistant_todos
-     SET title = ?3,
-         description = ?4,
-         state = ?5,
-         sort_order = ?6,
-         blocker_reason = ?7,
-         updated_at = ?8
-     WHERE id = ?1 AND assistant_id = ?2`
-  );
-  const deleteTodo = db.query(`DELETE FROM assistant_todos WHERE id = ?1 AND assistant_id = ?2`);
-  const insertTodo = db.query(
-    `INSERT INTO assistant_todos (
-       id, assistant_id, title, description, state, sort_order, blocker_reason, source,
-       created_at, updated_at, work_kind, work_target
-     )
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'assistant', ?8, ?8, 'app-code', ?9)
-     ON CONFLICT(id) DO UPDATE SET
-       title = excluded.title,
-       description = excluded.description,
-       state = excluded.state,
-       sort_order = excluded.sort_order,
-       blocker_reason = excluded.blocker_reason,
-       updated_at = excluded.updated_at,
-       work_kind = excluded.work_kind,
-       work_target = excluded.work_target`
-  );
-  for (const assistantId of assistantIds) {
-    insertTodo.run(
-      "orrn-restore-engine-workspace-p1",
-      assistantId,
-      "P1 TOP: Restore or retarget Orrn to the engine workspace",
-      "Repository evidence on 2026-06-25 shows the configured project path and repository root do not contain ./engine, while active Orrn implementation todos target ./engine. Next implementation job must first restore the engine checkout or retarget Orrn to the correct project before barrelDistortion, typecheck, export, WASM, or benchmark work.",
-      "pending",
-      0,
-      null,
-      now,
-      "./engine"
-    );
-    updateTodo.run("a66c7815-7917-4a3f-b904-bd349671641f", assistantId, "CANCELLED: barrelDistortion proof/quarantine needs missing ./engine", staleEngineReason, "cancelled", 10, staleEngineReason, now);
-    updateTodo.run("afdb1ff0-80e3-470f-8457-9342e039718b", assistantId, "CANCELLED: export docs and smoke sync needs missing ./engine", staleEngineReason, "cancelled", 11, staleEngineReason, now);
-    updateTodo.run("145b5bfb-f9ee-49c8-841d-04a0b511fbcf", assistantId, "CANCELLED: stray generic TypeScript bootstrap todo", "Obsolete duplicate bootstrap guidance; Orrn needs the engine workspace restored or retargeted first.", "cancelled", 12, "Duplicate/obsolete generic todo; no current engine repository evidence.", now);
-    updateTodo.run("26bd6b24-bb56-4dd4-8b15-62b9b80250b2", assistantId, "CANCELLED: recover engine typecheck needs missing ./engine", staleEngineReason, "cancelled", 13, staleEngineReason, now);
-    updateTodo.run("ec991928-c3bc-4125-8e1e-dd9553b989a2", assistantId, "P2 BLOCKED: Improve WASM HTTP and MIME fallback diagnostics after engine workspace returns", "Keep opt-in diagnostics unchanged until both a real consumer setup-friction report and the engine workspace are present.", "blocked", 20, missingEngineBlocker, now);
-    updateTodo.run("c48ffd8d-433d-4a97-9d89-2934cb48e6be", assistantId, "P3 BLOCKED: Calibrate benchmark thresholds after engine workspace and hot-path data", "Keep thresholds blocked until the engine workspace is present and migrated-game hot-path timing evidence exists.", "blocked", 21, missingEngineBlocker, now);
-    deleteTodo.run("7fcc46ee-1ba2-4c11-b0dc-37204ea5bdf4", assistantId);
-    deleteTodo.run("fbf48082-ac9d-47a3-b2ff-c5fc6bdd8d0d", assistantId);
-    deleteTodo.run("b6eeb799-2114-4195-a978-77729aad20d1", assistantId);
-  }
-}
-
 function parseAction(value: string) {
   if (
     value === "remove-jobs" ||
@@ -597,8 +535,7 @@ function parseAction(value: string) {
     value === "rebootstrap" ||
     value === "pause-assistants" ||
     value === "resume-assistants" ||
-    value === "start-jobs" ||
-    value === "reconcile-orrn-todos"
+    value === "start-jobs"
   ) {
     return value;
   }
@@ -643,9 +580,9 @@ function parsePositiveInteger(rawValue: string, flagName: string) {
 }
 
 async function runLiveAssistantMaintenance(options: AssistantMaintenanceOptions) {
-  const planned = runAssistantMaintenance({ ...options, execute: false }) as Row;
-  const lookup = planned.lookup as Row;
-  const plan = planned.plan as Row;
+  const planned = runAssistantMaintenance({ ...options, execute: false });
+  const lookup = planned.lookup;
+  const plan = planned.plan;
   const commands = buildLiveCommands(String(lookup.action), planned);
   if (commands.length === 0) {
     return {
@@ -683,24 +620,24 @@ async function runLiveAssistantMaintenance(options: AssistantMaintenanceOptions)
   };
 }
 
-function buildLiveCommands(action: string, result: Row) {
+function buildLiveCommands(action: string, result: ReturnType<typeof runAssistantMaintenance>) {
   if (action === "pause-assistants") {
-    const targets = ((result.assistants as Row[] | undefined) ?? []).map((assistant) => ({
+    const targets = ((result.assistants) ?? []).map((assistant) => ({
       kind: "assistant",
       assistantId: String(assistant.id)
     }));
     return buildBulkLiveCommands("pause", targets);
   }
   if (action === "resume-assistants") {
-    const targets = ((result.assistants as Row[] | undefined) ?? []).map((assistant) => ({
+    const targets = ((result.assistants) ?? []).map((assistant) => ({
       kind: "assistant",
       assistantId: String(assistant.id)
     }));
     return buildBulkLiveCommands("resume", targets);
   }
   if (action === "start-jobs") {
-    const plan = result.plan as Row;
-    const targets = ((plan.jobsToStart as Row[] | undefined) ?? []).map((job) => ({
+    const plan = result.plan;
+    const targets = ((plan.jobsToStart) ?? []).map((job) => ({
       kind: "background-job",
       projectId: String(job.project_id),
       jobId: String(job.id)
@@ -755,19 +692,19 @@ async function sendLiveCommands(url: string, commands: Row[], timeoutMs: number)
 
   socket.addEventListener("message", (event) => {
     try {
-      const parsed = JSON.parse(String(event.data)) as Row;
-      if (parsed.type !== "command.rejected") {
+      const parsed: unknown = JSON.parse(String(event.data));
+      if (!parsed || typeof parsed !== "object" || !("type" in parsed) || parsed.type !== "command.rejected") {
         return;
       }
-      const requestId = typeof parsed.requestId === "string" ? parsed.requestId : undefined;
+      const requestId = "requestId" in parsed && typeof parsed.requestId === "string" ? parsed.requestId : undefined;
       if (requestId && !pendingRequestIds.has(requestId)) {
         return;
       }
-      const payload = parsed.payload as Row | undefined;
+      const payload = "payload" in parsed && parsed.payload && typeof parsed.payload === "object" ? parsed.payload : undefined;
       rejected.push({
         requestId,
-        message: String(payload?.message ?? "Harness command rejected"),
-        detail: payload?.detail === undefined ? undefined : String(payload.detail)
+        message: String(payload && "message" in payload ? payload.message ?? "Harness command rejected" : "Harness command rejected"),
+        detail: payload && "detail" in payload && payload.detail !== undefined ? String(payload.detail) : undefined
       });
       if (requestId) {
         pendingRequestIds.delete(requestId);

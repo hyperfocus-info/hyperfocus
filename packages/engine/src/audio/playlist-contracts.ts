@@ -1,0 +1,4 @@
+export const AUDIO_MUSICAL_KEYS = ['C major', 'C# major', 'D major', 'D# major', 'E major', 'F major', 'F# major', 'G major', 'G# major', 'A major', 'A# major', 'B major', 'C minor', 'C# minor', 'D minor', 'D# minor', 'E minor', 'F minor', 'F# minor', 'G minor', 'G# minor', 'A minor', 'A# minor', 'B minor'] as const;
+export type AudioMusicalKey = typeof AUDIO_MUSICAL_KEYS[number];
+export type AudioPlaylistTrack = { assetId: string; gain?: number; bpm?: number; startSeconds?: number; endSeconds?: number; beatOffsetSeconds?: number; beatsPerBar?: number; phraseBars?: number; musicalKey?: AudioMusicalKey; energy?: number };
+export type AudioPlaylistTransition = { style?: 'varied' | 'crossfade' | 'echo' | 'flanger' | 'stutter' | 'filter'; durationSeconds?: number; align?: 'immediate' | 'beat' | 'bar' | 'phrase'; beatsPerBar?: number };

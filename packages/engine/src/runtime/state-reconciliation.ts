@@ -116,7 +116,7 @@ export function diffStateChecksums<TId extends StateChecksumId>(
     const key = idKey(entry.id);
     localKeys.add(key);
     const remoteEntry = remoteById.get(key);
-    if (!remoteEntry) localOnly.push(entry.id);
+    if (remoteEntry === undefined) localOnly.push(entry.id);
     else if (entry.checksum !== remoteEntry.checksum) changed.push(entry.id);
   }
   const remoteOnly = remote.entities.filter((entry) => !localKeys.has(idKey(entry.id))).map((entry) => entry.id);
@@ -170,12 +170,12 @@ export function createStateChecksumHistory<TEntity, TId extends StateChecksumId>
     },
     diff(remote: StateChecksumManifest<TId>) {
       const local = frames.get(remote.frame);
-      if (!local) return undefined;
+      if (local === undefined) return undefined;
       return diffStateChecksums(local.manifest, remote);
     },
     patchFor(remote: StateChecksumManifest<TId>): StateRepairPatch<TId, TEntity> | undefined {
       const local = frames.get(remote.frame);
-      if (!local) return undefined;
+      if (local === undefined) return undefined;
       const diff = diffStateChecksums(local.manifest, remote);
       const upsertIds = new Set([...diff.changed, ...diff.localOnly].map(idKey));
       const upserts: Array<{ id: TId; entity: TEntity }> = [];

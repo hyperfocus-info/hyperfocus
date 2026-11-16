@@ -1,3 +1,4 @@
+import { compareText } from "@hyperfocus/utilities/text";
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -12,7 +13,7 @@ const MIN_DEBOUNCE_MS = 25;
 const MAX_DEBOUNCE_MS = 2_000;
 const DEFAULT_MAX_CLIENTS = 32;
 const MAX_CLIENTS = 256;
-const MAX_PROJECT_JSON_BYTES = 10 * 1024 * 1024;
+const MAX_PROJECT_JSON_BYTES = 10485760;
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/i;
 const encoder = new TextEncoder();
 
@@ -144,9 +145,10 @@ export async function startProjectDevServer(options: StartProjectDevServerOption
     status = { ...status, state: "building", watchedFiles: relativeFiles(projectRoot, watchedFiles) };
     const buildPath = join(disposableDirectory, `build-${status.buildNumber + 1}-${crypto.randomUUID()}.html`);
     try {
-      await buildPortableProject(projectRoot, buildPath);
+      const built = await buildPortableProject(projectRoot, buildPath);
       const nextHtml = await readFile(buildPath, "utf8");
-      const nextFiles = await discoverProjectWatchFiles(projectRoot);
+      const nextFiles = [...new Set([resolve(projectRoot, HYPERFOCUS_PROJECT_PATH), resolve(projectRoot, HYPERFOCUS_ASSETS_PATH),
+        ...built.sourceFiles.filter(path => pathWithin(projectRoot, path) && SOURCE_EXTENSION.test(path) && !relative(projectRoot, path).split(/[\\/]/).includes('node_modules'))])].sort(compareText);
       if (stopped) return;
       html = nextHtml;
       replaceWatchers(nextFiles);
@@ -166,11 +168,20 @@ export async function startProjectDevServer(options: StartProjectDevServerOption
       if (status.buildNumber === 0) throw new Error(`Initial project build failed:\n${message}`, { cause });
     } finally {
       await rm(buildPath, { force: true }).catch(() => undefined);
+      await rm(`${buildPath}.receipt.json`, { force: true }).catch(() => undefined);
     }
   };
 
+  let buildPending = false, building = false;
   const queueBuild = () => {
-    buildChain = buildChain.then(runBuild, runBuild);
+    buildPending = true;
+    if (!building) {
+      building = true;
+      buildChain = (async () => {
+        try { while (buildPending && !stopped) { buildPending = false;await runBuild(); } }
+        finally { building = false; }
+      })();
+    }
     return buildChain;
   };
 
@@ -304,9 +315,7 @@ function formatDevError(value: unknown, root: string): string {
   return message.split(resolve(root)).join(".");
 }
 
-function compareText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
+
 
 export function projectDevCliHelp(): string {
   return [
@@ -328,13 +337,13 @@ function option(args: readonly string[], name: string): string | undefined {
   return prefixed?.slice(name.length + 1);
 }
 
-if (import.meta.main) {
-  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+export async function runProjectDevCli(args: readonly string[]) {
+  if (args.includes("--help") || args.includes("-h")) {
     console.log(projectDevCliHelp());
   } else {
-    const projectDirectory = option(process.argv, "--project") ?? process.cwd();
-    const portText = option(process.argv, "--port");
-    const hostname = option(process.argv, "--host") ?? "127.0.0.1";
+    const projectDirectory = option(args, "--project") ?? process.cwd();
+    const portText = option(args, "--port");
+    const hostname = option(args, "--host") ?? "127.0.0.1";
     const dev = await startProjectDevServer({
       projectDirectory,
       hostname,
@@ -350,3 +359,5 @@ if (import.meta.main) {
     await dev.stop();
   }
 }
+
+if (import.meta.main) await runProjectDevCli(process.argv.slice(2));

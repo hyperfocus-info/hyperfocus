@@ -1,3 +1,4 @@
+import { isRecord as isObject } from "@hyperfocus/utilities/records";
 export const HYPERFOCUS_SHARED_USER_PREFERENCES_KEY = "hyperfocus.ui.shared-user-preferences.v1";
 
 export type HyperfocusSharedUserPreferences = {
@@ -50,8 +51,4 @@ function safeStorage() {
 
 function clamp(value: unknown, minimum: number, maximum: number, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : fallback;
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

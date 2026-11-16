@@ -1,8 +1,9 @@
 {
-  "extends": "../../../../tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../../../.tmp-test-data/readable-progression-audit",
-    "rootDir": ".",
+    "target": "ES2022",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
     "module": "preserve",
     "moduleResolution": "bundler",
     "types": ["bun-types"]

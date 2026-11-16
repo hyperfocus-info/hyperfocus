@@ -129,6 +129,34 @@ export function applyWorldRotationDelta(
   return pose;
 }
 
+/** Applies a world-space translation delta through a rotated/scaled parent. */
+export function applyWorldTranslationDelta(
+  rig: Pick<CompiledSemanticRig, "totalCount" | "semanticParents">,
+  pose: PoseBuffer,
+  world: WorldPose,
+  jointIndex: number,
+  deltaWorld: ArrayLike<number>,
+): PoseBuffer {
+  if (!Number.isSafeInteger(jointIndex) || jointIndex < 0 || jointIndex >= rig.totalCount) throw new RangeError("world translation joint index is outside the rig");
+  if (deltaWorld.length < 3 || !Number.isFinite(deltaWorld[0]) || !Number.isFinite(deltaWorld[1]) || !Number.isFinite(deltaWorld[2])) throw new RangeError("world translation delta must contain three finite values");
+  const parentIndex = rig.semanticParents[jointIndex], offset = jointIndex * 3;
+  if (parentIndex < 0) {
+    pose.translations[offset] += deltaWorld[0]; pose.translations[offset + 1] += deltaWorld[1]; pose.translations[offset + 2] += deltaWorld[2];
+    return pose;
+  }
+  const parentRotationOffset = parentIndex * 4, parentTranslationOffset = parentIndex * 3;
+  const inverseParent = world.scratchQuaternion0, local = world.scratchQuaternion1;
+  inverseParent[0] = -world.rotations[parentRotationOffset]; inverseParent[1] = -world.rotations[parentRotationOffset + 1]; inverseParent[2] = -world.rotations[parentRotationOffset + 2]; inverseParent[3] = world.rotations[parentRotationOffset + 3];
+  local[0] = deltaWorld[0]; local[1] = deltaWorld[1]; local[2] = deltaWorld[2]; local[3] = 0;
+  const qx = inverseParent[0], qy = inverseParent[1], qz = inverseParent[2], qw = inverseParent[3];
+  const x = local[0], y = local[1], z = local[2], tx = 2 * (qy * z - qz * y), ty = 2 * (qz * x - qx * z), tz = 2 * (qx * y - qy * x);
+  const rotatedX = x + qw * tx + qy * tz - qz * ty, rotatedY = y + qw * ty + qz * tx - qx * tz, rotatedZ = z + qw * tz + qx * ty - qy * tx;
+  const scaleX = world.scales[parentTranslationOffset], scaleY = world.scales[parentTranslationOffset + 1], scaleZ = world.scales[parentTranslationOffset + 2];
+  if (Math.min(Math.abs(scaleX), Math.abs(scaleY), Math.abs(scaleZ)) <= 1e-12) throw new RangeError("world translation parent scale must be non-zero");
+  pose.translations[offset] += rotatedX / scaleX; pose.translations[offset + 1] += rotatedY / scaleY; pose.translations[offset + 2] += rotatedZ / scaleZ;
+  return pose;
+}
+
 function assertCompatible(
   rig: Pick<CompiledSemanticRig, "totalCount" | "semanticParents" | "evaluationOrder">,
   pose: PoseBuffer,

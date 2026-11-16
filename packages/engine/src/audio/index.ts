@@ -1,3 +1,14 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
+export { encodeMonoPcmWav } from './encoding/wav.ts';
+import { connectAudioOutput, type DynamicsCompressorNodeLike, type WaveShaperNodeLike } from './output-limiter.ts';
+import { createVoiceTransition } from './voice-transition.ts';
+import type { AudioPlaylistTransition } from './playlist-contracts.ts';
+import { readAudioMetadata, type AudioMetadata } from './metadata.ts';
+import { createBusEffects, createBusEffectControls, type AudioBusEffectsGraph, type AudioBusEffectsOptions } from './bus-effects.ts';
+import { createVoiceSaturation } from './impact-saturation.ts';
+import { rampParameter } from './native-pitch.ts';
+
 export type AudioDiagnosticCode =
   | "cache-entry-too-large"
   | "cache-evicted"
@@ -15,7 +26,7 @@ export type AudioDiagnosticCode =
   | "resume-failed"
   | "stereo-panner-unavailable"
   | "unlock-not-running"
-  | "voice-stolen";
+  | "voice-stolen" | "voice-capacity" | "effects-unavailable";
 
 export type AudioDiagnostic = {
   code: AudioDiagnosticCode;
@@ -40,6 +51,7 @@ export type AudioParamLike = {
   cancelScheduledValues(time: number): unknown;
   setValueAtTime(value: number, time: number): unknown;
   linearRampToValueAtTime(value: number, endTime: number): unknown;
+  cancelAndHoldAtTime?(time: number): unknown;
 };
 
 export type AudioNodeLike = {
@@ -56,6 +68,10 @@ export type AudioBufferLike = {
 
 export type GainNodeLike = AudioNodeLike & { gain: AudioParamLike };
 export type StereoPannerNodeLike = AudioNodeLike & { pan: AudioParamLike };
+export type AudioFilterNodeLike = AudioNodeLike & { type: string; frequency: AudioParamLike; Q?: AudioParamLike };
+export type AudioConvolverNodeLike = AudioNodeLike & { buffer: AudioBufferLike | null; normalize: boolean };
+export type AudioDelayNodeLike = AudioNodeLike & { delayTime: AudioParamLike };
+export type AudioOscillatorNodeLike = AudioNodeLike & { type: string; frequency: AudioParamLike; start(when?: number): void; stop(when?: number): void };
 export type AudioBufferSourceNodeLike = AudioNodeLike & {
   buffer: AudioBufferLike | null;
   loop: boolean;
@@ -70,11 +86,20 @@ export type AudioContextLike = {
   readonly currentTime: number;
   readonly destination: AudioNodeLike;
   readonly state: string;
+  readonly sampleRate?: number;
   createGain(): GainNodeLike;
   createBufferSource(): AudioBufferSourceNodeLike;
   createStereoPanner?(): StereoPannerNodeLike;
+  createDynamicsCompressor?(): DynamicsCompressorNodeLike;
+  createWaveShaper?(): WaveShaperNodeLike;
+  createBiquadFilter?(): AudioFilterNodeLike;
+  createDelay?(maxDelayTime?: number): AudioDelayNodeLike;
+  createOscillator?(): AudioOscillatorNodeLike;
+  createConvolver?(): AudioConvolverNodeLike;
+  createBuffer?(channels: number, length: number, sampleRate: number): AudioBufferLike & { getChannelData(channel: number): Float32Array };
   decodeAudioData(data: ArrayBuffer): Promise<AudioBufferLike>;
   resume(): Promise<void>;
+  suspend?(): Promise<void>;
   close?(): Promise<void>;
   addEventListener?(type: "statechange", listener: () => void): void;
   removeEventListener?(type: "statechange", listener: () => void): void;
@@ -108,9 +133,7 @@ function positive(value: number, label: string) {
   return value;
 }
 
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
+
 
 /** Pure, deterministic 2D attenuation and stereo-pan math. */
 export function computeSpatialAudio(
@@ -173,7 +196,7 @@ export function chooseAudioLoadPolicy(
   const byteLength = nonNegative(input.byteLength, "audio policy byteLength");
   if (!Number.isSafeInteger(byteLength)) throw new RangeError("audio policy byteLength must be a safe integer");
   const duration = input.durationSeconds === undefined ? undefined : nonNegative(input.durationSeconds, "audio policy durationSeconds");
-  const maxBytes = nonNegative(options.maxBufferedBytes ?? 4 * 1024 * 1024, "audio policy maxBufferedBytes");
+  const maxBytes = nonNegative(options.maxBufferedBytes ?? 4194304, "audio policy maxBufferedBytes");
   const maxDuration = nonNegative(options.maxBufferedDurationSeconds ?? 45, "audio policy maxBufferedDurationSeconds");
   if (input.mode === "buffer" || input.mode === "stream") return { mode: input.mode, reason: "explicit" };
   if (input.latencySensitive || input.usage === "sfx") return { mode: "buffer", reason: "latency-sensitive" };
@@ -187,6 +210,7 @@ export type AudioEngineOptions = {
   context?: AudioContextLike;
   contextFactory?: () => AudioContextLike;
   closeContextOnDispose?: boolean;
+  outputLimiter?: boolean;
   buses?: readonly string[];
   maxVoices?: number;
   maxDecodedEntries?: number;
@@ -205,13 +229,15 @@ export type PlayBufferOptions = {
   pan?: number;
   loop?: boolean;
   playbackRate?: number;
+  saturation?: number;
   priority?: number;
   when?: number;
   offset?: number;
   duration?: number;
+  onEnded?: (reason: 'ended' | 'stopped') => void;
 };
 
-export type AudioPlayFailureCode = "disposed" | "invalid-bus" | "missing-buffer" | "not-unlocked" | "play-failed";
+export type AudioPlayFailureCode = "disposed" | "invalid-bus" | "missing-buffer" | "not-unlocked" | "play-failed" | "voice-capacity";
 export type AudioVoiceHandle = {
   readonly id: number;
   readonly assetId: string;
@@ -220,6 +246,7 @@ export type AudioVoiceHandle = {
   setGain(value: number, when?: number): void;
   fadeTo(value: number, duration: number, when?: number): void;
   setPan(value: number, when?: number): void;
+  transitionOut?(options: AudioPlaylistTransition & { when?: number; bpm?: number }): void;
 };
 export type AudioPlayResult =
   | { ok: true; voice: AudioVoiceHandle }
@@ -233,8 +260,8 @@ export type AudioCacheSnapshot = {
   maxBytes: number;
 };
 
-type BusState = { name: string; node: GainNodeLike; gain: number; muted: boolean };
-type CacheEntry = { id: string; buffer: AudioBufferLike; bytes: number; used: number };
+type BusState = { name: string; node: GainNodeLike; gain: number; muted: boolean; effects?: AudioBusEffectsOptions; graph?: AudioBusEffectsGraph };
+type CacheEntry = { id: string; buffer: AudioBufferLike; bytes: number; used: number; metadata?: AudioMetadata };
 type VoiceSlot = {
   index: number;
   generation: number;
@@ -248,6 +275,10 @@ type VoiceSlot = {
   gain: GainNodeLike;
   panner?: StereoPannerNodeLike;
   source?: AudioBufferSourceNodeLike;
+  onEnded?: PlayBufferOptions['onEnded'];
+  transitionCleanup?: () => void;
+  stopRequested?: boolean;
+  saturationCleanup?: () => void;
 };
 
 function safeIntegerOption(value: number | undefined, fallback: number, label: string) {
@@ -276,10 +307,7 @@ function normalizedPan(value: number) {
 function scheduleValue(parameter: AudioParamLike, value: number, at: number, duration = 0) {
   const start = nonNegative(at, "audio schedule time");
   const fadeDuration = nonNegative(duration, "audio fade duration");
-  parameter.cancelScheduledValues(start);
-  parameter.setValueAtTime(parameter.value, start);
-  if (fadeDuration === 0) parameter.setValueAtTime(value, start);
-  else parameter.linearRampToValueAtTime(value, start + fadeDuration);
+  rampParameter(parameter, value, start, fadeDuration);
 }
 
 function decodedBufferBytes(buffer: AudioBufferLike) {
@@ -315,6 +343,7 @@ type AudioEngineMutableState = {
   context: AudioContextLike | undefined; master: BusState | undefined; disposed: boolean; unlocked: boolean;
   cacheBytes: number; useCounter: number; voiceSequence: number; nextVoiceId: number; warnedPanner: boolean;
   attachedContext: AudioContextLike | undefined; recovering: Promise<void> | undefined; recoveryPending: boolean;
+  output: AudioNodeLike | undefined;
 };
 type AudioEngineOperationContext = {
   options: AudioEngineOptions; maxVoices: number; maxDecodedEntries: number; maxDecodedBytes: number;
@@ -375,7 +404,7 @@ function createAudioLifecycleOperations(context: AudioEngineOperationContext) {
       const audio = ensureContext();
       if (state.master) return audio;
       const node = audio.createGain();
-      node.connect(audio.destination);
+      state.output = connectAudioOutput({ context: audio, source: node, enabled: options.outputLimiter !== false, onError: cause => diagnostic({ code: "play-failed", level: "warning", message: "Audio limiter unavailable; using the ordinary output graph.", cause }) });
       state.master = { name: "master", node, gain: 1, muted: false };
       for (const name of options.buses ?? ["music", "sfx", "voice", "ambient"]) callbacks.createBus(name);
       return audio;
@@ -399,13 +428,11 @@ function createAudioAssetOperations(context: AudioEngineOperationContext, operat
       validName(name, "audio bus name");
       const existing = buses.get(name);
       if (existing) return existing;
-      const audio = operations.ensureContext();
-      if (!state.master) {
-        const node = audio.createGain();
-        node.connect(audio.destination);
-        state.master = { name: "master", node, gain: 1, muted: false };
-      }
       const gain = normalizedGain(initialGain, `audio bus ${name} gain`);
+      const audio = operations.ensureGraph();
+      const initialized = buses.get(name);
+      if (initialized) { initialized.gain = gain;initialized.node.gain.value = gain;return initialized; }
+      if (!state.master) throw new Error('Audio master graph was not initialized.');
       const node = audio.createGain();
       node.gain.value = gain;
       node.connect(state.master.node);
@@ -487,9 +514,10 @@ function createAudioAssetOperations(context: AudioEngineOperationContext, operat
       operations.requireLive();
       const audio = operations.ensureContext();
       const data = encoded instanceof Uint8Array ? new Uint8Array(encoded).buffer : encoded.slice(0);
+      const metadata = readAudioMetadata({ bytes: data });
       try {
         const buffer = await audio.decodeAudioData(data);
-        cacheBuffer(id, buffer);
+        if (cacheBuffer(id, buffer)) { const entry = cache.get(id);if (entry) entry.metadata = metadata; }
         return buffer;
       } catch (cause) {
         const message = `Could not decode audio asset ${id}.`;
@@ -536,9 +564,12 @@ function createAudioVoiceOperations(context: AudioEngineOperationContext, operat
       slots.push(slot);
       return slot;
     }
-  function releaseSlot(slot: VoiceSlot, stopAt?: number) {
+  function releaseSlot(slot: VoiceSlot, stopAt?: number, reason: 'ended' | 'stopped' = 'stopped') {
       if (!slot.active) return;
       slot.active = false;
+      const onEnded = slot.onEnded;slot.onEnded = undefined;
+      slot.transitionCleanup?.();slot.transitionCleanup = undefined;
+      slot.saturationCleanup?.();slot.saturationCleanup = undefined;
       const source = slot.source;
       slot.source = undefined;
       if (source) {
@@ -550,9 +581,11 @@ function createAudioVoiceOperations(context: AudioEngineOperationContext, operat
       }
       const output = slot.panner ?? slot.gain;
       try { output.disconnect(); } catch { /* Best-effort cleanup. */ }
+      if (onEnded) queueMicrotask(() => onEnded(reason));
     }
   function stopSlot(slot: VoiceSlot, at: number, now: number) {
       if (!slot.active) return;
+      slot.stopRequested = true;
       if (at <= now || !slot.source) {
         releaseSlot(slot, at);
         return;
@@ -598,6 +631,16 @@ function createAudioVoiceOperations(context: AudioEngineOperationContext, operat
           const audio = operations.ensureContext();
           scheduleValue(slot.panner.pan, normalizedPan(value), Math.max(audio.currentTime, when ?? audio.currentTime));
         },
+        transitionOut(value) {
+          if (!isCurrent() || !slot.source) return;
+          const audio = operations.ensureContext(), at = Math.max(audio.currentTime, value.when ?? audio.currentTime);
+          const duration = nonNegative(value.durationSeconds ?? 2, 'audio transition duration');
+          if (duration > 10) throw new RangeError('audio transition duration must be at most ten seconds');
+          slot.transitionCleanup?.();
+          slot.source.disconnect();slot.source.connect(slot.gain);
+          slot.transitionCleanup = createVoiceTransition({ context: audio, source: slot.source, gain: slot.gain, transition: value, when: at, bpm: value.bpm }).cleanup;
+          scheduleValue(slot.gain.gain, 0, at, duration);stopSlot(slot, at + duration, audio.currentTime);
+        },
       };
     }
   function playBuffer(assetId: string, playOptions: PlayBufferOptions = {}): AudioPlayResult {
@@ -610,22 +653,30 @@ function createAudioVoiceOperations(context: AudioEngineOperationContext, operat
       const bus = operations.resolveBus(busName);
       if (!bus) return operations.failure("invalid-bus", `Audio bus does not exist: ${busName}`, { assetId, bus: busName });
       if (maxVoices === 0) return operations.failure("play-failed", "Audio voice capacity is zero.", { assetId, bus: busName });
+      let acquired: VoiceSlot | undefined;
       try {
+        if (playOptions.saturation !== undefined && (!Number.isFinite(playOptions.saturation) || playOptions.saturation < 0 || playOptions.saturation > 1)) throw new RangeError('Voice saturation must be from zero to one.');
         let slot = slots.find((candidate) => !candidate.active);
         if (!slot && slots.length < maxVoices) slot = makeSlot(audio);
         if (!slot) slot = stealCandidate();
         if (!slot) return operations.failure("play-failed", "No audio voice slot is available.", { assetId, bus: busName });
+        if (slot.active && slot.priority > finite(playOptions.priority ?? 0, "audio voice priority")) return { ok: false, code: "voice-capacity", message: "Audio voice capacity is occupied by higher-priority sounds." };
         if (slot.active) {
           operations.diagnostic({ code: "voice-stolen", level: "info", message: `Stole voice ${slot.voiceId} playing ${slot.assetId}.`, assetId: slot.assetId, bus: slot.bus, voiceId: slot.voiceId });
           releaseSlot(slot, audio.currentTime);
         }
+        acquired = slot;
         const output = slot.panner ?? slot.gain;
-        output.connect(bus.node);
+        output.connect(bus.graph?.input ?? bus.node);
         const source = audio.createBufferSource();
         source.buffer = buffer;
         source.loop = playOptions.loop ?? false;
         source.playbackRate.value = positive(playOptions.playbackRate ?? 1, "audio playbackRate");
-        source.connect(slot.gain);
+        if (playOptions.saturation !== undefined) {
+          const saturation = createVoiceSaturation({ context: audio, source, destination: slot.gain, amount: playOptions.saturation,
+            onFallback: cause => operations.diagnostic({ code: 'effects-unavailable', level: 'warning', message: 'Voice saturation unavailable; using dry playback.', cause }) });
+          slot.saturationCleanup = saturation;
+        } else source.connect(slot.gain);
         slot.gain.gain.value = normalizedGain(playOptions.gain ?? 1, "voice gain");
         if (slot.panner) slot.panner.pan.value = normalizedPan(playOptions.pan ?? 0);
         slot.generation += 1;
@@ -639,14 +690,17 @@ function createAudioVoiceOperations(context: AudioEngineOperationContext, operat
         state.voiceSequence += 1;
         slot.sequence = state.voiceSequence;
         slot.source = source;
+        slot.stopRequested = false;
+        slot.onEnded = playOptions.onEnded;
         const generation = slot.generation;
         const completedSlot = slot;
-        source.onended = () => { if (completedSlot.generation === generation) releaseSlot(completedSlot); };
+        source.onended = () => { if (completedSlot.generation === generation) releaseSlot(completedSlot, undefined, completedSlot.stopRequested ? 'stopped' : 'ended'); };
         const offset = nonNegative(playOptions.offset ?? 0, "audio offset");
         if (playOptions.duration === undefined) source.start(slot.startedAt, offset);
         else source.start(slot.startedAt, offset, positive(playOptions.duration, "audio duration"));
         return { ok: true, voice: voiceHandle(slot, generation) };
       } catch (cause) {
+        if (acquired) releaseSlot(acquired, audio.currentTime);
         return operations.failure("play-failed", `Could not start audio asset ${assetId}.`, { assetId, bus: busName, cause });
       }
     }
@@ -663,8 +717,20 @@ type AudioVoiceOperationsSet = ReturnType<typeof createAudioVoiceOperations>;
 
 function createAudioControlOperations(context: AudioEngineOperationContext, operations: AudioLifecycleOperationsSet & AudioVoiceOperationsSet) {
   const { options, buses, cache, slots, state } = context;
-  function rebuildGraph(audio: AudioContextLike) {
-      const busConfig = [...buses.values()].map((bus) => ({ name: bus.name, gain: bus.gain, muted: bus.muted }));
+  let paused = false;
+  async function setPaused(value: { paused: boolean }) {
+    operations.requireLive();
+    if (paused === value.paused) return;
+    const audio = state.context;
+    if (value.paused && audio && !audio.suspend) throw new Error("Audio context does not support suspension.");
+    paused = value.paused;
+    try {
+      if (paused) await audio?.suspend?.();
+      else if (state.unlocked) await audio?.resume();
+    } catch (cause) { paused = !value.paused; throw cause; }
+  }
+  function rebuildGraph(audio: AudioContextLike, reuseImpulses = true) {
+      const busConfig = [...buses.values()].map((bus) => ({ name: bus.name, gain: bus.gain, muted: bus.muted, effects: bus.effects, impulse: reuseImpulses ? bus.graph?.impulse : undefined }));
       const masterConfig = state.master ? { gain: state.master.gain, muted: state.master.muted } : { gain: 1, muted: false };
       for (const slot of slots) operations.releaseSlot(slot, audio.currentTime);
       for (const slot of slots) {
@@ -673,19 +739,24 @@ function createAudioControlOperations(context: AudioEngineOperationContext, oper
       }
       slots.length = 0;
       for (const bus of buses.values()) {
+        bus.graph?.dispose();
         try { bus.node.disconnect(); } catch { /* Best-effort cleanup. */ }
       }
       try { state.master?.node.disconnect(); } catch { /* Best-effort cleanup. */ }
+      try { state.output?.disconnect(); } catch { /* Best-effort cleanup. */ }
       buses.clear();
       const masterNode = audio.createGain();
       masterNode.gain.value = masterConfig.muted ? 0 : masterConfig.gain;
-      masterNode.connect(audio.destination);
+      state.output = connectAudioOutput({ context: audio, source: masterNode, enabled: options.outputLimiter !== false, onError: cause => operations.diagnostic({ code: "play-failed", level: "warning", message: "Audio limiter unavailable; using the ordinary output graph.", cause }) });
       state.master = { name: "master", node: masterNode, ...masterConfig };
       for (const config of busConfig) {
         const node = audio.createGain();
         node.gain.value = config.muted ? 0 : config.gain;
         node.connect(masterNode);
-        buses.set(config.name, { ...config, node });
+        const bus: BusState = { ...config, node };
+        if (config.effects) bus.graph = createBusEffects({ context: audio, output: node, effects: config.effects, impulse: cache.get(config.effects.reverb?.assetId ?? '')?.buffer ?? config.impulse,
+          onFallback: (message, cause) => operations.diagnostic({ code: 'effects-unavailable', level: 'warning', message, cause, bus: config.name }) });
+        buses.set(config.name, bus);
       }
     }
   async function recover() {
@@ -696,12 +767,11 @@ function createAudioControlOperations(context: AudioEngineOperationContext, oper
         if (audio.state === "closed") {
           operations.detachStateListener();
           state.context = undefined;
-          state.master = undefined;
-          buses.clear();
-          slots.length = 0;
           cache.clear();
           state.cacheBytes = 0;
           audio = operations.ensureContext();
+          // Rebind saved buses before the host rehydrates/configures effects on the new context.
+          rebuildGraph(audio, false);
           await options.onRecoveryRequired?.("context-closed");
         }
         await audio.resume();
@@ -723,6 +793,7 @@ function createAudioControlOperations(context: AudioEngineOperationContext, oper
       const audio = state.context;
       if (!audio || state.disposed) return;
       options.onContextStateChange?.(audio.state);
+      if (paused) return;
       if (audio.state === "running") {
         if (state.recoveryPending) queueMicrotask(() => void recover().catch(() => undefined));
         return;
@@ -735,6 +806,7 @@ function createAudioControlOperations(context: AudioEngineOperationContext, oper
     }
   async function unlock() {
       operations.requireLive();
+      if (paused) return;
       const audio = operations.ensureGraph();
       try {
         await audio.resume();
@@ -763,9 +835,11 @@ function createAudioControlOperations(context: AudioEngineOperationContext, oper
         try { slot.panner?.disconnect(); } catch { /* Best-effort cleanup. */ }
       }
       for (const bus of buses.values()) {
+        bus.graph?.dispose();
         try { bus.node.disconnect(); } catch { /* Best-effort cleanup. */ }
       }
       try { state.master?.node.disconnect(); } catch { /* Best-effort cleanup. */ }
+      try { state.output?.disconnect(); } catch { /* Best-effort cleanup. */ }
       buses.clear();
       cache.clear();
       state.cacheBytes = 0;
@@ -781,6 +855,7 @@ function createAudioControlOperations(context: AudioEngineOperationContext, oper
     rebuildGraph,
     recover,
     onContextStateChange,
+    setPaused,
     unlock,
     dispose,
   };
@@ -788,7 +863,7 @@ function createAudioControlOperations(context: AudioEngineOperationContext, oper
 export function createAudioEngine(options: AudioEngineOptions = {}) {
 const maxVoices = safeIntegerOption(options.maxVoices, 32, "audio maxVoices");
 const maxDecodedEntries = safeIntegerOption(options.maxDecodedEntries, 128, "audio maxDecodedEntries");
-const maxDecodedBytes = safeIntegerOption(options.maxDecodedBytes, 64 * 1024 * 1024, "audio maxDecodedBytes");
+const maxDecodedBytes = safeIntegerOption(options.maxDecodedBytes, 67108864, "audio maxDecodedBytes");
 const diagnostics: AudioDiagnostic[] = [];
 const buses = new Map<string, BusState>();
 const cache = new Map<string, CacheEntry>();
@@ -806,6 +881,7 @@ let attachedContext: AudioContextLike | undefined;
 let recovering: Promise<void> | undefined;
 let recoveryPending = false;
   const state: AudioEngineMutableState = {
+    output: undefined,
     get context() { return context; }, set context(value) { context = value; },
     get master() { return master; }, set master(value) { master = value; },
     get disposed() { return disposed; }, set disposed(value) { disposed = value; },
@@ -837,13 +913,24 @@ let recoveryPending = false;
   const { diagnostic, requireLive, ensureContext, ensureGraph } = audioOperations1;
   const { createBus, resolveBus, controlBus, muteBus, cacheBuffer, decode } = audioOperations2;
   const { stopSlot, playBuffer } = audioOperations3;
-  const { recover, unlock, dispose } = audioOperations4;
+  const { recover, unlock, dispose, setPaused } = audioOperations4;
+  const busEffectControls = createBusEffectControls({ requireLive, context: ensureGraph, bus: resolveBus, buses: () => buses.values(), impulse: id => cache.get(id)?.buffer,
+    reconnect(name, input) {
+      // Existing decoded sources reconnect; streamed hosts refresh withBus destinations.
+      for (const slot of slots) if (slot.active && slot.bus === name) { const output = slot.panner ?? slot.gain;output.disconnect();output.connect(input); }
+    },
+    onFallback: (bus, message, cause) => diagnostic({ code: 'effects-unavailable', level: 'warning', message, cause, bus }),
+  });
 return {
     unlock,
+    /** Freeze the playback clock and preserve active voices until resumed. */
+    setPaused,
     recover,
     decode,
     cacheBuffer,
     hasBuffer(id: string) { return cache.has(id); },
+    getBufferDuration(id: string) { return cache.get(id)?.buffer.duration; },
+    getAudioMetadata(id: string) { const metadata = cache.get(id)?.metadata;return metadata ? { ...metadata } : undefined; },
     removeBuffer(id: string) {
       const entry = cache.get(id);
       if (!entry) return false;
@@ -866,8 +953,9 @@ return {
         diagnostic({ code: "invalid-bus", level: "error", message, bus: name });
         throw createAudioEngineError("invalid-bus", message);
       }
-      return operation(audio, bus.node);
+      return operation(audio, bus.graph?.input ?? bus.node);
     },
+    ...busEffectControls,
     setMasterGain(value: number, when?: number) { controlBus("master", value, 0, when); },
     fadeMaster(value: number, duration: number, when?: number) { controlBus("master", value, duration, when); },
     muteMaster(muted = true, when?: number) { muteBus("master", muted, when); },
@@ -892,3 +980,16 @@ return {
 }
 
 export type AudioEngine = ReturnType<typeof createAudioEngine>;
+export type { AudioBusEffectsOptions, AudioBusReactiveOptions } from './bus-effects.ts';
+export { createAudioPlaylist } from './playlist.ts';
+export type { AudioPlaylist, AudioPlaylistEngine } from './playlist.ts';
+export { AUDIO_MUSICAL_KEYS } from './playlist-contracts.ts';
+export type { AudioMusicalKey, AudioPlaylistTrack, AudioPlaylistTransition } from './playlist-contracts.ts';
+export { createAudioQueue } from './queue.ts';
+export type { AudioQueue, AudioQueueEngine } from './queue.ts';
+export { createVoiceTransition, supportedAudioTransitions } from './voice-transition.ts';
+export { readAudioMetadata } from './metadata.ts';
+export type { AudioMetadata } from './metadata.ts';
+
+export { SFX_PRESET_NAMES, SFX_PRESET_STYLES, createSfxPresetBank, renderSfxPreset } from "./sfx-presets.ts";
+export type { SfxPresetName, SfxPresetStyle, RenderSfxPresetOptions, RenderedSfxPreset, PlaySfxPresetOptions, SfxPresetBankOptions, SfxPresetBank } from "./sfx-presets.ts";

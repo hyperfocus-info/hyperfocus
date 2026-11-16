@@ -82,10 +82,10 @@ export const tutorialDefinitions: TutorialDefinition[] = [
         fallback: "If the plan start action is not visible, send a task first and wait for planner output."
       },
       {
-        targetId: "trace-panel-toggle",
+        targetId: "help-button",
         title: "Open trace when needed",
-        body: "The trace panel is where you inspect planner, executor, and subagent transitions during review.",
-        fallback: "If trace toggle is hidden, wait for the header controls to finish rendering, then open trace from the header."
+        body: "Open Workspace actions, then Trace panel to inspect planner, executor, and subagent transitions during review.",
+        fallback: "Trace is available in Advanced interface mode. Open Workspace actions in the header, then choose Trace panel."
       }
     ]
   }

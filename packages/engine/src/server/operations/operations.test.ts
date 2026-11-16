@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { describe, expect, test } from "bun:test";
 import {
   SignedSessionAuthority,
@@ -22,9 +23,7 @@ function sequence(prefix = "nonce") {
   return () => `${prefix}-${++value}`;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function parseBackupSummary(bytes: Uint8Array) {
   const value: unknown = JSON.parse(new TextDecoder().decode(bytes));

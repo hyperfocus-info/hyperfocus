@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   cookGltfStaticMeshes,
+  parseGltfContainer,
   resolveAndCookGltfStaticMeshes,
   resolveGltfStaticBuffers,
 } from "./gltf-static.ts";
@@ -88,6 +89,14 @@ describe("vendor-neutral glTF static mesh cooking", () => {
     expect(cookGltfStaticMeshes(document, resolution.buffers).ok).toBe(true);
   });
 
+  test("parses and cooks a complete GLB 2.0 container", async () => {
+    const { bytes, document } = externalInterleaved(); delete document.buffers[0].uri;
+    const container = parseGltfContainer(glb(document, bytes));
+    expect(container.kind).toBe("glb"); expect(Array.from(container.embeddedBuffers.get(0)?.slice(0, bytes.length) ?? [])).toEqual(Array.from(bytes));
+    const result = await resolveAndCookGltfStaticMeshes(container.document, { embeddedBuffers: container.embeddedBuffers });
+    expect(result.ok).toBe(true); expect([...result.meshes[0]!.positions]).toEqual([0, 0, 0, 2, 0, 0, 0, 2, 0]);
+  });
+
   test("is deterministic and does not retain caller buffer aliases", async () => {
     const { bytes, document } = externalInterleaved();
     const first = cookGltfStaticMeshes(document, [bytes]);
@@ -173,6 +182,13 @@ describe("vendor-neutral glTF static mesh cooking", () => {
     const nonFinite = externalInterleaved();
     new DataView(nonFinite.bytes.buffer).setFloat32(0, Number.NaN, true);
     expect(cookGltfStaticMeshes(nonFinite.document, [nonFinite.bytes]).diagnostics[0]).toEqual(expect.objectContaining({ code: "accessor-non-finite", pointer: "/accessors/0" }));
-    expect(() => cookGltfStaticMeshes(nonFinite.document, [nonFinite.bytes], { maxOutputBytes: 1024 * 1024 * 1024 + 1 })).toThrow("maxOutputBytes");
+    expect(() => cookGltfStaticMeshes(nonFinite.document, [nonFinite.bytes], { maxOutputBytes: 1073741825 })).toThrow("maxOutputBytes");
   });
 });
+
+function glb(document: unknown, binary: Uint8Array): Uint8Array {
+  const json = new TextEncoder().encode(JSON.stringify(document)), jsonLength = Math.ceil(json.length / 4) * 4, binaryLength = Math.ceil(binary.length / 4) * 4;
+  const output = new Uint8Array(20 + jsonLength + 8 + binaryLength); const view = new DataView(output.buffer);
+  view.setUint32(0, 0x46546c67, true); view.setUint32(4, 2, true); view.setUint32(8, output.length, true); view.setUint32(12, jsonLength, true); view.setUint32(16, 0x4e4f534a, true);
+  output.fill(0x20, 20, 20 + jsonLength); output.set(json, 20); const binaryHeader = 20 + jsonLength; view.setUint32(binaryHeader, binaryLength, true); view.setUint32(binaryHeader + 4, 0x004e4942, true); output.set(Array.from(binary), binaryHeader + 8); return output;
+}

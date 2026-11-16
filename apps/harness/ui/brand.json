@@ -1,0 +1,11 @@
+{
+  "name": "Harness",
+  "description": "A workspace for building software with agents.",
+  "branding": {
+    "mark": "shield",
+    "color": "#0f766e",
+    "background": "#15131c"
+  },
+  "social": {},
+  "logoPath": "logo.svg"
+}

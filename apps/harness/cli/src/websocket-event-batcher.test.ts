@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
-import { parseServerEventFrame, type ServerEvent } from "@hyperfocus/ai-core/protocol";
+import { parseServerEventFrame } from "@hyperfocus/ai-core/protocol";
+import { readValueFrame } from "@hyperfocus/serialization";
+import { describe,expect,test } from "bun:test";
+import { assistantDelta } from "./test-support/fixtures/server-events";
 import { createWebsocketEventBatcher } from "./websocket-event-batcher";
 
 function createFakeGuardedSocket(sendStatuses: Array<number | void> = []) {
@@ -19,35 +21,24 @@ function createFakeGuardedSocket(sendStatuses: Array<number | void> = []) {
   };
 }
 
-function assistantDelta(index: number): ServerEvent {
-  return {
-    type: "assistant.chat.delta",
-    requestId: `req-${index}`,
-    payload: {
-      assistantId: "assistant-1",
-      sessionId: "session-1",
-      delta: `chunk-${index}`
-    }
-  };
-}
 
 describe("websocket event batcher", () => {
   test("sends queued control events as one typed batch frame", () => {
     const socket = createFakeGuardedSocket();
-    const batcher = createWebsocketEventBatcher({ maxQueuedBytes: 1024 * 1024, flushDelayMs: 60_000 });
+    const batcher = createWebsocketEventBatcher({ maxQueuedBytes: 1048576, flushDelayMs: 60_000 });
 
-    expect(batcher.send(socket, assistantDelta(1))).toBe(true);
-    expect(batcher.send(socket, assistantDelta(2))).toBe(true);
+    expect(batcher.send(socket, assistantDelta(1), "protobuf")).toBe(true);
+    expect(batcher.send(socket, assistantDelta(2), "protobuf")).toBe(true);
     expect(socket.sent).toHaveLength(0);
 
     expect(batcher.flush(socket)).toBe(true);
     expect(socket.sent).toHaveLength(1);
 
     const payload = socket.sent[0];
-    if (typeof payload !== "string") {
-      throw new Error("expected string websocket payload");
+    if (!(payload instanceof Uint8Array)) {
+      throw new Error("expected protobuf websocket payload");
     }
-    const events = parseServerEventFrame(JSON.parse(payload));
+    const events = parseServerEventFrame(readValueFrame(payload));
     expect(events.map((event) => event.type)).toEqual(["assistant.chat.delta", "assistant.chat.delta"]);
     expect(events.map((event) => (event.type === "assistant.chat.delta" ? event.payload.delta : ""))).toEqual([
       "chunk-1",
@@ -57,7 +48,7 @@ describe("websocket event batcher", () => {
 
   test("flushes queued events before immediate heartbeat responses", () => {
     const socket = createFakeGuardedSocket();
-    const batcher = createWebsocketEventBatcher({ maxQueuedBytes: 1024 * 1024, flushDelayMs: 60_000 });
+    const batcher = createWebsocketEventBatcher({ maxQueuedBytes: 1048576, flushDelayMs: 60_000 });
 
     batcher.send(socket, assistantDelta(1));
     batcher.send(socket, {
@@ -69,14 +60,16 @@ describe("websocket event batcher", () => {
     });
 
     expect(socket.sent).toHaveLength(2);
-    expect(JSON.parse(requireStringPayload(socket.sent[0])).type).toBe("assistant.chat.delta");
-    expect(JSON.parse(requireStringPayload(socket.sent[1])).type).toBe("connection.pong");
+    expect(typeof socket.sent[0]).toBe("string");
+    expect(typeof socket.sent[1]).toBe("string");
+    expect(parseServerEventFrame(readValueFrame(socket.sent[0]))[0]?.type).toBe("assistant.chat.delta");
+    expect(parseServerEventFrame(readValueFrame(socket.sent[1]))[0]?.type).toBe("connection.pong");
   });
 
   test("flushes when batch event limit is reached", () => {
     const socket = createFakeGuardedSocket();
     const batcher = createWebsocketEventBatcher({
-      maxQueuedBytes: 1024 * 1024,
+      maxQueuedBytes: 1048576,
       maxBatchEvents: 2,
       flushDelayMs: 60_000
     });
@@ -85,7 +78,7 @@ describe("websocket event batcher", () => {
     batcher.send(socket, assistantDelta(2));
 
     expect(socket.sent).toHaveLength(1);
-    const events = parseServerEventFrame(JSON.parse(requireStringPayload(socket.sent[0])));
+    const events = parseServerEventFrame(readValueFrame(socket.sent[0]));
     expect(events).toHaveLength(2);
   });
 
@@ -111,8 +104,3 @@ describe("websocket event batcher", () => {
     expect(socket.sent).toEqual([]);
   });
 });
-
-function requireStringPayload(value: string | Uint8Array | undefined): string {
-  if (typeof value !== "string") throw new TypeError("Expected string websocket payload");
-  return value;
-}

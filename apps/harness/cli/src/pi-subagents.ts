@@ -47,9 +47,12 @@ export type SubagentResult = {
   worktreePath?: string;
   contextUsage?: ProjectContextUsage;
   contractDriftPaths?: string[];
+  /** Shared-directory snapshot differences cannot establish which actor wrote them. */
+  unattributedChangePaths?: string[];
 };
 
 export type SubagentProgressCallbacks = {
+  threadTools?: (subagentId?: string) => import("./thread-tools").ThreadTools;
   onStart?: (task: PlannerSubtask, attempt: number) => void;
   onRetry?: (task: PlannerSubtask, attempt: number, error: Error) => void;
   onComplete?: (task: PlannerSubtask, output: string, durationMs: number) => void;
@@ -653,6 +656,7 @@ function createSubagentPromptRequests(input: {
 }) {
   const searchMemory = input.searchMemory;
   const createRequest = (prompt: string): PiAgentPromptRequest => ({
+    threadTools: input.callbacks?.threadTools?.(input.task.id),
     kind: "subagent",
     cwd: input.cwd,
     modelId: input.modelId,
@@ -693,6 +697,7 @@ function toSubagentContextUsage(
     sourceLabel: taskId,
     modelId,
     tokens: usage.tokens,
+    inputTokens: Math.max(0, usage.sessionStats.tokens.total - usage.sessionStats.tokens.output),
     contextWindow: usage.contextWindow,
     usagePercent: usage.usagePercent,
     totalProcessedTokens: usage.sessionStats.tokens.total,
@@ -762,7 +767,7 @@ export function buildSubagentPrompt(input: { brief: string; task: PlannerSubtask
         "Do not run browser, Playwright, dev server, python -m http.server, visible app smoke tests, or commands that can open windows.",
         "Do not use Start-Process for verification.",
         "Do not perform broad verification unless this subtask explicitly names a verification command.",
-        "On Windows, use PowerShell-compatible syntax only; do not use Bash heredocs like <<'EOF'.",
+        "On Windows, use PowerShell syntax, invoke Bun as bun.exe (including bun.exe x), and pass rg patterns as quoted literal arguments; never invoke policy-blocked .ps1 shims or Bash heredocs.",
         "Prefer bundled rg for search. If rg is unavailable, use Get-ChildItem plus Select-String.",
         "Return a concise changed-file summary.",
         SUBAGENT_MILESTONE_INSTRUCTION

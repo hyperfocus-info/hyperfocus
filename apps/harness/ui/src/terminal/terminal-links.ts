@@ -1,3 +1,5 @@
+import { isAbsolutePath } from "../lib/utils";
+
 export type TerminalLinkTarget =
   | { kind: "url"; href: string }
   | { kind: "file"; path: string; line?: number; column?: number };
@@ -105,10 +107,6 @@ function normalizePath(value: string) {
     parts.push(part);
   }
   return `${prefix}${parts.join("/")}`.replace(/\/$/, "");
-}
-
-function isAbsolutePath(value: string) {
-  return /^[A-Za-z]:\//.test(value) || value.startsWith("/");
 }
 
 function isInsidePath(path: string, root: string) {

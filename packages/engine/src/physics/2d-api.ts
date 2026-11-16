@@ -35,18 +35,17 @@ type Physics2DQueryApi = Pick<PhysicsWorld2D, "queryAabb" | "raycast" | "shapeCa
 type Physics2DDebugApi = Pick<PhysicsWorld2D, "debugSegmentCount" | "writeDebugSegments">;
 
 function createPhysics2DCoreApi(context: Physics2DOperationContext, operations: Physics2DOperations): Physics2DCoreApi {
-  const { config, bodies, contactStorage, joints, diagnostics, state, resolveIndex } = context;
-  const { capacity, maxJoints } = config;
-  const { alive, bodyType, shapeKind, flags, sleeping, x, y, velocityX, velocityY, angle, angularVelocity, inverseMass, inverseInertia, extentX, extentY, ids, indexById } = bodies;
+  const { bodies, contactStorage, joints, diagnostics, state, resolveIndex, bodyHandles, jointHandles } = context;
+  const { bodyType, shapeKind, flags, sleeping, x, y, velocityX, velocityY, angle, angularVelocity, inverseMass, inverseInertia, extentX, extentY, ids, indexById } = bodies;
   const { contactA, contactB, contactNormalX, contactNormalY, contactPenetration, contactPointX, contactPointY, contactTrigger } = contactStorage;
-  const { jointAlive, jointKind, jointFlags, jointA, jointB, jointLength, jointStiffness, jointDamping, jointAnchorAX, jointAnchorAY, jointAnchorBX, jointAnchorBY, jointIds, jointIndexById } = joints;
+  const { jointKind, jointFlags, jointA, jointB, jointLength, jointStiffness, jointDamping, jointAnchorAX, jointAnchorAY, jointAnchorBX, jointAnchorBY, jointIds, jointIndexById } = joints;
   const { detectContacts, integrate, setBodyAwake, solveContacts, solveJoints, updateSleeping,  } = operations;
   const body: PhysicsWorld2D["body"] = (indexOrId) => {
-      const index = typeof indexOrId === "string" ? indexById.get(indexOrId) ?? -1 : indexOrId;
-      if (!Number.isSafeInteger(index) || index < 0 || index >= capacity || alive[index] === 0) return undefined;
+      const index = typeof indexOrId === "string" ? indexById.get(indexOrId) : bodyHandles.resolve(indexOrId);
+      if (index === undefined) return undefined;
       const id = ids[index]!;
       return {
-        index,
+        index: bodyHandles.at(index),
         id,
         type: bodyType[index] === BODY_STATIC ? "static" : bodyType[index] === BODY_DYNAMIC ? "dynamic" : "kinematic",
         shape: shapeKind[index] === SHAPE_BOX
@@ -100,8 +99,8 @@ function createPhysics2DCoreApi(context: Physics2DOperationContext, operations: 
       angularVelocity[index] += (radiusX * appliedY - radiusY * appliedX) * inverseInertia[index];
     };
   const joint: PhysicsWorld2D["joint"] = (indexOrId) => {
-      const index = typeof indexOrId === "string" ? jointIndexById.get(indexOrId) ?? -1 : indexOrId;
-      if (!Number.isSafeInteger(index) || index < 0 || index >= maxJoints || !jointAlive[index]) return undefined;
+      const index = typeof indexOrId === "string" ? jointIndexById.get(indexOrId) : jointHandles.resolve(indexOrId);
+      if (index === undefined) return undefined;
       const a = jointA[index]!;
       const b = jointB[index]!;
       if (jointKind[index] === 1) {
@@ -115,10 +114,10 @@ function createPhysics2DCoreApi(context: Physics2DOperationContext, operations: 
         const anchorBY = y[b] + jointAnchorBX[index] * sineB + jointAnchorBY[index] * cosineB;
         return {
           kind: "revolute",
-          index,
+          index: jointHandles.at(index),
           id: jointIds[index]!,
-          aIndex: a,
-          bIndex: b,
+          aIndex: bodyHandles.at(a),
+          bIndex: bodyHandles.at(b),
           aId: ids[a]!,
           bId: ids[b]!,
           anchorX: (anchorAX + anchorBX) / 2,
@@ -130,10 +129,10 @@ function createPhysics2DCoreApi(context: Physics2DOperationContext, operations: 
       }
       return {
         kind: "distance",
-        index,
+        index: jointHandles.at(index),
         id: jointIds[index]!,
-        aIndex: a,
-        bIndex: b,
+        aIndex: bodyHandles.at(a),
+        bIndex: bodyHandles.at(b),
         aId: ids[a]!,
         bId: ids[b]!,
         length: jointLength[index]!,
@@ -158,8 +157,8 @@ function createPhysics2DCoreApi(context: Physics2DOperationContext, operations: 
       if (!Number.isSafeInteger(index) || index < 0 || index >= state.contacts) throw new RangeError(`Unknown contact index: ${index}`);
       const a = contactA[index]!;
       const b = contactB[index]!;
-      target.aIndex = a;
-      target.bIndex = b;
+      target.aIndex = bodyHandles.at(a);
+      target.bIndex = bodyHandles.at(b);
       target.aId = ids[a]!;
       target.bId = ids[b]!;
       target.normalX = contactNormalX[index]!;
@@ -174,6 +173,7 @@ function createPhysics2DCoreApi(context: Physics2DOperationContext, operations: 
 }
 
 function createPhysics2DQueryApi(context: Physics2DOperationContext, operations: Physics2DOperations): Physics2DQueryApi {
+  const { bodyHandles } = context;
   const { config, bodies, contactStorage, joints,  } = context;
   const { capacity,  } = config;
   const { alive, bodyType, shapeKind, flags, x, y, angle, extentX, extentY, layer, ids } = bodies;
@@ -193,7 +193,7 @@ function createPhysics2DQueryApi(context: Physics2DOperationContext, operations:
         const halfY = worldExtentY(index);
         if (x[index] + halfX < left || x[index] - halfX > right) continue;
         if (y[index] + halfY < top || y[index] - halfY > bottom) continue;
-        output[count++] = index;
+        output[count++] = bodyHandles.at(index);
       }
       return count;
     };
@@ -239,7 +239,7 @@ function createPhysics2DQueryApi(context: Physics2DOperationContext, operations:
         closestNormalY = rayScratch[2]!;
       }
       if (closestIndex < 0) return undefined;
-      target.index = closestIndex;
+      target.index = bodyHandles.at(closestIndex);
       target.id = ids[closestIndex]!;
       target.distance = closestDistance;
       target.x = startX + rayX * closestDistance;
@@ -298,7 +298,7 @@ function createPhysics2DQueryApi(context: Physics2DOperationContext, operations:
         closestNormalY = hit.normalX * sine + hit.normalY * cosine;
       }
       if (closestIndex < 0) return undefined;
-      target.index = closestIndex;
+      target.index = bodyHandles.at(closestIndex);
       target.id = ids[closestIndex]!;
       target.fraction = closestFraction;
       target.x = startX + deltaX * closestFraction;
@@ -416,7 +416,7 @@ export function createPhysicsWorld2DApi(options: {
     maxContacts,
     maxJoints,
     precision,
-    numericStorageBytes: capacity * (21 + floatStorageBytes * 14)
+    numericStorageBytes: context.bodyHandles.storageBytes + context.jointHandles.storageBytes + capacity * (21 + floatStorageBytes * 14)
       + maxContacts * (9 + floatStorageBytes * 5)
       + maxJoints * (15 + floatStorageBytes * 7)
       + floatStorageBytes * 3,
@@ -424,7 +424,7 @@ export function createPhysicsWorld2DApi(options: {
     addBody: operations.addBody,
     removeBody: operations.removeBody,
     hasBody: (id) => context.bodies.indexById.has(id),
-    bodyIndex: (id) => context.bodies.indexById.get(id) ?? -1,
+    bodyIndex: (id) => { const slot = context.bodies.indexById.get(id); return slot === undefined ? -1 : context.bodyHandles.at(slot); },
     ...core,
     addDistanceJoint: operations.addDistanceJoint,
     addRevoluteJoint: operations.addRevoluteJoint,

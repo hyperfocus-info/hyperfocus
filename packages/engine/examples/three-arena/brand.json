@@ -1,0 +1,10 @@
+{
+  "name": "Three Arena",
+  "description": "Three Arena interactive example.",
+  "branding": {
+    "mark": "orbit",
+    "color": "#f29c64",
+    "background": "#15131c"
+  },
+  "social": {}
+}

@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 export type CacheableUserBlockKind = "workspace-memory" | "uploadthing-attachment" | "frozen-plan";
 
 export type CacheableUserBlock = {
@@ -42,8 +43,4 @@ export function formatCacheableUserBlocks(blocks: CacheableUserBlock[]) {
   return blocks
     .map((block) => [`## ${block.title}`, `Kind: ${block.kind}`, "", block.text.trim()].join("\n"))
     .join("\n\n");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

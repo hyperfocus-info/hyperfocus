@@ -38,9 +38,7 @@ export function createWorkspaceLifecycleOperations2(context: WorkspaceRepository
         const savedJobs: BackgroundJob[] = [];
         if (shouldCreate) {
           for (const job of input.jobs) {
-            operations.saveBackgroundJob(job);
-            const savedJob = operations.getBackgroundJob(job.id);
-            if (savedJob) savedJobs.push(savedJob);
+            savedJobs.push(operations.saveBackgroundJob(job));
           }
           operations.appendAssistantLogEntry(input.logEntry);
         }

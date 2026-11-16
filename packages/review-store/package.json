@@ -1,0 +1,23 @@
+{
+  "name": "@hyperfocus/review-store",
+  "version": "0.0.1",
+  "description": "Bun SQLite persistence for immutable review assets and versioned human feedback.",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json"
+  },
+  "dependencies": {
+    "@hyperfocus/serialization": "workspace:*"
+  }
+}

@@ -1,10 +1,11 @@
-import { expect, test } from "bun:test";
-import { createChatMessage, type ClientCommand, type ServerEvent } from "@hyperfocus/ai-core/protocol";
+import { createChatMessage,type ClientCommand,type ServerEvent } from "@hyperfocus/ai-core/protocol";
+import { expect,test } from "bun:test";
 import { createViewProjectFixture } from "../utils/tests/test-fixtures";
+import { reject,rejected } from "../utils/tests/transport-fixtures";
 import {
-  applyWorkspacePageEvent,
-  createWorkspacePageRequests,
-  WORKSPACE_MESSAGE_CACHE_LIMIT
+applyWorkspacePageEvent,
+createWorkspacePageRequests,
+WORKSPACE_MESSAGE_CACHE_LIMIT
 } from "./workspace-page-state";
 
 test("workspace paging retries every collection and cancels obsolete ownership", () => {
@@ -16,9 +17,7 @@ test("workspace paging retries every collection and cancels obsolete ownership",
   const pages = createWorkspacePageRequests({ getWorkspace: () => workspace,
     sendCommand(command) { commands.push(command); return true; } });
   pages.ready();
-  const reject = (requestId: string): Extract<ServerEvent, { type: "command.rejected" }> => ({
-    type: "command.rejected", requestId, payload: { message: "Temporary failure" }
-  });
+
 
   for (let attempt = 0; attempt < 4; attempt += 1) pages.rejected(reject(pages.getProjectsRequest()!.id));
   expect(pages.getProjectsError()).toBe("Temporary failure");
@@ -47,8 +46,7 @@ test("invalid workspace cursors restart requested collections from their first p
   const pages = createWorkspacePageRequests({ getWorkspace: () => ({ activeProjectId: project.id, projects: [project],
       projectsNextCursor: "projects-next" }), sendCommand(command) { commands.push(command); return true; } });
   pages.ready();
-  const rejected = (requestId: string): Extract<ServerEvent, { type: "command.rejected" }> => ({ type: "command.rejected",
-    requestId, payload: { message: "Expired", code: "invalid-cursor" } });
+
   pages.rejected(rejected(pages.getProjectsRequest()!.id));
   pages.rejected(rejected(pages.getChildRequest(project.id)!.requestId));
   expect(commands.at(-2)).toMatchObject({ type: "workspace.projects.list", payload: { limit: 128 } });

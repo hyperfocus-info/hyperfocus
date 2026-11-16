@@ -1,32 +1,14 @@
-type OverlayEntry = {
-  id: string;
-  onEscape?: () => void;
-};
-
-const overlayStack: OverlayEntry[] = [];
+import { registerOverlay as registerSharedOverlay, isTopOverlay } from '@hyperfocus/ui/primitives';
+export { isTopOverlay };
+const registrations = new Set<() => void>();
 const focusReturnStack: Array<{ id: string; element: HTMLElement | null }> = [];
-let globalKeydownRegistered = false;
 
-export function registerOverlay(id: string, options: { onEscape?: () => void } = {}) {
-  overlayStack.push({ id, onEscape: options.onEscape });
-  ensureGlobalKeydown();
-  return () => {
-    const index = findLastOverlayIndex(id);
-    if (index >= 0) {
-      overlayStack.splice(index, 1);
-    }
-    if (overlayStack.length === 0) {
-      removeGlobalKeydown();
-      globalKeydownRegistered = false;
-    }
-  };
-}
-
-export function isTopOverlay(id: string) {
-  if (overlayStack.length === 0) {
-    return true;
-  }
-  return getTopOverlay()?.id === id;
+/** Keep Harness focus restoration while sharing Escape order with shared menus and dialogs. */
+export function registerOverlay(id: string, options: Pick<Parameters<typeof registerSharedOverlay>[0], 'element' | 'restoreFocus'> & { onEscape?: () => void } = {}) {
+  const unregister = registerSharedOverlay({ id, close: () => options.onEscape?.(), element: options.element, restoreFocus: options.restoreFocus });
+  const dispose = () => { unregister(); registrations.delete(dispose); };
+  registrations.add(dispose);
+  return dispose;
 }
 
 export function registerFocusReturn(id: string, element: HTMLElement | null) {
@@ -52,45 +34,6 @@ function findLastFocusReturnIndex(id: string) {
     }
   }
   return -1;
-}
-
-function findLastOverlayIndex(id: string) {
-  for (let index = overlayStack.length - 1; index >= 0; index -= 1) {
-    if (overlayStack[index]?.id === id) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-function ensureGlobalKeydown() {
-  if (globalKeydownRegistered || typeof window === "undefined") {
-    return;
-  }
-  window.addEventListener("keydown", handleOverlayKeyDown, true);
-  window.addEventListener("keydown", handleOverlayKeyDown);
-  globalKeydownRegistered = true;
-}
-
-function removeGlobalKeydown() {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.removeEventListener("keydown", handleOverlayKeyDown, true);
-  window.removeEventListener("keydown", handleOverlayKeyDown);
-}
-
-function handleOverlayKeyDown(event: KeyboardEvent) {
-  if (event.key !== "Escape") {
-    return;
-  }
-  const top = getTopOverlay();
-  if (!top?.onEscape) {
-    return;
-  }
-  event.preventDefault();
-  event.stopPropagation();
-  top.onEscape();
 }
 
 export function trapFocusInOverlay(event: KeyboardEvent, root: HTMLElement | undefined) {
@@ -130,29 +73,7 @@ function getFocusableElements(root: HTMLElement) {
   )].filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
 }
 
-function getOverlayPriority(id: string) {
-  if (id.startsWith("popover-")) {
-    return 3;
-  }
-  if (id.startsWith("dialog-") || id.startsWith("sheet-")) {
-    return 2;
-  }
-  return 1;
-}
-
-function getTopOverlay() {
-  if (overlayStack.length === 0) {
-    return undefined;
-  }
-  const maxPriority = Math.max(...overlayStack.map((entry) => getOverlayPriority(entry.id)));
-  return [...overlayStack].reverse().find((entry) => getOverlayPriority(entry.id) === maxPriority);
-}
-
 export function clearOverlayStackForTests() {
-  overlayStack.length = 0;
+  for (const unregister of registrations) unregister();
   focusReturnStack.length = 0;
-  if (globalKeydownRegistered) {
-    removeGlobalKeydown();
-    globalKeydownRegistered = false;
-  }
 }

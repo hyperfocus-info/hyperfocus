@@ -13,7 +13,7 @@ export function registerBackgroundThreadRoutingTests(serverTest: ServerTestRegis
                 if (reviewCount > 1) {
                     return {
                         status: "pass",
-                        summary: "Correctness review passed after follow-up.",
+                        summary: "Structural review found no known gaps. Runtime behavior and domain correctness remain unverified.",
                         gaps: []
                     };
                 }
@@ -94,6 +94,11 @@ export function registerBackgroundThreadRoutingTests(serverTest: ServerTestRegis
         expect(followUpDelta.payload.sessionId).toBe(originalThreadId);
         expect(repository.getProject(projectId).activeThreadId).toBe(focusedThreadId);
         await completePromise;
+        const milestones = repository.getThreadMessages(projectId, originalThreadId)
+            .filter((message) => message.kind === "run-milestones")
+            .map((message) => message.content).join("\n");
+        expect(milestones).toContain("Runtime behavior and domain correctness remain unverified.");
+        expect(milestones).not.toContain("Correctness review passed.");
         socket.close();
     }, 15000);
     serverTest("deleting a background streaming thread stops its active agents", async () => {

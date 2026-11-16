@@ -1,0 +1,194 @@
+{
+  "purpose": "Read-only routing simulations. Criteria are evaluator-only; give an independent agent only request and repository access. These are not executed product acceptance tests.",
+  "scenarios": [
+    {
+      "id": "audit-evidence-claims",
+      "request": "Review an existing simulated-user campaign's completion claims and the scripts that produced its screenshots and results. Investigate scalability and testing friction, and explain how to correct unsupported claims without losing evidence. Do not launch apps or edit files.",
+      "requiredPaths": [
+        ".agents/skills/audit-evidence-review/SKILL.md",
+        ".agents/skills/user-audit/references/evidence-reconciliation.md",
+        "docs/package-testing.md"
+      ],
+      "criteria": [
+        "Trace frozen mission and persona through selected attempt, artifact and domain result; receipt count and exit zero cannot establish completion.",
+        "Keep missing acceptance proof distinct from a product failure and preserve raw historical receipts with derived-report corrections.",
+        "Inspect screenshots with result receipts and producing code; simulated modifiers do not establish real accessibility or human preference.",
+        "Choose requested research lenses rather than loading every specialized workflow; attribute interpretations honestly.",
+        "Move recurring producers into checked owners and use meaningful runtime/boundary regressions rather than new generic lint prohibitions."
+      ]
+    },
+    {
+      "id": "game-art-scoped-repair",
+      "request": "Improve Touch of Death's running animation. The forearms were accepted, and the Universal Animation Library adaptation was mostly good but its knees bent strangely. Explain the references, change boundary and verification you would use; do not edit or launch anything.",
+      "requiredPaths": [
+        ".agents/skills/game-art-direction/SKILL.md",
+        ".agents/skills/game-art-direction/references/motion.md",
+        "packages/engine/examples/touch-of-death/docs/touch-of-death-art-constitution.md",
+        "scripts/game-art/README.md",
+        "apps/engine-editor/verification/art-direction/README.md"
+      ],
+      "criteria": [
+        "Preserve v14 forearms, C massing and the broadly liked source-based motion direction; do not regenerate the fighter or restart subjective competition for a local repair.",
+        "Use the actual UAL source comparison, full-cycle signed knee/transition checks and neutral/gameplay/contact rendered evidence; finite transforms and limb length alone are insufficient.",
+        "Run durable constraints through the actual builder, not a comparison to an arbitrary previous candidate; no ignored local database required for preservation.",
+        "Distinguish scoped quality acceptance from full animation approval; no GOLDEN exists and tests do not award one.",
+        "No editor chrome standard, whole-game beautification, permission for authorized objective repairs or premature shared rig extraction."
+      ]
+    },
+    {
+      "id": "new-game-art-direction",
+      "request": "Create a new fantasy game's fighter and arena in Hyperfocus. Existing primitive assets work but there is no approved visual direction. Explain how you would establish and retain coherent art direction; do not create assets yet.",
+      "requiredPaths": [
+        ".agents/skills/game-art-direction/SKILL.md",
+        "scripts/game-art/README.md"
+      ],
+      "criteria": [
+        "Inspect real runtime and existing asset libraries; ask a concrete material taste comparison before detailed work.",
+        "Use cheap silhouette and large-form arena competitions, gameplay-distance rendering and scoped selection before refinement.",
+        "Keep fantasy taste in its own constitution; do not copy Touch of Death's proportions, city palette or workwear as platform defaults.",
+        "Record positive and negative evidence, preserve accepted qualities, distinguish selection/APPROVED/GOLDEN and use the existing review store for requested grading.",
+        "Do not turn unspecified technical constants into owner questions or claim automated checks establish artistic quality."
+      ]
+    },
+    {
+      "id": "tiny-fix",
+      "request": "Fix a whitespace-only parsing bug in packages/workspace/src/path-utils.ts. The bug is local and its regression can use an in-memory fixture. Describe the guidance you would load and the completion boundary; do not edit code.",
+      "requiredPaths": [
+        "AGENTS.md",
+        "packages/workspace/README.md",
+        "docs/code-style.md"
+      ],
+      "criteria": [
+        "Use local source and focused regression; package path in the request may be illustrative, locate actual owner.",
+        "No release gate, UI skill, mandatory TDD, research, or approval for harmless fixture tests.",
+        "Complete repair and affected validation without scope expansion."
+      ]
+    },
+    {
+      "id": "first-party-ui",
+      "request": "Update the editor inspector's selection control to make a long option list searchable while preserving narrow-pane usability. Describe guidance, canonical controls, and evidence needed; do not edit code.",
+      "requiredPaths": [
+        ".agents/skills/app-ui-standard/SKILL.md",
+        "DESIGN.md",
+        "apps/engine-editor/AGENTS.md",
+        "packages/ui/README.md"
+      ],
+      "criteria": [
+        "Use existing SelectControl and shared tokens; inspect current supported API before inventing a widget.",
+        "Use managed server for browser verification and exercise narrow layout, search, keyboard/focus.",
+        "Preserve project mutation/command parity where affected; no full design evolution batch required."
+      ]
+    },
+    {
+      "id": "architecture",
+      "request": "Editor and PadPilot have a repeated credential adapter bug. Evaluate whether their existing shared runtime should own the fix. Describe investigation and completion, without implementing it.",
+      "requiredPaths": [
+        "docs/architecture.md",
+        "packages/ai-runtime/README.md"
+      ],
+      "criteria": [
+        "Check actual shared runtime and named consumers; do not create speculative infrastructure.",
+        "Keep credentials host/runtime-owned and out of portable artifacts/UI.",
+        "Review-only stops at evidence; an implementation request would require both consumer integrations and relevant tests.",
+        "Ask only unresolved product tradeoffs, not locally discoverable facts."
+      ]
+    },
+    {
+      "id": "package-contract",
+      "request": "Add a public export to @hyperfocus/workspace without introducing DOM dependencies. Describe the guidance and validation needed; do not edit code.",
+      "requiredPaths": [
+        "packages/workspace/README.md",
+        "docs/package-testing.md",
+        "docs/architecture.md"
+      ],
+      "criteria": [
+        "Manifest-backed export, declaration/runtime resolution, public consumer test, package build where affected.",
+        "No requirement to load Harness runtime details or engine renderer docs.",
+        "Use public facade in consumer tests and direct owning module in implementation tests."
+      ]
+    },
+    {
+      "id": "release",
+      "request": "Prepare a Harness release candidate for external testing. Publication has not been requested. Describe commands, acceptance, and the authorization boundary; do not package or publish.",
+      "requiredPaths": [
+        ".agents/skills/ship-readiness/SKILL.md",
+        "docs/shipping.md",
+        "docs/distribution.md"
+      ],
+      "criteria": [
+        "Choose Harness product/artifact/journey; inspect ship-check --list and harness --plan.",
+        "Source checks plus extracted launcher and first-use/recovery acceptance for the same candidate.",
+        "No publication/version bump/deployment assumed; safe local preparation need not await a new approval.",
+        "Do not describe planned validation as passed."
+      ]
+    },
+    {
+      "id": "engine",
+      "request": "Fix a game-engine collision regression that changes a hot-loop kernel and its public result. Describe scoped guidance and proportional validation; do not modify source.",
+      "requiredPaths": [
+        "packages/engine/AGENTS.md",
+        "packages/engine/docs/README.md",
+        "packages/engine/readme.md"
+      ],
+      "criteria": [
+        "Engine portability and measured performance constraints; tests/benchmark path depends on kernel.",
+        "No Solid/StyleX first-party chrome standard in engine core.",
+        "Relevant correctness/performance evidence and public consumer verification, not every engine topic preload."
+      ]
+    },
+    {
+      "id": "example",
+      "request": "Change the MMO skill demo's world-building placement behavior. Describe which project guidance applies and how you would verify the result; do not edit.",
+      "requiredPaths": [
+        "packages/engine/examples/mmo-skill-demo/.agents.md",
+        "packages/engine/examples/mmo-skill-demo/.agents/skills/world-building/SKILL.md"
+      ],
+      "criteria": [
+        "Use example-scoped world-building workflow and source discovery, plus engine invariants.",
+        "Preserve world reconstruction/publication and state constraints that apply.",
+        "Exercise the actual placement flow where user-visible; no release or unrelated skill tree preload."
+      ]
+    },
+    {
+      "id": "unknown-taste",
+      "request": "Redesign an editor panel's density. Two existing screenshots disagree, and both are marked implementation candidates with no user approval. Describe how you would proceed before choosing the visual direction.",
+      "requiredPaths": [
+        "DESIGN.md",
+        "docs/documentation-governance.md"
+      ],
+      "criteria": [
+        "Candidates are not approved taste; ask a discriminating concrete comparison question.",
+        "Show/reference alternatives and explain task consequences; continue independent functional inspection.",
+        "Store task-local preference locally; approved reusable product/shared decision belongs at its canonical owner with provenance.",
+        "Do not invent an answer or ask again after a recorded approval covers the choice."
+      ]
+    },
+    {
+      "id": "project-automation",
+      "request": "Import sprites into a saved editor project, create editable animation data, and persist it as one undoable action. Describe transport, guidance and verification; do not mutate a real project.",
+      "requiredPaths": [
+        ".agents/skills/hyperfocus-editor-agent/SKILL.md",
+        "apps/engine-editor/AGENTS.md"
+      ],
+      "criteria": [
+        "Use DOM-free editor commands and canonical validation/history authority.",
+        "Preserve explicit project root, batching/undo, persistence and JSON handoff; browser only for runtime/visual verification.",
+        "Read only needed import/animation references, no comprehensive command catalog preload."
+      ]
+    },
+    {
+      "id": "portable-harness",
+      "request": "Using a packaged Harness installation outside this checkout, capture and audit a user project's page. Describe discovery, tools and completion; do not launch a browser.",
+      "requiredPaths": [
+        "apps/harness/runtime-agents.md",
+        "apps/harness/.agents/skills/screenshot/SKILL.md",
+        "apps/harness/.agents/skills/ui-audit/SKILL.md"
+      ],
+      "criteria": [
+        "Bundled tools and project-declared commands, no monorepo bun run screenshot or inaccessible docs.",
+        "Capture owned browser evidence; distinguish an audit from authority to rewrite or publish.",
+        "Respect project visual identity and existing approvals; material unknown taste requires concrete user input."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@hyperfocus/serialization",
+  "version": "0.0.1",
+  "description": "Portable bounded protobuf codecs for Hyperfocus storage and transport.",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./text": "./src/text.ts",
+    "./http": "./src/http.ts",
+    "./sqlite": "./src/sqlite.ts"
+  },
+  "files": [
+    "src",
+    "schema",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts ./src/text.ts ./src/http.ts --outdir ./dist --target browser --format esm --external @bufbuild/protobuf",
+    "test": "bun test",
+    "generate": "bun scripts/generate.ts",
+    "benchmark": "bun scripts/benchmark.ts",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.13.0"
+  },
+  "devDependencies": {
+    "@hyperfocus/performance": "workspace:*",
+    "@hyperfocus/desktop-runtime": "workspace:*",
+    "@bufbuild/protoc-gen-es": "^2.13.0",
+    "grpc-tools": "^1.13.1"
+  }
+}

@@ -20,7 +20,7 @@ const DEFAULT_LIMIT = 20;
 const HELP_TEXT = `lookup-thread.ts
 
 Usage:
-  bun.cmd .agents/skills/db-data-harnessing/scripts/lookup-thread.ts <thread-id> [--db <path>] [--limit <n>] [--json]
+  bun "<skill>/scripts/lookup-thread.ts" <thread-id> [--db <path>] [--limit <n>] [--json]
 
 Options:
   --db <path>    Override DB path. Default: HARNESS_DB_PATH or ~/.ai-harness-template/harness.db
@@ -124,7 +124,7 @@ function parseArgs(argv: string[]) {
       dbPath,
       json,
       limit
-    } satisfies CliOptions
+    }
   };
 }
 

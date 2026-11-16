@@ -4,7 +4,7 @@ import { RUN_DETAIL_CHUNK_MAX_BYTES, RUN_DETAIL_MAX_BYTES, type AgentRunState } 
 import { createPageCursorError, decodePageCursor, encodePageCursor, isPageCursorError } from "./page-cursor-codec";
 import { workspaceProjectIncarnationSql, workspaceRunIncarnationSql, workspaceThreadIncarnationSql } from "./workspace-page-revisions";
 
-const CHUNK_BYTES = RUN_DETAIL_CHUNK_MAX_BYTES, MAX_ENTRIES = 32, MAX_CACHE_BYTES = 128 * 1024 * 1024, TTL_MS = 5 * 60_000;
+const CHUNK_BYTES = RUN_DETAIL_CHUNK_MAX_BYTES, MAX_ENTRIES = 32, MAX_CACHE_BYTES = 134217728, TTL_MS = 300000;
 type Snapshot = { owner: string; incarnation: string; revision: string; serialized: string; bytes: number; touchedAt: number };
 
 export function readRunDetailOwnerIncarnation(db: Database, projectId: string, threadId: string, runId: string) {

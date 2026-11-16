@@ -1,7 +1,8 @@
-import { describe, expect, it } from "bun:test";
 import { transformAsync } from "@babel/core";
+import { describe,expect,it } from "bun:test";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { isClassAttribute } from "./utils/tests/style-policy";
 
 type AstNode = {
   type: string;
@@ -227,9 +228,6 @@ function readJsxAttributeName(value: unknown) {
   return name?.type === "JSXIdentifier" ? String(name.name ?? "") : undefined;
 }
 
-function isClassAttribute(name: string) {
-  return name === "class" || name === "className" || name === "classList" || /Class$/.test(name);
-}
 
 function readMemberPropertyName(member: AstNode) {
   const property = readAstNode(member.property);

@@ -35,6 +35,14 @@ export function createFatalStartupLogger(options: FatalStartupLoggerOptions = {}
   const now = options.now ?? Date.now;
   let capturedRecord: FatalStartupRecord | undefined;
 
+  function report(line: string) {
+    try {
+      stderrWrite(line);
+    } catch {
+      // Reporting a fatal error must not replace it with an output failure.
+    }
+  }
+
   return (error: unknown, origin: FatalStartupOrigin) => {
     if (capturedRecord) {
       return capturedRecord;
@@ -47,22 +55,25 @@ export function createFatalStartupLogger(options: FatalStartupLoggerOptions = {}
       stack: normalizedError.stack
     };
 
-    stderrWrite(`Fatal ${origin} error: ${record.message}`);
+    capturedRecord = record;
+    report(`Fatal ${origin} error: ${record.message}`);
 
     if (launchMode === "portable-launcher") {
-      const logPath = resolvePortableCrashLogPath(execPath, now());
-      const logDir = path.dirname(logPath);
-      mkdir(logDir);
-      writeFile(logPath, buildFatalStartupLog({ record, launchMode, execPath, cwd, argv }));
-      record.logPath = logPath;
-      stderrWrite(`Crash log: ${logPath}`);
+      try {
+        const logPath = resolvePortableCrashLogPath(execPath, now());
+        mkdir(path.dirname(logPath));
+        writeFile(logPath, buildFatalStartupLog({ record, launchMode, execPath, cwd, argv }));
+        record.logPath = logPath;
+        report(`Crash log: ${logPath}`);
+      } catch {
+        report("Could not write the startup crash log.");
+      }
     }
 
     if (record.stack) {
-      stderrWrite(record.stack);
+      report(record.stack);
     }
 
-    capturedRecord = record;
     return record;
   };
 }
@@ -96,7 +107,7 @@ function buildFatalStartupLog(input: {
 function normalizeFatalStartupError(error: unknown) {
   if (error instanceof Error) {
     const message = hasNodeErrorCode(error, "ENOSPC")
-      ? `${error.message}\nDisk appears full. Free space or clean harness temporary artifacts such as .local/branchfs, .tmp-test-data, and dist/ui, then restart.`
+      ? `${error.message}\nDisk appears full. Free space or clean harness temporary artifacts such as .local/branchfs, .local/test-data, and dist/ui, then restart.`
       : error.message;
     return {
       message,

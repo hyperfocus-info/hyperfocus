@@ -1,3 +1,4 @@
+import { assert } from "@hyperfocus/utilities/assert";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -30,12 +31,6 @@ type EngineModule = {
 const rootDir = join(import.meta.dir, "..");
 const browserBuildPath = join(rootDir, "browser", "engine.js");
 const wasmPath = join(rootDir, "wasm", "collision-kernel.wasm");
-
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
 
 assert(existsSync(browserBuildPath), "browser runtime build is missing; run bun run build first");
 assert(existsSync(wasmPath), "WASM asset is missing");

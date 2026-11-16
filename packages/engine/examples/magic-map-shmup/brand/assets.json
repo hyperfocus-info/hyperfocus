@@ -1,0 +1,59 @@
+{
+  "schema": "hyperfocus-brand-assets-v1",
+  "name": "Magic Map",
+  "source": "symbol:controller",
+  "sourceSha256": "da26f0a41a487907c4d6ee47fb498c5dc13ae8321629866531e014ea641b213b",
+  "customization": "Replace the source logo in brand.json, then regenerate this directory. Do not edit renditions.",
+  "files": [
+    {
+      "path": "logo.svg",
+      "sha256": "da26f0a41a487907c4d6ee47fb498c5dc13ae8321629866531e014ea641b213b",
+      "bytes": 356
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "b15995912ae2ecea638cd8089f5db5079e733bfc93918a8044b627ab4b135b8d",
+      "bytes": 650
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "c645df5d5d19462047bfb7000db9cb98996baf67888e64f43878b336a86f20d4",
+      "bytes": 693
+    },
+    {
+      "path": "favicon-32.png",
+      "sha256": "42dbff6565d4e12aadedb70a49d84bf603163520c50c26c733d1899224c90c7a",
+      "bytes": 671
+    },
+    {
+      "path": "icon-192.png",
+      "sha256": "f656476f709c9f9b8c2e0c6705be3631169ef09a7665d1b4316811a8cb00abc8",
+      "bytes": 3734
+    },
+    {
+      "path": "icon-512.png",
+      "sha256": "b38ecfd5b1e21c78656918a9584449df21c4c7e2b65886f57a8770dd55d3a424",
+      "bytes": 10187
+    },
+    {
+      "path": "maskable-512.png",
+      "sha256": "c8ba65c1093294ea9fc84c39ce1078a69cce03d7b8e08ddc77a9ec76cef5942b",
+      "bytes": 7117
+    },
+    {
+      "path": "apple-touch-icon.png",
+      "sha256": "23078ac084ca1d644904f962531fa36629b46231f7cab8db2ce5c8c4627da962",
+      "bytes": 2783
+    },
+    {
+      "path": "social.png",
+      "sha256": "8da9dc09d8f352d6d4767422783b2d57759668bc3a5ecc7a20a29c9e27af55de",
+      "bytes": 11333
+    },
+    {
+      "path": "site.webmanifest",
+      "sha256": "c09743365ab1260f23985a9b8d9399fa15e55cfe935e9f758174f59298ca633e",
+      "bytes": 494
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { roundDecimal } from "@hyperfocus/utilities/math";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createRenderer } from "../src/client/render.ts";
@@ -138,10 +139,7 @@ function validateBenchConfig(config: BenchConfig) {
   if (!config.out) throw new Error("out must not be empty");
 }
 
-function round(value: number, digits = 3) {
-  const scale = 10 ** digits;
-  return Math.round(value * scale) / scale;
-}
+function round(value: number, digits = 3) { return roundDecimal(value, digits); }
 
 function summarize(values: readonly number[]): Summary {
   if (!values.length) return { min: 0, p50: 0, p95: 0, max: 0, avg: 0 };
@@ -482,7 +480,7 @@ export async function runRenderCallBench(cfg = renderCallBenchConfig()): Promise
   forceBenchmarkGc();
   const heapStart = heapMb();
   for (let frame = 0; frame < totalFrames; frame += 1) {
-    const timeMs = frame * (1000 / 60);
+    const timeMs = frame * (16.666666666666668);
     animateState(state, frame);
     const start = performance.now();
     const operationsBefore = operations();

@@ -1,5 +1,7 @@
+import { HarnessStoreProvider } from "../store-providers";
+import { createHarnessStore } from "../harness-store";
 /** @jsxImportSource solid-js */
-import { beforeEach, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, expect, it, mock } from "bun:test";
 import { createUiTest, requireButton, requireElement } from "../utils/tests/test-harness";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { ProjectSidebar } from "./project-sidebar/project-sidebar";
@@ -10,9 +12,42 @@ import { harnessStore, readProjectSidebarPreferences } from "../harness-store";
 import { OPEN_IDE_WINDOW_EVENT, type OpenIdeWindowInput } from "../lib/ide-window";
 
 createUiTest("ProjectSidebar", () => {
+  const originalBounds = HTMLElement.prototype.getBoundingClientRect;
   beforeEach(() => {
     cleanup();
     clearBrowserStateForTests();
+    // These toolbar tests exercise the expanded desktop layout; Happy DOM has no layout engine.
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.querySelector(":scope > [data-test-button-group]")) return new DOMRect(0, 0, 640, 40);
+      return originalBounds.call(this);
+    };
+  });
+  afterEach(() => { HTMLElement.prototype.getBoundingClientRect = originalBounds; });
+
+  it("keeps navigation commands isolated between two mounted store providers", () => {
+    const first = createHarnessStore();
+    const second = createHarnessStore();
+    const firstProject = createViewProjectFixture({ id: "isolated-first", name: "First provider" });
+    const secondProject = createViewProjectFixture({ id: "isolated-second", name: "Second provider" });
+    first.replaceStateForTests(createHarnessStateFixture({ workspace: { projects: [firstProject] } }));
+    second.replaceStateForTests(createHarnessStateFixture({ workspace: { projects: [secondProject] } }));
+    const firstCommands: unknown[] = [];
+    const secondCommands: unknown[] = [];
+    first.actions.setCommandDispatcher(command => { firstCommands.push(command); });
+    second.actions.setCommandDispatcher(command => { secondCommands.push(command); });
+    render(() => <>
+      <HarnessStoreProvider store={first}><ProjectSidebar /></HarnessStoreProvider>
+      <HarnessStoreProvider store={second}><ProjectSidebar /></HarnessStoreProvider>
+    </>);
+    firstCommands.length = 0;
+    secondCommands.length = 0;
+    fireEvent.click(screen.getByRole("button", { name: "Switch to First provider" }));
+    expect(firstCommands).toContainEqual(expect.objectContaining({ type: "project.activate", payload: { projectId: firstProject.id } }));
+    expect(secondCommands).toHaveLength(0);
+    firstCommands.length = 0;
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Second provider" }));
+    expect(secondCommands).toContainEqual(expect.objectContaining({ type: "project.activate", payload: { projectId: secondProject.id } }));
+    expect(firstCommands).toHaveLength(0);
   });
 
   it("uses shared left pane shell and empty-state presentation", () => {

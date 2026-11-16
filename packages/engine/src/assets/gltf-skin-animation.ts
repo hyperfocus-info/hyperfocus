@@ -1,9 +1,11 @@
+import { isPlainRecord as isJsonRecord } from "@hyperfocus/utilities/records";
 /** Vendor-neutral glTF 2.0 skin and TRS-animation cooking. This module performs no I/O. */
 
 import {
   resolveGltfStaticBuffers,
   type GltfBufferResolverOptions,
 } from "./gltf-static.ts";
+import { invertGltfMatrix4, rebuildGltfPoseMatrices, writeGltfMatrixQuaternion } from "./gltf-pose-overrides.ts";
 import {
   resolveGltfSkinAnimationCookLimits as resolveLimits,
   type GltfSkinAnimationCookLimits,
@@ -70,6 +72,8 @@ export type CookedGltfAnimationClip = {
 
 export type CookedGltfRig = {
   nodeCount: number;
+  /** Stable, unique bone/node identities derived from glTF names with index fallbacks. */
+  nodeIds: readonly string[];
   nodeParents: Int32Array;
   nodeTopologicalOrder: Uint32Array;
   nodeTranslations: Float32Array;
@@ -101,6 +105,8 @@ export type GltfPoseOutput = {
   localMatrices: Float32Array;
   worldMatrices: Float32Array;
 };
+
+/** Model-space rest transforms aligned with `rig.nodeIds`. */ export type GltfRigRestPose = { positions: Float32Array; rotations: Float32Array };
 
 export type EvaluateGltfAnimationOptions = {
   skeleton: number;
@@ -187,6 +193,7 @@ export function cookGltfSkinAnimations(
     }
     const rig: CookedGltfRig = {
       nodeCount: nodes.length,
+      nodeIds: nodeData.nodeIds,
       nodeParents: nodeData.nodeParents,
       nodeTopologicalOrder: nodeData.nodeTopologicalOrder,
       nodeTranslations: nodeData.nodeTranslations,
@@ -239,30 +246,60 @@ export function evaluateGltfAnimationPose(
   pose: GltfPoseOutput,
   palette: Float32Array,
 ): number {
+  resetGltfPose(rig, pose);
+  const sampleTime = applyGltfAnimationClip(rig, options.clip, options.timeSeconds, options.loop === true, pose);
+  writeGltfSkinPalette(rig, { skeleton: options.skeleton, ...(options.meshNode === undefined ? {} : { meshNode: options.meshNode }) }, pose, palette);
+  return sampleTime;
+}
+
+/** Resets caller-owned pose storage to the cooked reference pose. */
+export function resetGltfPose(rig: CookedGltfRig, pose: GltfPoseOutput): void {
   validatePoseOutput(rig, pose);
-  const skeleton = requireIndex(rig.skeletons, options.skeleton, "skeleton");
-  const clip = requireIndex(rig.clips, options.clip, "clip");
-  const time = finite(options.timeSeconds, "timeSeconds");
-  if (!(palette instanceof Float32Array) || palette.length !== skeleton.jointNodes.length * MATRIX_STRIDE) {
-    throw new RangeError(`palette must be a Float32Array with exactly ${skeleton.jointNodes.length * MATRIX_STRIDE} values.`);
-  }
-  assertDistinctPoseStorage(pose, palette);
   pose.translations.set(rig.nodeTranslations);
   pose.rotations.set(rig.nodeRotations);
   pose.scales.set(rig.nodeScales);
-  const sampleTime = resolveSampleTime(time, clip.duration, options.loop === true);
+}
+
+/** Captures portable model-space rest transforms for authoring sockets, IK, and physical rigs. */
+export function inspectGltfRigRestPose(rig: CookedGltfRig): GltfRigRestPose {
+  const pose = createGltfPoseOutput(rig); resetGltfPose(rig, pose); rebuildGltfPoseMatrices(rig, pose);
+  const positions = new Float32Array(rig.nodeCount * 3), rotations = new Float32Array(rig.nodeCount * 4);
+  for (let node = 0; node < rig.nodeCount; node += 1) { const offset = node * MATRIX_STRIDE; positions.set(pose.worldMatrices.subarray(offset + 12, offset + 15), node * 3); writeGltfMatrixQuaternion(pose.worldMatrices, offset, rotations, node * 4); }
+  return { positions, rotations };
+}
+
+/** Applies one clip over the current pose, allowing portable pre-animation corrections before this call. */
+export function applyGltfAnimationClip(rig: CookedGltfRig, clipIndex: number, timeSeconds: number, loop: boolean, pose: GltfPoseOutput): number {
+  validatePoseOutput(rig, pose);
+  const clip = requireIndex(rig.clips, clipIndex, "clip");
+  const sampleTime = resolveSampleTime(finite(timeSeconds, "timeSeconds"), clip.duration, loop);
   for (let channel = 0; channel < clip.channelTargetNodes.length; channel += 1) {
     sampleChannel(clip, channel, sampleTime, pose);
   }
-  for (let orderIndex = 0; orderIndex < rig.nodeTopologicalOrder.length; orderIndex += 1) {
-    const node = rig.nodeTopologicalOrder[orderIndex];
-    const matrixOffset = node * MATRIX_STRIDE;
-    if (rig.nodeMatrixFlags[node] !== 0) copy16(pose.localMatrices, matrixOffset, rig.nodeMatrices, matrixOffset);
-    else composeTrs(pose.localMatrices, matrixOffset, pose.translations, node * 3, pose.rotations, node * 4, pose.scales, node * 3);
-    const parent = rig.nodeParents[node];
-    if (parent === -1) copy16(pose.worldMatrices, matrixOffset, pose.localMatrices, matrixOffset);
-    else multiply4x4(pose.worldMatrices, matrixOffset, pose.worldMatrices, parent * MATRIX_STRIDE, pose.localMatrices, matrixOffset);
-  }
+  return sampleTime;
+}
+
+/** Blends two sampled TRS poses into target storage; palettes are rebuilt after blending. */
+export function blendGltfPoses(rig: CookedGltfRig, from: GltfPoseOutput, to: GltfPoseOutput, weight: number, target: GltfPoseOutput): void {
+  validatePoseOutput(rig, from); validatePoseOutput(rig, to); validatePoseOutput(rig, target);
+  const alpha = Math.max(0, Math.min(1, finite(weight, "pose blend weight")));
+  for (let index = 0; index < target.translations.length; index += 1) target.translations[index] = from.translations[index]! + (to.translations[index]! - from.translations[index]!) * alpha;
+  for (let index = 0; index < target.scales.length; index += 1) target.scales[index] = from.scales[index]! + (to.scales[index]! - from.scales[index]!) * alpha;
+  for (let node = 0; node < rig.nodeCount; node += 1) blendQuaternion(from.rotations, to.rotations, node * 4, alpha, target.rotations);
+}
+
+/** Rebuilds local/world transforms and a mesh-local GPU palette after pose edits or IK. */
+export function writeGltfSkinPalette(
+  rig: CookedGltfRig,
+  options: Pick<EvaluateGltfAnimationOptions, "skeleton" | "meshNode">,
+  pose: GltfPoseOutput,
+  palette: Float32Array,
+): void {
+  validatePoseOutput(rig, pose);
+  const skeleton = requireIndex(rig.skeletons, options.skeleton, "skeleton");
+  if (!(palette instanceof Float32Array) || palette.length !== skeleton.jointNodes.length * MATRIX_STRIDE) throw new RangeError(`palette must be a Float32Array with exactly ${skeleton.jointNodes.length * MATRIX_STRIDE} values.`);
+  assertDistinctPoseStorage(pose, palette);
+  rebuildGltfPoseMatrices(rig, pose);
   let hasMeshInverse = false;
   if (options.meshNode !== undefined) {
     const node = requireNode(rig, options.meshNode, "meshNode");
@@ -272,7 +309,7 @@ export function evaluateGltfAnimationPose(
       if (candidate.nodeIndex === node && candidate.skinIndex === skeleton.skinIndex) { bindingFound = true; break; }
     }
     if (!bindingFound) throw new RangeError(`meshNode ${node} does not reference skin ${skeleton.skinIndex}.`);
-    if (!invert4x4(pose.localMatrices, 0, pose.worldMatrices, node * MATRIX_STRIDE)) throw new Error(`meshNode ${node} world matrix is singular and cannot produce a mesh-local skin palette.`);
+    if (!invertGltfMatrix4(pose.localMatrices, 0, pose.worldMatrices, node * MATRIX_STRIDE)) throw new Error(`meshNode ${node} world matrix is singular and cannot produce a mesh-local skin palette.`);
     hasMeshInverse = true;
   }
   for (let joint = 0; joint < skeleton.jointNodes.length; joint += 1) {
@@ -281,10 +318,10 @@ export function evaluateGltfAnimationPose(
     multiply4x4(palette, targetOffset, pose.worldMatrices, node * MATRIX_STRIDE, skeleton.inverseBindMatrices, targetOffset);
     if (hasMeshInverse) multiply4x4(palette, targetOffset, pose.localMatrices, 0, palette, targetOffset);
   }
-  return sampleTime;
 }
 
 function cookNodes(nodes: unknown[], limits: ResolvedLimits): {
+  nodeIds: string[];
   nodeParents: Int32Array;
   nodeTopologicalOrder: Uint32Array;
   nodeTranslations: Float32Array;
@@ -295,6 +332,8 @@ function cookNodes(nodes: unknown[], limits: ResolvedLimits): {
   outputBytes: number;
 } {
   const count = nodes.length;
+  const nodeIds: string[] = [];
+  const usedNodeIds = new Set<string>();
   const nodeParents = new Int32Array(count); nodeParents.fill(-1);
   const nodeTranslations = new Float32Array(count * 3);
   const nodeRotations = new Float32Array(count * 4);
@@ -304,6 +343,10 @@ function cookNodes(nodes: unknown[], limits: ResolvedLimits): {
   for (let nodeIndex = 0; nodeIndex < count; nodeIndex += 1) {
     const pointer = `/nodes/${nodeIndex}`;
     const node = record(nodes[nodeIndex], pointer, "node-type", "Node must be an object.");
+    const requestedId = typeof node.name === "string" && node.name.trim() ? node.name.trim() : `node-${nodeIndex}`;
+    let nodeId = requestedId;
+    for (let suffix = 2; usedNodeIds.has(nodeId); suffix += 1) nodeId = `${requestedId}-${suffix}`;
+    usedNodeIds.add(nodeId); nodeIds.push(nodeId);
     if (node.weights !== undefined) fail("morph-weights-unsupported", `${pointer}/weights`, "Morph weights are not supported by the skin-animation cooker.");
     const hasMatrix = node.matrix !== undefined;
     if (hasMatrix && (node.translation !== undefined || node.rotation !== undefined || node.scale !== undefined)) {
@@ -338,7 +381,7 @@ function cookNodes(nodes: unknown[], limits: ResolvedLimits): {
     nodeParents.byteLength + nodeTopologicalOrder.byteLength + nodeTranslations.byteLength + nodeRotations.byteLength
       + nodeScales.byteLength + nodeMatrices.byteLength + nodeMatrixFlags.byteLength,
     limits, "/nodes");
-  return { nodeParents, nodeTopologicalOrder, nodeTranslations, nodeRotations, nodeScales, nodeMatrices, nodeMatrixFlags, outputBytes };
+  return { nodeIds, nodeParents, nodeTopologicalOrder, nodeTranslations, nodeRotations, nodeScales, nodeMatrices, nodeMatrixFlags, outputBytes };
 }
 
 function cookSkinStreams(context: CookContext, meshes: unknown[]): CookedGltfSkinStreams[] {
@@ -775,18 +818,6 @@ function topologicalOrder(parents: Int32Array): Uint32Array {
   return output;
 }
 
-function composeTrs(target: Float32Array, offset: number, translations: Float32Array, t: number, rotations: Float32Array, r: number, scales: Float32Array, s: number): void {
-  const x = rotations[r], y = rotations[r + 1], z = rotations[r + 2], w = rotations[r + 3];
-  const sx = scales[s], sy = scales[s + 1], sz = scales[s + 2];
-  const x2 = x + x, y2 = y + y, z2 = z + z;
-  const xx = x * x2, xy = x * y2, xz = x * z2, yy = y * y2, yz = y * z2, zz = z * z2;
-  const wx = w * x2, wy = w * y2, wz = w * z2;
-  target[offset] = (1 - (yy + zz)) * sx; target[offset + 1] = (xy + wz) * sx; target[offset + 2] = (xz - wy) * sx; target[offset + 3] = 0;
-  target[offset + 4] = (xy - wz) * sy; target[offset + 5] = (1 - (xx + zz)) * sy; target[offset + 6] = (yz + wx) * sy; target[offset + 7] = 0;
-  target[offset + 8] = (xz + wy) * sz; target[offset + 9] = (yz - wx) * sz; target[offset + 10] = (1 - (xx + yy)) * sz; target[offset + 11] = 0;
-  target[offset + 12] = translations[t]; target[offset + 13] = translations[t + 1]; target[offset + 14] = translations[t + 2]; target[offset + 15] = 1;
-}
-
 function multiply4x4(target: Float32Array, targetOffset: number, a: Float32Array, aOffset: number, b: Float32Array, bOffset: number): void {
   for (let column = 0; column < 4; column += 1) {
     const b0 = b[bOffset + column * 4], b1 = b[bOffset + column * 4 + 1], b2 = b[bOffset + column * 4 + 2], b3 = b[bOffset + column * 4 + 3];
@@ -795,37 +826,6 @@ function multiply4x4(target: Float32Array, targetOffset: number, a: Float32Array
     target[targetOffset + column * 4 + 2] = a[aOffset + 2] * b0 + a[aOffset + 6] * b1 + a[aOffset + 10] * b2 + a[aOffset + 14] * b3;
     target[targetOffset + column * 4 + 3] = a[aOffset + 3] * b0 + a[aOffset + 7] * b1 + a[aOffset + 11] * b2 + a[aOffset + 15] * b3;
   }
-}
-
-function invert4x4(target: Float32Array, targetOffset: number, source: Float32Array, sourceOffset: number): boolean {
-  const a00 = source[sourceOffset], a01 = source[sourceOffset + 1], a02 = source[sourceOffset + 2], a03 = source[sourceOffset + 3];
-  const a10 = source[sourceOffset + 4], a11 = source[sourceOffset + 5], a12 = source[sourceOffset + 6], a13 = source[sourceOffset + 7];
-  const a20 = source[sourceOffset + 8], a21 = source[sourceOffset + 9], a22 = source[sourceOffset + 10], a23 = source[sourceOffset + 11];
-  const a30 = source[sourceOffset + 12], a31 = source[sourceOffset + 13], a32 = source[sourceOffset + 14], a33 = source[sourceOffset + 15];
-  const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10;
-  const b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12;
-  const b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30;
-  const b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
-  let determinant = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
-  if (!Number.isFinite(determinant) || Math.abs(determinant) <= 1e-12) return false;
-  determinant = 1 / determinant;
-  target[targetOffset] = (a11 * b11 - a12 * b10 + a13 * b09) * determinant;
-  target[targetOffset + 1] = (a02 * b10 - a01 * b11 - a03 * b09) * determinant;
-  target[targetOffset + 2] = (a31 * b05 - a32 * b04 + a33 * b03) * determinant;
-  target[targetOffset + 3] = (a22 * b04 - a21 * b05 - a23 * b03) * determinant;
-  target[targetOffset + 4] = (a12 * b08 - a10 * b11 - a13 * b07) * determinant;
-  target[targetOffset + 5] = (a00 * b11 - a02 * b08 + a03 * b07) * determinant;
-  target[targetOffset + 6] = (a32 * b02 - a30 * b05 - a33 * b01) * determinant;
-  target[targetOffset + 7] = (a20 * b05 - a22 * b02 + a23 * b01) * determinant;
-  target[targetOffset + 8] = (a10 * b10 - a11 * b08 + a13 * b06) * determinant;
-  target[targetOffset + 9] = (a01 * b08 - a00 * b10 - a03 * b06) * determinant;
-  target[targetOffset + 10] = (a30 * b04 - a31 * b02 + a33 * b00) * determinant;
-  target[targetOffset + 11] = (a21 * b02 - a20 * b04 - a23 * b00) * determinant;
-  target[targetOffset + 12] = (a11 * b07 - a10 * b09 - a12 * b06) * determinant;
-  target[targetOffset + 13] = (a00 * b09 - a01 * b07 + a02 * b06) * determinant;
-  target[targetOffset + 14] = (a31 * b01 - a30 * b03 - a32 * b00) * determinant;
-  target[targetOffset + 15] = (a20 * b03 - a21 * b01 + a22 * b00) * determinant;
-  return true;
 }
 
 function slerpQuaternion(target: Float32Array, targetOffset: number, values: Float32Array, left: number, right: number, alpha: number): void {
@@ -843,6 +843,15 @@ function slerpQuaternion(target: Float32Array, targetOffset: number, values: Flo
   target[targetOffset + 2] = az * leftWeight + bz * rightWeight;
   target[targetOffset + 3] = aw * leftWeight + bw * rightWeight;
   normalizeQuaternion(target, targetOffset, "evaluated rotation");
+}
+
+function blendQuaternion(from: Float32Array, to: Float32Array, offset: number, alpha: number, target: Float32Array): void {
+  const ax = from[offset]!, ay = from[offset + 1]!, az = from[offset + 2]!, aw = from[offset + 3]!;
+  let bx = to[offset]!, by = to[offset + 1]!, bz = to[offset + 2]!, bw = to[offset + 3]!;
+  if (ax * bx + ay * by + az * bz + aw * bw < 0) { bx = -bx; by = -by; bz = -bz; bw = -bw; }
+  target[offset] = ax + (bx - ax) * alpha; target[offset + 1] = ay + (by - ay) * alpha;
+  target[offset + 2] = az + (bz - az) * alpha; target[offset + 3] = aw + (bw - aw) * alpha;
+  normalizeQuaternion(target, offset, "blended rotation");
 }
 
 function normalizeQuaternion(values: Float32Array, offset: number, pointer: string): void {
@@ -912,10 +921,6 @@ function concatenate(chunks: Float32Array[], total: number): Float32Array {
   return output;
 }
 
-function copy16(target: Float32Array, targetOffset: number, source: Float32Array, sourceOffset: number): void {
-  for (let index = 0; index < 16; index += 1) target[targetOffset + index] = source[sourceOffset + index];
-}
-
 function addOutputBytes(current: number, addition: number, limits: ResolvedLimits, pointer: string): number {
   return checkedAdd(current, addition, limits.maxOutputBytes, pointer, "output-byte-limit", "Cooked output bytes");
 }
@@ -930,11 +935,7 @@ function enforceCount(value: number, maximum: number, pointer: string, code: str
   if (value > maximum) fail(code, pointer, `${label} count ${value} exceeds limit ${maximum}.`);
 }
 
-function isJsonRecord(value: unknown): value is JsonRecord {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+
 
 function record(value: unknown, pointer: string, code: string, message: string): JsonRecord {
   if (!isJsonRecord(value)) fail(code, pointer, message);

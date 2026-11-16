@@ -1,3 +1,4 @@
+import { clamp01Or as clamp01 } from "@hyperfocus/utilities/math";
 export type ThreeIndicatorColor = string | number;
 export type ThreeIndicatorVec3 = readonly [number, number, number];
 export type ThreeIndicatorVec2 = readonly [number, number];
@@ -357,9 +358,4 @@ function positiveFinite(value: number, label: string) {
 function integerAtLeast(value: number, min: number, label: string) {
   if (!Number.isInteger(value) || value < min) throw new Error(`${label} must be an integer >= ${min}`);
   return value;
-}
-
-function clamp01(value: number) {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, value));
 }

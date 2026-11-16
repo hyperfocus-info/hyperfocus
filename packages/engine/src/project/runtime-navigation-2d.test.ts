@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { PlayableProject2D } from "./runtime-2d-contracts.ts";
-import { playableBehaviorDefinition2D } from "./runtime-2d-support.ts";
-import { createPlayableWorld } from "./runtime-world-2d.ts";
+import type { PlayableProject2D } from "./runtime2d/runtime-2d-contracts.ts";
+import { playableBehaviorDefinition2D } from "./runtime2d/runtime-2d-support.ts";
+import { createPlayableWorld } from "./runtime2d/runtime-world-2d.ts";
 import { auditNavigationProject2D, createNavigationBehaviorRegistry2D } from "./runtime-navigation-2d.ts";
 
 function project(): PlayableProject2D {

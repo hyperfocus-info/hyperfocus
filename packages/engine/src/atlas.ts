@@ -1,3 +1,4 @@
+import { isPlainRecord as isRecord } from "@hyperfocus/utilities/records";
 export type TextureAtlasRect = {
   x: number;
   y: number;
@@ -200,11 +201,7 @@ export function createTextureAtlas(json: unknown, image?: CanvasImageSource): Te
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
   if (!isRecord(value)) throw new TypeError(`${label} must be a plain object`);

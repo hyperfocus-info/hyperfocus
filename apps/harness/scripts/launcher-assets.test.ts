@@ -17,6 +17,18 @@ describe("launcher assets", () => {
     writeFileSync(path.join(repoRoot, "agents.md"), "# Agents\n");
     writeFileSync(path.join(repoRoot, ".agents", "skills", "assistant-actions", "SKILL.md"), "# assistant-actions\n");
     writeFileSync(path.join(repoRoot, ".agents", "skills", "grill-me", "SKILL.md"), "# grill-me\n");
+    const sourceScripts = path.join(repoRoot, ".agents", "skills", "assistant-actions", "scripts");
+    mkdirSync(path.join(sourceScripts, "__pycache__"), { recursive: true });
+    writeFileSync(path.join(sourceScripts, "__pycache__", "helper.cpython-312.pyc"), "generated");
+    writeFileSync(path.join(sourceScripts, "helper.pyo"), "generated");
+    writeFileSync(path.join(sourceScripts, "compiled.pyc"), "generated");
+    writeFileSync(path.join(sourceScripts, "helper.py"), "print('source')\n");
+    for (const directory of [".local", ".git", "node_modules"]) {
+      mkdirSync(path.join(sourceScripts, directory), { recursive: true });
+      writeFileSync(path.join(sourceScripts, directory, "private-state"), "fixture local state");
+    }
+    writeFileSync(path.join(sourceScripts, ".env"), "FIXTURE_VALUE=local\n");
+    writeFileSync(path.join(sourceScripts, ".env.example"), "FIXTURE_VALUE=\n");
 
     try {
       await copyLauncherRuntimeAssets(repoRoot, targetDir);
@@ -24,6 +36,16 @@ describe("launcher assets", () => {
       expect(existsSync(path.join(targetDir, "bin", process.platform === "win32" ? "rg.exe" : "rg"))).toBe(true);
       expect(existsSync(path.join(targetDir, ".agents", "skills", "assistant-actions", "SKILL.md"))).toBe(true);
       expect(existsSync(path.join(targetDir, ".agents", "skills", "grill-me", "SKILL.md"))).toBe(true);
+      const bundledScripts = path.join(targetDir, ".agents", "skills", "assistant-actions", "scripts");
+      expect(existsSync(path.join(bundledScripts, "__pycache__"))).toBe(false);
+      expect(existsSync(path.join(bundledScripts, "helper.pyo"))).toBe(false);
+      expect(existsSync(path.join(bundledScripts, "compiled.pyc"))).toBe(false);
+      expect(readFileSync(path.join(bundledScripts, "helper.py"), "utf8")).toBe("print('source')\n");
+      for (const directory of [".local", ".git", "node_modules"]) {
+        expect(existsSync(path.join(bundledScripts, directory))).toBe(false);
+      }
+      expect(existsSync(path.join(bundledScripts, ".env"))).toBe(false);
+      expect(readFileSync(path.join(bundledScripts, ".env.example"), "utf8")).toBe("FIXTURE_VALUE=\n");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

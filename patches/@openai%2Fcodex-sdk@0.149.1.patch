@@ -1,0 +1,17 @@
+diff --git a/dist/index.js b/dist/index.js
+index 062039c2610107095bd7a254bdebd6fcf7e15fc6..f898fc61b6a2d40cad8fbdd53e6ac74545a6c6d2 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -260,10 +260,10 @@ var CodexExec = class {
+     if (this.pathDirs.length > 0) {
+       prependPathDirs(env, this.pathDirs);
+     }
+-    const child = spawn(this.executablePath, commandArgs, {
++    const child = spawn(this.executablePath, commandArgs, { ...{
+       env,
+       signal: args.signal
+-    });
++    }, windowsHide: true });
+     let spawnError = null;
+     child.once("error", (err) => spawnError = err);
+     if (!child.stdin) {

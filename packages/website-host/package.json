@@ -1,0 +1,27 @@
+{
+  "name": "@hyperfocus/website-host",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./development-auth": "./src/development-auth.ts",
+    "./delivery": "./src/delivery/index.ts",
+    "./delivery/cli": "./src/delivery/cli.ts",
+    "./approval-policy": "./src/approval-policy.ts",
+    "./mute": "./src/mute.ts",
+    "./text-channel": "./src/text-channel.ts",
+    "./twilio": "./src/twilio.ts",
+    "./http": "./src/http.ts",
+    "./oidc": "./src/oidc.ts",
+    "./oidc-provider": "./src/oidc-provider.ts",
+    "./oidc-session": "./src/oidc-session.ts",
+    "./local-capability": "./src/local-capability.ts"
+  },
+  "dependencies": {
+    "@hyperfocus/desktop-runtime": "workspace:*",
+    "jose": "6.2.13",
+    "twilio": "6.2.0",
+    "zod": "3.25.76"
+  }
+}

@@ -190,7 +190,7 @@ function createContract(task: ComplexTask, ownedPath: string, deliverable: strin
     deliverables: [deliverable],
     integrationPoints: ["Aggregator summary"],
     verificationScope: "owned-files-only",
-    verificationCommands: ["echo verified"],
+    verificationCommands: ["bun --version"],
     mergeNotes: "No merge conflicts expected."
   };
 }
@@ -220,7 +220,8 @@ function createComplexPrerequisiteResult(
           : "Create shared scaffold before fan-out",
         reason: "Subagents need shared setup first",
         requiredForTaskIds: ["task-1", "task-2"],
-        owner: shouldUseAliasedOwner ? "user" : "main"
+        owner: shouldUseAliasedOwner ? "user" : "main",
+        verificationCommands: ["bun --version"]
       }
     ],
     subtasks: tasks,

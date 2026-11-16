@@ -1,7 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
+import { existsSync,mkdirSync,readFileSync,writeFileSync } from "node:fs";
 import path from "node:path";
-import { buildBunTestPlan, stripFlag } from "./test-runner";
-import { buildDefaultTestSegments, shouldUseDefaultTestSegments, type TestSegment } from "./test-segments";
+import { buildBunTestPlan,stripFlag } from "./testing/test-runner";
+import { buildDefaultTestSegments,shouldUseDefaultTestSegments,type TestSegment } from "./testing/test-segments";
+import { decodeXml,normalizeFilePath,parseOptionalPositiveInteger,parseXmlAttributes,roundDuration,toOptionalNumber } from "./tests/junit-values";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const profileDir = path.join(repoRoot, ".local", "profiles", "tests");
@@ -32,7 +34,7 @@ const segmentExitCodes = await Promise.all(defaultSegments.map(async (segment, i
     console.log(`[test:profile] ${segment.name}`);
   }
   const segmentStart = performance.now();
-  const profiledTestProcess = Bun.spawn({
+  const profiledTestProcess = spawnBackgroundProcess({
     cmd: [
       process.execPath,
       "test",
@@ -196,11 +198,6 @@ function mergeParsedReports(reports: ParsedReport[]): ParsedReport {
   return { tests, files };
 }
 
-function parseXmlAttributes(attributesText: string) {
-  return Object.fromEntries(
-    Array.from(attributesText.matchAll(/([A-Za-z_:][-A-Za-z0-9_:.]*)="([^"]*)"/g), ([, key, value]) => [key, value])
-  );
-}
 
 function buildMarkdownSummary(report: ParsedReport) {
   const lines = [
@@ -223,40 +220,4 @@ function printSummary(report: ParsedReport) {
   for (const record of report.tests.slice(0, 10)) {
     console.log(`[test:profile] ${record.durationMs}ms ${record.file}:${record.line ?? "?"} :: ${record.name} [${record.status}]`);
   }
-}
-
-function decodeXml(value: string) {
-  return value
-    .replaceAll("&quot;", "\"")
-    .replaceAll("&apos;", "'")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&");
-}
-
-function normalizeFilePath(filePath: string) {
-  return filePath.replaceAll("\\", "/");
-}
-
-function roundDuration(durationMs: number) {
-  return Number(durationMs.toFixed(2));
-}
-
-function toOptionalNumber(value: string | undefined) {
-  if (!value) {
-    return undefined;
-  }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function parseOptionalPositiveInteger(rawValue: string | undefined) {
-  if (!rawValue) {
-    return undefined;
-  }
-  const parsed = Number.parseInt(rawValue, 10);
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return undefined;
-  }
-  return parsed;
 }

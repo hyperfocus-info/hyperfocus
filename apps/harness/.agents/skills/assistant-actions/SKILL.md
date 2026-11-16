@@ -1,62 +1,40 @@
 ---
 name: assistant-actions
-description: Master runbook for chat-driven harness assistant actions. Use when Codex needs to handle assistant requests from project chat, inspect assistant state, answer assistant job or queue questions, manage assistant todos/questions/learnings/logs, create or clone assistants, create/list/run assistant-owned background jobs, or recover paused, failed, or circuit-tripped assistants.
+description: Inspect or manage Harness assistants and their jobs, todos, questions, and recovery state. Use for Harness assistant operations; thread-history forensics uses db-data-harnessing and ordinary project work does not use this skill.
 ---
 
-# Assistant Actions
+# Assistant actions
 
-Use this skill as the entrypoint for assistant work that should be doable from project chat.
+Use the bundled helpers or live Harness actions for assistant state. Do not create
+ad hoc database clients or write assistant-management code into the user's project.
+If an operation is unsupported, report the missing capability; change the installed
+helpers only when skill maintenance is part of the task.
 
-## Scope Guard
+Resolve helper paths from this file's directory, shown as `<skill>` below. The
+database defaults to `~/.ai-harness-template/harness.db`; `HARNESS_DB_PATH` or
+`--db` can select another file.
 
-Assistant management must run through this skill's referenced workflow and bundled scripts. That includes assistant state lookup, creation/config changes, todos, questions, learnings, logs, assistant-owned jobs, pause/resume, recovery, and circuit-breaker work.
-
-Do not create ad hoc project-space scripts, DB clients, migrations, helpers, or app code to inspect or mutate assistant state. If the bundled scripts cannot perform a needed assistant-management action, extend the scripts under `.agents/skills/assistant-actions/scripts` or the matching runbook docs instead, then run `runbook-check.ts`.
-
-Project work may still add normal project scripts when the user asks for project automation or implementation, but those scripts must not manage assistants or mutate harness assistant state.
-
-## Start
-
-1. Read [action-index.md](references/action-index.md).
-2. Resolve the assistant target with [assistant-selection.md](references/assistant-selection.md).
-3. If the request asks for current state, run [assistant-state.ts](scripts/assistant-state.ts) before guessing.
-4. For any mutation, check [operation-handoffs.md](references/operation-handoffs.md) before acting.
-5. Load only the branch doc needed for the action.
-
-## Branches
-
-- Create, edit, clone, or configure assistants: [create-configure.md](references/create-configure.md)
-- Chat, todos, questions, or learnings: [chat-todos-questions.md](references/chat-todos-questions.md)
-- Assistant-owned background jobs: [jobs.md](references/jobs.md)
-- Queued/open/learned/logged/status questions: [state-reporting.md](references/state-reporting.md)
-- Pause, resume, bootstrap retry, failures, or circuit breakers: [recovery.md](references/recovery.md)
-- Missing assistant, scope, project, schedule, or action target: [clarification-policy.md](references/clarification-policy.md)
-- Exact operation handoffs: [operation-handoffs.md](references/operation-handoffs.md)
-
-## Script Rule
-
-For deterministic state lookup, prefer:
-
-```powershell
-bun.cmd .agents/skills/assistant-actions/scripts/assistant-state.ts --assistant "<name-or-id>" --project "<name-or-id>" --limit 10
+```text
+bun "<skill>/scripts/assistant-state.ts" --assistant "<name-or-id>" --project "<name-id-or-root>" --limit 10
 ```
 
-Use `--json` when another script or agent needs machine-readable output.
+Use `--json` for structured output and `--help` for supported options. Resolve the
+target from the request and current project; read [selection](references/assistant-selection.md)
+when scope or matching is unclear. State questions require current saved evidence.
 
-For bulk pause or assistant-job launch planning, use:
+For a mutation, use the exact live action or helper in
+[operation handoffs](references/operation-handoffs.md). Run maintenance without
+`--execute` first, inspect its targets and effects, then execute within existing
+authorization. A matching dry run does not require another user confirmation.
+Verify the affected state afterward; an accepted request is not proof of completion.
 
-```powershell
-bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action pause-assistants --project "<project-name-or-id>"
-bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action resume-assistants --project "<project-name-or-id>"
-bun.cmd .agents/skills/assistant-actions/scripts/assistant-maintenance.ts --action start-jobs --assistant "<name-or-id>" --project "<project-name-or-id>"
-```
+Load only the action-specific detail needed:
 
-Dry-run first. Use `--execute` only after matched assistants/jobs are correct.
+- [Create/configure](references/create-configure.md): creation, field edits, cloning, removal.
+- [Chat/todos/questions](references/chat-todos-questions.md): messages and linked work.
+- [Jobs](references/jobs.md): schedules, bulk starts, removal, and live launch gates.
+- [State reporting](references/state-reporting.md): interpreting saved state.
+- [Recovery](references/recovery.md): pause, bootstrap, and circuit breakers.
 
-## Companion Workflows
-
-- Use `db-data-harnessing` when the task is mainly SQLite/thread persistence investigation instead of a normal assistant action.
-- Use `screenshot` when validating the Assistants or Jobs surfaces visually.
-- Normal assistant maintenance operates on the real harness database after dry-run
-  confirmation. Product source changes belong in a Hyperfocus source checkout, not
-  in an opened user project.
+Keep unrelated jobs running. Bulk project operations exclude global assistants
+unless explicitly named; workspace-wide mutations need explicit workspace scope.

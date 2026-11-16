@@ -5,6 +5,41 @@ import { describe, expect, test } from "bun:test";
 import { createFatalStartupLogger } from "./fatal-startup-log";
 
 describe("fatal startup logger", () => {
+  test.each(["mkdir", "writeFile"] as const)("preserves the original error when %s fails", (failure) => {
+    const lines: string[] = [];
+    let attempts = 0;
+    const fail = () => { attempts++; throw new Error("disk unavailable"); };
+    const logger = createFatalStartupLogger({
+      launchMode: "portable-launcher",
+      stderrWrite: line => { lines.push(line); },
+      mkdir: failure === "mkdir" ? fail : () => {},
+      writeFile: failure === "writeFile" ? fail : () => {}
+    });
+    const original = new Error("original startup failure");
+    const record = logger(original, "startup");
+    expect(record).toMatchObject({ origin: "startup", message: original.message, stack: original.stack });
+    expect(record.logPath).toBeUndefined();
+    expect(lines).toContain("Could not write the startup crash log.");
+    expect(lines.at(-1)).toBe(original.stack);
+    expect(logger(new Error("second failure"), "uncaughtException")).toBe(record);
+    expect(attempts).toBe(1);
+  });
+
+  test("still writes the crash log when stderr is unavailable", () => {
+    let contents = "";
+    const logger = createFatalStartupLogger({
+      launchMode: "portable-launcher",
+      stderrWrite: () => { throw new Error("broken pipe"); },
+      mkdir: () => {},
+      writeFile: (_path, value) => { contents = value; }
+    });
+    const record = logger(new Error("original startup failure"), "startup");
+    expect(record.message).toBe("original startup failure");
+    expect(record.logPath).toBeDefined();
+    expect(contents).toContain("original startup failure");
+    expect(logger(new Error("second failure"), "unhandledRejection")).toBe(record);
+  });
+
   test("portable launcher writes crash log and prints path", () => {
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), "pi-harness-fatal-log-"));
     const stderrLines: string[] = [];

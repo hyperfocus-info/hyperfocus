@@ -1,6 +1,8 @@
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
+import { isWebsiteArchiveCode } from './source-artifacts';
 
 export const PRODUCTION_SOURCE_LINE_LIMIT = 1_000;
 export const TEST_SOURCE_LINE_LIMIT = 1_500;
@@ -72,7 +74,7 @@ export function countPhysicalLines(source: string) {
 
 export function getSourceLineLimit(filePath: string) {
   const normalized = normalizeSourcePath(filePath);
-  if (!SOURCE_FILE_PATTERN.test(normalized)) return undefined;
+  if (!SOURCE_FILE_PATTERN.test(normalized) || isWebsiteArchiveCode(normalized)) return undefined;
   if (/\/proto\/generated\/[^/]+-pb\.ts$/i.test(normalized)) return undefined;
   if (/\.data\.ts$/i.test(normalized)) return DATA_CATALOG_SOURCE_LINE_LIMIT;
   if (TEST_FILE_PATTERN.test(normalized)) return TEST_SOURCE_LINE_LIMIT;
@@ -410,7 +412,7 @@ export async function collectExistingSourceStructure(
 }
 
 async function main() {
-  const result = Bun.spawnSync({
+  const result = spawnBackgroundProcessSync({
     cmd: ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
     stdout: "pipe",
     stderr: "inherit"
@@ -516,9 +518,7 @@ function requireMetadata(value: Record<string, unknown>, field: string, filePath
   return metadata;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import { isRecord } from '@hyperfocus/utilities/records';
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error && error.code === "ENOENT";

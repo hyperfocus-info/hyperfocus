@@ -1,3 +1,5 @@
+import { positiveInteger } from "./arguments/low-level.ts";
+import { roundDecimal } from "@hyperfocus/utilities/math";
 // Serial diagnostic spikes; run in isolation so workloads do not contend.
 import { dirname, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
@@ -260,7 +262,7 @@ function particleLayoutWorkloads(count: number, frames: number) {
         return checksum();
       }
     }
-  } satisfies Record<string, Workload>;
+  };
 }
 
 function spatialQueryWorkloads(entityCount: number, queryCount: number) {
@@ -307,7 +309,7 @@ function spatialQueryWorkloads(entityCount: number, queryCount: number) {
         return hits;
       }
     }
-  } satisfies Record<string, Workload>;
+  };
 }
 
 function renderRecordWorkloads(recordCount: number, frames: number) {
@@ -410,7 +412,7 @@ function renderRecordWorkloads(recordCount: number, frames: number) {
         return checksum;
       }
     }
-  } satisfies Record<string, Workload>;
+  };
 }
 
 function parseOptions(argv: string[]) {
@@ -439,11 +441,7 @@ function integerArgument(argv: readonly string[], name: string, fallback: number
   return positiveInteger(name, argument(argv, name, String(fallback)));
 }
 
-function positiveInteger(name: string, value: string) {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new RangeError(`--${name} must contain positive safe integers.`);
-  return parsed;
-}
+
 
 function percentile(values: readonly number[], ratio: number) {
   const sorted = [...values].sort((left, right) => left - right);
@@ -454,6 +452,4 @@ function percentDelta(value: number, baseline: number) {
   return round((value - baseline) / Math.max(0.001, baseline) * 100);
 }
 
-function round(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
+function round(value: number) { return roundDecimal(value, 3); }

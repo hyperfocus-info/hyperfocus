@@ -42,6 +42,15 @@ Mesh and RGBA8 texture arrays are borrowed, not copied. The caller must keep the
 
 Use `scene.destroyTransform` when a transform may be referenced by an instance. Directly destroying through `scene.transforms` is permitted for low-level control; compilation detects the dangling instance and reports it in `invalidTransformInstances` instead of reading invalid memory.
 
+`scene.setInstancePresentation(instance, mesh, material, visible)` applies the same
+mesh/material/visibility sequence as the individual setters, including restoring
+the mesh's registered bounds. It checks live registry storage before skipping
+unchanged static fields, so external visibility/bounds edits and invalid handles
+remain observable. Skinned meshes retain joint-range and skeleton validation.
+This is a positional hot-path operation, not an atomic transaction or a snapshot.
+The portable 3D runtime uses it with retained authored bindings; full save and
+rollback snapshots remain separate from presentation caches.
+
 Materials choose `shading: "unlit" | "lit"`, may reference one `baseColorTexture`, and accept opaque or alpha-mask state. Blended transparency is deliberately deferred until the command model owns a deterministic depth policy. Light records now include ambient, directional, point, and spot kinds; backend support is reported separately.
 
 ## Skeletal skinning contract

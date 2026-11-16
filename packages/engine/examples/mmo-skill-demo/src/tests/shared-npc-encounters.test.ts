@@ -178,7 +178,7 @@ test("MMO Skill Demo keeps shared-world hostile spawns beyond town safe screens"
   const townCenters = mmoSkillDemoRegionConfig.anchors
     .filter((anchor) => anchor.kind === "town" || anchor.id === "obsidian-sanctum")
     .map((anchor) => ({ id: anchor.id, x: anchor.tileX * TILE + TILE * 0.5, y: anchor.tileY * TILE + TILE * 0.5 }));
-  const minDistance = 960 * 1.5;
+  const minDistance = 1440;
   const world = createMmoSkillDemoState();
   const offenders = Object.values(world.npcs)
     .filter((npc) => !supportRoles.has(npc.role) && npc.role !== "boss-node")
@@ -531,7 +531,7 @@ test("MMO Skill Demo 10-player Flurry boss benchmark stays under the server fram
       await server.receiveInput(player.id, { action: "r", aimX: boss.x, aimY: boss.y });
     }
     const start = performance.now();
-    await server.tick(1 / 60);
+    await server.tick(0.016666666666666666);
     let bytes = 0;
     for (const join of joins) {
       const snapshot = mmoSkillDemoZone.getSnapshot!(room.ctx, join.player!);

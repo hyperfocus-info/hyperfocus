@@ -1,3 +1,5 @@
+import { isFiniteNumber } from "@hyperfocus/utilities/math";
+import { isRecord as isJsonRecord } from "@hyperfocus/utilities/records";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -234,13 +236,9 @@ function isBone(object: Object3D): object is Bone {
   return "isBone" in object && object.isBone === true;
 }
 
-function isJsonRecord(value: unknown): value is JsonRecord {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
+
+
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");

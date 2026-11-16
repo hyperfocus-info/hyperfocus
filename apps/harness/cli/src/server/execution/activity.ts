@@ -17,7 +17,7 @@ import { registerBrowserApprovalWaiter } from "./browser-approval-waiters";
 import { acquireHarnessBrowserCapacity, releaseHarnessBrowserCapacity } from "../../execution-runtime";
 
 type ExecutionActivityCallbacksInput = {
-  ws: Bun.ServerWebSocket<HarnessConnection>;
+  ws: import("../transport/events").ControlEventSocket;
   requestId: string;
   runtime: WorkspaceRuntimeStore;
   repository: WorkspaceRepository;
@@ -42,13 +42,24 @@ export function createExecutionActivityCallbacks(input: ExecutionActivityCallbac
 
 function recordExecutionActivity(input: ExecutionActivityCallbacksInput, eventInput: ExecutionEventInput) {
   const { ws, requestId, runtime, repository, projectId, runId, connections, recordRunMilestone } = input;
+  if (eventInput.event.type === "provider-capacity") {
+    const event = eventInput.event;
+    const state = runtime.getExecutionState(projectId, { runId, kind: eventInput.owner, subagentId: eventInput.subagentId });
+    if (state) runtime.setExecutionState(projectId, { ...state,
+      phase: event.state === "queued" ? "queued" : event.state === "acquired" ? "api-starting" : "failed",
+      lastProgressAt: Date.now() });
+    recordRunMilestone(event.state === "queued"
+      ? `Queued for ${event.provider} capacity; execution has not started.`
+      : `${event.provider} capacity ${event.state}; waited ${(event.waitMs / 1000).toFixed(1)}s.`);
+    return;
+  }
   if (eventInput.event.type === "tool-end") {
     releaseHarnessBrowserCapacity(
       browserCapacityKey(runId, eventInput.owner, eventInput.subagentId, eventInput.event.toolCallId)
     );
   }
   const persistedRun = repository.getRun(projectId, runId);
-  if (!persistedRun || eventInput.event.type === "session-created" || eventInput.event.type === "activity") {
+  if (!persistedRun || eventInput.event.type === "session-created" || eventInput.event.type === "activity" || eventInput.event.type === "context-delivery") {
     return;
   }
 

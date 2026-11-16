@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { resolveHarnessDbPath } from "./harness-db-path";
 
@@ -22,7 +22,7 @@ const DEFAULT_LIMIT = 10;
 const HELP_TEXT = `assistant-jobs.ts
 
 Usage:
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-jobs.ts [--assistant <name-or-id>] [--project <name-or-id-or-root>] [--db <path>] [--limit <n>] [--json]
+  bun "<skill>/scripts/assistant-jobs.ts" [--assistant <name-or-id>] [--project <name-or-id-or-root>] [--db <path>] [--limit <n>] [--json]
 
 Options:
   --assistant <value>  Optional assistant id or exact/fuzzy name
@@ -118,7 +118,7 @@ export function buildAssistantJobsReport(options: AssistantJobsOptions) {
   const db = new Database(options.dbPath, { readonly: true });
   try {
     const project = options.project ? resolveProject(db, options.project) : undefined;
-    const assistantMatches = options.assistant ? resolveAssistants(db, options.assistant, project?.id) : [];
+    const assistantMatches = options.assistant ? resolveAssistants(db, options.assistant, project ? String(project.id) : undefined) : [];
     if (options.assistant && assistantMatches.length !== 1) {
       return {
         lookup: {
@@ -133,7 +133,7 @@ export function buildAssistantJobsReport(options: AssistantJobsOptions) {
 
     const assistant = assistantMatches[0];
     const recentRuns = db
-      .query(
+      .query<Row, SQLQueryBindings[]>(
         `SELECT
            r.id, r.job_id, r.project_id, p.name AS project_name, p.root_path AS project_root_path,
            COALESCE(r.assistant_id, j.assistant_id) AS assistant_id, a.name AS assistant_name,
@@ -149,7 +149,7 @@ export function buildAssistantJobsReport(options: AssistantJobsOptions) {
          ORDER BY COALESCE(r.updated_at, r.completed_at, r.started_at, r.queued_at) DESC
          LIMIT ?3`
       )
-      .all(project?.id ?? null, assistant?.id ?? null, options.limit) as Row[];
+      .all(project ? String(project.id) : null, assistant ? String(assistant.id) : null, options.limit);
 
     return {
       lookup: {
@@ -167,15 +167,15 @@ export function buildAssistantJobsReport(options: AssistantJobsOptions) {
   }
 }
 
-export function renderAssistantJobsReport(report: Row) {
+export function renderAssistantJobsReport(report: ReturnType<typeof buildAssistantJobsReport>) {
   const lines: string[] = [];
-  const lookup = report.lookup as Row;
+  const lookup = report.lookup;
   lines.push("assistant-jobs recent");
   lines.push(`status: ${lookup.status}`);
   lines.push(`db: ${lookup.dbPath}`);
 
   if (lookup.status !== "ok") {
-    const matches = report.matches as Row[] | undefined;
+    const matches = report.matches;
     lines.push("");
     lines.push(lookup.status === "missing" ? "No matching assistant." : "Multiple matching assistants.");
     for (const match of matches ?? []) {
@@ -195,7 +195,7 @@ export function renderAssistantJobsReport(report: Row) {
     lines.push(renderObject(report.assistant, 2));
   }
 
-  const recentRuns = report.recentRuns as Row[] | undefined;
+  const recentRuns = report.recentRuns;
   lines.push("");
   lines.push(`recentRuns: ${recentRuns?.length ?? 0}`);
   for (const run of recentRuns ?? []) {
@@ -208,13 +208,13 @@ export function renderAssistantJobsReport(report: Row) {
 function resolveAssistants(db: Database, assistant: string, projectId: string | undefined) {
   const needle = assistant.trim().toLowerCase();
   const rows = db
-    .query(
+    .query<Row, SQLQueryBindings[]>(
       `SELECT a.id, a.name, a.scope, a.project_id, a.run_state, a.bootstrap_state, a.deleted_at, p.name AS project_name
        FROM assistants a
        LEFT JOIN projects p ON p.id = a.project_id
        WHERE a.deleted_at IS NULL`
     )
-    .all() as Row[];
+    .all();
   const scopedRows = projectId ? rows.filter((row) => row.scope === "global" || row.project_id === projectId) : rows;
   const exact = scopedRows.filter((row) => String(row.id).toLowerCase() === needle || String(row.name).toLowerCase() === needle);
   if (exact.length > 0) {
@@ -225,7 +225,7 @@ function resolveAssistants(db: Database, assistant: string, projectId: string | 
 
 function resolveProject(db: Database, project: string) {
   const needle = project.trim().toLowerCase();
-  const rows = db.query(`SELECT id, name, root_path FROM projects ORDER BY last_opened_at DESC, created_at ASC`).all() as Row[];
+  const rows = db.query<Row, SQLQueryBindings[]>(`SELECT id, name, root_path FROM projects ORDER BY last_opened_at DESC, created_at ASC`).all();
   const exact = rows.filter(
     (row) =>
       String(row.id).toLowerCase() === needle ||

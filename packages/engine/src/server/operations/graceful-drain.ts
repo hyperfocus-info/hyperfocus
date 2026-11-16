@@ -128,7 +128,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 
 function boundedTimeout(value: number, label: string): number {
   const result = positiveInteger(value, label);
-  if (result > 5 * 60_000) throw new Error(`${label} may not exceed 300000ms.`);
+  if (result > 300000) throw new Error(`${label} may not exceed 300000ms.`);
   return result;
 }
 

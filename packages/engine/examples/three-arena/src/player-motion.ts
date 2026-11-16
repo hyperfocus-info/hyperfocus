@@ -1,3 +1,5 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 import type { Object3D, Skeleton } from "three";
 import {
   createCharacterMotor3D,
@@ -251,7 +253,7 @@ export function createThreeArenaPlayerMotion(
   function recoil(amount = 1) {
     acceptedDelta.fill(0);
     controller.recoil(amount);
-    controller.update(1 / 60);
+    controller.update(0.016666666666666666);
     return snapshot();
   }
 
@@ -375,9 +377,7 @@ function quaternionAngle(a: ArrayLike<number>, b: ArrayLike<number>) {
   return 2 * Math.acos(clamp(dot, -1, 1));
 }
 
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
+
 
 function finite(value: unknown, label: string) {
   const number = Number(value);

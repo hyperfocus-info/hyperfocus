@@ -61,7 +61,7 @@ function render() {
 }
 
 const loop = createFixedStepLoop({
-  step: 1 / 20,
+  step: 0.05,
   maxFrame: 0.25,
   update() { if (connected) client.sendInput(currentInput()); keyboard.update(); },
   render,

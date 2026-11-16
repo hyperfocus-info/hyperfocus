@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   createMemoryEntryId,
   createMemoryRetrievalId,
+  memoryEntrySchema,
   type AgentRunState,
   type CorrectnessReview,
   type MemoryEntry,
@@ -10,9 +11,31 @@ import {
   type ProjectId,
   type ThreadId
 } from "@hyperfocus/ai-core/protocol";
+import type { SwarmRun } from "@hyperfocus/ai-core/swarm";
 import type { WorkspaceRepository } from "./workspace-repository";
 
 type RetrievalOwner = MemoryRetrieval["owner"];
+
+/** Refresh swarm-owned evidence without changing a user's project-note preferences. */
+export function saveSwarmRunMemory(repository: Pick<WorkspaceRepository, "getMemoryEntry" | "saveMemoryEntry">, run: SwarmRun) {
+  const id = `swarm-${run.id}`;
+  const existing = repository.getMemoryEntry(id);
+  if (existing && existing.projectId !== run.request.projectId) throw new Error("Swarm project memory belongs to a different project.");
+  const entry = memoryEntrySchema.parse({
+    ...existing ?? {
+      id, projectId: run.request.projectId, kind: "task-summary", status: "active",
+      title: `Swarm: ${run.request.goal}`.slice(0, 256),
+      tags: ["feature:swarm"], pathGlobs: [], confidence: "medium", freshness: "fresh", pinned: false,
+      hitCount: 0, createdAt: new Date(run.createdAt).toISOString(),
+    },
+    summary: `${run.status}: ${run.reason ?? run.integration?.detail ?? "Candidate review recorded."}\n${run.candidates.map(candidate => `${candidate.id}: ${candidate.disposition}; correctness ${candidate.correctness}; ${candidate.comparison?.decision ?? "not measured"}. ${candidate.diagnosis}`).join("\n")}`.slice(0, 4_000),
+    evidence: `Source ${run.request.repository.revision}\nRun ${run.id}\n${run.artifacts.map(artifact => `${artifact.kind} ${artifact.id} SHA-256 ${artifact.sha256}`).join("\n")}`.slice(0, 16_000),
+    updatedAt: new Date().toISOString(),
+  });
+  const saved = repository.saveMemoryEntry(entry);
+  if (!saved) throw new Error("Swarm project memory could not be saved.");
+  return saved;
+}
 
 export function retrieveMemorySummaries(
   repository: WorkspaceRepository,

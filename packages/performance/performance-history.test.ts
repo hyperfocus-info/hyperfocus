@@ -13,6 +13,18 @@ const report = (generatedAt: string, fingerprint = "laptop-ac") => createPerform
   generatedAt
 });
 
+test("normalizes and bounds imported groups even without new reports", () => {
+  const history = appendPerformanceHistory({ reports: [report("3"), report("1"), report("2")] });
+  history.entries.reverse();
+  const trimmed = appendPerformanceHistory({ history, reports: [], limitPerBenchmark: 2 });
+  expect(trimmed.entries.map((entry) => entry.report.generatedAt)).toEqual(["2", "3"]);
+  expect(trimmed.entries[0]?.comparisonToPrevious).toBeUndefined();
+  const other = { ...report("4"), benchmark: "other" };
+  const mixed = appendPerformanceHistory({ history, reports: [other], limitPerBenchmark: 1 });
+  expect(mixed.entries.map((entry) => [entry.report.benchmark, entry.report.generatedAt])).toEqual([["codec", "3"], ["other", "4"]]);
+  expect(history.entries).toHaveLength(3);
+});
+
 test("performance history is bounded and records whether adjacent timings are comparable", () => {
   const first = appendPerformanceHistory({ reports: [report("2026-08-27T00:00:00.000Z")] });
   const second = appendPerformanceHistory({

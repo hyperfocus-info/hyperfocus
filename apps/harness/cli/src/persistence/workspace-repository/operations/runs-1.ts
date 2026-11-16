@@ -10,6 +10,7 @@ import { buildRunRuntimeBudget, hashPromptText, parseChatAttachment, toGenerated
 import { createRunId, isTerminalAgentRunStatus } from "@hyperfocus/ai-core/protocol";
 import { createStableBoundedId } from "../../../notification-ids";
 import { persistBrowserApprovalResolution, persistTerminalRunTransition } from "../../run/terminal-run-transition";
+import { persistCompletedAgentRun, type CompleteAgentRunInput } from "../../run/complete-agent-run";
 
 export function createWorkspaceRunsOperations(context: WorkspaceRepositoryContext) {
   const { db } = context;
@@ -273,6 +274,10 @@ export type WorkspaceRunsOperations4Set = ReturnType<typeof createWorkspaceRunsO
 
 export function createWorkspaceRunsOperations5(context: WorkspaceRepositoryContext, operations: WorkspaceProjectReadsOperationsSet & WorkspaceRepositoryReadsOperationsSet & WorkspaceMigrationSupportOperationsSet & WorkspaceProjectReadsOperations3Set) {
   const { db } = context;
+  function completeAgentRun(input: CompleteAgentRunInput) {
+    persistCompletedAgentRun(db, input, (content) => { appendMessage(input.projectId, "assistant", content, input.threadId); });
+    return operations.readProjectSnapshot(input.projectId);
+  }
   function appendMessage(
       projectId: ProjectId,
       role: ChatRole,
@@ -353,7 +358,7 @@ export function createWorkspaceRunsOperations5(context: WorkspaceRepositoryConte
       operations.touchProject(projectId, now);
       return operations.readProjectSnapshot(projectId);
     }
-  function createAgentRun(projectId: ProjectId, latestUserPrompt: string, planningModelId?: string, threadId?: ThreadId, maxTurns?: number) {
+  function createAgentRun(projectId: ProjectId, latestUserPrompt: string, planningModelId?: string, threadId?: ThreadId, maxTurns?: number, launchProfile?: AgentRunState["launchProfile"]) {
       const resolvedThreadId = operations.resolveThreadId(projectId, threadId);
       operations.readThreadRow(projectId, resolvedThreadId);
       const runId = createRunId();
@@ -372,7 +377,7 @@ export function createWorkspaceRunsOperations5(context: WorkspaceRepositoryConte
             prompt_hash,
             transcript_chars,
             latest_task_chars,
-            planning_model_id,
+            planning_model_id, launch_profile_json,
             execution_model_id,
             difficulty_score,
             summary,
@@ -388,7 +393,7 @@ export function createWorkspaceRunsOperations5(context: WorkspaceRepositoryConte
             created_at,
             updated_at,
             completed_at
-          ) VALUES (?1, ?2, ?3, ?4, 'current-project', ?5, ?6, ?7, NULL, NULL, ?8, NULL, NULL, NULL, NULL, NULL, NULL, ?9, 0, NULL, NULL, NULL, NULL, ?10, ?10, NULL)`
+          ) VALUES (?1, ?2, ?3, ?4, 'current-project', ?5, ?6, ?7, NULL, NULL, ?8, ?11, NULL, NULL, NULL, NULL, NULL, NULL, ?9, 0, NULL, NULL, NULL, NULL, ?10, ?10, NULL)`
         )
         .run(
           runId,
@@ -400,7 +405,8 @@ export function createWorkspaceRunsOperations5(context: WorkspaceRepositoryConte
           hashPromptText(latestUserPrompt),
           planningModelId ?? null,
           maxTurns ?? null,
-          now
+          now,
+          launchProfile ? JSON.stringify(launchProfile) : null
         );
   
       db.query(`UPDATE project_threads SET updated_at = ?2 WHERE id = ?1`).run(resolvedThreadId, now);
@@ -415,6 +421,7 @@ export function createWorkspaceRunsOperations5(context: WorkspaceRepositoryConte
     },
     publicApi: {
       appendMessage,
+      completeAgentRun,
       updateThreadMessage,
       createAgentRun,
     },

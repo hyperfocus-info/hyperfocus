@@ -4,6 +4,8 @@ import { browserSessionSchema, isTerminalAgentRunStatus,
 import { cancelBrowserApprovals, resolveBrowserApproval } from "../../browser-session-state";
 import { createLegacyTruncatedId, createStableBoundedId } from "../../notification-ids";
 import { runPersistenceMigrationOnce, type PersistenceMigrationScope } from "../persistence-migrations";
+import { executionPlanSchema } from "@hyperfocus/ai-core/protocol";
+import { qualityCompletionBlock } from "@hyperfocus/ai-core/quality";
 
 type TerminalStatus = Extract<AgentRunState["status"], "completed" | "failed" | "partial-complete" | "stopped">;
 export type TerminalRunTransitionInput = { projectId: ProjectId; runId: string; status: TerminalStatus;
@@ -89,6 +91,7 @@ export function persistTerminalRunTransition(db: Database, input: TerminalRunTra
       archiveNotifications(db, notificationIds, now);
       return shouldRepairJson || archiveRunApprovalNotifications(db, input.runId, now).changes > 0;
     }
+    if (input.status === "completed") assertQualityCompletion(db, input.projectId, input.runId);
     const now = new Date().toISOString(), updated = db.query(`UPDATE agent_runs SET status = ?3,
       browser_sessions_json = ?4, failure_message = ?5, failure_category = ?6, updated_at = ?7,
       completed_at = COALESCE(completed_at, ?7) WHERE id = ?1 AND project_id = ?2`).run(
@@ -125,6 +128,16 @@ function requireRun(db: Database, projectId: ProjectId, runId: string) {
   const row = db.query<RunRow, [string, ProjectId]>(`SELECT status, browser_sessions_json FROM agent_runs
     WHERE id = ?1 AND project_id = ?2`).get(runId, projectId);
   if (!row) throw new Error(`Unknown agent run: ${runId}`); return row;
+}
+function assertQualityCompletion(db: Database, projectId: ProjectId, runId: string) {
+  const row = db.query<{ latest_user_prompt: string; plan_json: string | null }, [string, ProjectId]>(
+    "SELECT latest_user_prompt, plan_json FROM agent_runs WHERE id = ?1 AND project_id = ?2"
+  ).get(runId, projectId);
+  if (!row) throw new Error(`Unknown agent run: ${runId}`);
+  const plan = row.plan_json ? executionPlanSchema.parse(JSON.parse(row.plan_json)) : undefined;
+  const blocked = qualityCompletionBlock({ intent: row.latest_user_prompt, runId,
+    paths: plan?.contracts.flatMap(contract => contract.ownedPaths), trace: plan?.quality });
+  if (blocked) throw new Error(blocked);
 }
 function readSessions(json: string | null) {
   return parseSessions(json).sessions;

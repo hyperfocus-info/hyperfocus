@@ -1,3 +1,5 @@
+import { isFiniteNumber } from "@hyperfocus/utilities/math";
+import { isObject as isRecordValue } from "@hyperfocus/utilities/records";
 import type { PathCommand, Renderable } from "./draw-data.ts";
 
 type PooledRecord = Record<string, unknown>;
@@ -14,17 +16,13 @@ export type RenderFramePoolOptions = {
   recordStrategy?: RenderRecordStrategy;
 };
 
-function isFiniteNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value);
-}
+
 
 function isObjectValue(value: unknown) {
   return (typeof value === "object" && value !== null) || typeof value === "function";
 }
 
-function isRecordValue(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+
 
 function isPointBuffer(value: unknown) {
   return isObjectValue(value) && "length" in value && isFiniteNumber(value.length);

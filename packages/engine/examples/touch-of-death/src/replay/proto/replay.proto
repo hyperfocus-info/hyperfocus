@@ -1,0 +1,28 @@
+syntax = "proto3";
+package hyperfocus.touch_of_death.replay;
+
+// HFRP + envelope version 1 precedes Archive on disk. Field numbers are permanent.
+// Frames are contiguous from zero, with two seats and planar (y=0) directions.
+message Frame {
+  repeated string first_actions = 1; double first_x = 2; double first_z = 3;
+  repeated string second_actions = 4; double second_x = 5; double second_z = 6;
+}
+message Recording {
+  uint32 version = 1; string match_id = 2; string content_id = 3; uint32 seed = 4;
+  repeated string seats = 5; repeated Frame frames = 6; optional string mode = 7;
+}
+message Selection { string slot = 1; string choice = 2; }
+message Fighter {
+  string name = 1; string icon = 2; repeated Selection selections = 3;
+}
+message Appearance {
+  uint32 version = 1;
+  // Missing fighter messages represent null appearances, not an empty profile.
+  Fighter first = 2; Fighter second = 3;
+}
+message Archive {
+  Recording recording = 1;
+  string stopped_reason = 2;
+  Appearance appearance = 3;
+  optional uint32 start_frame = 4;
+}

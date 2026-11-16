@@ -37,7 +37,7 @@ type WasmAllocatorExport = (bytes: number) => number;
 
 const MAX_BATCH_COUNT = 0x7fff_ffff;
 const MAX_WASM_ALLOCATION_BYTES = 0x7fff_fff0;
-const DEFAULT_FIXED_SCRATCH_BYTES = 64 * 1024;
+const DEFAULT_FIXED_SCRATCH_BYTES = 65536;
 const SIMD_PROBE = Uint8Array.from([
   0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0,
   10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11

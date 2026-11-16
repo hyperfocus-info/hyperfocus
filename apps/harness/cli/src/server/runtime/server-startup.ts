@@ -1,4 +1,5 @@
 import type { AgentRuntimeRegistry } from "../../agent-runtimes/runtime-registry";
+import { startThreadMessageDispatcher } from "../execution/thread-message-dispatcher";
 import { createBranchfsManager } from "../../branchfs-manager";
 import type { openSystemBrowser } from "../../desktop-app";
 import { runGitPreflight } from "../../git-preflight";
@@ -38,6 +39,7 @@ export function finalizeHarnessServerStartup(input: {
 }) {
   input.state.scheduler.stop();
   input.state.scheduler.start();
+  startThreadMessageDispatcher(input.state);
   const serverUrl = `http://${input.server.hostname ?? "localhost"}:${input.server.port}`;
   if (process.env.NODE_ENV !== "test") {
     console.log(`Harness ${HARNESS_APP_VERSION} server listening on ${serverUrl}`);

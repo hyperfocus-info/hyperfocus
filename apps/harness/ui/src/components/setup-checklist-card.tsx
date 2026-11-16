@@ -1,4 +1,5 @@
-import { createSignal, For, Show } from "solid-js";
+/** @jsxImportSource solid-js */
+import { createMemo, createSignal, For, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import type { SetupAction, SetupCheck } from "@hyperfocus/ai-core/protocol";
 import { ActionButton } from "./action-button";
@@ -28,6 +29,9 @@ export function SetupChecklistCard(props: SetupChecklistCardProps) {
       const rightPriority = getPriority(right);
       return leftPriority === rightPriority ? left.title.localeCompare(right.title) : leftPriority - rightPriority;
     });
+  const needsAttention = (check: SetupCheck) => check.requiredForFirstTask && check.status !== "ready";
+  const visibleChecks = createMemo(() => showDetails() ? orderedChecks() : orderedChecks().filter(needsAttention));
+  const hiddenCheckCount = createMemo(() => orderedChecks().length - visibleChecks().length);
 
   return (
     <section {...stylex.attrs(styles.activationCard)}>
@@ -49,9 +53,13 @@ export function SetupChecklistCard(props: SetupChecklistCardProps) {
               ? Help
             </ActionButton>
           </Show>
-          <Show when={allRequiredReady()}>
-            <ActionButton tooltip={showDetails() ? "Hide optional setup details" : "Configure optional integrations"} type="button" variant="secondary" onClick={() => setShowDetails((current) => !current)}>
-              {showDetails() ? "Hide details" : "Set up more tools"}
+          <Show when={showDetails() || hiddenCheckCount() > 0}>
+            <ActionButton tooltip={showDetails() ? "Hide ready and optional setup checks" : "Show ready and optional setup checks"} type="button" variant="secondary" onClick={() => setShowDetails(!showDetails())}>
+              {showDetails()
+                ? "Hide details"
+                : allRequiredReady()
+                  ? "Set up more tools"
+                  : `Show ${hiddenCheckCount()} more ${hiddenCheckCount() === 1 ? "check" : "checks"}`}
             </ActionButton>
           </Show>
           <Show when={props.onDismiss}>
@@ -62,9 +70,9 @@ export function SetupChecklistCard(props: SetupChecklistCardProps) {
         </div>
       </div>
 
-      <Show when={!allRequiredReady() || showDetails()}>
+      <Show when={visibleChecks().length > 0}>
         <div {...stylex.attrs(styles.checksGrid)}>
-          <For each={orderedChecks()}>
+          <For each={visibleChecks()}>
           {(check) => (
             <article class={`${checkCardClass} ${check.status === "ready" ? readyCheckClass : check.status === "unsupported" ? unsupportedCheckClass : check.status === "warning" ? warningCheckClass : actionRequiredCheckClass}`}>
               <div {...stylex.attrs(styles.checkLayout)}>

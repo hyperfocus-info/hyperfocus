@@ -2,6 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { For, type JSX } from "solid-js";
 import { tokens } from "../theme/tokens.stylex";
 import { sharedStyles } from "../theme/styles";
+import { typography } from "../theme/typography";
 
 export type SegmentedControlOption<Value extends string = string> = {
   value: Value;
@@ -14,6 +15,7 @@ export type SegmentedControlProps<Value extends string = string> = {
   options: readonly SegmentedControlOption<Value>[];
   onValueChange: (value: Value) => void;
   ariaLabel: string;
+  describedBy?: string;
   orientation?: "horizontal" | "vertical";
   disabled?: boolean;
   class?: string;
@@ -29,8 +31,10 @@ const styles = stylex.create({
     gap: "2px",
     backgroundColor: tokens.panel,
     display: "inline-flex",
+    maxWidth: "100%",
+    minWidth: 0,
   },
-  horizontal: { flexDirection: "row" },
+  horizontal: { flexDirection: "row", flexWrap: "wrap" },
   vertical: { flexDirection: "column" },
   segment: {
     borderColor: "transparent",
@@ -42,14 +46,16 @@ const styles = stylex.create({
     alignItems: "center",
     backgroundColor: { default: "transparent", ":hover": tokens.panelRaised },
     color: { default: tokens.muted, ":hover": tokens.foreground },
-    cursor: { default: "pointer", ":disabled": "not-allowed" },
+    cursor: "pointer",
     display: "inline-flex",
-    fontFamily: tokens.fontUi,
-    fontSize: "0.78rem",
-    fontWeight: 650,
+    flexBasis: 'auto',
+    flexGrow: '1',
+    flexShrink: '1',
     justifyContent: "center",
     opacity: { default: 1, ":disabled": 0.48 },
-    minHeight: "2rem",
+    overflowWrap: "anywhere",
+    minHeight: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch },
+    minWidth: 0,
   },
   selected: {
     borderColor: tokens.accent,
@@ -98,6 +104,7 @@ export function SegmentedControl<Value extends string = string>(props: Segmented
       classList={{ [props.class ?? ""]: Boolean(props.class) }}
       role="radiogroup"
       aria-label={props.ariaLabel}
+      aria-describedby={props.describedBy}
       aria-orientation={orientation()}
       aria-disabled={props.disabled || undefined}
       onKeyDown={onKeyDown}
@@ -107,7 +114,7 @@ export function SegmentedControl<Value extends string = string>(props: Segmented
         const disabled = () => Boolean(props.disabled || option.disabled);
         return (
           <button
-            {...stylex.attrs(styles.segment, sharedStyles.focusRing, selected() ? styles.selected : undefined)}
+            {...stylex.attrs(typography.control, styles.segment, sharedStyles.focusRing, selected() ? styles.selected : undefined)}
             type="button"
             role="radio"
             aria-checked={selected()}

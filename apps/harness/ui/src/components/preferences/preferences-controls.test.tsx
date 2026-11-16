@@ -1,10 +1,20 @@
 /** @jsxImportSource solid-js */
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
-import { AdvancedDisclosure, PreferenceRow } from "./preferences-controls";
+import { AdvancedDisclosure, PreferenceRow, SegmentedControl } from "./preferences-controls";
 import { requireDetails } from "../../utils/tests/test-harness";
 
 afterEach(cleanup);
+
+test("segmented preference keyboard selection preserves numeric option values", () => {
+  let selected: number | undefined;
+  render(() => <SegmentedControl ariaLabel="Limit" value={1} options={[{ value: 1, label: "One" }, { value: 2, label: "Two" }]} onChange={value => { selected = value; }} />);
+  const first = screen.getByRole("radio", { name: "One" });
+  first.focus();
+  fireEvent.keyDown(first, { key: "ArrowRight" });
+  expect(selected).toBe(2);
+  expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Two" }));
+});
 
 describe("AdvancedDisclosure", () => {
   test("removes advanced controls from navigation until expanded", async () => {
@@ -29,5 +39,8 @@ describe("PreferenceRow", () => {
     const description = screen.getByText(/Keys stay local/);
     expect(description.classList.contains("wrapText")).toBe(true);
     expect(description.classList.contains("truncate")).toBe(false);
+    const heading = screen.getByRole("heading", { name: "Provider API keys" });
+    expect(heading.classList.contains("truncate")).toBe(false);
+    expect(heading.closest("section")?.classList.contains("overflowHidden")).toBe(false);
   });
 });

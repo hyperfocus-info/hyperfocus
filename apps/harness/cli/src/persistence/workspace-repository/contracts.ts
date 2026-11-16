@@ -187,6 +187,7 @@ export type AgentRunRow = {
   transcript_chars: number | null;
   latest_task_chars: number | null;
   planning_model_id: string | null;
+  launch_profile_json: string | null;
   execution_model_id: string | null;
   difficulty_score: number | null;
   summary: string | null;
@@ -515,7 +516,7 @@ export type AssistantLearningRow = {
   compacted_at: string | null;
 };
 
-export const ASSISTANT_COMPLETED_TODO_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+export const ASSISTANT_COMPLETED_TODO_RETENTION_MS = 1209600000;
 
 export type AssistantQuestionRow = PersistedAssistantQuestionRow;
 

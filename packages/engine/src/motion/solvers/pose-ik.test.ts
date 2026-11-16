@@ -94,3 +94,31 @@ test("pose IK clamps unreachable targets and supports explicit stylized stretch"
   expect(pose.translations[4]).toBeCloseTo(-1.1, 6);
   expect(pose.translations[7]).toBeCloseTo(-1.1, 6);
 });
+
+test('animated bend follows the reference plane and preserves the end orientation through changed reach and seeking', () => {
+  const rig = createTestRig(), pose = createPoseBuffer(createPoseBufferLayout(3, 4, { includeScales: true }));
+  const solver = createPoseTwoBoneIKSolver({ rig, rootIndex: 0, middleIndex: 1, endIndex: 2 });
+  for (const angle of [.6, -.7, 1.1, .6]) {
+    pose.translations.set(rig.referenceTranslations); pose.rotations.set(rig.referenceRotations);
+    pose.rotations.set([Math.sin(angle / 2), 0, 0, Math.cos(angle / 2)], 4);
+    const before = evaluateWorldPose(rig, pose, createWorldPose(rig));
+    const hand = [...before.rotations.subarray(8,12)];
+    const referenceSign = Math.sign(before.translations[8]!);
+    const result = solver.apply(pose, [.12, .15, 0], [0,0,-referenceSign], { bendMode: 'animated', targetMode: 'animated-offset', endOrientation: 'preserve-animation' });
+    expect(result.reached).toBe(true); expect(result.endError).toBeLessThan(.00001);
+    const after = evaluateWorldPose(rig, pose, createWorldPose(rig));
+    expect(Math.hypot(...hand.map((v,i) => v - after.rotations[8+i]!))).toBeLessThan(.00001);
+    // The midpoint stays on the source bend side, even though the fallback pole points elsewhere.
+    expect(Math.sign(after.translations[5]! - (after.translations[8]! / 2))).toBe(-referenceSign);
+    expect(Math.hypot(after.translations[3]!,after.translations[4]!,after.translations[5]!)).toBeCloseTo(1,5);
+  }
+});
+
+test('a neutral animated correction is a true no-op, including a straight source arm', () => {
+  const rig = createTestRig(), pose = createPoseBuffer(createPoseBufferLayout(3, 4, { includeScales: true }));
+  pose.translations.set(rig.referenceTranslations); pose.rotations.set(rig.referenceRotations);
+  const before = [...pose.rotations];
+  const solver = createPoseTwoBoneIKSolver({ rig, rootIndex: 0, middleIndex: 1, endIndex: 2 });
+  solver.apply(pose, [0,0,0], [0,-1,0], { bendMode: 'animated', targetMode: 'animated-offset', endOrientation: 'preserve-animation' });
+  expect([...pose.rotations]).toEqual(before);
+});

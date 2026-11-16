@@ -4,16 +4,15 @@ import type { AssistantManager } from "../../assistant-manager";
 import { evaluateAssistantQuestionPolicy, readAssistantQuestionPolicyContext, resolveAssistantPolicyAnswer } from "../../assistant-question-policy";
 import { readAssistantPromptLearnings } from "../../assistant-learning-policy";
 import { executeBackgroundJobRun } from "../../background-job-executor";
-import { isBackgroundRunPastLeaseGrace } from "../../background-run-leases";
 import { debugLog } from "../../logging";
 import { classifyRunFailure, isBackoffEligibleFailureCategory } from "../../run-failure-classification";
-import { BACKGROUND_RUN_CONTROLLER_LEASE_MS, BACKGROUND_RUN_CONTROLLER_RENEW_MS, BACKGROUND_RUN_STARTUP_GRACE_MS } from "../core/constants";
+import { BACKGROUND_RUN_CONTROLLER_LEASE_MS, BACKGROUND_RUN_CONTROLLER_RENEW_MS } from "../core/constants";
 import type { BackgroundRunControl, HarnessConnection } from "../core/contracts";
 import { emitUsageUpdatedToAll, recordServerTokenUsage } from "../transport/events";
 import { emitBackgroundJobRunUpdatedToAll, emitBackgroundJobsUpdatedToAll, emitNotificationsUpdatedToAll } from "./background-events";
 import { saveBackgroundRunStatusNotification } from "./notifications";
 import { assertRuntimeAvailable } from "../workspace/preferences";
-import { formatBackgroundLaunchProfileDetail, resolveBackgroundRunLaunchProfile, resolveExecutionModelIdForRuntime, tryMarkAssistantQuestionRunWaiting } from "./background-run-policy";
+import { formatBackgroundLaunchProfileDetail, resolveBackgroundRunLaunchProfile, resolveExecutionModelIdForRuntime } from "./background-run-policy";
 import { disposeBackgroundRunControl, getBackgroundJobRepositoryRuntimeContractMismatch } from "../runtime/background-run-lifecycle";
 import type { WorkspaceRepository } from "../../workspace-repository";
 import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
@@ -49,66 +48,16 @@ export function isBackgroundRunLive(
   );
 }
 
-export async function resumeAndRepairBackgroundJobRuns(
-  repository: WorkspaceRepository,
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
-  runtimeRegistry: AgentRuntimeRegistry,
-  runtime: WorkspaceRuntimeStore,
-  backgroundRunControllers: Map<string, BackgroundRunControl>,
-  assistantManager: AssistantManager,
-  now: Date,
-  tokenUsageSession: TokenUsageTotals
-) {
-  for (const run of repository.getActiveBackgroundJobRuns()) {
-    if (backgroundRunControllers.has(run.id) || run.status !== "running" || !run.linkedAgentRunId) {
-      continue;
-    }
-    if ((run.resumeAttemptCount ?? 0) >= 1) {
-      continue;
-    }
-    if (!isBackgroundRunPastLeaseGrace(run, now, BACKGROUND_RUN_STARTUP_GRACE_MS)) {
-      continue;
-    }
-    const linkedRun = repository.getRun(run.projectId, run.linkedAgentRunId);
-    if (linkedRun?.status !== "ready" || !linkedRun.plan) {
-      continue;
-    }
-
-    repository.appendBackgroundJobRunEvent(run.id, "queued", "Retrying orphaned ready run", "Restarting background execution once.");
-    const resumedRun = repository.setBackgroundJobRunStatus(run.id, "queued", {
-      summary: linkedRun.summary,
-      linkedAgentRunId: linkedRun.id,
-      resumeAttemptCount: (run.resumeAttemptCount ?? 0) + 1
-    });
-    emitBackgroundJobRunUpdatedToAll(connections, resumedRun);
-    await safeLaunchBackgroundJobRun(
-      connections,
-      repository,
-      runtimeRegistry,
-      runtime,
-      backgroundRunControllers,
-      assistantManager,
-      resumedRun.id,
-      tokenUsageSession
-    );
-  }
-
-  return reconcileBackgroundJobRunBlockers(
-    repository,
-    (run) => isBackgroundRunLive(backgroundRunControllers, runtime, run),
-    { now }
-  );
-}
-
 export function reconcileBackgroundJobRunBlockers(
   repository: WorkspaceRepository,
   isRunLive: (run: BackgroundJobRun) => boolean,
-  options: { jobId?: string; runId?: string; now?: Date } = {}
+  options: { jobId?: string; runId?: string; now?: Date; interruptedQueuedRunIds?: ReadonlySet<string> } = {}
 ) {
   const repairedRuns = repository.repairInterruptedBackgroundJobRuns({
     jobId: options.jobId,
     isRunLive,
-    now: options.now
+    now: options.now,
+    interruptedQueuedRunIds: options.interruptedQueuedRunIds
   });
   const repairedIds = new Set(repairedRuns.map((run) => run.id));
   const activeRuns = options.runId
@@ -188,26 +137,6 @@ export function syncBackgroundJobFailureTracking(repository: WorkspaceRepository
     return;
   }
   repository.recordBackgroundJobFailure(run.jobId, failureCategory);
-}
-
-export async function finalizeAutoResolvedAssistantQuestionRun(
-  repository: WorkspaceRepository,
-  connections: Set<Bun.ServerWebSocket<HarnessConnection>>,
-  run: BackgroundJobRun
-) {
-  const resolvedRun = repository.setBackgroundJobRunStatus(run.id, "succeeded", {
-    summary: "Assistant question auto-resolved from durable guidance"
-  });
-  repository.appendBackgroundJobRunEvent(
-    run.id,
-    "done",
-    "Assistant question auto-resolved",
-    run.summary ?? run.failureMessage ?? undefined
-  );
-  saveBackgroundRunStatusNotification(repository, resolvedRun);
-  emitBackgroundJobsUpdatedToAll(connections, repository.loadBackgroundJobsState());
-  emitBackgroundJobRunUpdatedToAll(connections, resolvedRun);
-  emitNotificationsUpdatedToAll(connections, `bg:auto:${crypto.randomUUID()}`, repository.loadNotificationInboxState());
 }
 
 export async function safeLaunchBackgroundJobRun(...args: Parameters<typeof launchBackgroundJobRun>) {
@@ -422,26 +351,6 @@ export async function launchBackgroundJobRun(
       return;
     }
     const failureMessage = error instanceof Error ? error.message : "Unknown background job failure";
-    if (job.assistantId) {
-      const waitingRun = tryMarkAssistantQuestionRunWaiting(repository, backgroundRunId, failureMessage);
-      if (waitingRun) {
-        const assistantOutcome = await assistantManager.handleBackgroundJobRunOutcome({
-          assistantId: job.assistantId,
-          status: "awaiting-user-input",
-          summary: failureMessage
-        });
-        if (assistantOutcome?.blocked === false) {
-          await finalizeAutoResolvedAssistantQuestionRun(repository, connections, waitingRun);
-          return;
-        }
-        saveBackgroundRunStatusNotification(repository, waitingRun);
-        emitBackgroundJobsUpdatedToAll(connections, repository.loadBackgroundJobsState());
-        emitBackgroundJobRunUpdatedToAll(connections, waitingRun);
-        emitNotificationsUpdatedToAll(connections, `bg:auto:${crypto.randomUUID()}`, repository.loadNotificationInboxState());
-        return;
-      }
-    }
-
     const failedRun = repository.setBackgroundJobRunStatus(backgroundRunId, "failed", {
       failureMessage,
       failureCategory: classifyRunFailure({ message: failureMessage })
@@ -527,7 +436,7 @@ async function executePreparedBackgroundRun(input: {
     onRunUpdated(updatedRun) { emitBackgroundJobRunUpdatedToAll(connections, updatedRun); },
     onContextUsage(contextUsage) {
       if (!input.tokenUsageSession) return;
-      const tokenUsage = recordServerTokenUsage(repository, input.tokenUsageSession, contextUsage);
+      const tokenUsage = recordServerTokenUsage(repository, input.tokenUsageSession, contextUsage, { projectId: job.projectId, threadId: job.automationThreadId, runId: backgroundRunId, runtime: agentRuntime.id });
       emitUsageUpdatedToAll(connections, `usage:bg:${crypto.randomUUID()}`, tokenUsage);
     }
   });
@@ -541,16 +450,12 @@ async function finalizeBackgroundRun(input: {
 }) {
   const { connections, repository, assistantManager, job, nextRun } = input;
   if (job.assistantId) {
-    const assistantOutcome = await assistantManager.handleBackgroundJobRunOutcome({
+    await assistantManager.handleBackgroundJobRunOutcome({
       assistantId: job.assistantId,
       status: nextRun.status === "succeeded" ? "succeeded" : nextRun.status === "partial-complete" ? "partial-complete"
         : nextRun.status === "awaiting-user-input" ? "awaiting-user-input" : "failed",
       summary: nextRun.summary, failureMessage: nextRun.failureMessage
     });
-    if (nextRun.status === "awaiting-user-input" && assistantOutcome?.blocked === false) {
-      await finalizeAutoResolvedAssistantQuestionRun(repository, connections, nextRun);
-      return;
-    }
   }
   saveBackgroundRunStatusNotification(repository, nextRun);
   syncBackgroundJobFailureTracking(repository, nextRun);

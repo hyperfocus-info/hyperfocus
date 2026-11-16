@@ -1,13 +1,15 @@
+import { executionLogLevelTone } from "./execution-log/level-tone";
 /** @jsxImportSource solid-js */
-import { Show, createMemo, createSignal } from "solid-js";
-import { Logs } from "lucide-solid";
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
+import { Logs } from "lucide-solid";
+import { Show,createMemo,createSignal } from "solid-js";
 import { formatShortTimestamp } from "../../lib/time-format";
 import { cn } from "../../lib/utils";
-import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
+import { FileLinkedText,type FileLinkConfig } from "../file-linked-text";
 import { MarkdownContent } from "../markdown-content";
-import { CopyTextButton } from "./copy-text-button";
 import { buttonVariants } from "./button";
+import { CopyTextButton } from "./copy-text-button";
 import { Dialog } from "./dialog";
 import { Tooltip } from "./tooltip";
 import { VirtualList } from "./virtual-list";
@@ -42,7 +44,7 @@ type ExecutionLogProps = {
 
 const styles = stylex.create({
   root: { flex: "1", display: "flex", flexDirection: "column", minHeight: 0, },
-  empty: { color: "var(--muted)", fontSize: "0.675rem" },
+  empty: { color: "var(--muted)", fontSize: tokens.fontBody },
   flatEmpty: { borderColor: "var(--border)",
  borderStyle: "dashed",
  borderBottomWidth: '0',
@@ -53,7 +55,7 @@ const styles = stylex.create({
  paddingLeft: '1rem',
  paddingRight: '0',
  paddingTop: '0.75rem', },
-  cardEmpty: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.9rem", borderStyle: "dashed", borderWidth: "1px", backgroundColor: "rgb(255 255 255 / 0.45)", },
+  cardEmpty: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.9rem", borderStyle: "dashed", borderWidth: "1px", backgroundColor: "var(--panel)", },
   list: { flex: "1", minHeight: 0, minWidth: 0, overflowX: "hidden", paddingRight: "0.5rem" },
   listContent: { minWidth: 0, width: "100%" },
   listItem: { minWidth: 0, paddingBottom: "0.75rem" },
@@ -66,27 +68,32 @@ const styles = stylex.create({
  paddingLeft: '1rem',
  paddingRight: '0.5rem',
  paddingTop: '0.75rem', },
-  cardRow: { padding: "0.75rem", borderRadius: "0.9rem", borderWidth: "1px", backgroundColor: "rgb(255 255 255 / 0.7)", },
-  interactiveRow: { borderColor: { default: null, ":hover": "var(--accent-strong)" }, outline: { default: null, ":focus-visible": "none" }, backgroundColor: { default: null, ":hover": "rgb(255 255 255 / 0.85)" }, boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, cursor: "pointer", transitionDuration: "150ms", transitionProperty: "background-color, border-color", },
-  error: { borderColor: "rgb(251 113 133)" },
-  warningBorder: { borderColor: "rgb(251 191 36)" },
-  success: { borderColor: "rgb(16 185 129)" },
-  running: { borderColor: "rgb(56 189 248)" },
+  cardRow: { padding: "0.75rem", borderRadius: "0.9rem", borderWidth: "1px", backgroundColor: "var(--panel)", },
+  interactiveRow: { borderColor: { default: null, ":hover": "var(--accent-strong)" }, outline: { default: null, ":focus-visible": "none" }, backgroundColor: { default: null, ":hover": "var(--panel-strong)" }, boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, cursor: "pointer", transitionDuration: "150ms", transitionProperty: "background-color, border-color", },
+  error: { borderColor: tokens.danger },
+  warningBorder: { borderColor: tokens.warning },
+  success: { borderColor: tokens.success },
+  running: { borderColor: tokens.accent },
   neutralBorder: { borderColor: "var(--border)" },
   rowLayout: { gap: "0.75rem", alignItems: "flex-start", display: "flex", flexWrap: "wrap", justifyContent: "space-between", },
-  rowCopy: { flex: "1", minWidth: 0 },
+  rowCopy: { flexBasis: '16rem',
+ flexGrow: '1',
+ flexShrink: '1',
+ overflowWrap: "anywhere",
+ minWidth: 0, },
   interactiveCopy: { borderRadius: "0.5rem", outline: { default: null, ":focus-visible": "none" }, boxShadow: { default: null, ":focus-visible": "0 0 0 2px var(--ring)" }, },
-  summary: { color: "var(--foreground)", fontSize: "0.675rem", overflowWrap: "break-word" },
-  metadata: { color: "var(--muted)", fontSize: "0.575rem", letterSpacing: "0.14em", textTransform: "uppercase", marginTop: "0.25rem", },
-  detailsButton: { flexShrink: 0, opacity: { default: 0.42, ":focus-visible": 1, ":hover": 1, }, transitionDuration: "160ms", transitionProperty: "opacity, transform", },
+  summary: { color: "var(--foreground)", fontSize: tokens.fontBody, overflowWrap: "break-word" },
+  metadata: { color: "var(--muted)", fontSize: tokens.fontCaption, letterSpacing: "normal", overflowWrap: "anywhere", textTransform: "none", marginTop: "0.25rem", },
+  detailsButton: { flexShrink: 0 },
   icon: { height: "1rem", width: "1rem" },
   dialog: { maxWidth: "48rem" },
   dialogContent: { maxHeight: "80vh" },
-  details: { gap: "0.75rem", display: "flex", flexDirection: "column", },
+  details: { gap: tokens.space3, display: "flex", flexDirection: "column", overflowWrap: "anywhere", minWidth: 0, },
   copyAction: { display: "flex", justifyContent: "flex-end" },
-  plainDetail: { padding: "0.75rem", borderColor: "var(--border)", borderRadius: "0.9rem", borderStyle: "solid", borderWidth: "1px", overflow: "visible", backgroundColor: "rgb(255 255 255 / 0.7)", color: "var(--foreground)", fontSize: "0.7rem", lineHeight: "1.25rem", overflowWrap: "break-word", whiteSpace: "pre-wrap", },
-  json: { padding: "0.75rem", borderRadius: "0.9rem", overflow: "auto", backgroundColor: "rgb(2 6 23 / 0.95)", color: "rgb(241 245 249)", fontSize: "0.625rem", lineHeight: "1.25rem", },
-  warning: { padding: "0.75rem", borderColor: "rgb(253 230 138)", borderRadius: "0.9rem", borderStyle: "solid", borderWidth: "1px", backgroundColor: "rgb(255 251 235)", color: "rgb(120 53 15)", fontSize: "0.675rem", }
+  disclosure: { paddingBlock: tokens.space2, cursor: "pointer", fontSize: tokens.fontControl, minHeight: { default: tokens.controlCompact, "@media (pointer: coarse)": tokens.controlTouch }, },
+  plainDetail: { padding: tokens.space3, borderColor: tokens.border, borderRadius: tokens.radiusSmall, borderStyle: "solid", borderWidth: "1px", overflow: "auto", backgroundColor: tokens.background, color: tokens.foreground, fontSize: tokens.fontBody, lineHeight: 1.5, overflowWrap: "anywhere", whiteSpace: "pre-wrap", },
+  json: { padding: tokens.space3, borderRadius: tokens.radiusSmall, overflow: "auto", backgroundColor: tokens.background, color: tokens.foreground, fontSize: tokens.fontCaption, lineHeight: 1.5, maxWidth: "100%", },
+  warning: { padding: tokens.space3, borderColor: tokens.warning, borderRadius: tokens.radiusSmall, borderStyle: "solid", borderWidth: "1px", color: tokens.foreground, fontSize: tokens.fontBody, }
 });
 
 export function ExecutionLog(props: ExecutionLogProps) {
@@ -231,7 +238,7 @@ export function ExecutionLog(props: ExecutionLogProps) {
             onClose={() => setSelectedEntryId(undefined)}
           >
             <div {...stylex.attrs(styles.details)}>
-              <Show when={entry().copyText}>
+              <Show when={entry().copyText ?? [entry().message, entry().detail, entry().detailsJson === undefined ? undefined : JSON.stringify(entry().detailsJson, null, 2)].filter(Boolean).join("\n\n")}>
                 {(copyText) => (
                   <div {...stylex.attrs(styles.copyAction)}>
                     <CopyTextButton
@@ -262,9 +269,11 @@ export function ExecutionLog(props: ExecutionLogProps) {
                 )}
               </Show>
               <Show when={entry().detailsJson !== undefined}>
+                <details><summary {...stylex.attrs(styles.disclosure)}>Structured event data</summary>
                 <pre {...stylex.attrs(styles.json)}>
                   <FileLinkedText text={() => JSON.stringify(entry().detailsJson, null, 2)} fileLinks={props.fileLinks} />
                 </pre>
+                </details>
               </Show>
               <Show when={entry().detailsJsonSummary}>
                 {(summary) => (
@@ -287,21 +296,4 @@ export function truncateLogText(value: string, maxLength = defaultSummaryLength)
     return normalized;
   }
   return `${normalized.slice(0, maxLength).trimEnd()}...`;
-}
-
-function executionLogLevelTone(level: string): "error" | "warningBorder" | "success" | "running" | "neutralBorder" {
-  const normalized = level.toLowerCase();
-  if (normalized.includes("fail") || normalized.includes("error") || normalized.includes("cancel")) {
-    return "error";
-  }
-  if (normalized.includes("warn") || normalized.includes("approval") || normalized.includes("input")) {
-    return "warningBorder";
-  }
-  if (normalized.includes("done") || normalized.includes("complete") || normalized.includes("success")) {
-    return "success";
-  }
-  if (normalized.includes("run") || normalized.includes("exec")) {
-    return "running";
-  }
-  return "neutralBorder";
 }

@@ -18,6 +18,7 @@ type ServerRunRuntime = Pick<WorkspaceRuntimeStore, "getProject" | "getRunExecut
 type ProjectRunState = Pick<WorkspaceProjectState, "activeRun" | "activeThreadId" | "id" | "lastRun">;
 
 export function resolvePlanExecutionModeDefault(repository: ServerRunRepository, mode?: ModeDefinition) {
+  if (mode?.id === "plan") return "approve";
   return repository.getConfiguredPlanExecutionModeDefault() ?? mode?.planExecutionModeDefault ?? repository.getPlanExecutionModeDefault();
 }
 
@@ -35,6 +36,7 @@ export function buildReadyPlanFromExecutionPlan(executionPlan: ExecutionPlan): P
     usesSubagents: subtasks.length > 0,
     subtasks,
     finalExecutionBrief: executionPlan.finalExecutionBrief,
+    supervision: executionPlan.supervision,
     prerequisites: executionPlan.prerequisites,
     contracts: executionPlan.contracts
   };
@@ -80,6 +82,7 @@ export function buildReadyPlanFromRun(run: AgentRunState): PlannerReadyTurn {
       instruction: task.instruction
     })),
     finalExecutionBrief: run.finalExecutionBrief,
+    supervision: run.plan?.supervision,
     prerequisites: run.plan?.prerequisites,
     contracts: run.plan?.contracts
   };

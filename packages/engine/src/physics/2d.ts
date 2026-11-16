@@ -15,6 +15,7 @@ import {
   positive,
 } from "./2d-internals.ts";
 import { createPhysicsWorld2DApi } from "./2d-api.ts";
+import { createPhysics2DHandles } from './lifecycle/handles-2d.ts';
 import {
   createPhysics2DContactOperations,
   createPhysics2DGeometryOperations,
@@ -172,7 +173,7 @@ export type PhysicsWorld2D = {
   step(seconds: number): number;
   contactCount(): number;
   contact(index: number, target?: PhysicsContact2D): PhysicsContact2D;
-  /** Writes stable body indices into caller-owned storage and returns the number written. */
+  /** Writes generation-checked body handles into caller-owned storage; returns count written. */
   queryAabb(minX: number, minY: number, maxX: number, maxY: number, output: Int32Array): number;
   /** Returns the closest hit; pass a target to keep the query allocation-free. */
   raycast(originX: number, originY: number, directionX: number, directionY: number, maxDistance: number, layerMask?: number, target?: PhysicsRaycastHit2D): PhysicsRaycastHit2D | undefined;
@@ -208,6 +209,7 @@ const precision = options.precision ?? "float64";
 if (precision !== "float32" && precision !== "float64") throw new RangeError(`Unsupported physics precision: ${String(precision)}`);
 const FloatStorage = precision === "float32" ? Float32Array : Float64Array;
 const alive = new Uint8Array(capacity);
+const bodyHandles = createPhysics2DHandles(alive);
 const bodyType = new Uint8Array(capacity);
 const shapeKind = new Uint8Array(capacity);
 const flags = new Uint8Array(capacity);
@@ -245,6 +247,7 @@ const contactTrigger = new Uint8Array(maxContacts);
 const rayScratch = new FloatStorage(3);
 let contacts = 0;
 const jointAlive = new Uint8Array(maxJoints);
+const jointHandles = createPhysics2DHandles(jointAlive);
 const jointKind = new Uint8Array(maxJoints);
 const jointFlags = new Uint8Array(maxJoints);
 const jointA = new Int32Array(maxJoints);
@@ -271,8 +274,8 @@ const diagnostics: PhysicsWorld2DDiagnostics = {
     sleepingBodies: 0,
   };
 const resolveIndex = (indexOrId: number | string) => {
-    const index = typeof indexOrId === "string" ? indexById.get(indexOrId) ?? -1 : indexOrId;
-    if (!Number.isSafeInteger(index) || index < 0 || index >= capacity || alive[index] === 0) {
+    const index = typeof indexOrId === "string" ? indexById.get(indexOrId) : bodyHandles.resolve(indexOrId);
+    if (index === undefined) {
       throw new RangeError(`Unknown physics body: ${String(indexOrId)}`);
     }
     return index;
@@ -289,6 +292,8 @@ const resolveIndex = (indexOrId: number | string) => {
     contactStorage: { contactA, contactB, contactNormalX, contactNormalY, contactPenetration, contactPointX, contactPointY, contactTrigger, rayScratch },
     joints: { jointAlive, jointKind, jointFlags, jointA, jointB, jointLength, jointStiffness, jointDamping, jointAnchorAX, jointAnchorAY, jointAnchorBX, jointAnchorBY, jointFree, jointIds, jointIndexById, nonCollidingJointPairs },
     diagnostics,
+    bodyHandles,
+    jointHandles,
     state,
     resolveIndex,
   };

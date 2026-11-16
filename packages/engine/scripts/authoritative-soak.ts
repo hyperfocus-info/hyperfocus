@@ -22,10 +22,10 @@ export type AuthoritativeSoakEvidence = {
 };
 
 export async function runAuthoritativeSoak(options: AuthoritativeSoakOptions): Promise<AuthoritativeSoakEvidence> {
-  const durationMs = bounded(options.durationMs, 100, 24 * 60 * 60_000, "durationMs");
+  const durationMs = bounded(options.durationMs, 100, 86400000, "durationMs");
   const clients = bounded(options.clients ?? 100, 1, 1_000, "clients");
   const tickRate = bounded(options.tickRate ?? 60, 1, 240, "tickRate");
-  const maxHeapGrowthBytes = bounded(options.maxHeapGrowthBytes ?? 64 * 1024 * 1024, 1, 2 * 1024 * 1024 * 1024, "maxHeapGrowthBytes");
+  const maxHeapGrowthBytes = bounded(options.maxHeapGrowthBytes ?? 67108864, 1, 2147483648, "maxHeapGrowthBytes");
   const state = { ticks: 0, inputs: 0 };
   const roomType = createRoomType<typeof state, { sequence: number }>({
     name: "soak",
@@ -89,7 +89,7 @@ function bounded(value: number, minimum: number, maximum: number, label: string)
 }
 
 if (import.meta.main) {
-  const duration = Number(process.env.SOAK_DURATION_MS ?? 30 * 60_000);
+  const duration = Number(process.env.SOAK_DURATION_MS ?? 1800000);
   const clients = Number(process.env.SOAK_CLIENTS ?? 100);
   try { console.log(JSON.stringify(await runAuthoritativeSoak({ durationMs: duration, clients }), null, 2)); }
   catch (cause) {

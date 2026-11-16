@@ -1,0 +1,10 @@
+{
+  "name": "MMO Field",
+  "description": "MMO Field interactive example.",
+  "branding": {
+    "mark": "grid",
+    "color": "#75d4aa",
+    "background": "#15131c"
+  },
+  "social": {}
+}

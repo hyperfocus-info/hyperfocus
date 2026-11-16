@@ -1,69 +1,65 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createRequestId,isTerminalAgentRunStatus,type AgentRunState } from "@hyperfocus/ai-core/protocol";
+import { Disclosure } from "@hyperfocus/ui";
+import { QualityReview } from "@hyperfocus/ui/task-review/quality";
 import * as stylex from "@stylexjs/stylex";
-import { createRequestId, isTerminalAgentRunStatus, type AgentRunState, type BackgroundJob, type BackgroundJobRun, type ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
-import { getActiveProject, harnessStore } from "../harness-store";
+import {
+ChevronDown,
+ChevronRight,
+CircleHelp,
+ClipboardList,
+LoaderCircle,
+RefreshCcw,
+ShieldCheck,
+ShieldX,
+Terminal
+} from "lucide-solid";
+import { For,Show,createContext,createMemo,createSignal,useContext } from "solid-js";
+import { harnessStore } from "../harness-store";
 import type { ChatFileTarget } from "../lib/chat-file-links";
 import { openIdeWindow } from "../lib/ide-window";
-import { getLatestTaskStatusText, getRunRefreshState, getVisibleProjectTraces, isRunWorking } from "../lib/run-status";
+import { getLatestTaskStatusText,getRunRefreshState,getVisibleProjectTraces,isRunWorking } from "../lib/run-status";
 import { formatShortTimestamp } from "../lib/time-format";
 import {
-  formatToolActivityCopyText,
-  formatToolActivityOwner,
-  formatToolActivitySnippet,
-  formatToolInvocationDescription,
-  normalizeToolSnippet
+formatToolActivityCopyText,
+formatToolActivityOwner,
+formatToolActivitySnippet,
+formatToolInvocationDescription,
+normalizeToolSnippet
 } from "../lib/tool-activity-format";
-import { rightAlignedNumbersEnabled } from "../lib/visual-flags";
 import {
-  getAssistantTracePanelSnapshot,
-  getJobTracePanelSnapshot,
-  getThreadTracePanelSnapshot,
-  getTracePanelExecutionLogEntries,
-  getTracePanelRunningCounts,
-  getTracePanelTitle,
-  resolveTracePanelEntity
+getAssistantTracePanelSnapshot,
+getJobTracePanelSnapshot,
+getThreadTracePanelSnapshot,
+getTracePanelExecutionLogEntries,
+getTracePanelRunningCounts,
+getTracePanelTitle,
+resolveTracePanelEntity
 } from "../lib/trace-panel-model";
+import { rightAlignedNumbersEnabled } from "../lib/visual-flags";
+import { TerminalHistoryDialog } from "../terminal/terminal-history-dialog";
 import { ActionButton } from "./action-button";
-import { FileLinkedText, type FileLinkConfig } from "./file-linked-text";
+import { FileLinkedText,type FileLinkConfig } from "./file-linked-text";
+import { MarkdownContent } from "./markdown-content";
 import { CopyTextButton } from "./primitives/copy-text-button";
 import { ExecutionLog } from "./primitives/execution-log";
-import { MarkdownContent } from "./markdown-content";
 import { Tooltip } from "./primitives/tooltip";
 import { VirtualList } from "./primitives/virtual-list";
-import { TerminalHistoryDialog } from "../terminal/terminal-history-dialog";
-import { tracePanelStyles as styles, traceUtilityStyles as utilities } from "./trace-panel.styles";
-import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Circle,
-  CircleAlert,
-  CircleHelp,
-  ClipboardList,
-  Eye,
-  LoaderCircle,
-  PanelRightOpen,
-  RefreshCcw,
-  ShieldCheck,
-  ShieldX,
-  Terminal,
-  X
-} from "lucide-solid";
+import { tracePanelStyles as styles,traceUtilityStyles as utilities } from "./trace-panel.styles";
 
 import {
-  AssistantJobStatusIcon,
-  TRACE_BROWSER_ACTIVITY_LIMIT,
-  TRACE_BROWSER_SESSION_LIMIT,
-  TRACE_EVENT_LIMIT,
-  TRACE_SUBTASK_LIMIT,
-  TRACE_TOOL_ACTIVITY_LIMIT,
-  TaskStatusIcon,
-  ToolActivityStatusIcon,
-  ToolSnippetBlock,
-  TraceContextSummary,
-  formatVerificationSummary,
-  getAssistantJobStatusText,
-  getAssistantJobStatusView,
+AssistantJobStatusIcon,
+TRACE_BROWSER_ACTIVITY_LIMIT,
+TRACE_BROWSER_SESSION_LIMIT,
+TRACE_EVENT_LIMIT,
+TRACE_SUBTASK_LIMIT,
+TRACE_TOOL_ACTIVITY_LIMIT,
+TaskStatusIcon,
+ToolActivityStatusIcon,
+ToolSnippetBlock,
+TraceContextSummary,
+formatVerificationSummary,
+getAssistantJobStatusText,
+getAssistantJobStatusView,
 } from "./trace-panel/trace-panel-support";
 
 export { TracePeekRail } from "./trace-panel/trace-panel-support";
@@ -86,7 +82,7 @@ function createTracePanelState() {
   });
   const executionLogEntries = createMemo(() => getTracePanelExecutionLogEntries(state, traceEntity()));
   const runningCounts = createMemo(() => getTracePanelRunningCounts(state, traceEntity()));
-  const activeProject = () => threadSnapshot()?.project ?? getActiveProject(state);
+  const activeProject = () => threadSnapshot()?.project;
   const threadProject = () => threadSnapshot()?.project;
   const fileLinkProject = createMemo(() => {
     const project = threadProject();
@@ -109,22 +105,38 @@ function createTracePanelState() {
     } : undefined;
   };
   const runToShow = () => threadSnapshot()?.runToShow;
+  const runScope = createMemo(() => {
+    const entity = traceEntity();
+    const run = runToShow();
+    return entity?.type === "thread" && run
+      ? { projectId: entity.projectId, threadId: entity.threadId, runId: run.id }
+      : undefined;
+  });
   const executionPaused = () => state.executionControl.isPaused;
   const visibleTraces = () => threadSnapshot()?.visibleTraces ?? getVisibleProjectTraces(activeProject()?.traces ?? []);
-  const refreshState = () => {
-    const project = activeProject();
-    return project
-      ? getRunRefreshState(project, runToShow())
+  const refreshState = (subagentId?: string) => {
+    const snapshot = threadSnapshot();
+    return snapshot
+      ? getRunRefreshState({ ...snapshot.project, ...snapshot.liveTranscript }, snapshot.runToShow, subagentId)
       : { disabled: true, disabledReason: "No run available", refreshing: false };
+  };
+  const retryDisabledReason = () => {
+    if (executionPaused()) return "Global execution pause is active";
+    const scope = runScope();
+    const snapshot = threadSnapshot();
+    if (!scope || !snapshot || !runToShow()?.retryable) return "No retryable run available";
+    if (scope.threadId !== snapshot.project.activeThreadId) return "Open this thread before retrying its run";
+    if (snapshot.project.session.isStreaming || snapshot.liveTranscript.isStreaming) return "Project is streaming";
+    return undefined;
   };
   const [expandedToolActivityId, setExpandedToolActivityId] = createSignal<string>();
   const [terminalHistoryOpen, setTerminalHistoryOpen] = createSignal(false);
   return {
     state, traceTitle, threadSnapshot, assistantSnapshot, jobSnapshot, executionLogEntries,
-    runningCounts, activeProject, threadProject, traceFileLinks, runToShow, executionPaused,
+    runningCounts, activeProject, threadProject, traceFileLinks, runToShow, runScope, executionPaused,
     executionPauseReason: "Global execution pause is active", refreshState,
     deferredBrowserApprovalCount: () => state.executionControl.deferredBrowserApprovalCount,
-    canRetryRun: () => Boolean(activeProject()?.lastRun?.retryable),
+    canRetryRun: () => Boolean(runToShow()?.retryable), retryDisabledReason,
     hasPlanDetails: () => Boolean(activeProject()?.latestPlan?.executionPlan),
     visibleSubtasks: createMemo(() => runToShow()?.subtasks ?? []),
     visibleToolActivities: createMemo(() => runToShow()?.toolActivities ?? []),
@@ -138,28 +150,28 @@ type TracePanelState = ReturnType<typeof createTracePanelState>;
 
 function createTracePanelActions(model: TracePanelState) {
   const sendRunCommand = (type: "run.retry" | "run.refresh", subagentId?: string) => {
-    const project = model.activeProject();
-    const run = type === "run.retry" ? project?.lastRun : project?.activeRun;
-    if (!project || !run) return;
+    const scope = model.runScope();
+    if (!scope || model.executionPaused()) return;
+    if (type === "run.retry" ? model.retryDisabledReason() : model.refreshState(subagentId).disabled) return;
     harnessStore.actions.sendCommand({
       type,
       requestId: createRequestId(),
       payload: {
-        projectId: project.id,
-        threadId: project.activeThreadId,
-        runId: run.id,
+        ...scope,
         ...(subagentId ? { subagentId } : {}),
       },
     });
   };
   const resolveBrowserApproval = (sessionId: string, toolCallId: string, approved: boolean) => {
-    const project = model.activeProject();
-    const run = project?.activeRun ?? project?.lastRun;
-    if (!project || !run || isTerminalAgentRunStatus(run.status)) return;
+    const scope = model.runScope();
+    const run = model.runToShow();
+    const approval = run?.browserSessions?.find((session) => session.id === sessionId)?.pendingApproval;
+    if (!scope || !run || isTerminalAgentRunStatus(run.status) || (approved && model.executionPaused())) return;
+    if (approval?.status !== "pending" || approval.toolCallId !== toolCallId) return;
     harnessStore.actions.sendCommand({
       type: "browser.approval.resolve",
       requestId: createRequestId(),
-      payload: { projectId: project.id, threadId: project.activeThreadId, runId: run.id, sessionId, toolCallId, approved },
+      payload: { ...scope, sessionId, toolCallId, approved },
     });
   };
   const openAssistantJob = (jobId: string) => {
@@ -176,13 +188,12 @@ function createTracePanelActions(model: TracePanelState) {
     });
   };
   const openRunTerminalHistory = () => {
-    const project = model.activeProject();
-    const run = model.runToShow();
-    if (!project || !run) return;
+    const scope = model.runScope();
+    if (!scope) return;
     harnessStore.actions.sendCommand({
       type: "terminal.history.list",
       requestId: createRequestId(),
-      payload: { projectId: project.id, threadId: project.activeThreadId, runId: run.id },
+      payload: scope,
     });
     model.setTerminalHistoryOpen(true);
   };
@@ -205,10 +216,27 @@ function createTracePanelActions(model: TracePanelState) {
 type TracePanelActions = ReturnType<typeof createTracePanelActions>;
 
 type TraceProject = NonNullable<ReturnType<TracePanelState["activeProject"]>>;
-type TracePanelViewProps = { model: TracePanelState; actions: TracePanelActions };
+const TraceStateContext = createContext<TracePanelState>();
+const TraceActionsContext = createContext<TracePanelActions>();
+function useTraceState() {
+  const model = useContext(TraceStateContext);
+  if (!model) throw new Error("Trace state requires its panel provider.");
+  return model;
+}
+function useTraceActions() {
+  const actions = useContext(TraceActionsContext);
+  if (!actions) throw new Error("Trace actions require their panel provider.");
+  return actions;
+}
+function requireTraceProject(model: TracePanelState): TraceProject {
+  const project = model.threadProject();
+  if (!project) throw new Error("Project trace requires a selected project.");
+  return project;
+}
 
-function TraceNonProjectContent(props: TracePanelViewProps) {
-  const { model, actions } = props;
+function TraceNonProjectContent() {
+  const model = useTraceState();
+  const actions = useTraceActions();
   return (
     <>
       <Show when={model.assistantSnapshot()}>
@@ -225,7 +253,7 @@ function TraceNonProjectContent(props: TracePanelViewProps) {
                     {(job) => {
                       const statusView = () => getAssistantJobStatusView(job.id, snapshot().runs);
                       const jobClass = () => {
-                        const base = [styles.assistantJob, utilities.cursorPointer, utilities.rounded2xl, utilities.border, utilities.bgWhite70, utilities.p3, utilities.text0675];
+                        const base = [styles.assistantJob, utilities.cursorPointer, utilities.rounded2xl, utilities.border, utilities.bgWhite70, utilities.p3, utilities.text0675, utilities.wrapAnywhere];
                         if (statusView().state === "running") return stylex.attrs(...base, styles.assistantJobRunning).class;
                         if (statusView().state === "successful") return stylex.attrs(...base, styles.assistantJobSuccessful).class;
                         if (statusView().state === "error") return stylex.attrs(...base, styles.assistantJobError).class;
@@ -260,13 +288,13 @@ function TraceNonProjectContent(props: TracePanelViewProps) {
                 </div>
               </Show>
             </div>
-            <TraceExecutionLog model={model} fill />
+            <TraceExecutionLog fill />
           </div>
         )}
       </Show>
       <Show when={model.jobSnapshot()}>
         <div class={stylex.attrs(utilities.flex, utilities.minH0, utilities.flex1, utilities.flexCol, utilities.gap4).class}>
-          <TraceExecutionLog model={model} fill />
+          <TraceExecutionLog fill />
         </div>
       </Show>
       <Show when={!model.assistantSnapshot() && !model.jobSnapshot()}>
@@ -280,39 +308,38 @@ function TraceNonProjectContent(props: TracePanelViewProps) {
   );
 }
 
-function TraceExecutionLog(props: { model: TracePanelState; fill?: boolean }) {
+function TraceExecutionLog(props: { fill?: boolean }) {
+  const model = useTraceState();
   return (
     <section class={stylex.attrs(
       utilities.flex,
-      utilities.minH85,
+      utilities.minH0,
       props.fill ? utilities.flex1 : utilities.maxH72,
       utilities.flexCol,
-      utilities.rounded3xl,
-      utilities.border,
-      utilities.borderDefault,
-      utilities.bgWhite55,
-      utilities.p3,
+      !props.fill && styles.executionLogViewport,
     ).class}>
       <div class={stylex.attrs(utilities.mb3, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking018, utilities.textMuted).class}>Execution log</div>
-      <ExecutionLog entries={props.model.executionLogEntries()} emptyMessage="No execution log yet." fileLinks={props.model.traceFileLinks()} />
+      <ExecutionLog entries={model.executionLogEntries()} emptyMessage="No execution log yet." fileLinks={model.traceFileLinks()} />
     </section>
   );
 }
 
-function TracePlanCard(props: { model: TracePanelState; project: TraceProject }) {
+function TracePlanCard() {
+  const model = useTraceState();
+  const project = () => requireTraceProject(model);
   return (
-    <Show when={props.project.latestPlan}>
+    <Show when={project().latestPlan}>
       <div class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
-        <div class={stylex.attrs(utilities.mb3, utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking02, utilities.textMuted).class}>
+        <div class={stylex.attrs(utilities.mb3, utilities.flex, utilities.flexWrap, utilities.itemsCenter, utilities.justifyBetween, utilities.gap2, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking02, utilities.textMuted).class}>
           <span>Latest plan</span>
-          <Show when={props.model.hasPlanDetails()}>
+          <Show when={model.hasPlanDetails()}>
             <ActionButton
               tooltip="Open the full execution plan"
               icon={<ClipboardList class={stylex.attrs(utilities.h35, utilities.w35).class} />}
               size="sm"
               variant="secondary"
               onClick={() => {
-                const executionPlan = props.project.latestPlan?.executionPlan;
+                const executionPlan = project().latestPlan?.executionPlan;
                 if (executionPlan) harnessStore.openExecutionPlanDialog(executionPlan);
               }}
             >
@@ -320,21 +347,26 @@ function TracePlanCard(props: { model: TracePanelState; project: TraceProject })
             </ActionButton>
           </Show>
         </div>
-        <div class={stylex.attrs(utilities.grid, utilities.gridCols2, utilities.gap2, utilities.text0675, utilities.textMuted).class}>
-          <div>Difficulty: {props.project.latestPlan?.difficultyScore}%</div>
-          <div>Route: {props.project.latestPlan?.executionPlan?.route ?? (props.project.latestPlan?.usesSubagents ? "subagents" : "main")}</div>
-          <div>Planner: {props.project.latestPlan?.planningModelId}</div>
-          <div>Executor: {props.project.latestPlan?.executionModelId}</div>
-          <div>Subtasks: {props.project.latestPlan?.subtaskCount}</div>
-          <div>Agent: {props.project.latestPlan?.agentId}</div>
+        <Show when={project().latestPlan?.executionPlan?.summary}><p class={stylex.attrs(utilities.wrapAnywhere, utilities.text0675).class}>{project().latestPlan?.executionPlan?.summary}</p></Show>
+        <Disclosure title="Plan routing and models">
+        <div class={stylex.attrs(styles.metadataGrid, utilities.text0675, utilities.textMuted).class}>
+          <div>Difficulty: {project().latestPlan?.difficultyScore}%</div>
+          <div>Route: {project().latestPlan?.executionPlan?.route ?? (project().latestPlan?.usesSubagents ? "subagents" : "main")}</div>
+          <div>Planner: {project().latestPlan?.planningModelId}</div>
+          <div>Executor: {project().latestPlan?.executionModelId}</div>
+          <div>Subtasks: {project().latestPlan?.subtaskCount}</div>
+          <div>Agent: {project().latestPlan?.agentId}</div>
         </div>
+        </Disclosure>
       </div>
     </Show>
   );
 }
 
-function TraceSubtasks(props: TracePanelViewProps & { project: TraceProject }) {
-  const { model, actions, project } = props;
+function TraceSubtasks() {
+  const model = useTraceState();
+  const actions = useTraceActions();
+  const project = () => requireTraceProject(model);
   return (
     <Show when={model.runToShow()?.subtasks.length}>
       <div class={stylex.attrs(utilities.mt4, utilities.spaceY2).class}>
@@ -349,21 +381,21 @@ function TraceSubtasks(props: TracePanelViewProps & { project: TraceProject }) {
           pagination={{ kind: "forward", initialCount: TRACE_SUBTASK_LIMIT, batchSize: TRACE_SUBTASK_LIMIT }}
         >
           {(task) => {
-            const taskRefresh = () => getRunRefreshState(project, project.activeRun, task.id);
+            const taskRefresh = () => model.refreshState(task.id);
             return (
-              <div class={stylex.attrs(utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite70, utilities.p3, utilities.text0675).class}>
-                <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
+              <div class={stylex.attrs(utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite70, styles.taskCard, utilities.text0675, utilities.wrapAnywhere).class}>
+                <div class={stylex.attrs(styles.taskHeading, utilities.textForeground).class}>
                   <span class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flex1, utilities.itemsCenter, utilities.gap2, utilities.fontSemibold).class}>
                     <TaskStatusIcon status={task.status} />
                     <Tooltip content={task.title} triggerClass={stylex.attrs(utilities.minW0, utilities.flex1).class}>
-                      <FileLinkedText class={stylex.attrs(utilities.block, utilities.truncate).class} text={task.title} fileLinks={model.traceFileLinks()} />
+                      <FileLinkedText class={stylex.attrs(utilities.block, utilities.wrapAnywhere).class} text={task.title} fileLinks={model.traceFileLinks()} />
                     </Tooltip>
                   </span>
-                  <span class={stylex.attrs(utilities.shrink0, utilities.uppercase, utilities.tracking014, utilities.textAccentStrong).class}>{task.status}</span>
+                  <span class={stylex.attrs(utilities.wrapAnywhere, utilities.textAccentStrong).class}>Status: {task.status}</span>
                 </div>
                 <div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>Attempts: {task.attemptCount}</div>
                 <div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>
-                  <FileLinkedText text={() => `Latest status: ${getLatestTaskStatusText(project, task)}`} fileLinks={model.traceFileLinks()} />
+                  <FileLinkedText text={() => `Latest status: ${getLatestTaskStatusText(project(), task)}`} fileLinks={model.traceFileLinks()} />
                 </div>
                 <Show when={task.startedAt}><div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>Started: {formatShortTimestamp(task.startedAt)}</div></Show>
                 <Show when={task.completedAt}><div class={stylex.attrs(utilities.mt1, utilities.textMuted).class}>Completed: {formatShortTimestamp(task.completedAt)}</div></Show>
@@ -379,11 +411,11 @@ function TraceSubtasks(props: TracePanelViewProps & { project: TraceProject }) {
                   >
                     {taskRefresh().refreshing ? "Refreshing" : "Refresh"}
                   </ActionButton>
-                  <Show when={project.lastRun?.retryable}>
+                  <Show when={model.canRetryRun()}>
                     <ActionButton
                       tooltip="Retry this subagent"
-                      disabledReason={model.executionPaused() ? model.executionPauseReason : "Project is streaming"}
-                      disabled={model.executionPaused() || project.session.isStreaming}
+                      disabledReason={model.retryDisabledReason()}
+                      disabled={Boolean(model.retryDisabledReason())}
                       icon={<RefreshCcw class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                       size="sm"
                       variant="secondary"
@@ -403,8 +435,9 @@ function TraceSubtasks(props: TracePanelViewProps & { project: TraceProject }) {
   );
 }
 
-function TraceRunCard(props: TracePanelViewProps & { project: TraceProject }) {
-  const { model, actions, project } = props;
+function TraceRunCard() {
+  const model = useTraceState();
+  const actions = useTraceActions();
   return (
     <Show when={model.runToShow()}>
       {(run) => (
@@ -427,8 +460,8 @@ function TraceRunCard(props: TracePanelViewProps & { project: TraceProject }) {
               <Show when={model.canRetryRun()}>
                 <ActionButton
                   tooltip="Retry last run"
-                  disabledReason={model.executionPaused() ? model.executionPauseReason : "Project is streaming"}
-                  disabled={model.executionPaused() || project.session.isStreaming}
+                  disabledReason={model.retryDisabledReason()}
+                  disabled={Boolean(model.retryDisabledReason())}
                   icon={<RefreshCcw class={stylex.attrs(utilities.h35, utilities.w35).class} />}
                   size="sm"
                   variant="secondary"
@@ -446,27 +479,25 @@ function TraceRunCard(props: TracePanelViewProps & { project: TraceProject }) {
             </div>
           </div>
           <div class={stylex.attrs(utilities.minW0, utilities.spaceY2, utilities.text0675, utilities.textMuted).class}>
-            <div>Status: {run().status}</div>
-            <div>Retryable: {run().retryable ? "yes" : "no"}</div>
-            <div>Resumable: {run().resumable ? "yes" : "no"}</div>
+            <div aria-label={`Run status: ${run().status}`}>{runStatusLabel(run().status)}</div>
             <Tooltip content={run().latestUserPrompt} triggerClass={stylex.attrs(utilities.block, utilities.minW0).class}>
               <div class={stylex.attrs(utilities.truncate).class}>
-                <FileLinkedText text={() => `Prompt: ${run().latestUserPrompt ?? ""}`} fileLinks={model.traceFileLinks()} />
+                <FileLinkedText text={() => `Task: ${run().latestUserPrompt ?? ""}`} fileLinks={model.traceFileLinks()} />
               </div>
             </Tooltip>
             <Show when={run().failureMessage}>
               {(failure) => <div class={stylex.attrs(utilities.wrapAnywhere).class}><FileLinkedText text={`Failure: ${failure()}`} fileLinks={model.traceFileLinks()} /></div>}
             </Show>
           </div>
-          <TraceSubtasks model={model} actions={actions} project={project} />
+          <TraceSubtasks />
         </div>
       )}
     </Show>
   );
 }
 
-function TraceToolActivitySection(props: { model: TracePanelState }) {
-  const { model } = props;
+function TraceToolActivitySection() {
+  const model = useTraceState();
   return (
     <Show when={model.runToShow()?.toolActivities?.length}>
       <div class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
@@ -484,7 +515,7 @@ function TraceToolActivitySection(props: { model: TracePanelState }) {
           pagination={{ kind: "forward", initialCount: TRACE_TOOL_ACTIVITY_LIMIT, batchSize: TRACE_TOOL_ACTIVITY_LIMIT }}
         >
           {(activity) => (
-            <article class={stylex.attrs(utilities.wFull, utilities.minW0, utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite70, utilities.p3, utilities.text0675).class}>
+            <article class={stylex.attrs(utilities.wFull, utilities.minW0, utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite70, utilities.p3, utilities.text0675, utilities.wrapAnywhere).class}>
               <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
                 <div class={stylex.attrs(utilities.flex, utilities.minW0, utilities.flex1, utilities.flexWrap, utilities.itemsCenter, utilities.gap2, utilities.fontSemibold).class}>
                   <ToolActivityStatusIcon status={activity.status} />
@@ -538,28 +569,31 @@ function TraceToolActivitySection(props: { model: TracePanelState }) {
   );
 }
 
-function TraceBrowserSessionCard(props: TracePanelViewProps & {
+function TraceBrowserSessionCard(props: {
   session: TracePanelState["visibleBrowserSessions"] extends () => Array<infer T> ? T : never;
 }) {
-  const { model, actions, session } = props;
+  const model = useTraceState();
+  const actions = useTraceActions();
+  const { session } = props;
   const pendingApproval = () => {
     const run = model.runToShow();
     return run && !isTerminalAgentRunStatus(run.status) ? session.pendingApproval : undefined;
   };
   return (
-    <article class={stylex.attrs(utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite70, utilities.p3, utilities.text0675).class}>
-      <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
+    <article class={stylex.attrs(utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite70, styles.browserInset, utilities.text0675, utilities.wrapAnywhere).class}>
+      <div class={stylex.attrs(utilities.flex, utilities.flexWrap, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
         <div class={stylex.attrs(utilities.fontSemibold).class}>{session.owner === "subagent" ? `Subagent ${session.subagentId}` : session.owner}</div>
         <div class={stylex.attrs(utilities.uppercase, utilities.tracking014, utilities.textAccentStrong).class}>{session.status}</div>
       </div>
       <Show when={pendingApproval()}>
         {(approval) => (
-          <div class={stylex.attrs(utilities.mt3, utilities.roundedXl, utilities.border, utilities.borderAmber300_70, utilities.bgAmber50_80, utilities.p3).class}>
+          <div class={stylex.attrs(utilities.mt3, utilities.roundedXl, utilities.border, utilities.borderAmber300_70, utilities.bgAmber50_80, styles.browserInset).class}>
             <div class={stylex.attrs(utilities.fontSemibold, utilities.textAmber900).class}>Approval needed</div>
             <div class={stylex.attrs(utilities.mt1, utilities.textAmber900_80).class}><FileLinkedText text={approval().label} fileLinks={model.traceFileLinks()} /></div>
             <Show when={approval().inputSummary}>
               {(summary) => <div class={stylex.attrs(utilities.mt1, utilities.whitespacePreWrap, utilities.textAmber900_70).class}><FileLinkedText text={summary()} fileLinks={model.traceFileLinks()} /></div>}
             </Show>
+            <Show when={model.executionPaused()}><p role="status" class={stylex.attrs(utilities.mt2, utilities.wrapAnywhere).class}>{model.executionPauseReason}</p></Show>
             <div class={stylex.attrs(utilities.mt3, utilities.flex, utilities.flexWrap, utilities.gap2).class}>
               <ActionButton
                 tooltip="Approve this browser step"
@@ -586,7 +620,7 @@ function TraceBrowserSessionCard(props: TracePanelViewProps & {
           {(activity) => (
             <Show when={activity.approval?.status !== "deferred"}>
               <div class={stylex.attrs(utilities.roundedXl, utilities.border, utilities.borderDefault, utilities.bgWhite80, utilities.p3).class}>
-                <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
+                <div class={stylex.attrs(utilities.flex, utilities.flexWrap, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.textForeground).class}>
                   <span class={stylex.attrs(utilities.fontSemibold).class}><FileLinkedText text={activity.label} fileLinks={model.traceFileLinks()} /></span>
                   <span class={stylex.attrs(utilities.uppercase, utilities.tracking014, utilities.textMuted).class}>{activity.status}</span>
                 </div>
@@ -611,8 +645,8 @@ function TraceBrowserSessionCard(props: TracePanelViewProps & {
   );
 }
 
-function TraceBrowserSessionsSection(props: TracePanelViewProps) {
-  const { model } = props;
+function TraceBrowserSessionsSection() {
+  const model = useTraceState();
   return (
     <Show when={model.runToShow()?.browserSessions?.length}>
       <div class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
@@ -631,20 +665,21 @@ function TraceBrowserSessionsSection(props: TracePanelViewProps) {
           estimateSize={240}
           pagination={{ kind: "forward", initialCount: TRACE_BROWSER_SESSION_LIMIT, batchSize: TRACE_BROWSER_SESSION_LIMIT }}
         >
-          {(session) => <TraceBrowserSessionCard model={model} actions={props.actions} session={session} />}
+          {(session) => <TraceBrowserSessionCard session={session} />}
         </VirtualList>
       </div>
     </Show>
   );
 }
 
-function TraceEventHistory(props: { model: TracePanelState }) {
+function TraceEventHistory() {
+  const model = useTraceState();
   return (
     <VirtualList
-      class={stylex.attrs(utilities.flex1, utilities.minH0, utilities.minW0, utilities.overflowXHidden, utilities.pr2).class}
+      class={stylex.attrs(styles.eventViewport, utilities.minW0, utilities.overflowXHidden, utilities.pr2).class}
       contentClass={stylex.attrs(utilities.wFull, utilities.minW0).class}
       itemClass={stylex.attrs(utilities.minW0, utilities.pb3).class}
-      items={props.model.visibleTraceRows()}
+      items={model.visibleTraceRows()}
       getKey={(trace, index) => `${trace.stage}-${index}`}
       estimateSize={140}
       pagination={{ kind: "reverse", initialCount: TRACE_EVENT_LIMIT, batchSize: TRACE_EVENT_LIMIT }}
@@ -652,16 +687,16 @@ function TraceEventHistory(props: { model: TracePanelState }) {
     >
       {(trace) => (
         <article class={stylex.attrs(utilities.rounded3xl, utilities.border, utilities.borderDefault, utilities.bgWhite55, utilities.p3).class}>
-          <div class={stylex.attrs(utilities.mb2, utilities.flex, utilities.itemsCenter, utilities.justifyBetween, utilities.gap3, utilities.text0585, utilities.fontSemibold, utilities.uppercase, utilities.tracking016, utilities.textAccentStrong).class}>
+          <div class={stylex.attrs(styles.eventHeading, utilities.mb2, utilities.text0585, utilities.fontSemibold, utilities.textAccentStrong).class}>
             <div class={stylex.attrs(utilities.minW0).class}>
-              <div class={stylex.attrs(utilities.truncate).class}>{trace.stage}</div>
+              <div class={stylex.attrs(utilities.wrapAnywhere).class}>{trace.stage}</div>
               <div class={stylex.attrs(utilities.mt1, utilities.text053, utilities.fontMedium, utilities.normalCase, utilities.trackingNormal, utilities.textMuted).class}>{formatShortTimestamp(trace.createdAt)}</div>
             </div>
-            <span>{trace.modelId ?? "n/a"}</span>
+            <span class={stylex.attrs(utilities.wrapAnywhere, utilities.textMuted).class}>Model: {trace.modelId ?? "Not recorded"}</span>
           </div>
-          <MarkdownContent content={() => trace.message} size="compact" fileLinks={props.model.traceFileLinks()} />
+          <MarkdownContent content={() => trace.message} size="compact" fileLinks={model.traceFileLinks()} />
           <Show when={trace.detail}>
-            <MarkdownContent content={() => trace.detail ?? ""} class={stylex.attrs(utilities.mt2).class} size="compact" tone="muted" fileLinks={props.model.traceFileLinks()} />
+            <Disclosure title="Event details"><MarkdownContent content={() => trace.detail ?? ""} class={stylex.attrs(utilities.mt2).class} size="compact" tone="muted" fileLinks={model.traceFileLinks()} /></Disclosure>
           </Show>
         </article>
       )}
@@ -669,33 +704,27 @@ function TraceEventHistory(props: { model: TracePanelState }) {
   );
 }
 
-function TraceProjectContent(props: TracePanelViewProps & { project: TraceProject }) {
+function TraceProjectContent() {
   return (
     <>
-      <TracePlanCard model={props.model} project={props.project} />
-      <TraceRunCard model={props.model} actions={props.actions} project={props.project} />
-      <TraceToolActivitySection model={props.model} />
-      <TraceBrowserSessionsSection model={props.model} actions={props.actions} />
-      <TraceExecutionLog model={props.model} />
-      <TraceEventHistory model={props.model} />
+      <TracePlanCard />
+      <TraceRunCard />
+      <TraceToolActivitySection />
+      <TraceBrowserSessionsSection />
+      <TraceExecutionLog />
+      <TraceEventHistory />
     </>
   );
 }
 
-function TraceTerminalHistory(props: { model: TracePanelState }) {
-  const scope = () => {
-    const project = props.model.activeProject();
-    const run = props.model.runToShow();
-    return project && run
-      ? { projectId: project.id, threadId: project.activeThreadId, runId: run.id }
-      : undefined;
-  };
+function TraceTerminalHistory() {
+  const model = useTraceState();
   return (
     <TerminalHistoryDialog
-      open={props.model.terminalHistoryOpen()}
+      open={model.terminalHistoryOpen() && Boolean(model.runScope())}
       title="Run Terminal History"
-      scope={scope()}
-      onClose={() => props.model.setTerminalHistoryOpen(false)}
+      scope={model.runScope()}
+      onClose={() => model.setTerminalHistoryOpen(false)}
     />
   );
 }
@@ -704,7 +733,7 @@ export function TracePanel() {
   const model = createTracePanelState();
   const actions = createTracePanelActions(model);
   return (
-    <>
+    <TraceStateContext.Provider value={model}><TraceActionsContext.Provider value={actions}>
       <aside
         data-test-trace-panel=""
         class={stylex.attrs(
@@ -714,17 +743,17 @@ export function TracePanel() {
           utilities.minH0,
           utilities.minW0,
           utilities.flexCol,
-          utilities.gap4,
+          utilities.gap2,
           utilities.overflowXHidden,
           utilities.rounded2xl,
           utilities.p08,
         ).class}
       >
         <div class={stylex.attrs(utilities.flex, utilities.itemsCenter, utilities.gap2, utilities.text0585, utilities.fontSemibold, utilities.tracking02, utilities.textMuted).class}>
-          <span>Developer trace</span>
-          <Tooltip content="Selected thread, assistant, or job traces stay here, separate from user-visible chat history.">
+          <span>Run details</span>
+          <Tooltip content="Execution evidence for the selected thread, assistant, or job.">
             <span class={stylex.attrs(utilities.inlineFlex).class}>
-              <CircleHelp class={stylex.attrs(utilities.h35, utilities.w35, utilities.textMuted).class} aria-label="Projects trace help" />
+              <CircleHelp class={stylex.attrs(utilities.h35, utilities.w35, utilities.textMuted).class} aria-label="Run details help" />
             </span>
           </Tooltip>
         </div>
@@ -740,8 +769,9 @@ export function TracePanel() {
           jobRunCount={model.jobSnapshot()?.runs.length}
           fileLinks={model.traceFileLinks()}
         />
-        <Show when={model.threadProject()} fallback={<TraceNonProjectContent model={model} actions={actions} />}>
-          {(project) => <TraceProjectContent model={model} actions={actions} project={project()} />}
+        <Show when={model.threadProject()} fallback={<TraceNonProjectContent />}>
+          <Show when={model.runToShow()?.plan?.quality}>{trace => <QualityReview trace={trace()} renderEvidence={reference => <FileLinkedText text={reference} fileLinks={model.traceFileLinks()} />} />}</Show>
+          <TraceProjectContent />
         </Show>
         <div data-test-trace-running-counts="" class={stylex.attrs(utilities.shrink0, utilities.rounded2xl, utilities.border, utilities.borderDefault, utilities.bgWhite75, utilities.px3, utilities.py2, utilities.text0625, utilities.fontSemibold, utilities.textForeground).class}>
           Running agents:{" "}
@@ -751,7 +781,11 @@ export function TracePanel() {
           {" "}total
         </div>
       </aside>
-      <TraceTerminalHistory model={model} />
-    </>
+      <TraceTerminalHistory />
+    </TraceActionsContext.Provider></TraceStateContext.Provider>
   );
+}
+
+function runStatusLabel(status: AgentRunState["status"]) {
+  return status.split("-").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
 }

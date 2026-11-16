@@ -51,8 +51,8 @@ import type { BenchStress } from "./runtime-types.ts";
 export async function runBenchWalkSimulation(options: { ms?: number; render?: boolean } = {}) {
   const ms = Math.max(0, Number(options.ms ?? 60_000));
   const renderScene = options.render !== false;
-  const dt = 1 / 60;
-  const frameGapMs = 1000 / 60;
+  const dt = 0.016666666666666666;
+  const frameGapMs = 16.666666666666668;
   const frames = Math.ceil(ms / frameGapMs);
   keys.add("KeyW");
   setInputMode("keyboard");

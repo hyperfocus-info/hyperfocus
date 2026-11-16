@@ -39,7 +39,7 @@ test("structured status bag ticks finite durations", () => {
 });
 
 test("status tokens can be read as exact and prefix bitmasks", () => {
-  const bits = { weakened: 1 << 0, enfeebled: 1 << 1, hex: 1 << 2 };
+  const bits = { weakened: 1, enfeebled: 2, hex: 4 };
   const mask = mmoStatusBitmask("weakened|hex:3", { exact: { weakened: bits.weakened, enfeebled: bits.enfeebled }, prefixes: { hex: bits.hex } });
 
   expect(hasMmoStatusBit(mask, bits.weakened)).toBe(true);
@@ -48,7 +48,7 @@ test("status tokens can be read as exact and prefix bitmasks", () => {
 });
 
 test("status bitmask prefix matching does not match exact tokens", () => {
-  const bits = { weakened: 1 << 0 };
+  const bits = { weakened: 1 };
   const exactOnly = mmoStatusBitmask("weakened:2", { exact: { weakened: bits.weakened } });
   const prefixOnly = mmoStatusBitmask("weakened", { prefixes: { weakened: bits.weakened } });
 

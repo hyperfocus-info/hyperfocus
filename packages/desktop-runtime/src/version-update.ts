@@ -50,18 +50,41 @@ export async function installStandaloneUpdate<TReceipt>(options: {
 export function compareVersions(left: string, right: string) {
   const leftParts = parseVersion(left);
   const rightParts = parseVersion(right);
-  const length = Math.max(leftParts.length, rightParts.length);
+  const length = Math.max(leftParts.core.length, rightParts.core.length);
   for (let index = 0; index < length; index += 1) {
-    const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
-    if (difference !== 0) return Math.sign(difference);
+    const difference = compareNumericIdentifier(leftParts.core[index] ?? "0", rightParts.core[index] ?? "0");
+    if (difference !== 0) return difference;
+  }
+  if (!leftParts.pre.length || !rightParts.pre.length) return Math.sign(Number(!leftParts.pre.length) - Number(!rightParts.pre.length));
+  for (let index = 0; index < Math.max(leftParts.pre.length, rightParts.pre.length); index += 1) {
+    const a = leftParts.pre[index];
+    const b = rightParts.pre[index];
+    if (a === undefined || b === undefined) return a === undefined ? -1 : 1;
+    if (a === b) continue;
+    const aNumeric = /^\d+$/.test(a);
+    const bNumeric = /^\d+$/.test(b);
+    if (aNumeric && bNumeric) return compareNumericIdentifier(a, b);
+    if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;
+    return a < b ? -1 : 1;
   }
   return 0;
 }
 
 function parseVersion(version: string) {
-  const match = version.trim().replace(/^v/i, "").match(/^\d+(?:\.\d+)*/)?.[0];
-  if (!match) {
+  const value = version.trim();
+  const match = value.length <= 256
+    ? /^v?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/i.exec(value)
+    : null;
+  if (!match?.[1]) {
     throw new Error(`Invalid version: ${version}`);
   }
-  return match.split(".").map(Number);
+  const core = match[1].split(".");
+  const pre = match[2]?.split(".") ?? [];
+  if ([...core, ...pre].some((part) => /^0\d+$/.test(part))) throw new Error(`Invalid version: ${version}`);
+  return { core, pre };
+}
+
+function compareNumericIdentifier(left: string, right: string) {
+  if (left.length !== right.length) return Math.sign(left.length - right.length);
+  return left === right ? 0 : left < right ? -1 : 1;
 }

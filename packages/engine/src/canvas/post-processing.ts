@@ -1,3 +1,6 @@
+import { positiveLoopInteger, boundedSampleCount } from "./color/post-process-bounds.ts";
+import { clampByte, finiteNumber, srgbByteToLinearByte, linearByteToSrgbByte } from "./color/post-process-channels.ts";
+import { clamp01 as clampUnit } from "@hyperfocus/utilities/math";
 export type Pixel = [number, number, number, number];
 
 export type PostProcessContext = {
@@ -178,49 +181,23 @@ export type PostProcessStackOptions = {
   workingColorSpace?: "srgb" | "linear-srgb";
 };
 
-const clampByte = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
-const clampUnit = (value: number) => Math.max(0, Math.min(1, value));
+
+
 const hasApply = (effect: PostProcessEffect): effect is PixelEffect => "apply" in effect;
 const hasDraw = (effect: PostProcessEffect): effect is CanvasOverlayEffect => "draw" in effect;
 const overlayCost = postProcessCosts.overlay;
 const pixelCost = postProcessCosts.pixel;
 const distortionCost = postProcessCosts.distortion;
-const MAX_POST_PROCESS_SAMPLES = 256;
 
-export function srgbByteToLinearByte(value: number) {
-  const encoded = clampUnit(finiteNumber(value, "sRGB byte") / 255);
-  const linear = encoded <= 0.04045 ? encoded / 12.92 : ((encoded + 0.055) / 1.055) ** 2.4;
-  return linear * 255;
-}
 
-export function linearByteToSrgbByte(value: number) {
-  const linear = clampUnit(finiteNumber(value, "linear RGB byte") / 255);
-  const encoded = linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055;
-  return encoded * 255;
-}
 
-function finiteNumber(value: number, label: string) {
-  if (!Number.isFinite(value)) throw new RangeError(`${label} must be finite`);
-  return value;
-}
 
-function positiveLoopInteger(value: number, label: string, max = Number.MAX_SAFE_INTEGER) {
-  if (!Number.isFinite(value) || value <= 0) throw new RangeError(`${label} must be a positive finite number`);
-  const normalized = Math.floor(value);
-  if (!Number.isSafeInteger(normalized) || normalized < 1 || normalized > max) {
-    throw new RangeError(`${label} must resolve to an integer between 1 and ${max}`);
-  }
-  return normalized;
-}
 
-function boundedSampleCount(value: number, label: string) {
-  if (!Number.isFinite(value) || value < 0) throw new RangeError(`${label} must be a non-negative finite number`);
-  const normalized = Math.floor(value);
-  if (!Number.isSafeInteger(normalized) || normalized > MAX_POST_PROCESS_SAMPLES) {
-    throw new RangeError(`${label} must resolve to an integer between 0 and ${MAX_POST_PROCESS_SAMPLES}`);
-  }
-  return normalized;
-}
+
+
+
+
+
 
 function canvasDimensions(ctx: CanvasRenderingContext2D) {
   const { width, height } = ctx.canvas;
@@ -688,3 +665,5 @@ function distort(ctx: CanvasRenderingContext2D, map: (nx: number, ny: number, wi
   }
   ctx.putImageData(output, 0, 0);
 }
+
+export { srgbByteToLinearByte, linearByteToSrgbByte } from "./color/post-process-channels.ts";

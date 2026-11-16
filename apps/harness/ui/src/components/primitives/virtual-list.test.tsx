@@ -1,13 +1,14 @@
+import { makeItems } from "../../utils/tests/list-fixtures";
 /** @jsxImportSource solid-js */
-import { afterEach, beforeAll, expect, it } from "bun:test";
+import { afterEach,beforeAll,expect,it } from "bun:test";
 import { createUiTest } from "../../utils/tests/test-harness";
 import {
-  getVirtualListContentSize,
-  getVirtualListNextLoadedCount,
-  getVirtualListReverseScrollTop,
-  getVirtualListScrollTarget,
-  getVirtualListStickToEndScrollTop,
-  shouldResizeVirtualListRow
+getVirtualListContentSize,
+getVirtualListNextLoadedCount,
+getVirtualListReverseScrollTop,
+getVirtualListScrollTarget,
+getVirtualListStickToEndScrollTop,
+shouldResizeVirtualListRow
 } from "./virtual-list";
 
 let render: typeof import("@solidjs/testing-library").render;
@@ -25,6 +26,49 @@ createUiTest("VirtualList", () => {
   afterEach(() => {
     globalThis.ResizeObserver = nativeResizeObserver;
     window.__HARNESS_UI_TELEMETRY__ = [];
+  });
+
+  for (const kind of ['forward', 'reverse'] as const) {
+    it(`renders the initial ${kind} page when items arrive after an empty mount`, async () => {
+      const { createSignal } = await import('solid-js');
+      const [items, setItems] = createSignal<ReturnType<typeof makeItems>>([]);
+      const mounted = render(() => <VirtualList items={items()} getKey={item => item.id} estimateSize={40} pagination={{ kind, initialCount: 10 }} overscan={0}>
+        {item => <div data-testid="arriving-row">{item.label}</div>}
+      </VirtualList>);
+      await Promise.resolve();
+      expect(mounted.container.querySelectorAll('[data-testid="arriving-row"]')).toHaveLength(0);
+      setItems(makeItems(80));
+      await waitFor(() => expect(mounted.container.querySelectorAll('[data-testid="arriving-row"]').length).toBeGreaterThan(0));
+      const canvas = mounted.container.querySelector<HTMLElement>('[data-test-virtual-list] > div');
+      expect(Number.parseFloat(canvas?.style.height ?? '0')).toBeGreaterThan(0);
+      expect(mounted.container.textContent).toContain(kind === 'forward' ? 'Row 0' : 'Row 79');
+    });
+  }
+
+  it('resynchronizes rows when a hidden viewport restores its scroll position without a scroll event', async () => {
+    const resizeObserver = installFakeResizeObserver();
+    const mounted = render(() => <VirtualList items={makeItems(80)} getKey={item => item.id} estimateSize={40} pagination={{ kind: 'all' }} overscan={0}>
+      {item => <div data-testid="revealed-row">{item.label}</div>}
+    </VirtualList>);
+    const viewport = mounted.container.querySelector<HTMLElement>('[data-test-virtual-list]')!;
+    let height = 400;
+    Object.defineProperty(viewport, 'clientHeight', { configurable: true, get: () => height });
+    Object.defineProperty(viewport, 'offsetHeight', { configurable: true, get: () => height });
+    Object.defineProperty(viewport, 'offsetWidth', { configurable: true, get: () => 300 });
+    viewport.scrollTop = 2800;
+    viewport.dispatchEvent(new Event('scroll'));
+    await waitFor(() => expect(mounted.container.textContent).toContain('Row 79'));
+    height = 0; viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
+    resizeObserver.triggerViewport();
+    await Promise.resolve();
+    height = 400; viewport.scrollTop = 2800;
+    resizeObserver.triggerViewport();
+    await waitFor(() => expect(mounted.container.textContent).toContain('Row 79'));
+    expect(viewport.scrollTop).toBe(2800);
+    // TanStack's scroll-end debounce may still contain the hidden pane's zero offset.
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(mounted.container.textContent).toContain('Row 79');
+    expect(viewport.scrollTop).toBe(2800);
   });
 
   it("renders bounded visible rows for a large list", async () => {
@@ -149,14 +193,7 @@ createUiTest("VirtualList", () => {
   });
 });
 
-type TestItem = {
-  id: string;
-  label: string;
-};
 
-function makeItems(count: number): TestItem[] {
-  return Array.from({ length: count }, (_, index) => ({ id: `row-${index}`, label: `Row ${index}` }));
-}
 
 function setMeasuredRowHeight(container: HTMLElement, height: number) {
   container.querySelectorAll<HTMLElement>("[data-test-virtual-list-item]").forEach((element) => {
@@ -193,6 +230,13 @@ function installFakeResizeObserver() {
   Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, writable: true, value: FakeResizeObserver });
 
   return {
+    triggerViewport() {
+      for (const observer of observers) {
+        const target = observer.target;
+        if (!(target instanceof HTMLElement) || !target.hasAttribute('data-test-virtual-list')) continue;
+        observer.callback([{ target, contentRect: target.getBoundingClientRect(), borderBoxSize: [{ inlineSize: target.offsetWidth, blockSize: target.offsetHeight }], contentBoxSize: [], devicePixelContentBoxSize: [] }], observer);
+      }
+    },
     triggerObservedRows() {
       for (const observer of observers) {
         const target = observer.target;

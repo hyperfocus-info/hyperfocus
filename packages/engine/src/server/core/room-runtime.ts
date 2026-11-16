@@ -114,18 +114,24 @@ function createRoomContext<TState, TInput, TEvent, TSnapshot>(
   options: RoomOptions<TState, TInput, TEvent, TSnapshot>,
   events: RoomBroadcast<TEvent>[]
 ): RoomContext<TState, TInput, TEvent> {
+  const players = new Map<string, AuthoritativePlayer>();
   return {
     roomId: options.id,
     roomType: options.type.name,
     state: options.type.createState({ roomId: options.id, roomType: options.type.name, now: options.now }),
-    players: new Map(),
+    players,
     now: options.now,
     broadcast(event, broadcastOptions) {
       const durability = broadcastOptions?.durability ?? "transient";
+      const requested = broadcastOptions?.recipients;
+      if (requested !== undefined && (!Array.isArray(requested) || requested.length > 256)) throw new Error('Invalid room event recipients.');
+      const captured = requested === undefined ? undefined : Array.from(requested);
+      if (captured && (new Set(captured).size !== captured.length || captured.some(id => typeof id !== 'string' || !id.trim() || new TextEncoder().encode(id).length > 128))) throw new Error('Invalid room event recipients.');
+      const recipients = captured?.filter(id => players.has(id));
       if (durability === "durable" && !options.persistence?.appendEvent && !options.persistence?.appendEvents) {
         throw new Error(`room ${options.id} cannot broadcast a durable event without event persistence`);
       }
-      events.push({ event, durability });
+      events.push({ event, durability, ...(recipients === undefined ? {} : { recipients, recipientConnections: new Map(recipients.map(id => [id, players.get(id)?.connection])) }) });
     },
     metrics: options.metrics,
     persistence: options.persistence

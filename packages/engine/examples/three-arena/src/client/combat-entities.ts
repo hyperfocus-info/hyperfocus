@@ -364,7 +364,7 @@ export function updateBullets(dt: number): void {
         }
       }
     });
-    if (!hit && bullet.kind === "boomerang" && bullet.returning && worldDistanceSquared(bullet.x, bullet.z, player.x, player.z) <= 1.4 ** 2) hit = true;
+    if (!hit && bullet.kind === "boomerang" && bullet.returning && worldDistanceSquared(bullet.x, bullet.z, player.x, player.z) <= 1.9599999999999997) hit = true;
     if (hit || bullet.ttl <= 0) removeFromList(state.bullets, i);
   }
 }
@@ -535,7 +535,7 @@ export function updatePickupLightPool(): void {
   for (const pickup of state.pickups) {
     if (lightIndex >= lights.length) break;
     const distanceSq = worldDistanceSquared(player.x, player.z, pickup.x, pickup.z);
-    if (distanceSq > 55 ** 2) continue;
+    if (distanceSq > 3025) continue;
     if (pickup.kind === "xp" && lightIndex > Math.floor(lights.length / 2)) continue;
     const light = lights[lightIndex];
     if (!light) break;

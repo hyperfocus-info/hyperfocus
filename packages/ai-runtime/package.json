@@ -1,0 +1,43 @@
+{
+  "name": "@hyperfocus/ai-runtime",
+  "version": "0.0.1",
+  "description": "App-embeddable AI runtime and secure provider credential adapters.",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./swarm": "./src/swarm/index.ts",
+    "./agent-events": "./src/agent-events.ts",
+    "./quality": "./src/quality/session.ts",
+    "./quality/commands": "./src/quality/commands.ts",
+    "./quality/execution": "./src/quality/execution.ts",
+    "./operations": "./src/operations.ts",
+    "./connections": "./src/connections.ts",
+    "./browser-grants": "./src/browser-grants.ts",
+    "./connections/codex": "./src/process/codex-connection.ts",
+    "./agent-events/mcp": "./src/agent-events-mcp.ts",
+    "./swarm/client": "./src/swarm/proxy.ts",
+    "./cli": "./src/cli.ts",
+    "./server": "./src/server.ts",
+    "./preferences": "./src/preferences/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts ./src/server.ts ./src/cli.ts --outdir ./dist --target bun --format esm --external @hyperfocus/ai-core --external @mariozechner/pi-ai --external zod",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.packages.json",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hyperfocus/desktop-runtime": "workspace:*",
+    "@hyperfocus/ai-core": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1",
+    "zod": "^3.25.76",
+    "@hyperfocus/serialization": "workspace:*",
+    "@hyperfocus/utilities": "workspace:*"
+  }
+}

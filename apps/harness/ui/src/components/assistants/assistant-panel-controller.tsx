@@ -1,78 +1,58 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX, type Setter } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowUp, ArrowUpRight, Brain, Bot, Calendar, Check, CheckSquare2, CircleAlert, CirclePause,
-  CircleHelp, CirclePlay, ClipboardList, CopyPlus, Cpu, FlaskConical, Folder, Gauge, Globe, ListFilter, ListChecks,
-  Logs, MessageSquare, Plus, RefreshCcw, Save, Split, Square, SquarePen, Trash2 } from "lucide-solid";
-import { formatForDisplay } from "@tanstack/solid-hotkeys";
-import {
-  createAssistantTodoId,
-  type BackgroundJob,
-  type BackgroundJobRun,
-  createRequestId,
-  type Assistant,
-  type AssistantLearning,
-  type AssistantQuestion,
-  type AssistantTodo,
-  type BulkOperationAction,
-  type BulkOperationTarget,
-  type ComposerReasoningStrength,
-} from "@hyperfocus/ai-core/protocol";
 import { resolveModeCatalog } from "@hyperfocus/ai-core/modes";
-import { getAssistantQuestionDefaultChoices } from "../../assistant-question-defaults";
-import { formatShortTimestamp, resolveBrowserTimezone } from "../../lib/time-format";
-import { cn, toProperCase } from "../../lib/utils";
-import { normalizeAppHotkeyPreferences } from "../../lib/app-hotkeys";
-import { findChatFileReferenceAtPosition, type ChatFileLinkContext, type ChatFileTarget } from "../../lib/chat-file-links";
+import {
+createAssistantTodoId,
+createRequestId,
+type Assistant,
+type AssistantLearning,
+type AssistantQuestion,
+type AssistantTodo,
+type BulkOperationAction,
+type BulkOperationTarget,
+type ComposerReasoningStrength,
+} from "@hyperfocus/ai-core/protocol";
+import * as stylex from "@stylexjs/stylex";
+import { Brain,Cpu,Gauge,Split } from "lucide-solid";
+import { createEffect,createMemo,createSignal,onCleanup,untrack,type Accessor,type Setter } from "solid-js";
+import { usePaneNavigation } from "../../app/pane-navigation";
+import { createAssistantWorkloadController } from "../../assistant-workload-state";
+import {
+COMPOSER_REASONING_STRENGTHS,
+DEFAULT_COMPOSER_REASONING_STRENGTH,getComposerControlState,getExecutionModelOptionsForAgent,
+getSelectedAssistant,getVisibleAssistants,harnessStore,
+type AssistantDetailTab,
+type AssistantEditorDraft,
+type BackgroundJobEditorDraft
+} from "../../harness-store";
+import { findChatFileReferenceAtPosition,type ChatFileLinkContext,type ChatFileTarget } from "../../lib/chat-file-links";
 import { registerCurrentTabItemSelector } from "../../lib/current-tab-item-hotkeys";
 import { openIdeWindow } from "../../lib/ide-window";
+import { resolveBrowserTimezone } from "../../lib/time-format";
 import { openAssistantLogEntrySource } from "../../source-navigation";
-import { submitOnEnter } from "../../textarea-submit";
-import { type AssistantEditorDraft, type AssistantDetailTab, type BackgroundJobEditorDraft, COMPOSER_REASONING_STRENGTHS,
-  DEFAULT_COMPOSER_REASONING_STRENGTH, type AssistantRosterSort, getComposerControlState, getExecutionModelOptionsForAgent,
-  getSelectedAssistant, getVisibleAssistants, harnessStore } from "../../harness-store";
-import { pushToast } from "../../toast-store";
-import { ActionButton } from "../action-button";
-import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
-import { MarkdownContent } from "../markdown-content";
-import { Button } from "../primitives/button";
-import { ChatComposer } from "../primitives/chat-composer";
-import { ContextMenu, type ContextMenuAction } from "../primitives/context-menu";
-import { CopyTextButton } from "../primitives/copy-text-button";
-import { Dialog } from "../primitives/dialog";
-import { ExecutionLog, type ExecutionLogEntry } from "../primitives/execution-log";
-import { DetailEmptyState, LeftPaneEmptyState, LeftPaneFilterBlock, LeftPaneHeader, LeftPaneListSection,
-  LeftPaneSearchInput, LeftPaneSearchMenu, LeftPaneShell, type LeftPaneSearchMenuItem } from "../primitives/left-pane";
-import { DropdownControl } from "../primitives/dropdown";
-import { Input } from "../primitives/input";
-import { StatusChip, type StatusChipTone } from "../primitives/status-chip";
-import { ScrollArea } from "../primitives/scroll-area";
-import { Textarea } from "../primitives/textarea";
-import { VirtualList } from "../primitives/virtual-list";
-import { rightAlignedNumbersEnabled } from "../../lib/visual-flags";
-import { assistantPanelStyles, assistantUtilityStyles } from "../assistants-panel.styles";
-import { createAssistantWorkloadController, type AssistantWorkloadCollectionState } from "../../assistant-workload-state";
-import { ASSISTANT_DETAIL_CACHE_LIMIT, assistantDetailCollectionForTab, createAssistantDetailPageCommand } from "../../store/assistant-detail-state";
-import {
-  createAssistantRosterPaginationController,
-  createFilteredAssistantRoster,
-} from "./roster-pagination";
-import {
-  assistantRunStateTone,
-  assistantSearchHaystack,
-  assistantWorkloadEmptyMessage,
-  compareAssistantLearnings,
-  compareAssistants,
-  formatAssistantBulkActionLabel,
-  formatReasoningOptionLabel,
-  fuzzyMatches,
-  getReasoningStrengthDescription,
-  matchesAssistantFilters,
-  mergeAssistantRangeSelection,
-  splitAssistantStreamingText,
-  toggleAssistantSelectionId,
-} from "./assistant-panel-model";
-import { createAssistantDetailSelectors } from "./assistant-detail-selectors";
 import { useHarnessStore } from "../../store-providers";
+import { assistantDetailCollectionForTab,createAssistantDetailPageCommand } from "../../store/assistant-detail-state";
+import { pushToast } from "../../toast-store";
+import { assistantUtilityStyles } from "../assistants-panel.styles";
+import { type FileLinkConfig } from "../file-linked-text";
+import { type ContextMenuAction } from "../primitives/context-menu";
+import { type ExecutionLogEntry } from "../primitives/execution-log";
+import { createAssistantDetailSelectors } from "./assistant-detail-selectors";
+import {
+assistantRunStateTone,
+assistantSearchHaystack,
+assistantWorkloadEmptyMessage,
+compareAssistants,
+formatAssistantBulkActionLabel,
+formatReasoningOptionLabel,
+fuzzyMatches,
+getReasoningStrengthDescription,
+matchesAssistantFilters,
+mergeAssistantRangeSelection,
+toggleAssistantSelectionId,
+} from "./assistant-panel-model";
+import {
+createAssistantRosterPaginationController,
+createFilteredAssistantRoster,
+} from "./roster-pagination";
 
 export type AssistantsPanelProps = {
   initialCircuitBreakerAssistantId?: string;
@@ -299,12 +279,15 @@ function createAssistantRecordActions(options: {
 }
 
 function createAssistantSelectionActions(options: {
+  onNavigate?: () => void;
   visibleAssistants: Accessor<Assistant[]>; selectedAssistantIds: Accessor<string[]>;
   setSelectedAssistantIds: Setter<string[]>; assistantSelectionAnchorId: Accessor<string | undefined>;
   setAssistantSelectionAnchorId: Setter<string | undefined>;
 }) {
-  const { visibleAssistants, selectedAssistantIds, setSelectedAssistantIds,
-    assistantSelectionAnchorId, setAssistantSelectionAnchorId } = options;
+  const {
+    visibleAssistants, setSelectedAssistantIds, assistantSelectionAnchorId,
+    setAssistantSelectionAnchorId,
+  } = options;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pendingId: string | undefined;
   let consumed = false;
@@ -364,6 +347,7 @@ function createAssistantSelectionActions(options: {
       return;
     }
     harnessStore.setSelectedAssistantId(assistant.id);
+    options.onNavigate?.();
   }
   return { clearAssistantSelectionTimer, handleAssistantCardClick, scheduleAssistantDelayedSelection };
 }
@@ -416,8 +400,7 @@ function createAssistantChatOptions(options: {
   assistantChatReasoningStrength: Accessor<ComposerReasoningStrength>;
   assistantChatFastMode: Accessor<boolean>;
 }) {
-  const { state, selectedAssistant, assistantChatModeId, assistantChatExecutionModelId,
-    assistantChatReasoningStrength, assistantChatFastMode } = options;
+  const { state, selectedAssistant, assistantChatExecutionModelId } = options;
   const assistantChatModeOptions = createMemo(() => {
       const assistant = selectedAssistant();
       const project = state.workspace.projects.find(
@@ -661,7 +644,15 @@ function installAssistantPanelEffects(options: {
     if (anchorId && !visibleIds.has(anchorId)) o.setAssistantSelectionAnchorId(undefined);
   });
   onCleanup(() => { o.clearAssistantSelectionTimer(); o.releaseAssistantDetailDemand(); });
-  createEffect(() => { o.store.actions.requestSelectedAssistantDetail(); });
+  const demandedAssistantId = createMemo(() => o.selectedAssistant()?.id);
+  const demandedDetailLoaded = createMemo(() => {
+    const assistantId = demandedAssistantId();
+    return Boolean(assistantId && o.store.state.assistants.loadedDetailAssistantIds.includes(assistantId));
+  });
+  createEffect(() => {
+    if (!demandedAssistantId() || demandedDetailLoaded()) return;
+    untrack(() => o.store.actions.requestSelectedAssistantDetail());
+  });
   createEffect(() => {
     const assistant = o.selectedAssistant();
     if (!assistant) return;
@@ -777,15 +768,13 @@ export function createAssistantsPanelController(props?: AssistantsPanelProps) {
   const signals = createAssistantPanelSignals(props);
   const {
     assistantChatExecutionModelId, assistantChatFastMode, assistantChatModeId,
-    assistantChatReasoningStrength, assistantSelectionAnchorId,
-    assistantStickToBottom, assistantStreamingStartedAtByAssistantId, chatDraft,
-    contextMenu, newTodoTitle, questionAnswers, refs, selectedAssistantIds,
-    selectedCircuitBreakerAssistantId, setAssistantChatExecutionModelId,
-    setAssistantChatFastMode, setAssistantChatModeId,
-    setAssistantChatReasoningStrength, setAssistantSelectionAnchorId,
-    setAssistantStickToBottom, setAssistantStreamingStartedAtByAssistantId,
-    setChatDraft, setContextMenu, setNewTodoTitle, setQuestionAnswers,
-    setSelectedAssistantIds, setSelectedCircuitBreakerAssistantId,
+    assistantChatReasoningStrength, assistantSelectionAnchorId, assistantStickToBottom,
+    assistantStreamingStartedAtByAssistantId, chatDraft, newTodoTitle, questionAnswers, refs,
+    selectedAssistantIds, selectedCircuitBreakerAssistantId, setAssistantChatExecutionModelId,
+    setAssistantChatFastMode, setAssistantChatModeId, setAssistantChatReasoningStrength,
+    setAssistantSelectionAnchorId, setAssistantStickToBottom,
+    setAssistantStreamingStartedAtByAssistantId, setChatDraft, setContextMenu, setNewTodoTitle,
+    setQuestionAnswers, setSelectedAssistantIds, setSelectedCircuitBreakerAssistantId,
   } = signals;
   const store = useHarnessStore();
   const releaseAssistantDetailDemand = props?.variant === "roster" ? () => {} : store.actions.registerAssistantDetailDemand();
@@ -809,32 +798,21 @@ export function createAssistantsPanelController(props?: AssistantsPanelProps) {
     ),
   );
   const selectionActions = createAssistantSelectionActions({
+    onNavigate: usePaneNavigation(),
     visibleAssistants, selectedAssistantIds, setSelectedAssistantIds,
     assistantSelectionAnchorId, setAssistantSelectionAnchorId,
   });
-  const {
-    clearAssistantSelectionTimer, handleAssistantCardClick,
-    scheduleAssistantDelayedSelection,
-  } = selectionActions;
+  const { clearAssistantSelectionTimer } = selectionActions;
   const bulkActions = createAssistantBulkActions({
     sendCommand, selectedAssistantIdSet, selectedAssistants, setSelectedAssistantIds,
     setAssistantSelectionAnchorId, setContextMenu,
     executionPaused: () => state.executionControl.isPaused,
   });
-  const { openAssistantBulkContextMenu, sendAssistantBulkOperation } = bulkActions;
   const selectedAssistant = createMemo(() => getSelectedAssistant(state));
   const workloadModel = createAssistantWorkloadModel({
     state, store, activeTab, selectedAssistant, sendCommand,
   });
-  const {
-    activateJobsTab, assistantFileProject, assistantJobsEmptyMessage,
-    assistantRunsEmptyMessage, bootstrapAssistantJobs, canBootstrapAssistantJobs,
-    detailCollectionLabel, loadMoreAssistantJobs, loadMoreAssistantRuns,
-    openAssistantBackgroundJob, openAssistantBackgroundRun, pendingJobSourceId,
-    pendingRunSourceId, requestMoreAssistantDetail, retryAssistantJobs,
-    retryAssistantRuns, selectedDetailCollection, selectedDetailPage,
-    selectedWorkloadPage, visibleJobs, visibleRuns,
-  } = workloadModel;
+  const { assistantFileProject } = workloadModel;
   const assistantChatFileLinkContext = (): ChatFileLinkContext => ({
     rootPath: assistantFileProject()?.rootPath,
     filePaths: assistantFileProject()?.filePaths ?? [],
@@ -842,10 +820,7 @@ export function createAssistantsPanelController(props?: AssistantsPanelProps) {
   const fileActions = createAssistantFileActions({
     state, assistantFileProject, assistantChatFileLinkContext,
   });
-  const {
-    getAssistantFileLinks, getAssistantProjectFileLinks, handleAssistantComposerClick,
-    handleAssistantRosterKeyDown, handleOpenAssistantChatFile,
-  } = fileActions;
+  const { getAssistantProjectFileLinks, handleOpenAssistantChatFile } = fileActions;
   const assistantChatFileLinks = () => ({
     ...assistantChatFileLinkContext(),
     onOpenFile: handleOpenAssistantChatFile,
@@ -865,44 +840,26 @@ export function createAssistantsPanelController(props?: AssistantsPanelProps) {
     state, selectedAssistant, assistantChatModeId, assistantChatExecutionModelId,
     assistantChatReasoningStrength, assistantChatFastMode,
   });
-  const {
-    assistantChatFastModeOptions, assistantChatModeOptions,
-    assistantChatModelOptions, assistantChatReasoningOptions,
-  } = chatOptions;
   const detailSelectors = createAssistantDetailSelectors({
     state, selectedAssistant, selectedCircuitBreakerAssistantId, assistantFileProject,
     getAssistantProjectFileLinks, assistantStreamingStartedAtByAssistantId,
   });
-  const {
-    assistantChatRows, circuitBreakerAssistant, circuitBreakerFileLinks,
-    circuitBreakerLogs, circuitBreakerQuestions, circuitBreakerRuns,
-    filteredLearnings, selectedAssetRefs, selectedExecutionLogs, selectedLearnings,
-    selectedThread, selectedTodos, streamingText, visibleLogs, visibleQuestions, visibleTodos,
-  } = detailSelectors;
+  const { selectedLearnings, selectedThread, selectedTodos, streamingText, visibleLogs } = detailSelectors;
   const executionPaused = createMemo(() => state.executionControl.isPaused);
   const executionPauseReason = "Global execution pause is active";
   const lifecycleActions = createAssistantLifecycleActions({
     state, sendCommand, selectedAssistant, setSelectedCircuitBreakerAssistantId,
     executionPaused,
   });
-  const {
-    handleDeleteAssistant, openAssistantJobEditor, openCircuitBreakerJobs,
-    retryCircuitBreaker,
-  } = lifecycleActions;
   const editorChatActions = createAssistantEditorChatActions({
     state, sendCommand, executionPaused, selectedAssistant, chatDraft, setChatDraft,
     assistantChatModeId, assistantChatExecutionModelId,
     assistantChatReasoningStrength, assistantChatFastMode, refs,
   });
-  const { handleSendChat, openCreateAssistant, openEditAssistant } = editorChatActions;
   const recordActions = createAssistantRecordActions({
     sendCommand, selectedAssistant, newTodoTitle, setNewTodoTitle, selectedTodos,
     selectedLearnings, executionPaused, questionAnswers, setQuestionAnswers,
   });
-  const {
-    answerQuestion, deleteLearning, deleteTodo, handleAddTodo, reorderLearning,
-    reorderTodo, updateTodo,
-  } = recordActions;
   const variant = () => (props && props.variant ? props.variant : "full");
 
 

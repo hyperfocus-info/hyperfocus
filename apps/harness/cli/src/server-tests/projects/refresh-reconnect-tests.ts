@@ -110,8 +110,8 @@ export function registerRefreshReconnectTests(serverTest: ServerTestRegistrar, f
         expect(restoredProject?.session.isStreaming).toBe(true);
         expect(restoredProject?.session.messages.at(-1)?.content).toBe("working");
         const complete = await waitForEvent(reconnectSocket, "chat.complete", (event) => event.payload.projectId === projectId && event.payload.threadId === threadId, 10000);
-        expect(complete.payload.assistantMessage.content).toBe("main execution result");
-        expect(complete.payload.state.messages.at(-1)?.content).toBe("main execution result");
+        expect(complete.payload.assistantMessage.content).toBe("main execution result\n\nVerification unverified: no task-specific checks were established.");
+        expect(complete.payload.state.messages.at(-1)?.content).toBe(complete.payload.assistantMessage.content);
         reconnectSocket.close();
     }, 10000);
     serverTest("creates a new thread while another thread is still streaming", async () => {
@@ -155,7 +155,7 @@ export function registerRefreshReconnectTests(serverTest: ServerTestRegistrar, f
         const completed = await completePromise;
         expect(completed.payload.threadId).toBe(originalThreadId);
         expect(repository.getProject(projectId).activeThreadId).toBe(newThreadId);
-        expect(repository.getThreadMessages(projectId, originalThreadId).at(-1)?.content).toBe("main execution result");
+        expect(repository.getThreadMessages(projectId, originalThreadId).at(-1)?.content).toBe("main execution result\n\nVerification unverified: no task-specific checks were established.");
         socket.close();
     }, 10000);
 }

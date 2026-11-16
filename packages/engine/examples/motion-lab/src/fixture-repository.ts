@@ -1,3 +1,5 @@
+import { isFiniteNumber as isNumber } from "@hyperfocus/utilities/math";
+import { isRecord } from "@hyperfocus/utilities/records";
 import { Group, SkinnedMesh, type Object3D } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -115,9 +117,9 @@ function isFixtureEntry(value: unknown): value is MotionLabFixtureEntry {
     isRecord(inspection) && [inspection.animations, inspection.joints].every(isNumber) && isStringArray(inspection.jointNames) && isStringArray(inspection.nodeNames);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === "object" && !Array.isArray(value)); }
+
 function isString(value: unknown): value is string { return typeof value === "string"; }
-function isNumber(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value); }
+
 function isBoolean(value: unknown): value is boolean { return typeof value === "boolean"; }
 function isStringArray(value: unknown): value is string[] { return Array.isArray(value) && value.every(isString); }
 

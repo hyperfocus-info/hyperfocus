@@ -1,6 +1,6 @@
-import { cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { $ } from "bun";
+import { runReleaseCommand } from "./smoke/run-command.ts";
 import {
   assertCameraDeclarationSource,
   assertCameraRootExportsSource,
@@ -66,7 +66,7 @@ export function copyRuntimeArtifacts(sourceDir: string, targetDir: string) {
 }
 
 export async function emitPackageDeclarations(targetDir: string, projectRoot = rootDir) {
-  await $`bun run tsc -p ./tsconfig.types.json --outDir ${targetDir}`.cwd(projectRoot);
+  await runReleaseCommand({ cmd: [process.execPath, "run", "tsc", "-p", "./tsconfig.types.json", "--outDir", targetDir], cwd: projectRoot });
   rewriteDeclarationImports(targetDir);
   assertNoElidedAnyDeclarations(targetDir);
   assertCameraDeclarationsStayPublic(targetDir);
@@ -74,8 +74,10 @@ export async function emitPackageDeclarations(targetDir: string, projectRoot = r
 
 export async function buildTypes() {
   const nonce = `${process.pid}-${Date.now()}`;
-  const stagingDir = join(rootDir, `.dist-types-${nonce}`);
-  const backupDir = join(rootDir, `.dist-backup-${nonce}`);
+  const scratchDir = join(rootDir, '.local');
+  mkdirSync(scratchDir, { recursive: true });
+  const stagingDir = join(scratchDir, `dist-types-${nonce}`);
+  const backupDir = join(scratchDir, `dist-backup-${nonce}`);
 
   try {
     await emitPackageDeclarations(stagingDir);

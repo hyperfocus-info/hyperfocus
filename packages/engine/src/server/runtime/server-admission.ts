@@ -6,8 +6,10 @@ import type { MmoAdmissionOptions } from "../replication/scaling.ts";
 import type { EngineServerWebSocket, JoinRoomOptions, JoinRoomResult } from "./server-contract.ts";
 import type { ServerReplication } from "./server-replication.ts";
 import type { ServerRoomManager } from "./server-rooms.ts";
+import { SESSION_SUPERSEDED_CLOSE_CODE } from '../../protocol/messages.ts';
 
 type ServerAdmissionOptions = {
+  reconnectGraceMs?: number;
   auth?: AuthAdapter;
   persistence?: PersistenceAdapter;
   roomTypes: readonly RoomType[];
@@ -25,7 +27,8 @@ type ServerAdmissionOptions = {
 let nextPlayerId = 1;
 
 export function isServerSocket(value: unknown): value is EngineServerWebSocket<unknown> {
-  return typeof value === "object" && value !== null && "send" in value && typeof value.send === "function";
+  return typeof value === "object" && value !== null && "send" in value && typeof value.send === "function"
+    && "close" in value && typeof value.close === "function";
 }
 
 function roomAllowed(decision: JoinDecision) {
@@ -42,6 +45,7 @@ export function createServerAdmission(options: ServerAdmissionOptions) {
   const closedConnections = new WeakSet<EngineServerWebSocket<unknown>>();
   const userJoinQueues = new Map<string, Promise<void>>();
   const joinIdleWaiters = new Set<() => void>();
+  const recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let activeJoins = 0;
 
   async function enqueueUserJoin<T>(userId: string, join: () => Promise<T>) {
@@ -62,8 +66,10 @@ export function createServerAdmission(options: ServerAdmissionOptions) {
   }
 
   async function leavePlayer(playerId: string, reason = "leave") {
+    clearTimeout(recoveryTimers.get(playerId));recoveryTimers.delete(playerId);
     const player = options.presence.get(playerId);
     if (!player) return false;
+    delete player.reconnectUntil;
     options.presence.remove(playerId);
     options.replication.removePlayer(playerId, player.roomId);
     const room = options.rooms.get(player.roomId);
@@ -86,12 +92,43 @@ export function createServerAdmission(options: ServerAdmissionOptions) {
       return { ok: false, reason: "auth returned an invalid session" };
     }
     const userId = authResult.userId;
+    const current = async () => {
+      try { return options.auth?.isCurrent === undefined || await options.auth.isCurrent(authResult) === true; }
+      catch { return false; }
+    };
     return enqueueUserJoin(userId, async () => {
       if (options.isStopping()) return { ok: false, reason: "server stopping" };
+      if (!await current()) return { ok: false, reason: 'authentication revoked' };
       const previous = options.presence.byUser(userId);
+      if (previous?.reconnectUntil !== undefined) {
+        if (options.now() >= previous.reconnectUntil) { await leavePlayer(previous.id, 'reconnect-timeout');return { ok: false, reason: 'reconnect grace expired' }; }
+        const room = options.rooms.get(previous.roomId);
+        if (!room || join.roomId !== previous.roomId || join.roomType !== room.type.name || (authResult.sessionId ?? `session:${userId}`) !== previous.sessionId || !isServerSocket(join.connection)) return { ok: false, reason: 'reconnect identity or room mismatch' };
+        if (closedConnections.has(join.connection)) return { ok: false, reason: 'connection closed' };
+        const connection = join.connection;
+        const attached = await room.runExclusive(async () => {
+          if (!await current()) return false;
+          if (options.isStopping() || closedConnections.has(connection) || options.presence.get(previous.id) !== previous || previous.reconnectUntil === undefined || options.now() >= previous.reconnectUntil) return false;
+          clearTimeout(recoveryTimers.get(previous.id));recoveryTimers.delete(previous.id);
+          previous.connection = connection;delete previous.reconnectUntil;
+          playerByConnection.set(connection, previous.id);
+          options.replication.attach(previous.id, room.id, connection);
+          return true;
+        });
+        if (!attached) return { ok: false, reason: 'reconnect reservation unavailable' };
+        options.metrics.record('server.reconnect', 1);
+        return { ok: true, player: previous, room };
+      }
       if (previous) {
         options.metrics.record("server.duplicate_login", 1);
-        await leavePlayer(previous.id, "duplicate-login");
+        try { await leavePlayer(previous.id, "duplicate-login"); }
+        finally {
+          if (isServerSocket(previous.connection)) {
+            closedConnections.add(previous.connection);
+            try { previous.connection.close(SESSION_SUPERSEDED_CLOSE_CODE, 'This account signed in elsewhere. Sign in again to continue.'); }
+            catch { /* The previous transport may already be closed. */ }
+          }
+        }
       }
       const playerBase = {
         id: `player-${nextPlayerId++}`,
@@ -103,11 +140,17 @@ export function createServerAdmission(options: ServerAdmissionOptions) {
         data: (await options.persistence?.loadPlayer(userId)) ?? undefined
       };
       if (options.isStopping()) return { ok: false, reason: "server stopping" };
+      if (!await current()) return { ok: false, reason: 'authentication revoked' };
 
       async function attemptRoom(room: AuthoritativeRoom): Promise<JoinRoomResult> {
+        if (!await current()) return { ok: false, reason: 'authentication revoked' };
         const player: AuthoritativePlayer = { ...playerBase, roomId: room.id };
         const decision = await room.join(player, join.request, options.roomManager.maxPlayersForRoom(room));
         if (!roomAllowed(decision)) return { ok: false, reason: roomReason(decision) ?? "join rejected" };
+        if (!await current()) {
+          await room.leave(player.id, 'authentication-revoked');
+          return { ok: false, reason: 'authentication revoked' };
+        }
         options.presence.add(player);
         if (isServerSocket(join.connection)) {
           playerByConnection.set(join.connection, player.id);
@@ -181,19 +224,35 @@ export function createServerAdmission(options: ServerAdmissionOptions) {
   }
 
   function boundPlayerId(socket: EngineServerWebSocket<unknown>) {
+    if (closedConnections.has(socket)) return undefined;
     const mappedPlayerId = playerByConnection.get(socket);
     if (!mappedPlayerId || !options.presence.get(mappedPlayerId)) return undefined;
     return mappedPlayerId;
   }
 
-  async function closeConnection(socket: EngineServerWebSocket<unknown>) {
+  async function closeConnection(socket: EngineServerWebSocket<unknown>, code = 1006) {
     closedConnections.add(socket);
-    const playerId = boundPlayerId(socket);
+    const playerId = playerByConnection.get(socket);
     if (!playerId) return;
-    playerByConnection.delete(socket);
-    socket.data = {};
-    options.replication.removePlayer(playerId, options.presence.get(playerId)?.roomId ?? "");
-    await leavePlayer(playerId, "disconnect");
+    const owner = options.presence.get(playerId);if (!owner) return;
+    await enqueueUserJoin(owner.userId, async () => {
+      if (options.presence.get(playerId) !== owner || owner.connection !== socket) return;
+      playerByConnection.delete(socket);socket.data = {};
+      options.replication.removePlayer(playerId, owner.roomId);
+      const grace = options.reconnectGraceMs ?? 0, room = options.rooms.get(owner.roomId);
+      if (!grace || ![1001, 1006, 1011, 1012, 1013, 4002].includes(code) || options.isStopping() || !room) { await leavePlayer(playerId, options.isStopping() ? 'server-stop' : code === 1000 ? 'leave' : grace ? 'connection-close' : 'disconnect');return; }
+      await room.runExclusive(() => { owner.connection = undefined;owner.reconnectUntil = options.now() + grace; });
+      const expire = () => {
+        void enqueueUserJoin(owner.userId, async () => {
+          if (options.presence.get(playerId) !== owner || owner.reconnectUntil === undefined) return;
+          const remaining = owner.reconnectUntil - options.now();
+          if (remaining > 0) { recoveryTimers.set(playerId, setTimeout(expire, remaining));return; }
+          await leavePlayer(playerId, 'reconnect-timeout');
+        }).catch(() => options.metrics.record('server.reconnect_expiry_error', 1));
+      };
+      recoveryTimers.set(playerId, setTimeout(expire, grace));
+      options.metrics.record('server.reconnect_wait', 1);
+    });
   }
 
   return {

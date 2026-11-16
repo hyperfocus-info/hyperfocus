@@ -1,26 +1,20 @@
-# TypeScript And Build
+# TypeScript and build
 
-Use this when touching TypeScript implementation style, build scripts, automation, Bun APIs, or build command flow. Use `general-conventions.md` for naming rules.
+For language, type modeling and naming, use
+[repository code style](../../../../docs/code-style.md); this reference owns
+Harness-specific build boundaries.
 
-## TypeScript Preferences
+Use Bun TypeScript for repository automation. Process creation goes through
+`@hyperfocus/desktop-runtime/process` and owned headless browsers through
+`/automation`; raw spawn convenience must not bypass the
+[hidden process contract](../../../../docs/development.md#process-and-browser-lifecycle).
 
-- Prefer inferred function return types over explicit return annotations.
-- Use explicit return annotations only when needed for a stable external contract or when inference is genuinely insufficient.
-- Do not use `as any` or `as unknown`.
-- Prefer zod validation, parser helpers, narrowing helpers, and typed adapters over unsafe casts.
-- Prefer explicit typed contracts over ad hoc string commands.
-- Keep domain types narrow. Normalize external input before parsing rather than widening internal unions.
+Build with `bun run build:harness` when changing production bundling, deployment
+wiring, asset serving, or compiler behavior. Focused tests/typechecking cover
+ordinary edits without a production build.
 
-## Bun Preferences
-
-- Use Bun latest syntax for scripts, tests, and generated files.
-- For script invocation and repo automation glue, prefer TypeScript executed with Bun over Python or shell when adding new paths.
-- Prefer Bun-native build and runtime APIs such as `Bun.build`, `Bun.file`, `Bun.write`, `Bun.spawn`, and `bun test` when they fit.
-- If `bun.ps1` is blocked by PowerShell execution policy, use `bun.cmd`.
-
-## Build Preferences
-
-- Do not require `bun run build:harness` for routine work when focused tests and
-  typechecking cover the risk.
-- Run `bun run build:harness` when work touches production bundling, deployment
-  wiring, asset serving, or compiler behavior.
+Server reuse, rollback, and HMR scheduling tests inject `uiAssetManagerFactory`
+and assert lifecycle calls. Real bundling exceeded the startup shard deadline
+and leaked pending startup into rollback tests; increasing timeouts does not
+isolate those responsibilities. Compilation/watcher coverage belongs in
+`apps/harness/cli/src/ui-build.test.ts` and production build verification.

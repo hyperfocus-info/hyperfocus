@@ -1,8 +1,78 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runGitPreflight } from "./git-preflight";
+import { ensureProjectDirectory } from "./git-project";
+
+describe("project directory validation", () => {
+  const windowsTest = process.platform === "win32" ? test : test.skip;
+
+  windowsTest("rejects an unavailable drive before recursive directory creation", async () => {
+    const statPaths: string[] = [];
+    const mkdirPaths: string[] = [];
+    const unavailable = Object.assign(new Error("drive not found"), { code: "ENOENT" });
+
+    await expect(ensureProjectDirectory("Z:\\missing-project", {
+      async statPath(targetPath) {
+        statPaths.push(targetPath);
+        throw unavailable;
+      },
+      async createDirectory(targetPath) {
+        mkdirPaths.push(targetPath);
+      }
+    })).rejects.toThrow("Project drive Z: is unavailable");
+
+    expect(statPaths).toEqual([path.parse("Z:\\missing-project").root]);
+    expect(mkdirPaths).toEqual([]);
+  });
+
+  windowsTest("normalizes an escaped Windows path before creating the missing folder", async () => {
+    const statPaths: string[] = [];
+    const mkdirPaths: string[] = [];
+    const missing = Object.assign(new Error("missing"), { code: "ENOENT" });
+    const rawPath = "C:\\\\projects\\\\new-project";
+    const normalizedPath = path.normalize(rawPath);
+
+    const result = await ensureProjectDirectory(rawPath, {
+      async statPath(targetPath) {
+        statPaths.push(targetPath);
+        if (targetPath === path.parse(normalizedPath).root) {
+          return { isDirectory: () => true };
+        }
+        throw missing;
+      },
+      async createDirectory(targetPath) {
+        mkdirPaths.push(targetPath);
+      }
+    });
+
+    expect(result).toBe(normalizedPath);
+    expect(statPaths).toEqual([path.parse(normalizedPath).root, normalizedPath]);
+    expect(mkdirPaths).toEqual([normalizedPath]);
+  });
+
+  windowsTest("does not create through a target path that cannot be inspected", async () => {
+    const mkdirPaths: string[] = [];
+    const denied = Object.assign(new Error("access denied"), { code: "EPERM" });
+    const targetPath = "C:\\protected\\project";
+
+    await expect(ensureProjectDirectory(targetPath, {
+      async statPath(candidatePath) {
+        if (candidatePath === path.parse(targetPath).root) {
+          return { isDirectory: () => true };
+        }
+        throw denied;
+      },
+      async createDirectory(candidatePath) {
+        mkdirPaths.push(candidatePath);
+      }
+    })).rejects.toThrow(`Project path is unavailable: ${targetPath}`);
+
+    expect(mkdirPaths).toEqual([]);
+  });
+});
 
 describe("git preflight", () => {
   test("allows non-git folders when dirty-git restriction is disabled", async () => {
@@ -54,6 +124,21 @@ describe("git preflight", () => {
       })
     ).rejects.toThrow("Git preflight could not inspect workspace state: fatal: Unable to create '.git/index.lock': File exists.");
   });
+
+  test("explains an inherited parent repository and the independent-product recovery", async () => {
+    const rootPath = createTempDir();
+    await runGit(["init"], rootPath);
+    writeFileSync(path.join(rootPath, "parent.txt"), "unrelated work");
+    const nested = path.join(rootPath, "new-product");
+    mkdirSync(nested);
+    const result = await runGitPreflight(nested, { maxDirtyFileCount: 0 });
+    expect(result.status).toBe("blocked");
+    if (result.status === "clean") throw new Error("Expected dirty repository");
+    expect(result.preflight.message).toContain("shares the parent repository");
+    expect(result.preflight.message).toContain("initialize a separate Git repository");
+    await runGit(["init"], nested);
+    expect((await runGitPreflight(nested)).status).toBe("clean");
+  });
 });
 
 function createTempDir() {
@@ -63,7 +148,7 @@ function createTempDir() {
 }
 
 async function runGit(args: string[], cwd: string) {
-  const process = Bun.spawn({
+  const process = spawnBackgroundProcess({
     cmd: ["git", ...args],
     cwd,
     stdout: "ignore",

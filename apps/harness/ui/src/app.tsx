@@ -1,9 +1,27 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type Component } from "solid-js";
-import { createHotkeys, formatForDisplay } from "@tanstack/solid-hotkeys";
-import type { CreateHotkeyDefinition } from "@tanstack/solid-hotkeys";
-import * as stylex from "@stylexjs/stylex";
-import { Bot, BriefcaseBusiness, Clock3, Cog, ExternalLink, FolderKanban, Maximize2, Menu, Minimize2, Pause, Play, PanelsTopLeft, Workflow, CircleQuestionMark, X } from "lucide-solid";
 import { createRequestId } from "@hyperfocus/ai-core/protocol";
+import { PanelGroup,type PanelDescriptor,type PanelGroupLayout } from "@hyperfocus/ui";
+import { HomeButton, registerOverlay } from "@hyperfocus/ui/primitives";
+import * as stylex from "@stylexjs/stylex";
+import type { CreateHotkeyDefinition } from "@tanstack/solid-hotkeys";
+import { createHotkeys,formatForDisplay } from "@tanstack/solid-hotkeys";
+import { ExternalLink,Maximize2,Menu,Minimize2,X } from "lucide-solid";
+import { createEffect,createMemo,createSignal,For,onCleanup,onMount,Show } from "solid-js";
+import { styles } from "./app/app.styles";
+import { HeaderActions } from "./app/header-actions";
+import {
+persistIdeWindowState,
+readPersistedIdeWindowState,
+type IdeWindowBounds,
+} from "./app/ide-window-state";
+import {
+isProjectSwitcherInputFocused,
+isResizeObserverLoopError,
+measureTabStripMinimumWidth,
+shouldCollapseTabStrip,
+} from "./app/layout-measurement";
+import { lazySurface } from "./app/lazy-surface";
+import { leftPaneTabs } from "./app/left-pane-tabs";
+import { PaneNavigationProvider } from "./app/pane-navigation";
 import { AssistantEditorDialog } from "./components/assistant-editor-dialog";
 import { AssistantsPanel } from "./components/assistants-panel";
 import { BackgroundJobEditorDialog } from "./components/background-job-editor-dialog";
@@ -12,49 +30,35 @@ import { ChatPanel } from "./components/chat-panel";
 import { ConnectionBanner } from "./components/connection-banner";
 import { ExecutionPlanDialog } from "./components/execution-plan-dialog";
 import { HelpTutorialDialog } from "./components/help-tutorial-dialog";
-import { NotificationInbox } from "./components/notification-inbox";
-import { PreferenceSectionNav, PreferencesPanel } from "./components/preferences-modal";
+import { PreferencesPanel } from "./components/preferences-modal";
+import { Button } from "./components/primitives/button";
+import { SheetContent,SheetRoot,SheetTrigger } from "./components/primitives/sheet";
 import { ProjectSidebar } from "./components/project-sidebar/project-sidebar";
 import { ProjectSwitcherDialog } from "./components/project-switcher-dialog";
 import { Toaster } from "./components/toaster";
-import { TracePanel, TracePeekRail } from "./components/trace-panel";
-import { getTutorialDefinition, tutorialDefinitions } from "./components/tutorial-definitions";
+import { TracePanel,TracePeekRail } from "./components/trace-panel";
+import { getTutorialDefinition,tutorialDefinitions } from "./components/tutorial-definitions";
 import { TutorialOverlay } from "./components/tutorial-overlay";
-import { ActionButton } from "./components/action-button";
-import { LeftPaneShell } from "./components/primitives/left-pane";
-import { SheetContent, SheetRoot, SheetTrigger } from "./components/primitives/sheet";
-import { Button } from "./components/primitives/button";
+import { harnessStore,type AssistantEditorDraft,type BackgroundJobEditorDraft,type HarnessLeftTab } from "./harness-store";
 import { connectHarnessWebSocket } from "./harness-websocket";
-import { harnessStore, type AssistantEditorDraft, type BackgroundJobEditorDraft, type HarnessLeftTab, type MainPanelSizes } from "./harness-store";
-import { IdeWorkbench } from "./ide/ide-workbench";
 import { ideStore } from "./ide/ide-store";
-import { resolveBrowserTimezone } from "./lib/time-format";
-import { appHotkeySettings, currentTabItemHotkeyIds, normalizeAppHotkeyPreferences, type AppHotkeyId } from "./lib/app-hotkeys";
+import type { IdeWorkbenchProps } from "./ide/ide-workbench";
+import { appHotkeySettings,currentTabItemHotkeyIds,normalizeAppHotkeyPreferences,type AppHotkeyId } from "./lib/app-hotkeys";
 import { selectCurrentTabItem } from "./lib/current-tab-item-hotkeys";
-import { createIdeWindowUrl, IDE_POP_IN_EVENT, OPEN_IDE_WINDOW_EVENT, readOpenIdeWindowInput, type OpenIdeWindowInput } from "./lib/ide-window";
+import { createIdeWindowUrl,IDE_POP_IN_EVENT,OPEN_IDE_WINDOW_EVENT,readOpenIdeWindowInput,type OpenIdeWindowInput } from "./lib/ide-window";
+import { resolveBrowserTimezone } from "./lib/time-format";
+import { resolveTracePanelEntity } from "./lib/trace-panel-model";
+import { isTutorialGoalSatisfied } from "./lib/tutorial-progress";
 import { createCurrentToastSourceNavigation } from "./source-navigation";
-import { TerminalDrawer } from "./terminal/terminal-drawer";
 import { toggleTerminalSearch } from "./terminal/terminal-search-actions";
 import { terminalStore } from "./terminal/terminal-store";
-import { reportUiError, setDefaultToastSourceResolver } from "./toast-store";
-import { isTutorialGoalSatisfied } from "./lib/tutorial-progress";
-import { styles } from "./app/app.styles";
-import {
-  createDefaultIdeWindowBounds,
-  persistIdeWindowState,
-  readPersistedIdeWindowState,
-  type IdeWindowBounds,
-} from "./app/ide-window-state";
-import { leftPaneTabs } from "./app/left-pane-tabs";
-import {
-  isProjectSwitcherInputFocused,
-  isResizeObserverLoopError,
-  measureTabStripMinimumWidth,
-  shouldCollapseTabStrip,
-} from "./app/layout-measurement";
+import { reportUiError,setDefaultToastSourceResolver } from "./toast-store";
 
 export { createDefaultIdeWindowBounds } from "./app/ide-window-state";
 export { shouldCollapseTabStrip } from "./app/layout-measurement";
+
+const IdeWorkbench = lazySurface<IdeWorkbenchProps>("IDE", async () => ({ default: (await import("./ide/ide-workbench")).IdeWorkbench }));
+const TerminalDrawer = lazySurface("terminal", async () => ({ default: (await import("./terminal/terminal-drawer")).TerminalDrawer }));
 
 function createIdeWindowController() {
   const persisted = readPersistedIdeWindowState();
@@ -86,7 +90,7 @@ function registerAppHotkeys(options: { openIde: () => void; closeIde: () => void
   const appHotkeys = (): CreateHotkeyDefinition[] => {
     const hotkeys = normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
     return appHotkeySettings.filter((setting) => setting.id !== "focusCurrentSearch" && setting.scope !== "ide").flatMap((setting) =>
-      hotkeys[setting.id].map((hotkey) => ({
+      hotkeys[setting.id].flatMap(hotkey => setting.id === "openPreferences" && hotkey === "Mod+," ? ["Meta+," as const, "Control+," as const] : [hotkey]).map((hotkey) => ({
         hotkey,
         callback: () => handleAppHotkey(setting.id, { openIde: options.openIde }),
         options: { meta: { name: setting.label, description: setting.description } }
@@ -95,14 +99,14 @@ function registerAppHotkeys(options: { openIde: () => void; closeIde: () => void
   };
   const projectSwitcherHotkeys = (): CreateHotkeyDefinition[] => {
     const hotkeys = normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
-    return hotkeys.openProjectSwitcher.map((hotkey) => ({
+    return (['openProjectSwitcher', 'openPreferences'] as const).flatMap(id => hotkeys[id].flatMap(hotkey => id === 'openPreferences' && hotkey === 'Mod+,' ? ['Meta+,' as const, 'Control+,' as const] : [hotkey]).map((hotkey) => ({
       hotkey,
-      callback: () => handleAppHotkey("openProjectSwitcher"),
+      callback: () => { if (id === 'openPreferences') options.closeIde(); handleAppHotkey(id); },
       options: {
         conflictBehavior: "allow" as const,
-        meta: { name: "Project switcher", description: "Open projects and active threads." }
+        meta: { name: id === 'openPreferences' ? 'Workspace preferences' : 'Project switcher', description: id === 'openPreferences' ? 'Open workspace preferences.' : 'Open projects and active threads.' }
       }
-    }));
+    })));
   };
   const searchHotkeys = (): CreateHotkeyDefinition[] => {
     const hotkeys = normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences);
@@ -129,25 +133,7 @@ function registerAppHotkeys(options: { openIde: () => void; closeIde: () => void
     stopPropagation: true
   }));
   createHotkeys(searchHotkeys, standardOptions);
-  createHotkeys(
-    () => [{
-      hotkey: "Escape",
-      callback: () => {
-        if (harnessStore.state.projectSwitcherOpen) {
-          harnessStore.closeProjectSwitcher();
-          return;
-        }
-        if (!closeIdeOverlay()) options.closeIde();
-      },
-      options: { meta: { name: "Close IDE", description: "Close the IDE window" } }
-    }],
-    () => ({
-      enabled: harnessStore.state.activeSurface === "ide",
-      ignoreInputs: false,
-      preventDefault: true,
-      stopPropagation: true
-    })
-  );
+
 }
 
 function registerAppLifecycle(options: { openIde: () => void; ideWindowOpen: () => boolean }) {
@@ -204,63 +190,79 @@ function createAppViewModel() {
   const state = harnessStore.state;
   const activeLeftTab = createMemo(() => state.activeLeftTab);
   const activeLeftTabDefinition = createMemo(() => leftPaneTabs.find((tab) => tab.id === activeLeftTab()) ?? leftPaneTabs[0]);
-  const tracePanelMode = createMemo(() => state.experienceMode === "simple" ? "closed" : state.tracePanelMode);
-  const mainPanelGridStyle = () => ({
-    "--left-panel-size": `${state.mainPanelSizes.left}fr`,
-    "--center-panel-size": `${state.mainPanelSizes.center}fr`,
-    "--right-panel-size": `${state.mainPanelSizes.right}fr`
-  });
-  const startPanelResize = (divider: "left" | "right", event: PointerEvent) => {
-    if (window.innerWidth < 1180) return;
-    event.preventDefault();
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLElement)) return;
-    target.setPointerCapture?.(event.pointerId);
-    const startX = event.clientX;
-    const startSizes = { ...state.mainPanelSizes };
-    const total = tracePanelMode() === "open"
-      ? startSizes.left + startSizes.center + startSizes.right
-      : startSizes.left + startSizes.center;
-    const pixelsPerFr = Math.max(80, window.innerWidth / total);
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const deltaFr = (moveEvent.clientX - startX) / pixelsPerFr;
-      const nextSizes: MainPanelSizes = { ...startSizes };
-      if (divider === "left") {
-        nextSizes.left = startSizes.left + deltaFr;
-        nextSizes.center = startSizes.center - deltaFr;
-      } else {
-        nextSizes.center = startSizes.center + deltaFr;
-        nextSizes.right = startSizes.right - deltaFr;
-      }
-      harnessStore.setMainPanelSizes(nextSizes);
-    };
-    const onPointerUp = (endEvent: PointerEvent) => {
-      if (endEvent.pointerId !== event.pointerId) return;
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
-      if (target.hasPointerCapture?.(event.pointerId)) target.releasePointerCapture(event.pointerId);
-    };
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-    window.addEventListener("pointercancel", onPointerUp, { once: true });
-  };
-  const resizePanelFromKeyboard = (divider: "left" | "right", direction: -1 | 1, largeStep: boolean) => {
-    const step = largeStep ? 0.5 : 0.1;
-    const nextSizes: MainPanelSizes = { ...state.mainPanelSizes };
-    if (divider === "left") {
-      nextSizes.left += direction * step;
-      nextSizes.center -= direction * step;
-    } else {
-      nextSizes.center += direction * step;
-      nextSizes.right -= direction * step;
-    }
-    harnessStore.setMainPanelSizes(nextSizes);
-  };
+  const tracePanelMode = createMemo(() => state.experienceMode === "simple" || state.activeLeftTab === "preferences" || !resolveTracePanelEntity(state) ? "closed" : state.tracePanelMode);
   const executionControlTooltip = () => !state.executionControl.isPaused
     ? "Pause new executions"
     : `Resume new executions | queued ${state.executionControl.deferredPlanningQuestionCount} planner, ${state.executionControl.deferredAssistantQuestionCount} assistant, ${state.executionControl.deferredBrowserApprovalCount} browser`;
-  return { state, activeLeftTab, activeLeftTabDefinition, tracePanelMode, mainPanelGridStyle, startPanelResize, resizePanelFromKeyboard, executionControlTooltip };
+  return { state, activeLeftTab, activeLeftTabDefinition, tracePanelMode, executionControlTooltip };
+}
+
+function HarnessPanelGroup(props: {
+  activeLeftTab: () => HarnessLeftTab;
+  tracePanelMode: () => "closed" | "peek" | "open";
+}) {
+  const [narrowPanel, setNarrowPanel] = createSignal("work");
+  const firstRun = () => props.activeLeftTab() === "projects" && harnessStore.state.workspace.projects.length === 0;
+  const scale = 240;
+  const mainContent = () => (
+    <div {...stylex.attrs(styles.mainPanelSurface)}>
+      <Show when={props.activeLeftTab() === "jobs" || props.activeLeftTab() === "runs"} fallback={
+        <Show when={props.activeLeftTab() === "preferences"} fallback={
+          <Show when={props.activeLeftTab() === "assistants"} fallback={<ChatPanel />}><AssistantsPanel variant="detail" /></Show>
+        }><PreferencesPanel /></Show>
+      }>
+        <BackgroundJobsPanel variant="detail" segment={props.activeLeftTab() === "jobs" ? "jobs" : "runs"} />
+      </Show>
+    </div>
+  );
+  // Context availability changes the detail pane, not the navigation lifetime.
+  const navigationContent = <div {...stylex.attrs(styles.desktopSidebar)}><div data-tour-id="project-sidebar" {...stylex.attrs(styles.fullHeight)}><TabbedLeftPane onNavigate={() => setNarrowPanel("work")} /></div></div>;
+  const navigationPanel: PanelDescriptor = {
+      id: "navigation", get label() { return leftPaneTabs.find((tab) => tab.id === props.activeLeftTab())?.label ?? "Projects"; },
+      axis: "horizontal", minimumSize: 220, defaultSize: 276, maximumSize: 480,
+      collapseMode: "hidden", persistenceScope: "app-user:harness.main-panels.v2", resizeHandle: "end", narrowMode: "mode",
+      content: navigationContent,
+    };
+  const workPanel: PanelDescriptor = {
+      id: "work", label: "Work", axis: "horizontal", minimumSize: 360, defaultSize: 720, maximumSize: 2400,
+      collapseMode: "none", persistenceScope: "app-user:harness.main-panels.v2", resizeHandle: "none", narrowMode: "primary", grow: true,
+      content: mainContent(),
+    };
+  const panels = createMemo<readonly PanelDescriptor[]>(() => [navigationPanel, workPanel,
+    ...(props.tracePanelMode() === "closed" ? [] : [{
+      id: "run-details", label: "Run details", axis: "horizontal" as const,
+      minimumSize: props.tracePanelMode() === "peek" ? 240 : 260,
+      defaultSize: props.tracePanelMode() === "peek" ? 240 : 300,
+      maximumSize: props.tracePanelMode() === "peek" ? 240 : 560,
+      collapseMode: props.tracePanelMode() === "peek" ? "none" as const : "hidden" as const, persistenceScope: "app-user:harness.main-panels.v2",
+      resizeHandle: props.tracePanelMode() === "peek" ? "none" as const : "start" as const,
+      narrowMode: "mode" as const,
+      content: props.tracePanelMode() === "peek" ? <TracePeekRail /> : <TracePanel />,
+    }]),
+  ]);
+  const layout = () => ({
+    navigation: { size: harnessStore.state.mainPanelSizes.left * scale, collapsed: harnessStore.state.mainPanelSizes.leftCollapsed === true },
+    work: { size: harnessStore.state.mainPanelSizes.center * scale },
+    ...(props.tracePanelMode() === "closed" ? {} : { "run-details": { size: props.tracePanelMode() === "peek" ? 240 : harnessStore.state.mainPanelSizes.right * scale } }),
+  });
+  const onLayoutChange = (next: PanelGroupLayout) => {
+    const navigation = next.navigation;
+    const work = next.work;
+    const details = next["run-details"];
+    harnessStore.setMainPanelSizes({
+      left: (navigation?.size ?? 276) / scale,
+      center: (work?.size ?? 720) / scale,
+      right: (details?.size ?? harnessStore.state.mainPanelSizes.right * scale) / scale,
+      ...(navigation?.collapsed ? { leftCollapsed: true } : {}),
+    });
+  };
+  return (
+    <div data-test-main-panel-grid="" data-main-panel-mode={props.tracePanelMode()} {...stylex.attrs(styles.mainPanelGrid)}>
+      <Show when={props.activeLeftTab() === "preferences" || firstRun()} fallback={<PanelGroup id="harness-main-panels" panels={panels()} layout={layout} onLayoutChange={onLayoutChange} ariaLabel="Harness workspace" narrowBreakpoint={820} narrowModeLabel="Workspace panes" narrowActivePanelId={narrowPanel} onNarrowActivePanelChange={setNarrowPanel} />}>
+        <div {...stylex.attrs(styles.preferencesWorkspace)}><TabbedLeftPane tabsOnly />{workPanel.content}</div>
+      </Show>
+    </div>
+  );
 }
 
 function IdeFullPage() {
@@ -295,6 +297,8 @@ function advanceActiveTutorial(state: typeof harnessStore.state) {
 export function App() {
   const [sidebarOpen, setSidebarOpen] = createSignal(false);
   const ideWindow = createIdeWindowController();
+  // Preserve terminal buffers, selection and unfinished settings after first use.
+  const terminalRequested = createMemo(wasRequested => wasRequested || terminalStore.state.open, false);
   const {
     open: ideWindowOpen,
     maximized: ideWindowMaximized,
@@ -313,11 +317,7 @@ export function App() {
   const {
     state,
     activeLeftTab,
-    activeLeftTabDefinition,
     tracePanelMode,
-    mainPanelGridStyle,
-    startPanelResize,
-    resizePanelFromKeyboard,
     executionControlTooltip
   } = createAppViewModel();
   if (window.location.pathname === "/ide") return <IdeFullPage />;
@@ -326,7 +326,7 @@ export function App() {
     <main data-test-app-shell="" {...stylex.attrs(styles.appShell)}>
       <div {...stylex.attrs(styles.appBackground)} />
       <div {...stylex.attrs(styles.appContent)}>
-        <header data-test-app-header="" {...stylex.attrs(styles.commandBar)}>
+        <header data-test-app-header="" data-ui-navbar {...stylex.attrs(styles.commandBar)}>
           <div {...stylex.attrs(styles.headerIdentity)}>
             <SheetRoot open={sidebarOpen()} onOpenChange={setSidebarOpen}>
               <div {...stylex.attrs(styles.mobileOnly)}>
@@ -334,7 +334,7 @@ export function App() {
                   class={stylex.attrs(styles.mobileMenuButton).class}
                   aria-label="Open projects"
                   data-tour-id="project-sidebar"
-                  onClick={() => setSidebarOpen(true)}
+                  onClick={() => setSidebarOpen(open => !open)}
                 >
                   <Menu {...stylex.attrs(styles.icon16)} />
                 </SheetTrigger>
@@ -345,109 +345,18 @@ export function App() {
             </SheetRoot>
 
             <div {...stylex.attrs(styles.minWidthZero)}>
-              <div {...stylex.attrs(styles.workspaceLabel)}>
-                <Workflow {...stylex.attrs(styles.icon14)} />
-                <span {...stylex.attrs(styles.truncate)}>AI harness workspace</span>
-              </div>
-              <div data-test-mobile-surface-label="" {...stylex.attrs(styles.mobileSurfaceLabel)}>
-                {(() => {
-                  const Icon = activeLeftTabDefinition().icon;
-                  return <Icon class={stylex.attrs(styles.icon14).class} />;
-                })()}
-                {activeLeftTabDefinition().label}
-              </div>
+              <HomeButton name="Harness" onClick={() => { harnessStore.setActiveLeftTab("projects"); setSidebarOpen(false); }} class={stylex.attrs(styles.workspaceLabel).class}>
+                <img src="/brand/logo.svg" alt="" width="24" height="24"/><span {...stylex.attrs(styles.truncate)}>Harness</span>
+              </HomeButton>
+
             </div>
+            <ConnectionBanner />
           </div>
 
-          <div {...stylex.attrs(styles.headerActions)}>
-            <ConnectionBanner />
-            <NotificationInbox />
-            <ActionButton
-              tooltip={executionControlTooltip()}
-              icon={state.executionControl.isPaused ? <Play {...stylex.attrs(styles.icon16)} /> : <Pause {...stylex.attrs(styles.icon16)} />}
-              variant="ghost"
-              size="sm"
-              class={stylex.attrs(styles.executionControl, state.executionControl.isPaused ? styles.executionPaused : styles.executionRunning).class}
-              onClick={() =>
-                harnessStore.actions.sendCommand({
-                  type: state.executionControl.isPaused ? "execution.resume-all" : "execution.pause-all",
-                  requestId: createRequestId()
-                })
-              }
-            >
-              {state.executionControl.isPaused ? "Resume" : "Pause"}
-            </ActionButton>
-            <ActionButton
-              tooltip="Open guided help and tutorials"
-              icon={<CircleQuestionMark {...stylex.attrs(styles.icon16)} />}
-              variant="secondary"
-              dataTourId="help-button"
-              onClick={() => harnessStore.openHelpDialog()}
-            >
-            </ActionButton>
-            <Show when={state.experienceMode === "advanced"}>
-              <ActionButton
-                tooltip={withPrimaryHotkey(`Trace panel: ${state.tracePanelMode}. Click to cycle closed, peek, open.`, "toggleTracePanel")}
-                icon={<PanelsTopLeft {...stylex.attrs(styles.icon16)} />}
-                variant="secondary"
-                dataTourId="trace-panel-toggle"
-                onClick={() => harnessStore.toggleTracePanel()}
-              >
-                <span {...stylex.attrs(styles.traceButtonLabel)}>{state.tracePanelMode === "closed" ? "Trace" : state.tracePanelMode}</span>
-              </ActionButton>
-            </Show>
-          </div>
+          <HeaderActions executionTooltip={executionControlTooltip()} traceTooltip={withPrimaryHotkey(`Trace panel: ${state.tracePanelMode}. Click to cycle closed, peek, open.`, "toggleTracePanel")} />
         </header>
 
-        <div
-          data-test-main-panel-grid=""
-          data-main-panel-mode={tracePanelMode()}
-          {...stylex.attrs(
-            styles.mainPanelGrid,
-            tracePanelMode() === "open" && styles.mainPanelOpen,
-            tracePanelMode() === "peek" && styles.mainPanelPeek,
-            tracePanelMode() === "closed" && styles.mainPanelClosed
-          )}
-          style={mainPanelGridStyle()}
-        >
-          <div {...stylex.attrs(styles.desktopSidebar)}>
-            <div data-tour-id="project-sidebar" {...stylex.attrs(styles.fullHeight)}>
-              <TabbedLeftPane />
-            </div>
-          </div>
-          <PanelResizeHandle label="Resize left and center panels" value={state.mainPanelSizes.left} onPointerDown={(event) => startPanelResize("left", event)} onKeyboardResize={(direction, largeStep) => resizePanelFromKeyboard("left", direction, largeStep)} onReset={() => harnessStore.resetMainPanelSizes()} />
-          <div {...stylex.attrs(styles.mainPanelSurface)}>
-            <Show
-              when={activeLeftTab() === "jobs" || activeLeftTab() === "runs"}
-              fallback={
-                <Show
-                  when={activeLeftTab() === "preferences"}
-                  fallback={
-                    <Show when={activeLeftTab() === "assistants"} fallback={<ChatPanel />}>
-                      <AssistantsPanel variant="detail" />
-                    </Show>
-                  }
-                >
-                  <PreferencesPanel />
-                </Show>
-              }
-            >
-              <BackgroundJobsPanel variant="detail" segment={activeLeftTab() === "jobs" ? "jobs" : "runs"} />
-            </Show>
-          </div>
-          <Show when={tracePanelMode() !== "closed"}>
-            <>
-              <Show when={tracePanelMode() === "open"} fallback={<div {...stylex.attrs(styles.desktopOnly)} />}>
-                <PanelResizeHandle label="Resize center and trace panels" value={state.mainPanelSizes.right} onPointerDown={(event) => startPanelResize("right", event)} onKeyboardResize={(direction, largeStep) => resizePanelFromKeyboard("right", direction, largeStep)} onReset={() => harnessStore.resetMainPanelSizes()} />
-              </Show>
-              <div {...stylex.attrs(styles.shrinkablePanel)}>
-                <Show when={tracePanelMode() === "open"} fallback={<TracePeekRail />}>
-                  <TracePanel />
-                </Show>
-              </div>
-            </>
-          </Show>
-        </div>
+        <HarnessPanelGroup activeLeftTab={activeLeftTab} tracePanelMode={tracePanelMode} />
       </div>
 
       <HelpTutorialDialog
@@ -485,7 +394,9 @@ export function App() {
           onToggleMaximized={() => setIdeWindowMaximized((value) => !value)}
         />
       </Show>
-      <TerminalDrawer />
+      <div hidden={state.activeLeftTab === "preferences"} data-test-terminal-visibility="">
+        <Show when={terminalRequested()}><TerminalDrawer /></Show>
+      </div>
       <Toaster />
     </main>
   );
@@ -499,28 +410,10 @@ function IdeVirtualWindow(props: {
   onPopOut: () => void;
   onToggleMaximized: () => void;
 }) {
-  onMount(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || harnessStore.state.activeSurface !== "ide") {
-        return;
-      }
-      if (harnessStore.state.projectSwitcherOpen) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      if (closeIdeOverlay()) {
-        return;
-      }
-      props.onClose();
-    };
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    document.addEventListener("keydown", onKeyDown, { capture: true });
-    onCleanup(() => {
-      window.removeEventListener("keydown", onKeyDown, { capture: true });
-      document.removeEventListener("keydown", onKeyDown, { capture: true });
-    });
-  });
+  onMount(() => onCleanup(registerOverlay({ id: "harness-ide-window", close: () => {
+    if (!closeIdeOverlay()) props.onClose();
+  } })));
+
 
   const windowStyle = () =>
     props.maximized
@@ -830,37 +723,6 @@ function focusCurrentTabSearch() {
   input?.select();
 }
 
-function PanelResizeHandle(props: { label: string; value: number; onPointerDown: (event: PointerEvent) => void; onKeyboardResize: (direction: -1 | 1, largeStep: boolean) => void; onReset: () => void }) {
-  return (
-    <Button
-      tooltip={props.label}
-      tooltipTriggerClass={stylex.attrs(styles.panelResizeTrigger).class}
-      variant="ghost"
-      size="icon"
-      class={stylex.attrs(styles.panelResizeHandle).class}
-      data-test-panel-resize-handle=""
-      role="separator"
-      aria-label={props.label}
-      aria-orientation="vertical"
-      aria-valuemin={0.75}
-      aria-valuemax={5}
-      aria-valuenow={props.value}
-      onPointerDown={props.onPointerDown}
-      onDblClick={props.onReset}
-      onKeyDown={(event) => {
-        if (event.key === "Home" || event.key === "End") {
-          event.preventDefault();
-          props.onReset();
-          return;
-        }
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        event.preventDefault();
-        props.onKeyboardResize(event.key === "ArrowLeft" ? -1 : 1, event.shiftKey);
-      }}
-    />
-  );
-}
-
 function formatHotkeyHint(hotkey: string) {
   return formatForDisplay(hotkey)
     .split("+")
@@ -877,7 +739,7 @@ function withPrimaryHotkey(tooltip: string, hotkeyId?: AppHotkeyId) {
   return primaryHotkey ? `${tooltip} (${formatHotkeyHint(primaryHotkey)})` : tooltip;
 }
 
-function TabbedLeftPane(props: { compact?: boolean; onNavigate?: () => void } = {}) {
+function TabbedLeftPane(props: { compact?: boolean; tabsOnly?: boolean; onNavigate?: () => void } = {}) {
   const state = harnessStore.state;
   const [iconsOnly, setIconsOnly] = createSignal(false);
   let navRef: HTMLElement | undefined;
@@ -906,7 +768,7 @@ function TabbedLeftPane(props: { compact?: boolean; onNavigate?: () => void } = 
   });
 
   return (
-    <div data-test-left-tabbed-pane="" {...stylex.attrs(styles.leftTabbedPane)}>
+    <PaneNavigationProvider value={() => props.onNavigate?.()}><div data-test-left-tabbed-pane="" {...stylex.attrs(styles.leftTabbedPane, props.tabsOnly && styles.tabsOnly)}>
       <nav
           ref={navRef}
           data-test-left-tab-nav=""
@@ -926,8 +788,10 @@ function TabbedLeftPane(props: { compact?: boolean; onNavigate?: () => void } = 
                 role="tab"
                 variant="ghost"
                 size="sm"
+                tooltipTriggerClass={stylex.attrs(styles.surfaceTabTrigger).class}
                 class={stylex.attrs(styles.surfaceTab, iconsOnly() && styles.surfaceTabCollapsed).class}
                 aria-label={tab.label}
+                data-ui-action={tab.id === "preferences" ? "settings" : tab.id}
                 attr:aria-selected={state.activeLeftTab === tab.id ? "true" : "false"}
                 tabIndex={state.activeLeftTab === tab.id ? 0 : -1}
                 onClick={() => {
@@ -942,18 +806,14 @@ function TabbedLeftPane(props: { compact?: boolean; onNavigate?: () => void } = 
           }}
         </For>
       </nav>
-      <div {...stylex.attrs(styles.leftPaneBody)}>
+      <Show when={!props.tabsOnly}><div {...stylex.attrs(styles.leftPaneBody)}>
         <Show
           when={state.activeLeftTab === "jobs" || state.activeLeftTab === "runs"}
           fallback={
             <Show
               when={state.activeLeftTab === "assistants"}
               fallback={
-                <Show when={state.activeLeftTab === "preferences"} fallback={<ProjectSidebar compact={props.compact} onNavigate={props.onNavigate} />}>
-                  <LeftPaneShell kind="preferences">
-                    <PreferenceSectionNav onNavigate={props.onNavigate} />
-                  </LeftPaneShell>
-                </Show>
+                <Show when={state.activeLeftTab !== "preferences"}><ProjectSidebar compact={props.compact} /></Show>
               }
             >
               <AssistantsPanel variant="roster" />
@@ -962,7 +822,7 @@ function TabbedLeftPane(props: { compact?: boolean; onNavigate?: () => void } = 
         >
           <BackgroundJobsPanel variant="left" segment={state.activeLeftTab === "jobs" ? "jobs" : "runs"} />
         </Show>
-      </div>
-    </div>
+      </div></Show>
+    </div></PaneNavigationProvider>
   );
 }

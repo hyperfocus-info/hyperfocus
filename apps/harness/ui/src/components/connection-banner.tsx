@@ -1,28 +1,24 @@
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import { Dot } from "lucide-solid";
 import * as stylex from "@stylexjs/stylex";
 import { harnessStore } from "../harness-store";
 import { ActionButton } from "./action-button";
 import { retryHarnessConnection } from "../harness-websocket";
+import { Tooltip } from "./primitives/tooltip";
 
 const styles = stylex.create({
   root: {
-    borderColor: "var(--border)",
-    borderRadius: "9999px",
-    borderStyle: "solid",
-    borderWidth: "1px",
-    paddingBlock: '0.375rem',
-    paddingInline: '0.75rem',
-    backgroundColor: "var(--row)",
-    boxShadow: "0 1px 2px rgb(0 0 0 / 0.05)",
+    overflowWrap: 'anywhere',
+    maxWidth: '100%',
+    minWidth: 0,
   },
-  status: { gap: "0.5rem", alignItems: "center", display: "flex", fontSize: "0.675rem", fontWeight: 500, },
-  connected: { color: "rgb(4 120 87)" },
-  connecting: { color: "rgb(180 83 9)" },
-  error: { color: "rgb(185 28 28)" },
+  status: { gap: "0.5rem", alignItems: "center", display: "flex", fontSize: tokens.fontCaption, fontWeight: 500, },
+  connected: { color: "var(--success-strong)" },
+  connecting: { color: "var(--warning-strong)" },
+  error: { color: "var(--danger-strong)" },
   inactive: { color: "var(--muted)" },
   icon: { height: "1rem", width: "1rem" },
-  label: { textTransform: "capitalize" },
-  errorMessage: { color: "var(--danger)", fontSize: "0.585rem", marginTop: "0.25rem" }
+  errorMessage: { color: "var(--danger)", fontSize: tokens.fontCaption, marginTop: "0.25rem" }
 });
 
 export function ConnectionBanner() {
@@ -46,8 +42,7 @@ export function ConnectionBanner() {
           state.connectionState !== "connected" && state.connectionState !== "connecting" && state.connectionState !== "error" && styles.inactive
         )}
       >
-        <Dot {...stylex.attrs(styles.icon)} />
-        <span {...stylex.attrs(styles.label)}>{state.connectionState}</span>
+        <Tooltip content={`Connection: ${state.connectionState}`}><span role="img" tabIndex={0} aria-label={`Connection: ${state.connectionState}`}><Dot {...stylex.attrs(styles.icon)} /></span></Tooltip>
       </div>
       {state.connectionError ? (
         <div data-test-connection-error="" {...stylex.attrs(styles.errorMessage)}>{state.connectionError}

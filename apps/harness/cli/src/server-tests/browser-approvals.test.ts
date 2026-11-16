@@ -1,15 +1,17 @@
-import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
+import { parseServerEventFrame } from "@hyperfocus/ai-core/protocol";
+import { encodeValue,readValueFrame } from "@hyperfocus/serialization";
+import { Database } from "bun:sqlite";
+import { afterEach,expect,setDefaultTimeout,test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { Database } from "bun:sqlite";
-import { parseServerEventFrame, type BrowserSession } from "@hyperfocus/ai-core/protocol";
 import { createStableBoundedId } from "../notification-ids";
 import { syncBrowserApprovalNotifications } from "../server/automation/notifications";
-import { createWorkspaceRepository } from "../workspace-repository";
 import { createFakePiAgentAdapter } from "../test-support/fake-pi-agent-adapter";
+import { createPendingBrowserSession } from "../test-support/fixtures/browser-session";
 import { useGitProjectFixture } from "../test-support/git-project-fixture";
 import { resolveHarnessTestTempRoot } from "../test-support/test-temp-root";
-import { startServerForTest, stopServerForTest } from "./support/server-test-client";
+import { createWorkspaceRepository } from "../workspace-repository";
+import { startServerForTest,stopServerForTest } from "./support/server-test-client";
 
 setDefaultTimeout(15000);
 
@@ -43,7 +45,7 @@ test("browser approval resolve rejects stale thread ownership before mutating ap
 
   const started = await startServerForTest({ port: 0, adapter: createFakePiAgentAdapter(), repository });
   activeServer = started.server;
-  const socket = createSocket(started.port);
+  const socket = createSocket(started.port, "protobuf");
   try {
     await waitForEvent(socket, "connection.ready");
 
@@ -53,7 +55,7 @@ test("browser approval resolve rejects stale thread ownership before mutating ap
       (event) => event.requestId === "req-browser-wrong-thread"
     );
     socket.send(
-      JSON.stringify({
+      encodeValue({
         type: "browser.approval.resolve",
         requestId: "req-browser-wrong-thread",
         payload: {
@@ -78,7 +80,7 @@ test("browser approval resolve rejects stale thread ownership before mutating ap
       (event) => event.requestId === "req-browser-owning-thread"
     );
     socket.send(
-      JSON.stringify({
+      encodeValue({
         type: "browser.approval.resolve",
         requestId: "req-browser-owning-thread",
         payload: {
@@ -139,48 +141,9 @@ function createRepository() {
   });
 }
 
-function createPendingBrowserSession(runId: string): BrowserSession {
-  const now = "2026-06-26T12:00:00.000Z";
-  const approval = {
-    toolCallId: "tool-call-1",
-    toolName: "playwright-browser",
-    kind: "navigate" as const,
-    label: "Open preview",
-    inputSummary: "https://example.test",
-    status: "pending" as const,
-    requestedAt: now
-  };
-  return {
-    id: "browser-session-1",
-    runId,
-    owner: "main",
-    status: "awaiting-approval",
-    approvalMode: "per-tool",
-    lastActivityLabel: "Open preview",
-    startedAt: now,
-    updatedAt: now,
-    pendingApproval: approval,
-    activities: [
-      {
-        id: "browser-activity-1",
-        toolCallId: "tool-call-1",
-        toolName: "playwright-browser",
-        kind: "navigate",
-        label: "Open preview",
-        inputSummary: "https://example.test",
-        status: "pending-approval",
-        startedAt: now,
-        updatedAt: now,
-        approval,
-        replay: [],
-        verification: []
-      }
-    ]
-  };
-}
 
-function createSocket(port: number) {
-  return new WebSocket(`ws://127.0.0.1:${port}/ws?harnessSession=test-harness-session-token-000000000000000000000000`);
+function createSocket(port: number, encoding: "json" | "protobuf" = "json") {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/ws?harnessSession=test-harness-session-token-000000000000000000000000&encoding=${encoding}`); socket.binaryType = "arraybuffer"; return socket;
 }
 
 function waitForEvent(socket: EventTarget, type: string, predicate?: (payload: any) => boolean, timeoutMs = 1500) {
@@ -189,11 +152,11 @@ function waitForEvent(socket: EventTarget, type: string, predicate?: (payload: a
     let timeout: ReturnType<typeof setTimeout>;
 
     const listener: EventListener = (event) => {
-      if (!(event instanceof MessageEvent) || typeof event.data !== "string") {
+      if (!(event instanceof MessageEvent)) {
         return;
       }
       for (const payload of parseMessageEventPayloads(event.data)) {
-        if (payload.type === type && (predicate ? predicate(payload) : true)) {
+        if (payload && typeof payload === "object" && "type" in payload && payload.type === type && (predicate ? predicate(payload) : true)) {
           cleanup();
           resolve(payload);
           return;
@@ -226,8 +189,8 @@ function waitForEvent(socket: EventTarget, type: string, predicate?: (payload: a
   });
 }
 
-function parseMessageEventPayloads(data: string) {
-  const raw = JSON.parse(data);
+function parseMessageEventPayloads(data: unknown) {
+  const raw = readValueFrame(data);
   try {
     return parseServerEventFrame(raw);
   } catch {

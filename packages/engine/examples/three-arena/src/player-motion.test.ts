@@ -42,7 +42,7 @@ test("Three Arena adapter reconstructs a finite semantic pose from authoritative
       aimTarget: [6, 5.8, frame * 0.1],
       grounded: true,
       groundNormal: [0, 1, 0],
-    }, 1 / 60);
+    }, 0.016666666666666666);
   }
 
   expect(snapshot.active).toBe(true);
@@ -54,7 +54,9 @@ test("Three Arena adapter reconstructs a finite semantic pose from authoritative
   expect(snapshot.metrics.rightGripError).toBeLessThan(0.04);
   expect(snapshot.metrics.plantedVerticalError).toBeLessThanOrEqual(1e-4);
   expect(snapshot.metrics.headAboveHipsMeters).toBeGreaterThan(0.2);
-  expect(motion.controller.state.locomotion.targetLocomotionWeight).toBe(1);
+  // Resolved physical travel produces a continuous blend, including sub-millimetre integration error.
+  expect(motion.controller.state.locomotion.targetLocomotionWeight).toBeCloseTo(1, 4);
+  expect(motion.controller.state.locomotion.targetLocomotionWeight).toBeLessThanOrEqual(1);
   for (const side of ["left", "right"] as const) {
     const contact = side === "left" ? motion.controller.state.leftFoot : motion.controller.state.rightFoot;
     if (!contact?.planted) continue;
@@ -89,7 +91,7 @@ test("Three Arena adapter resets contacts on discontinuities and probes aim/reco
     aimTarget: [46, 5.8, 0],
     grounded: true,
     groundNormal: [0, 1, 0],
-  }, 1 / 60);
+  }, 0.016666666666666666);
   expect(motion.controller.motor.state.position.x).toBeCloseTo(40, 5);
 
   const up = motion.probeAim(Math.PI * 0.4);

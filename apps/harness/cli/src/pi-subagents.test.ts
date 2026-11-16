@@ -1,35 +1,29 @@
-import { describe, expect, test } from "bun:test";
-import type { PlannerSubtask } from "@hyperfocus/ai-core/protocol";
-import type { PiAgentAdapter, PiAgentExecutionController, PiAgentPromptRequest, PiAgentPromptResult } from "./pi-agent-adapter";
+import { describe,expect,test } from "bun:test";
 import {
-  canRunSameWorktreeTask,
-  isPathWithinSameWorktreeScope,
-  orderSameWorktreeTasks,
-  sameWorktreeOwnedPathsOverlap,
-  type TaskContractSettings
+classifyProviderCongestion,
+createHarnessCapacityGovernor,
+getHarnessManagedAgentAdapter,
+ProviderCongestionError
+} from "./execution-runtime";
+import type { PiAgentAdapter,PiAgentExecutionController,PiAgentPromptRequest,PiAgentPromptResult } from "./pi-agent-adapter";
+import {
+canRunSameWorktreeTask,
+isPathWithinSameWorktreeScope,
+orderSameWorktreeTasks,
+sameWorktreeOwnedPathsOverlap
 } from "./pi-orchestrator";
 import {
-  buildSubagentPrompt,
-  createIndexedTaskQueue,
-  executeSubagents,
-  resolveSubagentConcurrency,
-  scheduleSubagentTasks,
-  type SubagentResult
+buildSubagentPrompt,
+createIndexedTaskQueue,
+executeSubagents,
+resolveSubagentConcurrency,
+scheduleSubagentTasks,
+type SubagentResult
 } from "./pi-subagents";
 import { buildSubagentEnvironmentBrief } from "./subagent-environment";
+import { createResult,createScopedTask,pathForTest,promptRequest,type ScopedTask } from "./test-support/fixtures/subagent-tasks";
 import { createWorkspaceRepository } from "./workspace-repository";
-import {
-  classifyProviderCongestion,
-  createHarnessCapacityGovernor,
-  getHarnessManagedAgentAdapter,
-  ProviderCongestionError
-} from "./execution-runtime";
 
-type ScopedTask = {
-  task: PlannerSubtask;
-  contractSettings: TaskContractSettings;
-  recoveryAttempt: number;
-};
 
 describe("subagent scheduler", () => {
   test("shared capacity keeps one hundred mixed agents inside every resource cap", async () => {
@@ -179,7 +173,8 @@ describe("subagent scheduler", () => {
     expect(prompt).toContain("Create missing directories and the first listed missing file immediately");
     expect(prompt).toContain("Return a concise changed-file summary.");
     expect(prompt).toContain("Do not run browser, Playwright, dev server");
-    expect(prompt).toContain("PowerShell-compatible syntax");
+    expect(prompt).toContain("invoke Bun as bun.exe");
+    expect(prompt).toContain("never invoke policy-blocked .ps1 shims");
     expect(prompt).toContain("Prefer bundled rg");
     expect(prompt).toContain("MILESTONE:");
     expect(prompt).toContain("Execution cwd: C:\\repo\\context");
@@ -627,40 +622,7 @@ describe("subagent scheduler", () => {
   });
 });
 
-function createScopedTask(id: string, ownedPaths: string[], exclusive: boolean = false): ScopedTask {
-  return {
-    task: {
-      id,
-      title: id,
-      instruction: `run ${id}`
-    },
-    recoveryAttempt: 0,
-    contractSettings: {
-      ownedContracts: [],
-      explicitOwnedPaths: ownedPaths,
-      verificationCommands: [],
-      exclusive
-    }
-  };
-}
 
-function createResult(
-  id: string,
-  status: "completed" | "failed",
-  attemptCount: number = 1,
-  errorMessage?: string
-): SubagentResult {
-  return {
-    id,
-    title: id,
-    instruction: `run ${id}`,
-    status,
-    output: status === "completed" ? `${id} done` : undefined,
-    errorMessage,
-    attemptCount,
-    durationMs: 1
-  };
-}
 
 function createReleaseMap() {
   const resolvers = new Map<string, () => void>();
@@ -716,13 +678,7 @@ function createLease(runId: string) {
   };
 }
 
-function pathForTest(id: string) {
-  return `C:\\tmp\\${id}`;
-}
 
-function promptRequest(prompt: string): PiAgentPromptRequest {
-  return { kind: "planner", cwd: ".", modelId: "openai/test", prompt };
-}
 
 function createPromptAdapter(runPrompt: (request: PiAgentPromptRequest) => Promise<PiAgentPromptResult>): PiAgentAdapter {
   return {

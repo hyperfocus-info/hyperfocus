@@ -1,4 +1,11 @@
-import { TransformHierarchy3D, createTransformHierarchy3D, sphereIntersectsFrustum3D } from "./3d-core.ts";
+import { createFixedSlotPool } from './three/slot-pool.ts';
+import { instanceIntersectsFrustum, packLights } from './three/scene-compiler-support.ts';
+import type { BoundedScene3DState } from './three/scene-state.ts';
+import { TransformHierarchy3D, createTransformHierarchy3D } from "./3d-core.ts";
+import { prepareTextureReplacement } from './three/texture-replacement.ts';
+export { createParticleSceneBinding3D, particleQuad3D } from './three/particle-scene.ts';
+import { createInstanceAppearance3D, DEFAULT_INSTANCE_APPEARANCE_3D, validateInstanceAppearance3D, writeInstanceAppearance3D, type InstanceAppearance3D } from './three/instance-appearance.ts';
+export type { InstanceAppearance3D } from './three/instance-appearance.ts';
 import {
   LIGHT_KIND_AMBIENT_3D,
   LIGHT_KIND_DIRECTIONAL_3D,
@@ -13,12 +20,27 @@ import {
   validateTexture,
   writeBounds
 } from "./three/scene-validation.ts";
+import {
+  MATERIAL_FLAG_CUTAWAY_3D, MATERIAL_FLAG_ADDITIVE_3D, MATERIAL_FLAG_ALPHA_BLEND_3D, MATERIAL_FLAG_ALPHA_MASK_3D, MATERIAL_FLAG_DOUBLE_SIDED_3D, MATERIAL_FLAG_EMISSIVE_TEXTURED_3D, MATERIAL_FLAG_LIT_3D,
+  MATERIAL_FLAG_METALLIC_ROUGHNESS_TEXTURED_3D, MATERIAL_FLAG_NORMAL_TEXTURED_3D, MATERIAL_FLAG_OCCLUSION_TEXTURED_3D,
+  MATERIAL_FLAG_SHADER_HOLOGRAM_3D, MATERIAL_FLAG_SHADER_RETRO_3D, MATERIAL_FLAG_SHADER_TOON_3D, MATERIAL_FLAG_SKINNED_3D,
+  MATERIAL_FLAG_TEXTURED_3D, MATERIAL_FLOAT_STRIDE_3D, MATERIAL_TEXTURE_STRIDE_3D, type Material3D,
+} from "./materials/contracts.ts";
+import { writePackedMaterial3D } from "./materials/packed-material.ts";
+export type { Material3D, MaterialAlphaMode3D, MaterialShading3D, MaterialShader3D, MaterialToon3D } from "./materials/contracts.ts";
+export {
+  MATERIAL_FLOAT_STRIDE_3D, MATERIAL_TEXTURE_STRIDE_3D,
+  MATERIAL_TEXTURE_BASE_COLOR_3D, MATERIAL_TEXTURE_METALLIC_ROUGHNESS_3D, MATERIAL_TEXTURE_NORMAL_3D,
+  MATERIAL_TEXTURE_OCCLUSION_3D, MATERIAL_TEXTURE_EMISSIVE_3D,
+  MATERIAL_FLAG_DOUBLE_SIDED_3D, MATERIAL_FLAG_ALPHA_MASK_3D, MATERIAL_FLAG_TEXTURED_3D,
+  MATERIAL_FLAG_LIT_3D, MATERIAL_FLAG_SKINNED_3D, MATERIAL_FLAG_METALLIC_ROUGHNESS_TEXTURED_3D,
+  MATERIAL_FLAG_NORMAL_TEXTURED_3D, MATERIAL_FLAG_OCCLUSION_TEXTURED_3D, MATERIAL_FLAG_EMISSIVE_TEXTURED_3D,
+  MATERIAL_FLAG_CUTAWAY_3D, MATERIAL_FLAG_SHADER_TOON_3D, MATERIAL_FLAG_SHADER_RETRO_3D, MATERIAL_FLAG_SHADER_HOLOGRAM_3D, MATERIAL_FLAG_ALPHA_BLEND_3D, MATERIAL_FLAG_ADDITIVE_3D,
+} from "./materials/contracts.ts";
 export { LIGHT_KIND_AMBIENT_3D, LIGHT_KIND_DIRECTIONAL_3D, LIGHT_KIND_POINT_3D, LIGHT_KIND_SPOT_3D } from "./three/scene-validation.ts";
 
 export type MeshTopology3D = "triangle-list" | "line-list";
 export type IndexBuffer3D = Uint16Array | Uint32Array;
-export type MaterialAlphaMode3D = "opaque" | "mask";
-export type MaterialShading3D = "unlit" | "lit";
 export type LightKind3D = "ambient" | "directional" | "point" | "spot";
 export type TextureFilter3D = "nearest" | "linear";
 export type TextureWrap3D = "clamp" | "repeat";
@@ -42,20 +64,6 @@ export interface MeshGeometry3D {
   label?: string;
   /** Optional local-space sphere. Computed from positions when omitted. */
   bounds?: Readonly<{ x: number; y: number; z: number; radius: number }>;
-}
-
-export interface Material3D {
-  baseColor?: ArrayLike<number>;
-  emissive?: ArrayLike<number>;
-  metallic?: number;
-  roughness?: number;
-  alphaMode?: MaterialAlphaMode3D;
-  alphaCutoff?: number;
-  doubleSided?: boolean;
-  shading?: MaterialShading3D;
-  baseColorTexture?: number;
-  /** Enables the skeletal shader path and requires skinned mesh streams. */
-  skinning?: boolean;
 }
 
 export interface TextureResource3D {
@@ -85,6 +93,7 @@ export interface Light3D {
 }
 
 export interface SceneInstance3D {
+  appearance?: InstanceAppearance3D;
   mesh: number;
   material: number;
   transform: number;
@@ -142,13 +151,7 @@ export interface CompileScene3DOptions {
   layerMask?: number;
 }
 
-export const MATERIAL_FLOAT_STRIDE_3D = 12;
 export const LIGHT_FLOAT_STRIDE_3D = 16;
-export const MATERIAL_FLAG_DOUBLE_SIDED_3D = 1;
-export const MATERIAL_FLAG_ALPHA_MASK_3D = 2;
-export const MATERIAL_FLAG_TEXTURED_3D = 4;
-export const MATERIAL_FLAG_LIT_3D = 8;
-export const MATERIAL_FLAG_SKINNED_3D = 16;
 export const RENDER_COMMAND_FLAG_SKINNED_3D = 1;
 const MATRIX_STRIDE = 16;
 const BOUNDS_STRIDE = 4;
@@ -172,12 +175,6 @@ function finiteAt(values: ArrayLike<number> | undefined, index: number, fallback
   return finite(values[index], `${label}[${index}]`);
 }
 
-function unitInterval(value: number, label: string): number {
-  value = finite(value, label);
-  if (value < 0 || value > 1) throw new RangeError(`${label} must be between 0 and 1; received ${value}.`);
-  return value;
-}
-
 function uintMask(value: number | undefined): number {
   if (value === undefined) return UINT32_MAX;
   if (!Number.isInteger(value) || value < 0 || value > UINT32_MAX) {
@@ -186,44 +183,6 @@ function uintMask(value: number | undefined): number {
   return value >>> 0;
 }
 
-type FixedSlotPool = {
-  readonly active: Uint8Array;
-  readonly count: number;
-  allocate(): number;
-  release(handle: number): void;
-  assert(handle: number): void;
-};
-
-function createFixedSlotPool(capacity: number, label: string): FixedSlotPool {
-  const active = new Uint8Array(capacity);
-  const free = new Uint32Array(capacity);
-  let freeCount = capacity;
-  let count = 0;
-  for (let index = 0; index < capacity; index += 1) free[index] = capacity - index - 1;
-  function assert(handle: number) {
-    if (!Number.isInteger(handle) || handle < 0 || handle >= active.length || active[handle] === 0) {
-      throw new RangeError(`${label} handle ${handle} is not active.`);
-    }
-  }
-  return {
-    active,
-    get count() { return count; },
-    allocate() {
-      if (freeCount === 0) throw new RangeError(`${label} registry capacity ${active.length} is exhausted.`);
-      const handle = free[--freeCount];
-      active[handle] = 1;
-      count += 1;
-      return handle;
-    },
-    release(handle) {
-      assert(handle);
-      active[handle] = 0;
-      free[freeCount++] = handle;
-      count -= 1;
-    },
-    assert
-  };
-}
 
 interface RenderScratch3D {
   visibleInstances: Uint32Array;
@@ -234,6 +193,8 @@ interface RenderScratch3D {
 
 const renderScratch = new WeakMap<RenderCommandBuffer3D, RenderScratch3D>();
 const boundedScenes = new WeakSet<object>();
+const sceneStorage = new WeakMap<BoundedScene3D, BoundedScene3DState>();
+const endpointScenes = new WeakSet<BoundedScene3DState>();
 
 function nextPowerOfTwo(value: number): number {
   let result = 1;
@@ -251,6 +212,8 @@ export type RenderCommandBuffer3D = {
   readonly commandFlags: Uint32Array;
   readonly instanceSceneHandles: Uint32Array;
   readonly instanceMatrices: Float32Array;
+  /** Allocated lazily only for scenes that use per-instance tint/atlas rectangles. */
+  instanceAppearance?: Float32Array;
   readonly lightTypes: Uint32Array;
   readonly lightSceneHandles: Uint32Array;
   readonly lightData: Float32Array;
@@ -317,6 +280,7 @@ export type BoundedScene3D = {
   getMesh(handle: number): MeshGeometry3D;
   isMaterialActive(handle: number): boolean;
   registerTexture(texture: TextureResource3D): number;
+  replaceTexture(options: { handle: number; width: number; height: number; pixels: Uint8Array | Uint8ClampedArray }): void;
   getTexture(handle: number): TextureResource3D;
   isTextureActive(handle: number): boolean;
   destroyTexture(handle: number): void;
@@ -335,43 +299,15 @@ export type BoundedScene3D = {
   createInstance(instance: SceneInstance3D): number;
   destroyInstance(handle: number): void;
   setInstanceVisible(handle: number, visible: boolean): void;
+  setInstanceAppearance(handle: number, appearance: InstanceAppearance3D): void;
   setInstanceMesh(handle: number, meshHandle: number): void;
+  setInstanceMaterial(handle: number, materialHandle: number): void;
+  /** Apply mesh/material/visibility together; unchanged static records avoid repeated validation and writes. Resets mesh bounds like setInstanceMesh. */
+  setInstancePresentation(handle: number, meshHandle: number, materialHandle: number, visible: boolean): void;
   setInstanceLayerMask(handle: number, layerMask: number): void;
   setInstanceBounds(handle: number, bounds: Readonly<{ x: number; y: number; z: number; radius: number }>): void;
   destroyTransform(handle: number): void;
   compile(out: RenderCommandBuffer3D, options?: CompileScene3DOptions): RenderCommandBuffer3D;
-};
-
-type BoundedScene3DState = {
-  readonly transforms: TransformHierarchy3D;
-  readonly materialData: Float32Array;
-  readonly materialFlags: Uint32Array;
-  readonly materialTextureHandles: Int32Array;
-  readonly skeletonMatrices: Float32Array;
-  readonly skeletonJointCounts: Uint32Array;
-  readonly jointsPerSkeleton: number;
-  readonly meshes: Array<MeshGeometry3D | undefined>;
-  readonly meshBounds: Float32Array;
-  readonly meshPool: FixedSlotPool;
-  readonly materialPool: FixedSlotPool;
-  readonly texturePool: FixedSlotPool;
-  readonly lightPool: FixedSlotPool;
-  readonly instancePool: FixedSlotPool;
-  readonly skeletonPool: FixedSlotPool;
-  readonly lightTypes: Uint8Array;
-  readonly lightData: Float32Array;
-  readonly lightLayerMasks: Uint32Array;
-  readonly lightEnabled: Uint8Array;
-  readonly instanceMeshes: Uint32Array;
-  readonly instanceMaterials: Uint32Array;
-  readonly instanceTransforms: Uint32Array;
-  readonly instanceBounds: Float32Array;
-  readonly instanceLayerMasks: Uint32Array;
-  readonly instanceVisible: Uint8Array;
-  readonly instanceSkeletons: Int32Array;
-  readonly textures: Array<TextureResource3D | undefined>;
-  readonly textureByteLimit: number;
-  textureBytes: number;
 };
 
 export function createBoundedScene3D(limits: SceneLimits3D): BoundedScene3D {
@@ -386,7 +322,7 @@ export function createBoundedScene3D(limits: SceneLimits3D): BoundedScene3D {
   const jointsPerSkeleton = requireCapacity(limits.jointsPerSkeleton ?? 0, "jointsPerSkeleton");
   if (textures > 0 && textureBytes === 0) throw new RangeError("textureBytes must be positive when texture capacity is enabled.");
   if (skeletons > 0 && jointsPerSkeleton === 0) throw new RangeError("jointsPerSkeleton must be positive when skeleton capacity is enabled.");
-  const materialTextureHandles = new Int32Array(materials); materialTextureHandles.fill(-1);
+  const materialTextureHandles = new Int32Array(materials * MATERIAL_TEXTURE_STRIDE_3D); materialTextureHandles.fill(-1);
   const instanceSkeletons = new Int32Array(instances); instanceSkeletons.fill(-1);
   const scene: BoundedScene3DState = {
     transforms: createTransformHierarchy3D(transforms),
@@ -415,6 +351,7 @@ export function createBoundedScene3D(limits: SceneLimits3D): BoundedScene3D {
     getMesh: (handle) => getMesh(scene, handle),
     isMaterialActive: (handle) => isMaterialActive(scene, handle),
     registerTexture: (texture) => registerTexture(scene, texture),
+    replaceTexture: ({ handle, width, height, pixels }) => replaceTexture(scene, handle, width, height, pixels),
     getTexture: (handle) => getTexture(scene, handle),
     isTextureActive: (handle) => isTextureActive(scene, handle),
     destroyTexture: (handle) => destroyTexture(scene, handle),
@@ -433,15 +370,50 @@ export function createBoundedScene3D(limits: SceneLimits3D): BoundedScene3D {
     createInstance: (instance) => createInstance(scene, instance),
     destroyInstance: (handle) => destroyInstance(scene, handle),
     setInstanceVisible: (handle, visible) => setInstanceVisible(scene, handle, visible),
+    setInstanceAppearance: (handle, appearance) => {
+      scene.instancePool.assert(handle);validateInstanceAppearance3D(appearance);
+      scene.instanceAppearance ??= createInstanceAppearance3D(instances);writeInstanceAppearance3D(scene.instanceAppearance, handle, appearance);
+    },
     setInstanceMesh: (handle, meshHandle) => setInstanceMesh(scene, handle, meshHandle),
+    setInstancePresentation: (handle, mesh, material, visible) => setInstancePresentation(scene, handle, mesh, material, visible),
+    setInstanceMaterial: (handle, materialHandle) => setInstanceMaterial(scene, handle, materialHandle),
     setInstanceLayerMask: (handle, layerMask) => setInstanceLayerMask(scene, handle, layerMask),
     setInstanceBounds: (handle, bounds) => setInstanceBounds(scene, handle, bounds),
     destroyTransform: (handle) => destroyTransform(scene, handle),
     compile: (out, options) => compile(scene, out, options),
   };
   boundedScenes.add(api);
+  sceneStorage.set(api, scene);
   return api;
 }
+
+/** Exclusive endpoint owner: renderer storage may remain stale after acquisition.
+ * Acquisition permanently disables compilation, including previously captured
+ * aliases. Bootstrap packet capacities must be captured first. The endpoint
+ * consumer owns its own scene and performs full application before rendering.
+ */
+export function acquireSceneEndpointWriter3D(api: BoundedScene3D) {
+  const scene = sceneStorage.get(api);
+  if (!scene) throw new TypeError('Endpoint producer requires a bounded scene.');
+  if (endpointScenes.has(scene)) throw new Error('Scene already belongs to an endpoint producer.');
+  endpointScenes.add(scene);
+  const scratch = new Float32Array(MATERIAL_FLOAT_STRIDE_3D);
+  return {
+    storageBytes: scratch.byteLength,
+    instance(handle: number, mesh: number, material: number) {
+      validateInstanceMesh(scene, handle, mesh);
+      validateInstanceMaterial(scene, handle, material, mesh);
+    },
+    material(handle: number, value: Material3D) {
+      return prepareMaterial(scene, handle, value, scratch, 0);
+    },
+    materialResources(handle: number, textures: readonly number[], skinned: boolean) {
+      scene.materialPool.assert(handle);
+      validateMaterialResources(scene, handle, textures, skinned);
+    },
+  };
+}
+export type SceneEndpointWriter3D = ReturnType<typeof acquireSceneEndpointWriter3D>;
 
 export function BoundedScene3D(limits: SceneLimits3D): BoundedScene3D {
   return createBoundedScene3D(limits);
@@ -497,6 +469,11 @@ function requireTexture(scene: BoundedScene3DState, handle: number): TextureReso
   return texture;
 }
 
+function replaceTexture(scene: BoundedScene3DState, handle: number, width: number, height: number, pixels: Uint8Array | Uint8ClampedArray): void {
+  const next = prepareTextureReplacement(requireTexture(scene, handle), width, height, pixels, scene.textureBytes, scene.textureByteLimit);
+  scene.textures[handle] = next.resource;scene.textureBytes = next.bytes;
+}
+
 function isTextureActive(scene: BoundedScene3DState, handle: number): boolean {
     return Number.isInteger(handle)
       && handle >= 0
@@ -507,7 +484,8 @@ function isTextureActive(scene: BoundedScene3DState, handle: number): boolean {
 function destroyTexture(scene: BoundedScene3DState, handle: number): void {
     scene.texturePool.assert(handle);
     for (let material = 0; material < scene.materialPool.active.length; material += 1) {
-      if (scene.materialPool.active[material] !== 0 && scene.materialTextureHandles[material] === handle) {
+      const offset = material * MATERIAL_TEXTURE_STRIDE_3D;
+      if (scene.materialPool.active[material] !== 0 && scene.materialTextureHandles.subarray(offset, offset + MATERIAL_TEXTURE_STRIDE_3D).includes(handle)) {
         throw new Error(`texture ${handle} is still referenced by material ${material}.`);
       }
     }
@@ -580,46 +558,55 @@ function createMaterial(scene: BoundedScene3DState, material: Material3D = {}): 
   }
 
 function updateMaterial(scene: BoundedScene3DState, handle: number, material: Material3D): void {
+    const textureHandles = prepareMaterial(scene, handle, material, scene.materialData, handle * MATERIAL_FLOAT_STRIDE_3D);
+    writeMaterialFlags(scene, handle, material, textureHandles);
+  }
+
+function prepareMaterial(scene: BoundedScene3DState, handle: number, material: Material3D, data: Float32Array, offset: number): number[] {
     scene.materialPool.assert(handle);
-    if (material.alphaMode !== undefined && material.alphaMode !== "opaque" && material.alphaMode !== "mask") {
+    if (material.alphaMode !== undefined && material.alphaMode !== "opaque" && material.alphaMode !== "mask" && material.alphaMode !== "blend" && material.alphaMode !== "additive") {
       throw new RangeError(`unsupported alphaMode ${String(material.alphaMode)}.`);
     }
     if (material.shading !== undefined && material.shading !== "unlit" && material.shading !== "lit") {
       throw new RangeError(`unsupported material shading ${String(material.shading)}.`);
     }
-    const texture = material.baseColorTexture ?? -1;
-    if (texture !== -1) scene.texturePool.assert(texture);
-    validateMaterialSkinningForInstances(scene, handle, material.skinning === true);
-    const baseR = finiteAt(material.baseColor, 0, 1, "baseColor");
-    const baseG = finiteAt(material.baseColor, 1, 1, "baseColor");
-    const baseB = finiteAt(material.baseColor, 2, 1, "baseColor");
-    const baseA = unitInterval(finiteAt(material.baseColor, 3, 1, "baseColor"), "baseColor[3]");
-    const emissiveR = finiteAt(material.emissive, 0, 0, "emissive");
-    const emissiveG = finiteAt(material.emissive, 1, 0, "emissive");
-    const emissiveB = finiteAt(material.emissive, 2, 0, "emissive");
-    const metallic = unitInterval(material.metallic ?? 0, "metallic");
-    const roughness = unitInterval(material.roughness ?? 1, "roughness");
-    const alphaCutoff = unitInterval(material.alphaCutoff ?? 0.5, "alphaCutoff");
-    const offset = handle * MATERIAL_FLOAT_STRIDE_3D;
-    scene.materialData[offset] = baseR; scene.materialData[offset + 1] = baseG;
-    scene.materialData[offset + 2] = baseB; scene.materialData[offset + 3] = baseA;
-    scene.materialData[offset + 4] = emissiveR; scene.materialData[offset + 5] = emissiveG; scene.materialData[offset + 6] = emissiveB;
-    scene.materialData[offset + 7] = metallic; scene.materialData[offset + 8] = roughness; scene.materialData[offset + 9] = alphaCutoff;
-    scene.materialData[offset + 10] = 0;
-    scene.materialData[offset + 11] = 0;
+    if (material.shader !== undefined && !["pbr", "toon", "retro", "hologram"].includes(material.shader)) throw new RangeError(`unsupported material shader ${String(material.shader)}.`);
+    const textureHandles = [material.baseColorTexture, material.metallicRoughnessTexture, material.normalTexture, material.occlusionTexture, material.emissiveTexture].map((texture) => texture ?? -1);
+    validateMaterialResources(scene, handle, textureHandles, material.skinning === true);
+    writePackedMaterial3D(data, offset, material);
+    return textureHandles;
+  }
+
+function validateMaterialResources(scene: BoundedScene3DState, handle: number, textures: readonly number[], skinned: boolean) {
+    for (const texture of textures) if (texture !== -1) scene.texturePool.assert(texture);
+    if (((scene.materialFlags[handle]! & MATERIAL_FLAG_SKINNED_3D) !== 0) !== skinned) validateMaterialSkinningForInstances(scene, handle, skinned);
+  }
+
+function writeMaterialFlags(scene: BoundedScene3DState, handle: number, material: Material3D, textureHandles: readonly number[]) {
     scene.materialFlags[handle] = (material.doubleSided ? MATERIAL_FLAG_DOUBLE_SIDED_3D : 0)
       | (material.alphaMode === "mask" ? MATERIAL_FLAG_ALPHA_MASK_3D : 0)
-      | (texture !== -1 ? MATERIAL_FLAG_TEXTURED_3D : 0)
+      | (material.alphaMode === "blend" || material.alphaMode === "additive" ? MATERIAL_FLAG_ALPHA_BLEND_3D : 0)
+      | (material.alphaMode === "additive" ? MATERIAL_FLAG_ADDITIVE_3D : 0)
+      | (material.cutaway ? MATERIAL_FLAG_CUTAWAY_3D : 0)
+      | (textureHandles[0] !== -1 ? MATERIAL_FLAG_TEXTURED_3D : 0)
       | (material.shading === "lit" ? MATERIAL_FLAG_LIT_3D : 0)
-      | (material.skinning ? MATERIAL_FLAG_SKINNED_3D : 0);
-    scene.materialTextureHandles[handle] = texture;
+      | (material.skinning ? MATERIAL_FLAG_SKINNED_3D : 0)
+      | (textureHandles[1] !== -1 ? MATERIAL_FLAG_METALLIC_ROUGHNESS_TEXTURED_3D : 0)
+      | (textureHandles[2] !== -1 ? MATERIAL_FLAG_NORMAL_TEXTURED_3D : 0)
+      | (textureHandles[3] !== -1 ? MATERIAL_FLAG_OCCLUSION_TEXTURED_3D : 0)
+      | (textureHandles[4] !== -1 ? MATERIAL_FLAG_EMISSIVE_TEXTURED_3D : 0)
+      | (material.shader === "toon" ? MATERIAL_FLAG_SHADER_TOON_3D : 0)
+      | (material.shader === "retro" ? MATERIAL_FLAG_SHADER_RETRO_3D : 0)
+      | (material.shader === "hologram" ? MATERIAL_FLAG_SHADER_HOLOGRAM_3D : 0);
+    scene.materialTextureHandles.set(textureHandles, handle * MATERIAL_TEXTURE_STRIDE_3D);
   }
 
 function destroyMaterial(scene: BoundedScene3DState, handle: number): void {
     scene.materialPool.assert(handle);
     assertResourceUnused(scene, scene.instanceMaterials, handle, "material");
     scene.materialPool.release(handle);
-    scene.materialTextureHandles[handle] = -1;
+    scene.materialFlags[handle] = 0;
+    scene.materialTextureHandles.fill(-1, handle * MATERIAL_TEXTURE_STRIDE_3D, (handle + 1) * MATERIAL_TEXTURE_STRIDE_3D);
   }
 
 function createLight(scene: BoundedScene3DState, light: Light3D): number {
@@ -695,7 +682,10 @@ function createInstance(scene: BoundedScene3DState, instance: SceneInstance3D): 
     const bounds = instance.bounds;
     if (bounds) validateBounds(bounds);
     const layerMask = uintMask(instance.layerMask);
+    if (instance.appearance) validateInstanceAppearance3D(instance.appearance);
     const handle = scene.instancePool.allocate();
+    if (instance.appearance) scene.instanceAppearance ??= createInstanceAppearance3D(scene.instanceVisible.length);
+    if (scene.instanceAppearance) writeInstanceAppearance3D(scene.instanceAppearance, handle, instance.appearance ?? {});
     scene.instanceMeshes[handle] = instance.mesh;
     scene.instanceMaterials[handle] = instance.material;
     scene.instanceTransforms[handle] = instance.transform;
@@ -719,6 +709,12 @@ function setInstanceVisible(scene: BoundedScene3DState, handle: number, visible:
   }
 
 function setInstanceMesh(scene: BoundedScene3DState, handle: number, meshHandle: number): void {
+    validateInstanceMesh(scene, handle, meshHandle);
+    scene.instanceMeshes[handle] = meshHandle;
+    copyBounds(scene.instanceBounds, handle * BOUNDS_STRIDE, scene.meshBounds, meshHandle * BOUNDS_STRIDE);
+  }
+
+function validateInstanceMesh(scene: BoundedScene3DState, handle: number, meshHandle: number): void {
     scene.instancePool.assert(handle);
     scene.meshPool.assert(meshHandle);
     const mesh = requireMesh(scene, meshHandle);
@@ -732,8 +728,6 @@ function setInstanceMesh(scene: BoundedScene3DState, handle: number, meshHandle:
       const maximumJoint = maxJointIndex(mesh.joints);
       if (maximumJoint >= scene.skeletonJointCounts[skeleton]) throw new RangeError(`LOD mesh ${meshHandle} JOINTS_0 index ${maximumJoint} exceeds skeleton ${skeleton} jointCount ${scene.skeletonJointCounts[skeleton]}.`);
     } else if (skeleton !== -1) throw new Error(`Static LOD mesh ${meshHandle} cannot replace skinned instance ${handle}.`);
-    scene.instanceMeshes[handle] = meshHandle;
-    copyBounds(scene.instanceBounds, handle * BOUNDS_STRIDE, scene.meshBounds, meshHandle * BOUNDS_STRIDE);
   }
 
 function setInstanceLayerMask(scene: BoundedScene3DState, handle: number, layerMask: number): void {
@@ -753,6 +747,7 @@ function destroyTransform(scene: BoundedScene3DState, handle: number): void {
   }
 
 function compile(scene: BoundedScene3DState, out: RenderCommandBuffer3D, options: CompileScene3DOptions = {}): RenderCommandBuffer3D {
+    if (endpointScenes.has(scene)) throw new Error('Endpoint producer scene cannot compile renderer output.');
     const scratch = renderScratch.get(out);
     if (!scratch) throw new TypeError("render output must be created with createRenderCommandBuffer3D.");
     resetOutput(out, scratch);
@@ -809,6 +804,8 @@ function compile(scene: BoundedScene3DState, out: RenderCommandBuffer3D, options
       const instance = scratch.visibleInstances[accepted], command = scratch.visibleCommands[accepted];
       const target = scratch.commandWriteCursors[command]++;
       out.instanceSceneHandles[target] = instance;
+      if (scene.instanceAppearance) out.instanceAppearance ??= createInstanceAppearance3D(out.instanceSceneHandles.length);
+      if (out.instanceAppearance) for (let i = 0; i < 8; i++) out.instanceAppearance[target * 8 + i] = scene.instanceAppearance?.[instance * 8 + i] ?? DEFAULT_INSTANCE_APPEARANCE_3D[i]!;
       const transform = scene.instanceTransforms[instance];
       const sourceOffset = transform * MATRIX_STRIDE, targetOffset = target * MATRIX_STRIDE;
       for (let component = 0; component < MATRIX_STRIDE; component += 1) {
@@ -850,35 +847,6 @@ function copyPalette(scene: BoundedScene3DState, handle: number, matrices: Array
     for (let component = 0; component < count; component += 1) scene.skeletonMatrices[offset + component] = matrices[component];
   }
 
-function instanceIntersectsFrustum(scene: BoundedScene3DState, instance: number, transform: number, planes: ArrayLike<number>): boolean {
-    const matrixOffset = transform * MATRIX_STRIDE, boundsOffset = instance * BOUNDS_STRIDE;
-    const matrix = scene.transforms.worldMatrices;
-    const x = scene.instanceBounds[boundsOffset], y = scene.instanceBounds[boundsOffset + 1], z = scene.instanceBounds[boundsOffset + 2];
-    const worldX = matrix[matrixOffset] * x + matrix[matrixOffset + 4] * y + matrix[matrixOffset + 8] * z + matrix[matrixOffset + 12];
-    const worldY = matrix[matrixOffset + 1] * x + matrix[matrixOffset + 5] * y + matrix[matrixOffset + 9] * z + matrix[matrixOffset + 13];
-    const worldZ = matrix[matrixOffset + 2] * x + matrix[matrixOffset + 6] * y + matrix[matrixOffset + 10] * z + matrix[matrixOffset + 14];
-    const scaleX = Math.hypot(matrix[matrixOffset], matrix[matrixOffset + 1], matrix[matrixOffset + 2]);
-    const scaleY = Math.hypot(matrix[matrixOffset + 4], matrix[matrixOffset + 5], matrix[matrixOffset + 6]);
-    const scaleZ = Math.hypot(matrix[matrixOffset + 8], matrix[matrixOffset + 9], matrix[matrixOffset + 10]);
-    const radius = scene.instanceBounds[boundsOffset + 3] * Math.max(scaleX, scaleY, scaleZ);
-    return sphereIntersectsFrustum3D(planes, worldX, worldY, worldZ, radius);
-  }
-
-function packLights(scene: BoundedScene3DState, out: RenderCommandBuffer3D, layerMask: number): void {
-    for (let light = 0; light < scene.lightPool.active.length; light += 1) {
-      if (scene.lightPool.active[light] === 0 || scene.lightEnabled[light] === 0 || (scene.lightLayerMasks[light] & layerMask) === 0) continue;
-      out.matchingLights += 1;
-      if (out.lightCount >= out.lightTypes.length) { out.truncatedLights += 1; continue; }
-      const target = out.lightCount++;
-      out.lightTypes[target] = scene.lightTypes[light];
-      out.lightSceneHandles[target] = light;
-      const sourceOffset = light * LIGHT_FLOAT_STRIDE_3D, targetOffset = target * LIGHT_FLOAT_STRIDE_3D;
-      for (let component = 0; component < LIGHT_FLOAT_STRIDE_3D; component += 1) {
-        out.lightData[targetOffset + component] = scene.lightData[sourceOffset + component];
-      }
-    }
-  }
-
 /** Deterministically selects a first-party scene mesh from ordered distance bands. */
 export function selectLodMesh3D(levels: readonly LodLevel3D[], distance: number): number {
   if (!Array.isArray(levels) || levels.length === 0) throw new Error("3D LOD policy requires at least one level.");
@@ -894,6 +862,37 @@ export function selectLodMesh3D(levels: readonly LodLevel3D[], distance: number)
   for (const level of levels) if (distance <= level.maxDistance) return level.mesh;
   return levels[levels.length - 1]!.mesh;
 }
+
+function setInstancePresentation(scene: BoundedScene3DState, handle: number, mesh: number, material: number, visible: boolean): void {
+  scene.instancePool.assert(handle);
+  // Inspect live storage: other consumers can replace resources, bounds and material flags.
+  // Skinned meshes retain full joint-range validation because their typed arrays are mutable.
+  const geometry = scene.meshes[mesh];
+  if (scene.instanceMeshes[handle] !== mesh || scene.instanceMaterials[handle] !== material
+    || !geometry || geometry.joints || geometry.weights || scene.instanceSkeletons[handle] !== -1
+    || (scene.materialFlags[material]! & MATERIAL_FLAG_SKINNED_3D) !== 0) {
+    setInstanceMesh(scene, handle, mesh);setInstanceMaterial(scene, handle, material);
+  } else {
+    scene.meshPool.assert(mesh);scene.materialPool.assert(material);
+    const source = mesh * BOUNDS_STRIDE, target = handle * BOUNDS_STRIDE;
+    for (let axis = 0; axis < BOUNDS_STRIDE; axis++) if (!Object.is(scene.instanceBounds[target + axis], scene.meshBounds[source + axis])) scene.instanceBounds[target + axis] = scene.meshBounds[source + axis]!;
+  }
+  const flag = visible ? 1 : 0;
+  if (scene.instanceVisible[handle] !== flag) scene.instanceVisible[handle] = flag;
+}
+
+function setInstanceMaterial(scene: BoundedScene3DState, handle: number, materialHandle: number): void {
+    validateInstanceMaterial(scene, handle, materialHandle, scene.instanceMeshes[handle]!);
+    scene.instanceMaterials[handle] = materialHandle;
+  }
+
+function validateInstanceMaterial(scene: BoundedScene3DState, handle: number, materialHandle: number, meshHandle: number): void {
+    scene.instancePool.assert(handle); scene.materialPool.assert(materialHandle);
+    const mesh = requireMesh(scene, meshHandle);
+    const materialSkinned = (scene.materialFlags[materialHandle] & MATERIAL_FLAG_SKINNED_3D) !== 0;
+    const meshSkinned = mesh.joints !== undefined && mesh.weights !== undefined;
+    if (meshSkinned !== materialSkinned) throw new Error(`Material ${materialHandle} skinning is incompatible with instance ${handle} mesh ${scene.instanceMeshes[handle]}.`);
+  }
 
 /** Streams square terrain regions directly into bounded first-party scene resources. */
 export function createTerrainStreamer3D(options: TerrainStreamer3DOptions): {

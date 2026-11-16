@@ -1,3 +1,5 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 import { createTileMap, type TileLayerSpec, type TileMap, type TileMapMarker, type TileValue } from "./tile-map.ts";
 import type { Tileset } from "./tileset.ts";
 import { createSeedableRandom } from "../core/random.ts";
@@ -129,9 +131,7 @@ function mapSize(options: GenerateTileMapOptions) {
   };
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+
 
 function resolveAnchorTile(anchor: TileMapAnchorSpec, width: number, height: number, grid: TileMapChunkGrid | undefined, seed: number | string | undefined, index: number) {
   if ((anchor.tileX === undefined) !== (anchor.tileY === undefined)) {

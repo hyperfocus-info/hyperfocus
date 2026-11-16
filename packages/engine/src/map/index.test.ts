@@ -240,7 +240,7 @@ test("generic region builders resolve anchors, NPCs, tiles, and zones from confi
   expect(npc.metadata).toMatchObject({ id: "guide", zoneId: "meadow", anchorId: "town-a" });
 
   const tiles = buildRegionTiles(region);
-  expect(tiles).toHaveLength(18 * 10);
+  expect(tiles).toHaveLength(180);
   expect(town && tiles[town.tileY * 18 + town.tileX]).toBe(2);
   expect(mine && zoneForRegionTile(region, mine.tileX, mine.tileY)).toBe("crag");
 });

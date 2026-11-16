@@ -20,7 +20,7 @@ import { resolveModeById } from "@hyperfocus/ai-core/modes";
 import type { AgentRunState, ComposerReasoningStrength, ModeDefinition, PlannerReadyTurn, ProjectId, ProviderBrand, ThreadId, TokenUsageTotals, WorkspaceRuleSource } from "@hyperfocus/ai-core/protocol";
 
 export async function continueRunLifecycle(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -119,7 +119,7 @@ export async function continueRunLifecycle(
   }
 }
 type FinishPlannerTurnInput = {
-  ws: Bun.ServerWebSocket<HarnessConnection>;
+  ws: import("../transport/events").ControlEventSocket;
   requestId: string;
   runtime: WorkspaceRuntimeStore;
   repository: WorkspaceRepository;
@@ -234,7 +234,7 @@ function finishPlannerTurn(input: FinishPlannerTurnInput) {
 
 
 export async function continueQuickTaskLifecycle(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -253,7 +253,7 @@ export async function continueQuickTaskLifecycle(
   }
 ) {
   const project = runtime.getProject(projectId);
-  const activeRun = requireActiveRun(project, options.runId);
+  const activeRun = options.runId ? requirePersistedThreadRun(repository, projectId, options.threadId, options.runId) : requireActiveRun(project);
   const threadSession = getThreadSessionState(runtime, repository, projectId, activeRun.threadId);
   appendComposerControlStatus(ws, requestId, runtime, repository, projectId, activeRun.threadId, options.fastMode);
   const planExecutionMode = resolvePlanExecutionModeDefault(repository, options.mode);
@@ -312,7 +312,7 @@ export async function continueQuickTaskLifecycle(
 }
 
 export async function resumeRunLifecycle(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,

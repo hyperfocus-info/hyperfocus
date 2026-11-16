@@ -1,4 +1,5 @@
 import { STREAM_HEARTBEAT } from "../../agent-runtimes/cli-session-manager";
+import { encodeValue, readValueFrame } from "@hyperfocus/serialization";
 import { LOG_COMMAND_ERRORS, handleCommand } from "../commands/router";
 import { DEV_UI_LIVE_RELOAD_ENDPOINT } from "../core/constants";
 import type { HarnessConnection, HarnessHandlerRefs, HarnessServerState, HarnessWebSocketOptions } from "../core/contracts";
@@ -16,19 +17,37 @@ import { TERMINAL_STREAM_HEARTBEAT } from "../../terminal/terminal-session-manag
 import { withWebsocketCompression } from "../../websocket-send-guard";
 import { defaultAgentCatalog } from "@hyperfocus/ai-core/agent-catalog";
 import { HARNESS_APP_VERSION } from "@hyperfocus/ai-core/app-version";
-import { getClientCommandRejectionMetadata, parseClientCommand, SERVER_EVENT_EMIT_MAX_BYTES, type ServerEvent } from "@hyperfocus/ai-core/protocol";
+import { getClientCommandRejectionMetadata, parseClientCommand, SERVER_EVENT_EMIT_MAX_BYTES, SERVER_EVENT_FRAME_MAX_BYTES, type ServerEvent } from "@hyperfocus/ai-core/protocol";
 import type { ClientCommand } from "@hyperfocus/ai-core/protocol";
 import { createClientLeaseController, resolveDesktopTarget } from "@hyperfocus/desktop-runtime";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { authorizePrivilegedRequest } from "./request-admission";
+import { createSwarmProxyHandler } from "@hyperfocus/ai-runtime/swarm/client";
+import { saveSwarmRunMemory } from "../../memory-bank";
 
 const inFlightCommandsByState = new WeakMap<HarnessServerState, Set<Promise<void>>>();
 
 export const desktopOpenRequestSchema = z.object({
   target: z.string().trim().min(1).max(32_768)
 });
+
+/** An explicitly configured coordinator alias still requires an opened local
+ * project at that exact root. Live and archived monitors use the same mapping;
+ * neither an arbitrary remote ID nor an unopened filesystem path grants access. */
+export function resolveSwarmProxyProject<T extends { id: string; rootPath: string }>(
+  projects: readonly T[], projectId: string, environment: Readonly<Record<string, string | undefined>> = process.env
+): T | undefined {
+  const configuredId = environment.HYPERFOCUS_SWARM_PROJECT_ID;
+  const configuredRoot = environment.HYPERFOCUS_SWARM_PROJECT_ROOT;
+  if (configuredId && configuredRoot) {
+    const normalize = (value: string) => process.platform === "win32" ? path.resolve(value).toLowerCase() : path.resolve(value);
+    const project = projects.find(value => normalize(value.rootPath) === normalize(configuredRoot) && (value.id === projectId || configuredId === projectId));
+    return project ? { ...project, id: configuredId } : undefined;
+  }
+  return projects.find(project => project.id === projectId);
+}
 
 export function createHarnessHandlerRefs(
   state: HarnessServerState,
@@ -43,8 +62,18 @@ export function createHarnessHandlerRefs(
 }
 
 function createHarnessFetchHandler(state: HarnessServerState): HarnessHandlerRefs["fetch"] {
+  const handleSwarm = createSwarmProxyHandler({
+    resolveProject: async (projectId) => resolveSwarmProxyProject(state.runtime.getWorkspace().projects, projectId),
+    onDisposition: (run) => { saveSwarmRunMemory(state.repository, run); },
+  });
   return async (request, serverInstance) => {
 const url = new URL(request.url);
+
+if (url.pathname.startsWith("/api/swarm/v1/")) {
+  const admission = authorizePrivilegedRequest({ request, sessionToken: state.sessionToken, tokenSource: "header" });
+  if (!admission.allowed) return admission.response;
+  return await handleSwarm(request) ?? new Response("Swarm route not found", { status: 404 });
+}
 
 if (url.pathname === "/api/desktop/v1/status" && isLoopbackRequest(serverInstance, request)) {
   if (request.headers.get("origin")) {
@@ -134,7 +163,8 @@ if (url.pathname === "/ws" && request.headers.get("upgrade")?.toLowerCase() === 
       clientId: crypto.randomUUID(),
       connectionId: crypto.randomUUID(),
       clientKind: admission.clientKind,
-      kind: "control" as const
+      kind: "control" as const,
+      encoding: url.searchParams.get("encoding") === "protobuf" ? "protobuf" as const : "json" as const
     }
   });
 
@@ -229,7 +259,7 @@ if (state.ui.mode === "static-dist") {
 
   const assetPath = state.ui.uiAssets.resolveAsset(url.pathname);
   if (assetPath) {
-    return createUiAssetResponse(assetPath, state.ui.liveReload, state.sessionToken);
+    return createUiAssetResponse(assetPath, state.ui.liveReload, state.sessionToken, url.pathname === "/swarm");
   }
 }
 
@@ -286,7 +316,11 @@ function createHarnessWebSocketHandlers(
         notifications: state.repository.loadNotificationInboxState()
       }
     };
-    const encodedSize = () => new TextEncoder().encode(JSON.stringify(readyEvent)).byteLength;
+    const encodedSize = () => {
+      if (ws.data.encoding !== "protobuf") return new TextEncoder().encode(JSON.stringify(readyEvent)).byteLength;
+      try { return encodeValue(readyEvent, { maxBytes: SERVER_EVENT_FRAME_MAX_BYTES }).byteLength; }
+      catch (error) { if (error instanceof RangeError) return Infinity; throw error; }
+    };
     while (encodedSize() > SERVER_EVENT_EMIT_MAX_BYTES && shrinkWorkspaceBootstrap(readyEvent.payload.workspace, state.repository)) { /* bounded */ }
     let assistantLimit = readyEvent.payload.assistants.assistants.length;
     let jobLimit = readyEvent.payload.backgroundJobs.jobs.length; let runLimit = readyEvent.payload.backgroundJobs.runs.length;
@@ -363,12 +397,13 @@ function createHarnessWebSocketHandlers(
       return;
     }
 
-    const text = typeof message === "string" ? message : new TextDecoder().decode(message);
-
     let command: ClientCommand;
     let decodedCommand: unknown;
     try {
-      decodedCommand = JSON.parse(text);
+      if (typeof message === "string" && new TextEncoder().encode(message).byteLength > SERVER_EVENT_EMIT_MAX_BYTES) {
+        throw new RangeError("Control command exceeds its byte limit");
+      }
+      decodedCommand = typeof message === "string" ? JSON.parse(message) : readValueFrame(message, { maxBytes: SERVER_EVENT_EMIT_MAX_BYTES });
       command = parseClientCommand(decodedCommand);
     } catch (error) {
       const rejection = getClientCommandRejectionMetadata(decodedCommand, error);
@@ -383,6 +418,7 @@ function createHarnessWebSocketHandlers(
     }
 
     const commandTask = handleCommand(command, {
+      launchMode: state.launchMode,
       ws,
       runtime: state.runtime,
       repository: state.repository,
@@ -502,6 +538,7 @@ export function decorateHarnessServerStop(
     const stopped = stop(closeActiveConnections);
     state.assistantManager.beginShutdown();
     stopLiveProjectRunsOnShutdown(state);
+    const threadMessagesStopped = import("../execution/thread-message-dispatcher").then(module => module.stopThreadMessageDispatcher(state));
     failLiveBackgroundRunsOnShutdown(state.repository, state.backgroundRunControllers);
     if (state.ui.mode === "static-dist") {
       state.ui.uiAssets.dispose();
@@ -510,6 +547,7 @@ export function decorateHarnessServerStop(
     onStopped?.();
     await Promise.resolve(stopped);
     await awaitInFlightCommands(state);
+    await threadMessagesStopped;
     await state.assistantManager.settleShutdown();
   };
   server.stop = decoratedStop;

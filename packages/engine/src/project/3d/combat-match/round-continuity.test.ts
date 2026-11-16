@@ -1,0 +1,54 @@
+import { expect, test } from 'bun:test';
+import { createGameplay3D, createHyperfocus3DRuntime } from '../../runtime-3d.ts';
+import { combatMotionFixture } from '../combat-motion-fixture.ts';
+
+test('round recovery retains removed surfaces, weapon wear and both world clocks through rollback', async () => {
+  const base = await combatMotionFixture({ match: true }), project = base.project;
+  const definition = project.extensions.hyperfocusCombat;
+  const scene = project.extensions.hyperfocus3D.scenes[0]!;
+  scene.entities.push({ ...scene.entities[2]!, id: 'scheduled-wall', position: [20, 2, 0], scale: [.3, 2, 3] });
+  scene.entities.push({ ...scene.entities[2]!, id: 'rod', position: [.5, 1, 0], scale: [.1, .1, .1], physics: undefined });
+  project.extensions.hyperfocus3D.budgets.entities = 12;
+  definition.environment = { surfaces: [{ entityId: 'scheduled-wall', trigger: { kind: 'scheduled', warningFrame: 2, removeFrame: 5 } }] };
+  definition.interactions = { weapons: [{ entityId: 'rod', material: 'wood', durability: 48, length: 2, lightMoveId: 'jab', heavyMoveId: 'heavy' }] };
+  const runtime = await createHyperfocus3DRuntime(project, base.assets), game = createGameplay3D({ project, runtime });
+  game.step(['match:practice']);game.step(['a:interact']);game.step([]);game.step(['a:jab']);
+  for (let frame = 0; frame < 12; frame++) game.step([]);
+  const damaged = game.snapshot().combat!;
+  expect(damaged.environment!.surfaces[0]!.phase).toBe('removed');
+  expect(damaged.interactions!.weapons[0]!.durability).toBeLessThan(48);
+  const saved = game.snapshot();saved.combat!.state.fighters[1]!.health = 0;
+  saved.combat!.match = { ...saved.combat!.match!, phase: 'round-result', ticks: 3, winner: 'player', held: [] };
+  game.restore(saved);const checkpoint = game.checkpoint();
+  for (let frame = 0; frame < 3; frame++) game.step([]);
+  const after = game.snapshot();
+  expect(after.combat!.match!.phase).toBe('fighting');
+  expect(after.combat!.environment!.surfaces[0]!.phase).toBe('removed');
+  expect(after.combat!.environment!.trace).toEqual(damaged.environment!.trace);
+  expect(runtime.physics.body('scheduled-wall')!.collisionMask).toBe(0);
+  expect(after.combat!.interactions!.weapons[0]!.durability).toBe(damaged.interactions!.weapons[0]!.durability);
+  expect(after.combat!.interactions!.weapons[0]!.owner).toBe('a');
+  expect(after.tick).toBeGreaterThan(saved.tick);expect(after.combat!.state.frame).toBeGreaterThan(saved.combat!.state.frame);
+  checkpoint.restore();for (let frame = 0; frame < 3; frame++) game.step([]);expect(game.snapshot()).toEqual(after);
+  game.reset();expect(runtime.physics.body('scheduled-wall')!.collisionMask).not.toBe(0);
+  expect(game.snapshot().combat!.interactions!.weapons[0]!.durability).toBe(48);
+});
+
+test('first resumed combat frame uses the recovered standing transform rather than the corpse pose', async () => {
+  const { runtime, game } = await combatMotionFixture({ match: true, independentCombatInputs: true });
+  const saved = game.snapshot();
+  saved.combat!.state.fighters[1]!.health = 0;
+  saved.combat!.match = { ...saved.combat!.match!, phase: 'round-result', ticks: 1, winner: 'player', held: [] };
+  game.restore(saved);
+  runtime.applyCommands({ commands: [{ type: 'teleport', entityId: 'b', position: [10, .6, 3], rotationY: 1 }] });
+  const tick = runtime.snapshot().tick;
+  game.step([], [0, 1].map(() => ({ actions: new Set<string>(), direction: { x: 0, y: 0, z: 0 } })));
+  const after = game.snapshot();
+  const fighter = after.combat!.state.fighters.find(fighter => fighter.id === 'b')!;
+  expect(after.combat!.match!.phase).toBe('fighting');
+  expect(fighter.health).toBe(100);
+  expect(fighter.position).toEqual({ x: 10, y: 1.855, z: 3 });
+  expect(runtime.physics.body('b')!.y).toBeGreaterThan(1.8);
+  expect(runtime.snapshot().entities.find(entity => entity.id === 'b')!.position[1]).toBeGreaterThan(1.8);
+  expect(runtime.snapshot().tick).toBeGreaterThan(tick);
+});

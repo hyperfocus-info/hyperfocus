@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { resolveHarnessDbPath } from "./harness-db-path";
 
@@ -22,7 +22,7 @@ const DEFAULT_LIMIT = 20;
 const HELP_TEXT = `assistant-state.ts
 
 Usage:
-  bun.cmd .agents/skills/assistant-actions/scripts/assistant-state.ts --assistant <name-or-id> [--project <name-or-id>] [--db <path>] [--limit <n>] [--json]
+  bun "<skill>/scripts/assistant-state.ts" --assistant <name-or-id> [--project <name-or-id>] [--db <path>] [--limit <n>] [--json]
 
 Options:
   --assistant <value>  Assistant id or exact/fuzzy name
@@ -138,12 +138,12 @@ export function buildAssistantStateReport(options: AssistantStateOptions) {
     const assistant = assistantMatches[0]!;
     const assistantId = String(assistant.id);
     const thread = db
-      .query(
+      .query<Row, SQLQueryBindings[]>(
         `SELECT id, session_id, memory_summary_content, memory_summary_updated_at, updated_at, created_at
          FROM assistant_threads
          WHERE assistant_id = ?1`
       )
-      .get(assistantId) as Row | null;
+      .get(assistantId);
 
     return {
       lookup: {
@@ -166,7 +166,7 @@ export function buildAssistantStateReport(options: AssistantStateOptions) {
       ],
       messages: thread?.id
         ? db
-            .query(
+            .query<Row, SQLQueryBindings[]>(
               `SELECT id, role, content, created_at
                FROM assistant_messages
                WHERE assistant_thread_id = ?1
@@ -176,7 +176,7 @@ export function buildAssistantStateReport(options: AssistantStateOptions) {
             .all(String(thread.id), options.limit)
         : [],
       todos: db
-        .query(
+        .query<Row, SQLQueryBindings[]>(
           `SELECT id, title, description, state, sort_order, blocker_reason, source, updated_at
            FROM assistant_todos
            WHERE assistant_id = ?1
@@ -185,7 +185,7 @@ export function buildAssistantStateReport(options: AssistantStateOptions) {
         )
         .all(assistantId, options.limit),
       learnings: db
-        .query(
+        .query<Row, SQLQueryBindings[]>(
           `SELECT id, summary, source, confidence, created_at
            FROM assistant_learnings
            WHERE assistant_id = ?1
@@ -194,7 +194,7 @@ export function buildAssistantStateReport(options: AssistantStateOptions) {
         )
         .all(assistantId, options.limit),
       questions: db
-        .query(
+        .query<Row, SQLQueryBindings[]>(
           `SELECT id, prompt, status, answer_text, asked_at, answered_at
            FROM assistant_questions
            WHERE assistant_id = ?1
@@ -203,7 +203,7 @@ export function buildAssistantStateReport(options: AssistantStateOptions) {
         )
         .all(assistantId, options.limit),
       logs: db
-        .query(
+        .query<Row, SQLQueryBindings[]>(
           `SELECT id, level, summary, detail, created_at
            FROM assistant_log_entries
            WHERE assistant_id = ?1
@@ -212,7 +212,7 @@ export function buildAssistantStateReport(options: AssistantStateOptions) {
         )
         .all(assistantId, options.limit),
       backgroundJobs: db
-        .query(
+        .query<Row, SQLQueryBindings[]>(
           `SELECT id, project_id, automation_thread_id, kind, name, description, schedule_input, timezone, status, risk_level, next_run_at, last_run_at, updated_at
            FROM background_jobs
            WHERE assistant_id = ?1
@@ -221,7 +221,7 @@ export function buildAssistantStateReport(options: AssistantStateOptions) {
         )
         .all(assistantId, options.limit),
       backgroundJobRuns: db
-        .query(
+        .query<Row, SQLQueryBindings[]>(
           `SELECT id, job_id, project_id, trigger_source, status, risk_level, approval_status, summary, failure_message, queued_at, started_at, completed_at, updated_at
            FROM background_job_runs
            WHERE assistant_id = ?1
@@ -235,15 +235,15 @@ export function buildAssistantStateReport(options: AssistantStateOptions) {
   }
 }
 
-export function renderAssistantStateReport(report: Row) {
+export function renderAssistantStateReport(report: ReturnType<typeof buildAssistantStateReport>) {
   const lines: string[] = [];
-  const lookup = report.lookup as Row;
+  const lookup = report.lookup;
   lines.push(`assistant-state ${lookup.assistant ?? ""}`);
   lines.push(`status: ${lookup.status}`);
   lines.push(`db: ${lookup.dbPath}`);
 
   if (lookup.status !== "ok") {
-    const matches = report.matches as Row[] | undefined;
+    const matches = report.matches;
     lines.push("");
     lines.push(lookup.status === "missing" ? "No matching assistant." : "Multiple matching assistants.");
     for (const match of matches ?? []) {
@@ -264,18 +264,18 @@ export function renderAssistantStateReport(report: Row) {
 
   lines.push("");
   lines.push("counts:");
-  for (const count of (report.counts as Row[] | undefined) ?? []) {
+  for (const count of (report.counts) ?? []) {
     lines.push(`- ${count.label}: ${count.count}`);
   }
 
-  for (const section of ["todos", "questions", "backgroundJobs", "backgroundJobRuns", "learnings", "logs", "messages"]) {
+  for (const section of ["todos", "questions", "backgroundJobs", "backgroundJobRuns", "learnings", "logs", "messages"] as const) {
     const rows = report[section];
     if (!Array.isArray(rows) || rows.length === 0) {
       continue;
     }
     lines.push("");
     lines.push(`${section}:`);
-    for (const row of rows as Row[]) {
+    for (const row of rows) {
       lines.push(renderObject(row, 2));
     }
   }
@@ -286,7 +286,7 @@ export function renderAssistantStateReport(report: Row) {
 function resolveAssistants(db: Database, assistant: string, projectId: string | undefined) {
   const needle = assistant.trim().toLowerCase();
   const rows = db
-    .query(
+    .query<Row, SQLQueryBindings[]>(
       `SELECT
          a.id, a.name, a.scope, a.project_id, a.description, a.agent_id, a.mode_id, a.execution_model_id,
          a.run_state, a.bootstrap_state, a.failure_streak_count, a.circuit_breaker_state,
@@ -296,7 +296,7 @@ function resolveAssistants(db: Database, assistant: string, projectId: string | 
        LEFT JOIN projects p ON p.id = a.project_id
        WHERE a.deleted_at IS NULL`
     )
-    .all() as Row[];
+    .all();
 
   const scopedRows = projectId
     ? rows.filter((row) => row.scope === "global" || row.project_id === projectId)
@@ -311,8 +311,8 @@ function resolveAssistants(db: Database, assistant: string, projectId: string | 
 function resolveProject(db: Database, project: string) {
   const needle = project.trim().toLowerCase();
   const rows = db
-    .query(`SELECT id, name, root_path FROM projects ORDER BY last_opened_at DESC, created_at ASC`)
-    .all() as Row[];
+    .query<Row, SQLQueryBindings[]>(`SELECT id, name, root_path FROM projects ORDER BY last_opened_at DESC, created_at ASC`)
+    .all();
   const exact = rows.filter(
     (row) =>
       String(row.id).toLowerCase() === needle ||
@@ -323,16 +323,18 @@ function resolveProject(db: Database, project: string) {
   if (matches.length !== 1) {
     throw new Error(matches.length === 0 ? `Project not found: ${project}` : `Project is ambiguous: ${project}`);
   }
-  return matches[0] as { id: string; name: string; root_path: string };
+  const match = matches[0];
+  if (!match || typeof match.id !== "string" || typeof match.name !== "string" || typeof match.root_path !== "string") throw new Error("Invalid project row");
+  return { id: match.id, name: match.name, root_path: match.root_path };
 }
 
 function readProjectById(db: Database, projectId: string) {
-  return db.query(`SELECT id, name, root_path FROM projects WHERE id = ?1`).get(projectId) as Row | null;
+  return db.query<Row, SQLQueryBindings[]>(`SELECT id, name, root_path FROM projects WHERE id = ?1`).get(projectId);
 }
 
 function countRow(db: Database, label: string, sql: string, value: string) {
-  const row = db.query(sql).get(value) as { count?: number } | null;
-  return { label, count: row?.count ?? 0 };
+  const row = db.query<Row, SQLQueryBindings[]>(sql).get(value);
+  return { label, count: typeof row?.count === "number" ? row.count : 0 };
 }
 
 function requireValue(argv: string[], index: number, flagName: string) {

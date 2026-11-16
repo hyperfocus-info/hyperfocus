@@ -30,6 +30,7 @@ export async function handleCommand(
     case "execution.pause-all":
     case "execution.resume-all":
     case "agent.list":
+    case "usage.refresh":
     case "usage.reset":
     case "agent.runtime.refresh":
     case "setup.refresh":
@@ -69,6 +70,8 @@ export async function handleCommand(
     case "ide.git.status":
       return handleProjectsCommand(command, context);
     case "thread.create":
+    case "thread.message":
+    case "thread.input":
     case "thread.activate":
     case "thread.fork":
     case "thread.rename":

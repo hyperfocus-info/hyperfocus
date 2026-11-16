@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { connectAuthoritative, type AuthoritativeClient } from "@hyperfocus/engine/net";
 import { normalizeThreeArenaStateSnapshot, threeArenaStateSchema, type ThreeArenaStateSnapshot } from "../binary-state.ts";
 
@@ -453,9 +454,7 @@ function objectFrom(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function authoritativeUrl(rawUrl?: string) {
   const hasLocation = typeof location !== "undefined" && location.host && location.protocol !== "file:";

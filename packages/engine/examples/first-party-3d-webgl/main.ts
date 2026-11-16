@@ -17,7 +17,7 @@ type AcceptanceState = {
   error?: string;
   snapshot(): {
     draws: number; instances: number; triangles: number; width: number; height: number; generation: number;
-    textureUploads: number; ambientLights: number; directionalLights: number; shadowDraws: number;
+    textureUploads: number; ambientLights: number; directionalLights: number; shadowDraws: number; outlineDraws: number;
     paletteUploads: number; skinnedDraws: number; skinnedInstances: number; pose: number;
   };
   contextRoundTrip(): Promise<{ supported: boolean; generation: number }>;
@@ -89,7 +89,7 @@ const ribbon = scene.registerMesh({
   ]),
   indices: new Uint16Array([0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4])
 });
-const blue = scene.createMaterial({ shading: "lit", baseColor: [0.16, 0.57, 0.95, 1], roughness: 0.7 });
+const blue = scene.createMaterial({ shading: "lit", shader: "toon", baseColor: [0.16, 0.57, 0.95, 1], roughness: 0.7, toon: { bands: 3, shadowColor: [0.1, 0.18, 0.42], rimColor: [0.7, 0.95, 1], rimStrength: 0.42, outlineColor: [0.01, 0.015, 0.04, 1], outlineWidth: 0.006 } });
 const coral = scene.createMaterial({ shading: "lit", baseColor: [1, 1, 1, 1], baseColorTexture: checker, alphaMode: "mask", alphaCutoff: 0.4 });
 const ground = scene.createMaterial({ shading: "lit", baseColor: [0.2, 0.28, 0.38, 1], roughness: 1 });
 const animated = scene.createMaterial({ shading: "lit", skinning: true, doubleSided: true, baseColor: [0.35, 0.95, 0.54, 1] });
@@ -130,7 +130,7 @@ multiplyMat4(shadowViewProjection, shadowProjection, shadowView);
 let renderer: ReturnType<typeof createWebGl2Renderer3D>;
 let lastStats = {
   draws: 0, instances: 0, triangles: 0, width: 0, height: 0, generation: 0,
-  textureUploads: 0, ambientLights: 0, directionalLights: 0, shadowDraws: 0,
+  textureUploads: 0, ambientLights: 0, directionalLights: 0, shadowDraws: 0, outlineDraws: 0,
   paletteUploads: 0, skinnedDraws: 0, skinnedInstances: 0, pose: 0
 };
 browserState.__firstParty3D = {
@@ -166,7 +166,7 @@ function showError(error: unknown): void {
 }
 
 try {
-  renderer = createWebGl2Renderer3D({
+  renderer = createWebGl2Renderer3D({ pixelRatio: () => globalThis.devicePixelRatio || 1,
     canvas,
     scene,
     maxInstances: 8,
@@ -209,6 +209,7 @@ function renderFrame(nowSeconds: number): void {
       ambientLights: Math.max(lastStats.ambientLights, stats.ambientLightsUsed),
       directionalLights: Math.max(lastStats.directionalLights, stats.directionalLightsUsed),
       shadowDraws: stats.shadowDrawCalls,
+      outlineDraws: stats.outlineDrawCalls,
       paletteUploads: Math.max(lastStats.paletteUploads, stats.paletteUploads),
       skinnedDraws: stats.skinnedDrawCalls,
       skinnedInstances: stats.skinnedInstances,
@@ -221,6 +222,7 @@ function renderFrame(nowSeconds: number): void {
       && lastStats.ambientLights > 0
       && lastStats.directionalLights > 0
       && lastStats.shadowDraws > 0
+      && lastStats.outlineDraws > 0
       && lastStats.paletteUploads > 0
       && !stats.contextLost;
   } catch (error) {
@@ -230,7 +232,7 @@ function renderFrame(nowSeconds: number): void {
 
 let animationSeconds = performance.now() / 1000;
 createFixedStepLoop({
-  step: 1 / 60,
+  step: 0.016666666666666666,
   maxFrame: 0.1,
   update(dt) { animationSeconds += dt; },
   render() { renderFrame(animationSeconds); },

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createInMemorySaveStorage } from "../save/index.ts";
-import type { PlayableProject2D } from "./runtime-2d-contracts.ts";
-import { createPlayableWorld } from "./runtime-world-2d.ts";
+import type { PlayableProject2D } from "./runtime2d/runtime-2d-contracts.ts";
+import { createPlayableWorld } from "./runtime2d/runtime-world-2d.ts";
 import { createPlayableSaveController2D } from "./runtime-save-2d.ts";
 import { createPlayableStoryController2D, validatePlayableStoryProject2D, type PlayableStoryProject2D } from "./runtime-story-2d.ts";
 

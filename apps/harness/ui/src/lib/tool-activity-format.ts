@@ -1,4 +1,5 @@
 import type { ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
+import { isRecord } from "@hyperfocus/utilities/records";
 import { formatShortTimestamp } from "./time-format";
 
 const DEFAULT_SNIPPET_LENGTH = 220;
@@ -325,9 +326,6 @@ function parseJsonRecord(value: string | undefined) {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function readString(record: Record<string, unknown> | undefined, keys: string[]) {
   if (!record) {

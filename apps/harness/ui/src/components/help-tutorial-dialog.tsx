@@ -1,5 +1,6 @@
 import { For } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
+import { Disclosure } from "@hyperfocus/ui";
 import type { SetupState } from "@hyperfocus/ai-core/protocol";
 import { tutorialDefinitions } from "./tutorial-definitions";
 import { Dialog } from "./primitives/dialog";
@@ -23,19 +24,9 @@ export function HelpTutorialDialog(props: HelpTutorialDialogProps) {
       onClose={props.onClose}
       eyebrow="Guided help"
       title="Walkthroughs and setup"
-      description="Run a targeted tutorial, then come back to the activation checklist when you need another repair step."
+      description="Choose a walkthrough. Progress stays in this browser."
       class={stylex.attrs(styles.dialogWide).class}
     >
-      <section {...stylex.attrs(styles.setupSummary)}>
-        <div {...stylex.attrs(styles.setupLabel)}>Current setup</div>
-        <div {...stylex.attrs(styles.setupCount)}>
-          {props.setup.readyRequiredCount}/{props.setup.totalRequiredCount} required checks ready
-        </div>
-        <div {...stylex.attrs(styles.setupDescription)}>
-          Launch mode: {props.setup.launchMode}. Guided help stays local to this browser profile.
-        </div>
-      </section>
-
       <div {...stylex.attrs(styles.tutorialGrid)}>
         <For each={tutorialDefinitions}>
           {(tutorial) => {
@@ -59,8 +50,8 @@ export function HelpTutorialDialog(props: HelpTutorialDialogProps) {
                   <span {...stylex.attrs(styles.tutorialSteps)}>
                     {tutorial.steps.length} steps
                   </span>
-                  <ActionButton tooltip={`Start ${tutorial.title}`} type="button" onClick={() => props.onStartTutorial(tutorial.id)}>
-                    Start tutorial
+                  <ActionButton tooltip={`${status() === "Completed" ? "Restart" : "Start"} ${tutorial.title}`} type="button" onClick={() => props.onStartTutorial(tutorial.id)}>
+                    {status() === "Completed" ? "Restart tutorial" : "Start tutorial"}
                   </ActionButton>
                 </div>
               </article>
@@ -68,6 +59,9 @@ export function HelpTutorialDialog(props: HelpTutorialDialogProps) {
           }}
         </For>
       </div>
+      <Disclosure title={`Setup: ${props.setup.readyRequiredCount}/${props.setup.totalRequiredCount} required checks ready`}>
+        <p {...stylex.attrs(styles.setupDescription)}>Launch mode: {props.setup.launchMode}. Return to the activation checklist for setup repairs.</p>
+      </Disclosure>
     </Dialog>
   );
 }

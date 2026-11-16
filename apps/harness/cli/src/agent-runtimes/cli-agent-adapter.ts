@@ -29,7 +29,7 @@ type CliAgentAdapterOptions = {
 };
 
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
-const DEFAULT_TOTAL_TIMEOUT_MS = 15 * 60_000;
+const DEFAULT_TOTAL_TIMEOUT_MS = 900000;
 
 export function createCliAgentAdapter(options: CliAgentAdapterOptions): PiAgentAdapter {
   const processManager = createCliProcessManager();

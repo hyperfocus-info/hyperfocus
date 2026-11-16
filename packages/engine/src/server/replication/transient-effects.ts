@@ -1,3 +1,4 @@
+import { finiteOr as finite } from "@hyperfocus/utilities/math";
 import { createObjectPool } from "../../runtime/object-pool.ts";
 
 export type CompactTransientEffect = {
@@ -48,9 +49,7 @@ export const transientEffectSchemaFields = {
   priority: "u16"
 } as const;
 
-function finite(value: number, fallback = 0) {
-  return Number.isFinite(value) ? value : fallback;
-}
+
 
 function u16(value: number) {
   const normalized = Number.isNaN(value) ? 0 : value;
@@ -118,8 +117,8 @@ function assignNormalizedEffect(target: CompactTransientEffect, effect: Transien
   target.id = effect.id.slice(0, 32);
   target.kind = effect.kind === "line" ? "line" : "aoe";
   target.zoneId = effect.zoneId.slice(0, 16);
-  target.x = finite(effect.x);
-  target.y = finite(effect.y);
+  target.x = finite(effect.x, 0);
+  target.y = finite(effect.y, 0);
   target.toX = finite(effect.toX, effect.x);
   target.toY = finite(effect.toY, effect.y);
   target.radius = u16(effect.radius);

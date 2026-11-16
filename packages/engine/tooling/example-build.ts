@@ -6,7 +6,7 @@ export type ExampleBundle = Omit<BuildConfig, "outdir"> & {
   expectedOutputs: readonly string[];
 };
 
-export async function buildExampleBundles(label: string, outdir: string, bundles: readonly ExampleBundle[]): Promise<void> {
+export async function buildExampleBundles(label: string, outdir: string, bundles: readonly ExampleBundle[], finalize?: (directory: string) => Promise<void>): Promise<void> {
   const suffix = `${process.pid}-${crypto.randomUUID()}`;
   const staging = `${outdir}.staging-${suffix}`;
   const backup = `${outdir}.backup-${suffix}`;
@@ -26,6 +26,7 @@ export async function buildExampleBundles(label: string, outdir: string, bundles
       }
     }
 
+    await finalize?.(staging);
     if (existsSync(outdir)) {
       renameSync(outdir, backup);
       oldOutputMoved = true;

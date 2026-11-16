@@ -142,7 +142,10 @@ export function createWorkspacePageRequests(options: WorkspacePageRequestOptions
     if (childRequests.has(projectId)) return;
     const project = options.getWorkspace().projects.find((entry) => entry.id === projectId);
     if (!project) return;
-    const command = createWorkspaceChildPageCommand(project, { includeMessages: false });
+    // Hydrate a summary shell once; older transcript pages remain explicitly requested.
+    const command = createWorkspaceChildPageCommand(project, {
+      includeMessages: project.messagesNextCursor === "__start__" && project.session.messages.length === 0
+    });
     if (command) sendChild(command, 0);
   };
   const requestMessages = (projectId: string) => {

@@ -1,7 +1,8 @@
+import type { AgentId,AgentRuntimeCapability,ModelDiscoveryConfidence } from "@hyperfocus/ai-core/protocol";
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 import { Buffer } from "node:buffer";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { AgentId, AgentRuntimeCapability, ModelDiscoveryConfidence } from "@hyperfocus/ai-core/protocol";
 import type { CliProcessManager } from "./cli-process-manager";
 
 const HEALTH_TOTAL_TIMEOUT_MS = 10_000;
@@ -285,9 +286,6 @@ function parseCopilotConfig(text: string, filename: string) {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function uniqueStrings(values: Array<string | undefined>) {
   return [...new Set(values.filter((value): value is string => Boolean(value?.trim())).map((value) => value.trim()))];

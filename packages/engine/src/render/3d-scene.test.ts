@@ -67,7 +67,7 @@ test("skeleton palettes are fixed-capacity, lifecycle-safe, and split instancing
   for (let joint = 0; joint < 2; joint += 1) {
     palette[joint * 16] = 1; palette[joint * 16 + 5] = 1; palette[joint * 16 + 10] = 1; palette[joint * 16 + 15] = 1;
   }
-  palette[16 + 12] = 0.25;
+  palette[28] = 0.25;
   scene.setSkeletonMatrices(firstSkeleton, palette);
   expect(scene.skeletonMatrices[scene.skeletonMatrixOffset(firstSkeleton) + 28]).toBe(0.25);
   const transforms = [scene.transforms.create(), scene.transforms.create(), scene.transforms.create()];
@@ -128,6 +128,20 @@ test("texture registry enforces capacity, byte ownership, references, and materi
   expect(scene.textureCount).toBe(1);
 });
 
+test('texture replacement preserves handles and sampler settings, copies pixels and rejects atomically', () => {
+  const scene = createBoundedScene3D(sceneLimits({ textures: 1, textureBytes: 16 }));
+  const handle = scene.registerTexture({ width: 1, height: 1, pixels: new Uint8Array(4), filter: 'nearest', wrapU: 'repeat' });
+  const pixels = new Uint8ClampedArray(16).fill(123), original = scene.getTexture(handle);
+  scene.replaceTexture({ handle, width: 2, height: 2, pixels });pixels.fill(0);
+  const replaced = scene.getTexture(handle);expect(replaced).not.toBe(original);expect(replaced.pixels[0]).toBe(123);
+  expect(replaced.filter).toBe('nearest');expect(replaced.wrapU).toBe('repeat');expect(scene.textureCount).toBe(1);expect(scene.textureBytes).toBe(16);
+  for (const patch of [{ width: 3, height: 2, pixels: new Uint8Array(24) }, { width: 0, height: 1, pixels: new Uint8Array(0) }, { width: 1.5, height: 1, pixels: new Uint8Array(6) }, { width: 2, height: 2, pixels: new Uint8Array(15) }]) {
+    expect(() => scene.replaceTexture({ handle, ...patch })).toThrow();expect(scene.getTexture(handle)).toBe(replaced);expect(scene.textureBytes).toBe(16);
+  }
+  expect(() => scene.replaceTexture({ handle: 99, width: 1, height: 1, pixels: new Uint8Array(4) })).toThrow();
+  scene.replaceTexture({ handle, width: 1, height: 1, pixels: new Uint8Array(4) });expect(scene.textureBytes).toBe(4);
+});
+
 test("ambient lights compile into the bounded light stream", () => {
   const scene = createBoundedScene3D(sceneLimits({ lights: 1 }));
   const light = scene.createLight({ kind: "ambient", color: [0.2, 0.3, 0.4], intensity: 0.5 });
@@ -172,6 +186,26 @@ test("mesh registry validates bounded position morph targets", () => {
   expect(scene.getMesh(mesh).morphWeights).toBe(weights);
   expect(() => scene.registerMesh({ positions, morphPositions: [new Float32Array(3)] })).toThrow("must contain 9");
   expect(() => scene.registerMesh({ positions, morphWeights: [1] })).toThrow("require morphPositions");
+});
+
+test('combined presentation preserves live bounds, visibility, resource checks and mutable skin validation', () => {
+  const scene = createBoundedScene3D(sceneLimits({ skeletons: 1, jointsPerSkeleton: 2 }));
+  const mesh = scene.registerMesh({ positions: triangle() }), material = scene.createMaterial(), transform = scene.transforms.create();
+  scene.transforms.setPosition(transform, 0, 0, -5);
+  const instance = scene.createInstance({ mesh, material, transform }), output = createRenderCommandBuffer3D({ commands: 2, instances: 2, lights: 0 });
+  scene.setInstancePresentation(instance, mesh, material, true);
+  scene.setInstanceBounds(instance, { x: 1000, y: 1000, z: 0, radius: 0 });
+  scene.compile(output, { frustumPlanes: cameraFrustum() });expect(output.visibleInstances).toBe(0);
+  scene.setInstancePresentation(instance, mesh, material, true);
+  scene.compile(output, { frustumPlanes: cameraFrustum() });expect(output.visibleInstances).toBe(1);
+  scene.setInstanceVisible(instance, false);scene.setInstancePresentation(instance, mesh, material, true);
+  scene.compile(output, { frustumPlanes: cameraFrustum() });expect(output.visibleInstances).toBe(1);
+  const skinMesh = scene.registerMesh(skinnedTriangle()), skinMaterial = scene.createMaterial({ skinning: true });
+  const skin = scene.createInstance({ mesh: skinMesh, material: skinMaterial, transform, skeleton: scene.createSkeleton(2) });
+  scene.setInstancePresentation(skin, skinMesh, skinMaterial, true);
+  scene.getMesh(skinMesh).joints![0] = 2;
+  expect(() => scene.setInstancePresentation(skin, skinMesh, skinMaterial, true)).toThrow('exceeds skeleton');
+  scene.destroyInstance(instance);expect(() => scene.setInstancePresentation(instance, mesh, material, true)).toThrow();
 });
 
 test("first-party LOD selection is deterministic and safely rebinds scene instances", () => {
@@ -281,7 +315,7 @@ test("command, instance, light, and layer limits are observable without growing 
   expect(output.truncatedLights).toBe(1);
   expect(output.lightTypes[0]).toBe(LIGHT_KIND_POINT_3D);
   expect(Array.from(output.lightData.slice(0, 4))).toEqual([1, 2, 3, 12]);
-  expect(output.instanceMatrices.byteLength).toBe(2 * 16 * Float32Array.BYTES_PER_ELEMENT);
+  expect(output.instanceMatrices.byteLength).toBe(32 * Float32Array.BYTES_PER_ELEMENT);
 });
 
 test("resource lifecycle prevents dangling handles and reuses released slots", () => {

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, type Accessor } from "solid-js";
+import { createContext, createEffect, createMemo, createSignal, onCleanup, onMount, Show, untrack, useContext, type Accessor } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { getTutorialDefinition } from "./tutorial-definitions";
 import { PrimitivePortal } from "./primitives/primitive-portal";
@@ -32,22 +32,27 @@ type Particle = {
 
 const BOUNCE_CLASSES = (stylex.attrs(styles.targetBounce).class ?? "").split(/\s+/).filter(Boolean);
 
-type TutorialStep = NonNullable<ReturnType<typeof getTutorialDefinition>>["steps"][number];
+const TutorialPanelContext = createContext<ReturnType<typeof createTutorialPanelState>>();
 
-function TutorialPanel(props: {
-  step: Accessor<TutorialStep | undefined>;
-  stepIndex: number;
-  finalStep: Accessor<boolean>;
-  targetPresent: Accessor<boolean>;
-  targetInteracted: Accessor<boolean>;
-  completionSatisfied: boolean;
-  canAdvance: Accessor<boolean>;
-  onBack: () => void;
-  onNext: () => void;
-  onClose: () => void;
-}) {
+function createTutorialPanelState(props: TutorialOverlayProps, targetPresent: Accessor<boolean>, targetInteracted: Accessor<boolean>) {
+  const tutorial = createMemo(() => getTutorialDefinition(props.tutorialId));
+  const step = createMemo(() => tutorial()?.steps[props.stepIndex]);
+  const finalStep = createMemo(() => props.stepIndex >= (tutorial()?.steps.length ?? 1) - 1);
+  const completionSatisfied = () => props.completionSatisfied;
+  const canAdvance = createMemo(() => isTutorialStepAdvanceAllowed({
+    finalStep: finalStep(), targetPresent: targetPresent(), targetInteracted: targetInteracted(),
+    completionSatisfied: completionSatisfied()
+  }));
+  return { step, finalStep, completionSatisfied, canAdvance, targetPresent, targetInteracted,
+    stepIndex: () => props.stepIndex,
+    back: () => props.onBack(), next: () => props.onNext(), close: () => props.onClose() };
+}
+
+function TutorialPanel() {
+  const state = useContext(TutorialPanelContext);
+  if (!state) throw new Error("TutorialPanel requires its overlay scope");
   return (
-    <Show when={props.step()}>
+    <Show when={state.step()}>
       {(step) => (
         <>
           <div {...stylex.attrs(styles.backdrop)} />
@@ -55,23 +60,23 @@ function TutorialPanel(props: {
             <div {...stylex.attrs(styles.eyebrow)}>Guided tutorial</div>
             <div {...stylex.attrs(styles.title)}>{step().title}</div>
             <div {...stylex.attrs(styles.body)}>{step().body}</div>
-            <Show when={!props.targetPresent()}>
+            <Show when={!state.targetPresent()}>
               <div {...stylex.attrs(styles.fallback)}>{step().fallback}</div>
             </Show>
-            <Show when={props.targetPresent() && !props.targetInteracted() && !props.finalStep()}>
+            <Show when={state.targetPresent() && !state.targetInteracted() && !state.finalStep()}>
               <div {...stylex.attrs(styles.requirement)}>Use the highlighted control to unlock the next step.</div>
             </Show>
-            <Show when={props.finalStep() && !props.completionSatisfied}>
+            <Show when={state.finalStep() && !state.completionSatisfied()}>
               <div {...stylex.attrs(styles.requirement)}>Complete the tutorial goal in the workspace to unlock Finish.</div>
             </Show>
             <div {...stylex.attrs(styles.actions)}>
-              <Tooltip content={props.stepIndex === 0 ? "Already at the first tutorial step" : "Go to previous tutorial step"}>
+              <Tooltip content={state.stepIndex() === 0 ? "Already at the first tutorial step" : "Go to previous tutorial step"}>
                 <span {...stylex.attrs(styles.tooltipTrigger)}>
                   <button
                     {...stylex.attrs(styles.button, styles.buttonSecondary)}
                     type="button"
-                    onClick={props.onBack}
-                    disabled={props.stepIndex === 0}
+                    onClick={state.back}
+                    disabled={state.stepIndex() === 0}
                   >
                     Back
                   </button>
@@ -80,12 +85,12 @@ function TutorialPanel(props: {
               <button
                 {...stylex.attrs(styles.button)}
                 type="button"
-                onClick={props.onNext}
-                disabled={!props.canAdvance()}
+                onClick={state.next}
+                disabled={!state.canAdvance()}
               >
-                {props.finalStep() ? "Finish" : "Next"}
+                {state.finalStep() ? "Finish" : "Next"}
               </button>
-              <button {...stylex.attrs(styles.button, styles.buttonSecondary)} type="button" onClick={props.onClose}>
+              <button {...stylex.attrs(styles.button, styles.buttonSecondary)} type="button" onClick={state.close}>
                 Skip
               </button>
             </div>
@@ -108,17 +113,10 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
   const [targetInteracted, setTargetInteracted] = createSignal(false);
   const [stepStartedAt, setStepStartedAt] = createSignal(Date.now());
   const [particles, setParticles] = createSignal<Particle[]>([]);
-  const tutorial = createMemo(() => getTutorialDefinition(props.tutorialId));
-  const currentStep = createMemo(() => tutorial()?.steps[props.stepIndex]);
-  const finalStep = createMemo(() => props.stepIndex >= (tutorial()?.steps.length ?? 1) - 1);
-  const canAdvance = createMemo(() =>
-    isTutorialStepAdvanceAllowed({
-      finalStep: finalStep(),
-      targetPresent: targetPresent(),
-      targetInteracted: targetInteracted(),
-      completionSatisfied: props.completionSatisfied
-    })
-  );
+  // One overlay mount owns animation resources; tutorial/step changes reset only
+  // interaction evidence. Panel consumers read the same live scope at use.
+  const panel = createTutorialPanelState(props, targetPresent, targetInteracted);
+  const currentStep = panel.step;
 
   onMount(() => {
     const dismissFromEscape = (event: KeyboardEvent) => {
@@ -273,18 +271,9 @@ export function TutorialOverlay(props: TutorialOverlayProps) {
     <PrimitivePortal active={Boolean(props.tutorialId && currentStep())} layer="tutorial">
       <div {...stylex.attrs(styles.shell)}>
         <canvas ref={canvasRef} {...stylex.attrs(styles.canvas)} />
-        <TutorialPanel
-          step={currentStep}
-          stepIndex={props.stepIndex}
-          finalStep={finalStep}
-          targetPresent={targetPresent}
-          targetInteracted={targetInteracted}
-          completionSatisfied={props.completionSatisfied}
-          canAdvance={canAdvance}
-          onBack={props.onBack}
-          onNext={props.onNext}
-          onClose={props.onClose}
-        />
+        <TutorialPanelContext.Provider value={panel}>
+          <TutorialPanel />
+        </TutorialPanelContext.Provider>
       </div>
     </PrimitivePortal>
   );

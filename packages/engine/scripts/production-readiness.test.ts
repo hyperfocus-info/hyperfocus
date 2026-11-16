@@ -26,6 +26,12 @@ test("package and MMO claims accept complete, current external evidence", () => 
   expect(validateProductionEvidence(evidence(), "mmo", "0.0.1", now)).toEqual([]);
 });
 
+test("npm publishing invokes the certification gate without blocking local packing", async () => {
+  const manifest = await Bun.file(new URL("../package.json", import.meta.url)).json();
+  expect(manifest.scripts.prepublishOnly).toBe("bun run certify:package");
+  expect(manifest.scripts.prepack).toBeUndefined();
+});
+
 test("MMO claims fail closed on local-only or stale operational evidence", () => {
   const candidate = evidence();
   candidate.browserMatrix.engines = ["chromium"];

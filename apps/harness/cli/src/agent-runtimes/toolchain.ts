@@ -1,6 +1,11 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { resolveBundledBunPath as resolveBun } from "@hyperfocus/ai-runtime/quality/commands";
+
+export function resolveBundledBunPath(input: { rootPath?: string; platform?: NodeJS.Platform } = {}) {
+  return resolveBun({ ...input, resolutionBase: import.meta.url });
+}
 
 const RIPGREP_PACKAGE = "@vscode/ripgrep";
 
@@ -39,11 +44,11 @@ function resolveInstalledRipgrepPath(platform: NodeJS.Platform, architecture: st
 
 export function buildToolchainPath(input: { basePath?: string; rootPath?: string; platform?: NodeJS.Platform } = {}) {
   const rgPath = resolveBundledRipgrepPath(input);
-  if (!rgPath) {
-    return input.basePath;
-  }
-
-  return prependPath(path.dirname(rgPath), input.basePath ?? Bun.env.PATH ?? "", input.platform);
+  const bunPath = resolveBundledBunPath(input);
+  let nextPath = input.basePath ?? Bun.env.PATH ?? "";
+  if (bunPath) nextPath = prependPath(path.dirname(bunPath), nextPath, input.platform);
+  if (rgPath) nextPath = prependPath(path.dirname(rgPath), nextPath, input.platform);
+  return nextPath || input.basePath;
 }
 
 export function applyHarnessToolchainToProcessEnv(input: { rootPath?: string; platform?: NodeJS.Platform } = {}) {

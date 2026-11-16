@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import {  Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, untrack } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { Bot, Brain, ClipboardList, FolderOpen, Gauge, Play, Split, UserRound } from "lucide-solid";
 import { resolveModeCatalog } from "@hyperfocus/ai-core/modes";
@@ -25,9 +25,10 @@ import { Dialog } from "./primitives/dialog";
 import { DropdownControl, type DropdownOption } from "./primitives/dropdown";
 import { getModeDropdownIcon } from "./primitives/dropdown-option-icons";
 import { DialogField, DialogFormSection, DialogInlineNote } from "./primitives/form-layout";
-import { Input } from "./primitives/input";
+import { Input } from "@hyperfocus/ui";
 import { Textarea } from "./primitives/textarea";
 import { backgroundJobsStyles as styles } from "./background-jobs.styles";
+import { ShellJobFields, shellTaskDefinition, shellTaskErrors } from "./background-jobs/shell-task-fields";
 
 function createBackgroundJobEditorFields() {
   const [projectId, setProjectId] = createSignal<string>();
@@ -48,21 +49,33 @@ function createBackgroundJobEditorFields() {
   const [aiSubagentWorktreeStrategy, setAiSubagentWorktreeStrategy] = createSignal<SubagentWorktreeStrategy>("same-worktree");
   const [shellExecutable, setShellExecutable] = createSignal("");
   const [shellArgsText, setShellArgsText] = createSignal("");
+  const [shellArgs, setShellArgs] = createSignal<string[]>();
   const [shellCwd, setShellCwd] = createSignal("");
   const [shellEnvRefsText, setShellEnvRefsText] = createSignal("");
-  const [shellTimeoutSeconds, setShellTimeoutSeconds] = createSignal(600);
+  const [shellTimeoutSeconds, setShellTimeoutSeconds] = createSignal("600");
+  const [initialSnapshot, setInitialSnapshot] = createSignal("");
   const [shellNetworkAccess, setShellNetworkAccess] = createSignal(false);
   const [previewRequestId, setPreviewRequestId] = createSignal<string>();
-  return {
-    projectId, setProjectId, assistantId, setAssistantId, templateId, setTemplateId, kind, setKind,
-    lane, setLane, name, setName, description, setDescription, scheduleInput, setScheduleInput,
-    timezone, setTimezone, aiPrompt, setAiPrompt, aiModeId, setAiModeId, aiExecutionModelId,
-    setAiExecutionModelId, aiReasoningStrength, setAiReasoningStrength, aiFastMode, setAiFastMode,
-    aiPlanExecutionMode, setAiPlanExecutionMode, aiSubagentWorktreeStrategy, setAiSubagentWorktreeStrategy,
-    shellExecutable, setShellExecutable, shellArgsText, setShellArgsText, shellCwd, setShellCwd,
-    shellEnvRefsText, setShellEnvRefsText, shellTimeoutSeconds, setShellTimeoutSeconds,
-    shellNetworkAccess, setShellNetworkAccess, previewRequestId, setPreviewRequestId
+  const values = {
+    projectId, assistantId, templateId, kind, lane, name, description, scheduleInput,
+    timezone, aiPrompt, aiModeId, aiExecutionModelId, aiReasoningStrength, aiFastMode,
+    aiPlanExecutionMode, aiSubagentWorktreeStrategy, shellExecutable, shellArgsText,
+    shellArgs, shellCwd, shellEnvRefsText, shellTimeoutSeconds, shellNetworkAccess,
   };
+  return {
+    ...values,
+    setProjectId, setAssistantId, setTemplateId, setKind, setLane, setName,
+    setDescription, setScheduleInput, setTimezone, setAiPrompt, setAiModeId,
+    setAiExecutionModelId, setAiReasoningStrength, setAiFastMode, setAiPlanExecutionMode,
+    setAiSubagentWorktreeStrategy, setShellExecutable, setShellArgsText, setShellArgs,
+    setShellCwd, setShellEnvRefsText, setShellTimeoutSeconds, setShellNetworkAccess,
+    previewRequestId, setPreviewRequestId, initialSnapshot, setInitialSnapshot,
+    snapshot: () => JSON.stringify(Object.entries(values).map(([key, read]) => [key, read()])),
+  };
+}
+
+function shellValues(fields: ReturnType<typeof createBackgroundJobEditorFields>) {
+  return { executable: fields.shellExecutable(), argsText: fields.shellArgsText(), preservedArgs: fields.shellArgs(), cwd: fields.shellCwd(), envRefsText: fields.shellEnvRefsText(), timeoutSeconds: fields.shellTimeoutSeconds(), networkAccess: fields.shellNetworkAccess() };
 }
 
 function registerBackgroundJobEditorLifecycle(options: {
@@ -91,16 +104,16 @@ function registerBackgroundJobEditorLifecycle(options: {
     fields.setAiSubagentWorktreeStrategy(draft.aiSubagentWorktreeStrategy ?? state.subagentWorktreeStrategyDefault);
     fields.setShellExecutable(draft.shellExecutable);
     fields.setShellArgsText(draft.shellArgsText);
+    fields.setShellArgs(draft.shellArgs);
     fields.setShellCwd(draft.shellCwd);
     fields.setShellEnvRefsText(draft.shellEnvRefsText);
-    fields.setShellTimeoutSeconds(draft.shellTimeoutSeconds);
+    fields.setShellTimeoutSeconds(String(draft.shellTimeoutSeconds));
     fields.setShellNetworkAccess(draft.shellNetworkAccess);
   };
   createEffect(() => {
     const draft = state.backgroundJobEditorDraft;
     if (!state.backgroundJobEditorOpen || !draft) return;
-    seedFromDraft(draft);
-    harnessStore.clearBackgroundJobSchedulePreview();
+    untrack(() => { seedFromDraft(draft); fields.setInitialSnapshot(fields.snapshot()); harnessStore.clearBackgroundJobSchedulePreview(); });
   });
   createEffect(() => {
     if (!state.backgroundJobEditorOpen) return;
@@ -111,6 +124,7 @@ function registerBackgroundJobEditorLifecycle(options: {
   });
   createEffect(() => {
     if (!state.backgroundJobEditorOpen) return;
+    state.backgroundJobEditorDraft;
     const input = fields.scheduleInput().trim();
     if (!input) {
       harnessStore.clearBackgroundJobSchedulePreview();
@@ -144,9 +158,10 @@ function registerBackgroundJobEditorLifecycle(options: {
     }
     fields.setShellExecutable(template.definition.executable);
     fields.setShellArgsText(template.definition.args.join("\n"));
+    fields.setShellArgs(template.definition.args);
     fields.setShellCwd(template.definition.cwd ?? "");
     fields.setShellEnvRefsText((template.definition.envRefs ?? []).join("\n"));
-    fields.setShellTimeoutSeconds(template.definition.timeoutSeconds);
+    fields.setShellTimeoutSeconds(String(template.definition.timeoutSeconds));
     fields.setShellNetworkAccess(Boolean(template.definition.networkAccess));
   };
   return { applyTemplate };
@@ -160,10 +175,17 @@ function createBackgroundJobEditorSaveActions(options: {
   schedulePreview: () => typeof harnessStore.state.backgroundJobSchedulePreview extends infer T
     ? T extends { preview: infer P } ? P | undefined : undefined
     : undefined;
+  targetError: () => string | undefined;
 }) {
   const fields = options.fields;
+  const [savingDraft, setSavingDraft] = createSignal<BackgroundJobEditorDraft>();
+  const saving = () => Boolean(savingDraft() && savingDraft() === options.activeDraft());
+  const [saveError, setSaveError] = createSignal("");
+  createEffect(() => { options.activeDraft(); setSaveError(""); });
+  const identity = createMemo(() => ({ draft: options.activeDraft(), jobId: options.activeDraft()?.jobId ?? createBackgroundJobId(), threadId: options.activeDraft()?.automationThreadId ?? createThreadId() }));
   const handleClose = () => harnessStore.closeBackgroundJobEditor();
   const saveDisabledReason = () => {
+    if (options.targetError()) return options.targetError();
     if (!fields.projectId()) return "Select a project";
     if (!fields.name().trim()) return "Enter a task name";
     if (!options.schedulePreview()?.schedule || options.schedulePreview()?.error) {
@@ -171,9 +193,13 @@ function createBackgroundJobEditorSaveActions(options: {
     }
     if (fields.kind() === "ai-routine" && !fields.aiPrompt().trim()) return "Describe what the AI routine should do";
     if (fields.kind() === "shell" && !fields.shellExecutable().trim()) return "Enter a shell executable";
+    if (fields.kind() === "shell") return Object.values(shellTaskErrors(shellValues(fields)))[0];
     return undefined;
   };
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving()) return;
+    const error = saveDisabledReason();
+    if (error) { pushToast("Task needs attention", error, "error"); return; }
     const draft = options.activeDraft();
     const resolvedProjectId = fields.projectId();
     const preview = options.schedulePreview();
@@ -201,15 +227,7 @@ function createBackgroundJobEditorSaveActions(options: {
           planExecutionMode: fields.aiPlanExecutionMode(),
           subagentWorktreeStrategy: fields.aiSubagentWorktreeStrategy()
         }
-      : {
-          kind: "shell" as const,
-          executable: fields.shellExecutable().trim(),
-          args: splitMultilineInput(fields.shellArgsText()) ?? [],
-          cwd: fields.shellCwd().trim() || undefined,
-          envRefs: splitMultilineInput(fields.shellEnvRefsText()),
-          timeoutSeconds: Math.max(1, Math.min(24 * 60 * 60, Math.round(fields.shellTimeoutSeconds()))),
-          networkAccess: fields.shellNetworkAccess()
-        };
+      : shellTaskDefinition(shellValues(fields));
     if (definition.kind === "ai-routine" && !definition.prompt) {
       pushToast("Prompt required", "AI routine needs self-contained prompt.", "error");
       return;
@@ -219,15 +237,16 @@ function createBackgroundJobEditorSaveActions(options: {
       return;
     }
     const now = new Date().toISOString();
-    options.sendCommand({
+    setSavingDraft(draft); setSaveError("");
+    try { await harnessStore.actions.saveBackgroundJob({
       type: "background-job.save",
       requestId: createRequestId(),
       payload: {
         job: {
-          id: draft.jobId ?? createBackgroundJobId(),
+          id: identity().jobId,
           projectId: resolvedProjectId,
           assistantId: fields.assistantId().trim() || undefined,
-          automationThreadId: draft.automationThreadId ?? createThreadId(),
+          automationThreadId: identity().threadId,
           templateId: options.selectedTemplate()?.id ?? draft.templateId ?? undefined,
           createdFromRunId: draft.createdFromRunId,
           kind: definition.kind,
@@ -248,9 +267,11 @@ function createBackgroundJobEditorSaveActions(options: {
         }
       }
     });
-    handleClose();
+    if (options.activeDraft() === draft) handleClose();
+    } catch (error) { if (options.activeDraft() === draft) setSaveError(error instanceof Error ? error.message : "Task could not be saved."); }
+    finally { if (savingDraft() === draft) setSavingDraft(undefined); }
   };
-  return { handleClose, saveDisabledReason, handleSave };
+  return { handleClose, saveDisabledReason, handleSave, saving, saveError };
 }
 
 function BackgroundJobTaskFields(props: {
@@ -261,8 +282,10 @@ function BackgroundJobTaskFields(props: {
   kindOptions: () => DropdownOption<BackgroundJob["kind"]>[];
   laneOptions: () => DropdownOption<NonNullable<BackgroundJob["lane"]>>[];
   applyTemplate: (templateId: string) => void;
+  projectError: () => string | undefined;
 }) {
   const fields = props.fields;
+  const projectErrorId = createUniqueId();
   return (
     <DialogFormSection title="Task" description="Pick where this job runs, who owns it, and what kind of work it performs.">
       <DialogField label="Name">
@@ -277,6 +300,8 @@ function BackgroundJobTaskFields(props: {
         <DropdownControl
           kind="select"
           ariaLabel="Select background job project"
+          invalid={Boolean(props.projectError())}
+          describedBy={props.projectError() ? projectErrorId : undefined}
           icon={<FolderOpen class={stylex.attrs(styles.iconSm).class} />}
           size="md"
           class={stylex.attrs(styles.controlFullWidth).class}
@@ -284,6 +309,7 @@ function BackgroundJobTaskFields(props: {
           options={props.projectOptions()}
           onChange={(value) => fields.setProjectId(value || undefined)}
         />
+        <Show when={props.projectError()}>{error => <span id={projectErrorId} role="alert"><DialogInlineNote tone="danger">{error()}</DialogInlineNote></span>}</Show>
       </DialogField>
       <details class={stylex.attrs(styles.advancedSettings).class}>
         <summary class={stylex.attrs(styles.advancedSummary).class}>Advanced task settings</summary>
@@ -316,13 +342,16 @@ function BackgroundJobAiFields(props: {
   fastModeOptions: () => DropdownOption<string>[];
   planGateOptions: () => DropdownOption<PlanExecutionMode>[];
   worktreeOptions: () => DropdownOption<SubagentWorktreeStrategy>[];
+  modeError: () => string | undefined;
 }) {
   const fields = props.fields;
+  const modeErrorId = createUniqueId();
   return (
     <DialogFormSection title="AI routine" description="Prompt and execution defaults used each time the schedule fires.">
       <div class={stylex.attrs(styles.aiGrid).class}>
         <DialogField label="Mode">
-          <DropdownControl kind="select" ariaLabel="Select background job mode" icon={<Split class={stylex.attrs(styles.iconSm).class} />} size="md" class={stylex.attrs(styles.controlFullWidth).class} value={fields.aiModeId()} options={props.modeOptions()} onChange={fields.setAiModeId} />
+          <DropdownControl kind="select" ariaLabel="Select background job mode" invalid={Boolean(props.modeError())} describedBy={props.modeError() ? modeErrorId : undefined} icon={<Split class={stylex.attrs(styles.iconSm).class} />} size="md" class={stylex.attrs(styles.controlFullWidth).class} value={fields.aiModeId()} options={props.modeOptions()} onChange={fields.setAiModeId} />
+          <Show when={props.modeError()}>{error => <span id={modeErrorId} role="alert"><DialogInlineNote tone="danger">{error()}</DialogInlineNote></span>}</Show>
         </DialogField>
         <DialogField label="Execution model">
           <Input value={fields.aiExecutionModelId()} onInput={(event) => fields.setAiExecutionModelId(event.currentTarget.value)} placeholder="openai/gpt-5.4" />
@@ -349,14 +378,10 @@ export function BackgroundJobEditorDialog() {
   const sendCommand = harnessStore.actions.sendCommand;
   const fields = createBackgroundJobEditorFields();
   const {
-    projectId, setProjectId, assistantId, setAssistantId, templateId, setTemplateId, kind, setKind,
-    lane, setLane, name, setName, description, setDescription, scheduleInput, setScheduleInput,
-    timezone, setTimezone, aiPrompt, setAiPrompt, aiModeId, setAiModeId, aiExecutionModelId,
-    setAiExecutionModelId, aiReasoningStrength, setAiReasoningStrength, aiFastMode, setAiFastMode,
-    aiPlanExecutionMode, setAiPlanExecutionMode, aiSubagentWorktreeStrategy, setAiSubagentWorktreeStrategy,
+    projectId, templateId, kind, scheduleInput, setScheduleInput, timezone, setTimezone, aiModeId,
     shellExecutable, setShellExecutable, shellArgsText, setShellArgsText, shellCwd, setShellCwd,
     shellEnvRefsText, setShellEnvRefsText, shellTimeoutSeconds, setShellTimeoutSeconds,
-    shellNetworkAccess, setShellNetworkAccess, previewRequestId, setPreviewRequestId
+    shellNetworkAccess, setShellNetworkAccess, previewRequestId,
   } = fields;
 
   const activeDraft = () => state.backgroundJobEditorDraft;
@@ -441,32 +466,51 @@ export function BackgroundJobEditorDialog() {
     }
   ];
   const { applyTemplate } = registerBackgroundJobEditorLifecycle({ state, sendCommand, fields, assistantOptions });
-  const { handleClose, saveDisabledReason, handleSave } = createBackgroundJobEditorSaveActions({
+  const projectError = () => projectId() && !projectOptions().some(option => option.value === projectId()) ? "This project is no longer available. Choose a current project before saving." : undefined;
+  const modeError = () => kind() === "ai-routine" && aiModeId() && !availableModes().some(mode => mode.id === aiModeId()) ? "This mode is unavailable in the selected project. Choose Project default or another mode." : undefined;
+  const [transition, setTransition] = createSignal<{ title: string; description: string; action: string; run: () => void }>();
+  const dirty = createMemo(() => fields.initialSnapshot() !== "" && fields.snapshot() !== fields.initialSnapshot());
+  const { handleClose, saveDisabledReason, handleSave, saving, saveError } = createBackgroundJobEditorSaveActions({
     sendCommand,
     fields,
     activeDraft,
     selectedTemplate,
-    schedulePreview
+    schedulePreview,
+    targetError: () => projectError() || modeError()
   });
+  const requestClose = () => {
+    if (saving()) return;
+    if (!dirty()) { handleClose(); return; }
+    setTransition({ title: "Discard task changes?", description: "Your task has not been saved. Keep editing to retain your changes.", action: "Discard changes", run: handleClose });
+  };
+  const requestTemplate = (id: string) => {
+    if (!id || id === templateId()) { applyTemplate(id); return; }
+    const label = state.backgroundJobs.templates.find(template => template.id === id)?.label;
+    if (!label) return;
+    setTransition({ title: "Replace task details?", description: `${label} will replace the command or prompt and its execution settings. Name, project and schedule are kept.`, action: "Apply template", run: () => applyTemplate(id) });
+  };
 
   return (
-    <Dialog
+    <><Dialog
       open={state.backgroundJobEditorOpen}
-      onClose={handleClose}
+      onClose={requestClose}
       title={activeDraft()?.source === "edit" ? "Edit scheduled task" : "Scheduled task"}
-      eyebrow="Background jobs"
       description="Save self-contained AI routines or typed shell jobs."
       class={stylex.attrs(styles.editorDialog).class}
       contentClass={stylex.attrs(styles.editorDialogContent).class}
       footer={
         <>
-          <Button tooltip="Close scheduled task editor without saving" variant="ghost" onClick={handleClose}>
+          <Show when={saveDisabledReason()}>{reason => <span role="status" class={stylex.attrs(styles.executionStatus).class}>{reason()}</span>}</Show>
+          <Button tooltip="Close scheduled task editor without saving" disabled={saving()} variant="ghost" onClick={requestClose}>
             Cancel
           </Button>
-          <Button tooltip={saveDisabledReason() ?? "Save scheduled task"} disabled={Boolean(saveDisabledReason())} onClick={handleSave}>Save task</Button>
+          <Button tooltip={saveDisabledReason() ?? "Save scheduled task"} disabled={saving() || Boolean(saveDisabledReason())} onClick={handleSave}>{saving() ? "Saving…" : saveError() ? "Retry save" : "Save task"}</Button>
         </>
       }
     >
+      <Show when={saving()}><div role="status"><DialogInlineNote>Saving task. Waiting for workspace confirmation…</DialogInlineNote></div></Show>
+      <Show when={saveError()}><div role="alert"><DialogInlineNote tone="danger">{saveError()} Your draft is retained.</DialogInlineNote></div></Show>
+      <fieldset disabled={saving()} aria-label="Task fields" class={stylex.attrs(styles.editorFields).class}>
       <BackgroundJobTaskFields
         fields={fields}
         projectOptions={projectOptions}
@@ -474,7 +518,8 @@ export function BackgroundJobEditorDialog() {
         templateOptions={templateOptions}
         kindOptions={kindOptions}
         laneOptions={laneOptions}
-        applyTemplate={applyTemplate}
+        applyTemplate={requestTemplate}
+        projectError={projectError}
       />
 
       <DialogFormSection title="Schedule" description="Use an interval, one-off datetime, or cron expression.">
@@ -488,7 +533,7 @@ export function BackgroundJobEditorDialog() {
           </DialogField>
         </div>
 
-        <DialogInlineNote tone={schedulePreview()?.error ? "danger" : schedulePreview()?.schedule ? "success" : "neutral"}>
+        <div role="status" aria-live="polite"><DialogInlineNote tone={schedulePreview()?.error ? "danger" : schedulePreview()?.schedule ? "success" : "neutral"}>
           <Show when={schedulePreview()} fallback={<span>Enter a schedule to see its next run in local time.</span>}>
             {(preview) => (
               <Show when={!preview().error} fallback={<span>{preview().error}</span>}>
@@ -496,86 +541,37 @@ export function BackgroundJobEditorDialog() {
               </Show>
             )}
           </Show>
-        </DialogInlineNote>
+        </DialogInlineNote></div>
       </DialogFormSection>
 
       <Show when={kind() === "ai-routine"} fallback={<ShellJobFields
         executable={shellExecutable()}
         argsText={shellArgsText()}
+        preservedArgs={fields.shellArgs()}
+        onPreservedArgsInput={fields.setShellArgs}
         cwd={shellCwd()}
         envRefsText={shellEnvRefsText()}
         timeoutSeconds={shellTimeoutSeconds()}
         networkAccess={shellNetworkAccess()}
         onExecutableInput={setShellExecutable}
-        onArgsInput={setShellArgsText}
+        onArgsInput={value => { fields.setShellArgs(undefined); setShellArgsText(value); }}
         onCwdInput={setShellCwd}
         onEnvRefsInput={setShellEnvRefsText}
-        onTimeoutInput={(value) => setShellTimeoutSeconds(Math.max(1, Number(value) || 1))}
+        onTimeoutInput={setShellTimeoutSeconds}
         onNetworkAccessInput={setShellNetworkAccess}
       />}>
-        <BackgroundJobAiFields
+        <details class={stylex.attrs(styles.advancedSettings).class}><summary class={stylex.attrs(styles.advancedSummary).class}>AI execution settings</summary><BackgroundJobAiFields
           fields={fields}
           modeOptions={modeOptions}
           reasoningOptions={reasoningOptions}
           fastModeOptions={fastModeOptions}
           planGateOptions={planGateOptions}
           worktreeOptions={worktreeOptions}
-        />
+          modeError={modeError}
+        /></details>
       </Show>
-    </Dialog>
+    </fieldset></Dialog><Dialog open={Boolean(transition())} title={transition()?.title ?? "Confirm change"} description={transition()?.description} onClose={() => setTransition(undefined)} footer={<><Button justificationForNoTooltip="The visible action explains retaining this draft" variant="ghost" onClick={() => setTransition(undefined)}>Keep editing</Button><Button justificationForNoTooltip="The confirmation description explains the action" onClick={() => { const next = transition(); setTransition(undefined); next?.run(); }}>{transition()?.action}</Button></>}><span>Nothing changes until you confirm.</span></Dialog></>
   );
-}
-
-function ShellJobFields(props: {
-  executable: string;
-  argsText: string;
-  cwd: string;
-  envRefsText: string;
-  timeoutSeconds: number;
-  networkAccess: boolean;
-  onExecutableInput: (value: string) => void;
-  onArgsInput: (value: string) => void;
-  onCwdInput: (value: string) => void;
-  onEnvRefsInput: (value: string) => void;
-  onTimeoutInput: (value: string) => void;
-  onNetworkAccessInput: (value: boolean) => void;
-}) {
-  return (
-    <DialogFormSection title="Shell job" description="Command, arguments, environment, and runtime limits for typed background execution.">
-      <div class={stylex.attrs(styles.shellGrid).class}>
-      <DialogField label="Executable">
-        <Input value={props.executable} onInput={(event) => props.onExecutableInput(event.currentTarget.value)} placeholder="bun" />
-      </DialogField>
-      <DialogField label="Working directory">
-        <Input value={props.cwd} onInput={(event) => props.onCwdInput(event.currentTarget.value)} placeholder="Project root when empty" />
-      </DialogField>
-      <DialogField label="Args, one per line">
-        <Textarea rows="6" value={props.argsText} onInput={(event) => props.onArgsInput(event.currentTarget.value)} placeholder="run&#10;test" />
-      </DialogField>
-      <DialogField label="Env refs, one per line">
-        <Textarea rows="6" value={props.envRefsText} onInput={(event) => props.onEnvRefsInput(event.currentTarget.value)} placeholder="OPENAI_API_KEY" />
-      </DialogField>
-      <DialogField label="Timeout seconds">
-        <Input type="number" min="1" max={String(24 * 60 * 60)} value={String(props.timeoutSeconds)} onInput={(event) => props.onTimeoutInput(event.currentTarget.value)} />
-      </DialogField>
-      <label class={stylex.attrs(styles.networkLabel).class}>
-        <input class={stylex.attrs(styles.marginTopXs).class} type="checkbox" checked={props.networkAccess} onInput={(event) => props.onNetworkAccessInput(event.currentTarget.checked)} />
-        <div>
-          <div class={stylex.attrs(styles.networkTitle).class}>Allow network access</div>
-          <div class={stylex.attrs(styles.networkHelp).class}>Marks task unsafe. Leave off for repo-local commands.</div>
-        </div>
-      </label>
-      </div>
-    </DialogFormSection>
-  );
-}
-
-function splitMultilineInput(value: string) {
-  const entries = value
-    .split(/\r?\n/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  return entries.length > 0 ? entries : undefined;
 }
 
 function getReasoningStrengthDescription(strength: ComposerReasoningStrength) {

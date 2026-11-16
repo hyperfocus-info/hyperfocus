@@ -22,6 +22,14 @@ type TestSocket = {
 
 const counterSchema = defineSchema<CounterState>({ ticks: "u16" });
 
+test("callback-free clocks advance without retaining ticks under every backlog policy", () => {
+  for (const backlogPolicy of ["coalesce", "drop", "queue"] as const) {
+    const clock = createServerClock({ now: () => 0, backlogPolicy });
+    for (let tick = 1; tick <= 10_000; tick += 1) expect(clock.advance(tick * 50)).toBe(1);
+    expect(clock.getStats()).toMatchObject({ tick: 10_000, pendingTicks: 0, droppedTicks: 0, coalescedTicks: 0 });
+  }
+});
+
 function requireTestState(value: unknown): TestState {
   if (typeof value !== "object" || value === null || !Array.isArray(Reflect.get(value, "joined"))
     || typeof Reflect.get(value, "inputs") !== "number" || typeof Reflect.get(value, "ticks") !== "number") {

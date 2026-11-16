@@ -19,6 +19,7 @@ const server = Bun.serve({
   port,
   fetch(request) {
     const path = new URL(request.url).pathname;
+    if (/^\/brand\/[a-z0-9-]+\.(svg|png|ico|webmanifest|json)$/.test(path)) return new Response(Bun.file(resolve(import.meta.dir,path.slice(1))));
     if (path === "/" || path === "/index.html") return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
     if (path === "/client.js") return new Response(client, { headers: { "content-type": "text/javascript; charset=utf-8" } });
     return new Response("Not found", { status: 404 });

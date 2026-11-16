@@ -1,0 +1,19 @@
+syntax = "proto3";
+package hyperfocus.serialization;
+
+// Wire-compatible with google.protobuf.Value. Explicit entries preserve arbitrary
+// object keys without depending on the JavaScript runtime's map property setter.
+message Value {
+  oneof kind {
+    NullValue null_value = 1;
+    double number_value = 2;
+    string string_value = 3;
+    bool bool_value = 4;
+    Record struct_value = 5;
+    List list_value = 6;
+  }
+}
+enum NullValue { NULL_VALUE = 0; }
+message Record { repeated Entry entries = 1; }
+message Entry { string key = 1; Value value = 2; }
+message List { repeated Value values = 1; }

@@ -5,7 +5,7 @@ import type { WorkspaceBackgroundReadsOperations2Set } from "./background-reads"
 import type { WorkspaceMigrationSupportOperations2Set, WorkspaceMigrationSupportOperationsSet } from "./migration-support";
 import type { WorkspaceProjectReadsOperationsSet } from "./project-reads";
 import { ACTIVE_PROJECT_KEY } from "../contracts";
-import { agentRunStateSchema } from "@hyperfocus/ai-core/protocol";
+import { agentRunStateSchema, runLaunchProfileSchema } from "@hyperfocus/ai-core/protocol";
 import { buildRunPromptStats, buildRunRuntimeBudget, isThreadLoadError, normalizeRunFailureCategory, parseBrowserSessions, parseCorrectnessReview, parseExecutionPlan, parsePlanningChoices, parsePlanningQuestionIntent, parseToolActivities } from "../models";
 import { isRunResumable, isRunRetryable, toAgentRunSummaryRow } from "../../run-summary-projection";
 import { normalizeInteger, normalizeOptionalInteger, normalizeOptionalString, normalizeRequiredString, safeParsePersisted } from "../persisted-values";
@@ -73,7 +73,7 @@ export function createWorkspaceRepositoryReadsOperations(context: WorkspaceRepos
         .query<AgentRunRow, [string, string, string]>(
           `SELECT
             id, project_id, thread_id, status, execution_target, latest_user_prompt, prompt_chars, prompt_hash, transcript_chars, latest_task_chars,
-            planning_model_id, execution_model_id, difficulty_score, summary, final_execution_brief, failure_message, failure_category, max_turns, turns_used, plan_json, correctness_review_json,
+            launch_profile_json, planning_model_id, execution_model_id, difficulty_score, summary, final_execution_brief, failure_message, failure_category, max_turns, turns_used, plan_json, correctness_review_json,
             browser_sessions_json, tool_activities_json, thread_run_sequence,
             created_at, updated_at, completed_at
            FROM agent_runs
@@ -283,6 +283,7 @@ export function createWorkspaceRepositoryReadsOperations4(context: WorkspaceRepo
           latestTaskChars: run.latest_task_chars
         }),
         planningModelId: normalizeOptionalString(run.planning_model_id, 256),
+        launchProfile: parseLaunchProfile(run.launch_profile_json),
         executionModelId: normalizeOptionalString(run.execution_model_id, 256),
         difficultyScore: normalizeOptionalInteger(run.difficulty_score, 0, 100),
         summary: normalizeOptionalString(run.summary, 1000000),
@@ -312,7 +313,7 @@ export function createWorkspaceRepositoryReadsOperations4(context: WorkspaceRepo
         .query<AgentRunRow, [string, string]>(
           `SELECT
             id, project_id, thread_id, status, execution_target, latest_user_prompt, prompt_chars, prompt_hash, transcript_chars, latest_task_chars,
-            planning_model_id, execution_model_id, difficulty_score, summary, final_execution_brief, failure_message, failure_category, max_turns, turns_used, plan_json, correctness_review_json,
+            launch_profile_json, planning_model_id, execution_model_id, difficulty_score, summary, final_execution_brief, failure_message, failure_category, max_turns, turns_used, plan_json, correctness_review_json,
             browser_sessions_json, tool_activities_json, thread_run_sequence,
             created_at, updated_at, completed_at
            FROM agent_runs
@@ -334,7 +335,7 @@ export function createWorkspaceRepositoryReadsOperations4(context: WorkspaceRepo
         .query<AgentRunRow, [string, string]>(
           `SELECT
             id, project_id, thread_id, status, execution_target, latest_user_prompt, prompt_chars, prompt_hash, transcript_chars, latest_task_chars,
-            planning_model_id, execution_model_id, difficulty_score, summary, final_execution_brief, failure_message, failure_category, max_turns, turns_used, plan_json, correctness_review_json,
+            launch_profile_json, planning_model_id, execution_model_id, difficulty_score, summary, final_execution_brief, failure_message, failure_category, max_turns, turns_used, plan_json, correctness_review_json,
             browser_sessions_json, tool_activities_json, thread_run_sequence,
             created_at, updated_at, completed_at
            FROM agent_runs
@@ -358,3 +359,8 @@ export function createWorkspaceRepositoryReadsOperations4(context: WorkspaceRepo
 }
 
 export type WorkspaceRepositoryReadsOperations4Set = ReturnType<typeof createWorkspaceRepositoryReadsOperations4>["operations"];
+
+function parseLaunchProfile(value: string | null) {
+  if (!value) return undefined;
+  try { return runLaunchProfileSchema.parse(JSON.parse(value)); } catch { return undefined; }
+}

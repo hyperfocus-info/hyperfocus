@@ -18,10 +18,10 @@ export type WorkspaceFileSnapshot = {
   revision: number;
 };
 
-export type WorkspaceFileChangeEvent =
+export type WorkspaceFileChangeEvent = Readonly<
   | { type: "created" | "changed"; path: string; revision: number; sequence: number }
   | { type: "deleted"; path: string; revision: number; sequence: number }
-  | { type: "invalidated"; reason: "overflow" | "external-change"; sequence: number; resnapshot: true };
+  | { type: "invalidated"; reason: "overflow" | "external-change"; sequence: number; resnapshot: true }>;
 
 /** @deprecated Use WorkspaceFileChangeEvent. */
 export type FileChangeEvent = WorkspaceFileChangeEvent;

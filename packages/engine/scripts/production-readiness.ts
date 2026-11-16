@@ -1,8 +1,9 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 export type ProductionClaim = "package" | "mmo";
 
 type JsonRecord = Record<string, unknown>;
 
-const DAY_MS = 24 * 60 * 60_000;
+const DAY_MS = 86400000;
 const INCIDENT_SCENARIOS = [
   "replay-store-partition",
   "cross-process-replay",
@@ -99,9 +100,7 @@ function record(value: unknown, label: string, errors: string[]): JsonRecord {
   return {};
 }
 
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function equal(value: unknown, expected: unknown, label: string, errors: string[]): void {
   if (value !== expected) errors.push(`${label} must equal ${JSON.stringify(expected)}.`);
@@ -125,7 +124,7 @@ function recentDate(value: unknown, label: string, maximumAgeDays: number, now: 
   if (typeof value !== "string") { errors.push(`${label} must be an ISO timestamp.`); return; }
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) { errors.push(`${label} must be an ISO timestamp.`); return; }
-  if (timestamp > now + 5 * 60_000 || now - timestamp > maximumAgeDays * DAY_MS) {
+  if (timestamp > now + 300000 || now - timestamp > maximumAgeDays * DAY_MS) {
     errors.push(`${label} must be no more than ${maximumAgeDays} days old and not in the future.`);
   }
 }

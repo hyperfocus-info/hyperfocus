@@ -1,3 +1,5 @@
+import { createTooltipInteraction } from "./tooltip/interaction";
+
 let domTooltipSequence = 0;
 
 /**
@@ -17,16 +19,16 @@ export function installDomTooltips(root: ParentNode = document) {
     borderRadius: "var(--hf-radius-sm, 6px)",
     boxShadow: "var(--hf-shadow-lg, 0 18px 54px rgb(0 0 0 / 35%))",
     color: "var(--hf-color-text, #e9f5f4)",
-    font: "0.72rem/1.4 var(--hf-font-ui, system-ui, sans-serif)",
-    maxWidth: "18rem",
+    font: "var(--hf-font-caption, 0.75rem)/1.4 var(--hf-font-ui, system-ui, sans-serif)",
+    maxWidth: "min(18rem, calc(100vw - 16px))",
+    boxSizing: "border-box",
     padding: "0.4rem 0.55rem",
-    pointerEvents: "none",
+    pointerEvents: "auto",
     position: "fixed",
     zIndex: "1200",
   });
   document.body.append(tooltip);
   let active: HTMLElement | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
 
   const upgrade = (scope: ParentNode) => {
     const candidates = [scope instanceof HTMLElement ? scope : undefined, ...scope.querySelectorAll<HTMLElement>("[title]")].filter((candidate): candidate is HTMLElement => Boolean(candidate));
@@ -49,44 +51,40 @@ export function installDomTooltips(root: ParentNode = document) {
     tooltip.style.left = `${left}px`;
     tooltip.style.top = `${top}px`;
   };
-  const show = (element: HTMLElement, immediate: boolean) => {
-    clearTimeout(timer);
-    active = element;
-    const reveal = () => {
-      if (!active?.dataset.hfTooltip) return;
-      tooltip.textContent = active.dataset.hfTooltip;
+  const interaction = createTooltipInteraction({
+    id, enabled: () => true, content: () => tooltip,
+    show: (element) => {
+      active = element;
+      const layer = element.closest('dialog[open]') ?? document.body;
+      if (tooltip.parentElement !== layer) layer.append(tooltip);
+      tooltip.textContent = element.dataset.hfTooltip ?? "";
       tooltip.hidden = false;
-      active.setAttribute("aria-describedby", id);
       position();
-    };
-    if (immediate) reveal(); else timer = setTimeout(reveal, 350);
-  };
-  const hide = () => {
-    clearTimeout(timer);
-    active?.removeAttribute("aria-describedby");
-    active = undefined;
-    tooltip.hidden = true;
-  };
+    },
+    hide: () => { active = undefined; tooltip.hidden = true; },
+  });
   const findTrigger = (target: EventTarget | null) => target instanceof Element ? target.closest<HTMLElement>("[data-hf-tooltip]") : undefined;
   const onPointerOver: EventListener = (event) => {
     if (!(event instanceof PointerEvent)) return;
     const trigger = findTrigger(event.target);
-    if (trigger) show(trigger, false);
+    if (trigger && !trigger.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) interaction.pointerEnter(trigger);
   };
   const onPointerOut: EventListener = (event) => {
-    if (event instanceof PointerEvent && active && !active.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) hide();
+    const trigger = findTrigger(event.target);
+    if (event instanceof PointerEvent && trigger && !trigger.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) interaction.pointerLeave();
   };
   const onFocusIn: EventListener = (event) => {
     if (!(event instanceof FocusEvent)) return;
     const trigger = findTrigger(event.target);
-    if (trigger) show(trigger, true);
+    if (trigger) interaction.focusIn(trigger);
   };
   const onFocusOut: EventListener = (event) => {
-    if (event instanceof FocusEvent && active && !active.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) hide();
+    if (event instanceof FocusEvent && active && !active.contains(event.relatedTarget instanceof Node ? event.relatedTarget : null)) interaction.focusOut();
   };
-  const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") hide(); };
+  const onClick: EventListener = event => { if (findTrigger(event.target)) interaction.dismiss(); };
   const onViewportChange = () => position();
   const observer = new MutationObserver((records) => {
+    if (active && !active.isConnected) interaction.dismiss();
     for (const record of records) {
       if (record.type === "attributes" && record.target instanceof HTMLElement) upgrade(record.target);
       for (const node of record.addedNodes) if (node instanceof HTMLElement) upgrade(node);
@@ -98,19 +96,23 @@ export function installDomTooltips(root: ParentNode = document) {
   root.addEventListener("pointerout", onPointerOut);
   root.addEventListener("focusin", onFocusIn);
   root.addEventListener("focusout", onFocusOut);
-  document.addEventListener("keydown", onKeyDown);
+  root.addEventListener("click", onClick);
+  tooltip.addEventListener("pointerenter", interaction.contentEnter);
+  tooltip.addEventListener("pointerleave", interaction.contentLeave);
   window.addEventListener("resize", onViewportChange);
   window.addEventListener("scroll", onViewportChange, true);
   observer.observe(root, { attributes: true, attributeFilter: ["title"], childList: true, subtree: true });
 
   return () => {
-    clearTimeout(timer);
+    interaction.dispose();
     observer.disconnect();
     root.removeEventListener("pointerover", onPointerOver);
     root.removeEventListener("pointerout", onPointerOut);
     root.removeEventListener("focusin", onFocusIn);
     root.removeEventListener("focusout", onFocusOut);
-    document.removeEventListener("keydown", onKeyDown);
+    root.removeEventListener("click", onClick);
+    tooltip.removeEventListener("pointerenter", interaction.contentEnter);
+    tooltip.removeEventListener("pointerleave", interaction.contentLeave);
     window.removeEventListener("resize", onViewportChange);
     window.removeEventListener("scroll", onViewportChange, true);
     tooltip.remove();

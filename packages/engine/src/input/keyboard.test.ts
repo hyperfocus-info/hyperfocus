@@ -82,6 +82,21 @@ test("keyboard blur reset can be disabled", () => {
   expect(keyboard.down("left")).toBe(false);
 });
 
+test("keyboard actions leave editable controls usable by default", () => {
+  const target = createTarget();
+  const keyboard = createKeyboardActions({ KeyA: "left" }, target);
+  let prevented = 0;
+  const input = { tagName: "input" };
+  target.dispatch("keydown", { code: "KeyA", target: input, preventDefault: () => prevented += 1 });
+  expect(keyboard.down("left")).toBe(false);
+  expect(prevented).toBe(0);
+
+  const captured = createKeyboardActions({ KeyA: "left" }, target, { captureEditableTargets: true });
+  target.dispatch("keydown", { code: "KeyA", target: input, preventDefault: () => prevented += 1 });
+  expect(captured.down("left")).toBe(true);
+  expect(prevented).toBe(1);
+});
+
 test("keyboard actions are Node-safe and ignore inherited binding names", () => {
   expect(() => createKeyboardActions({ Space: "jump" }, null)).toThrow("event target");
   const target = createTarget();

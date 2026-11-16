@@ -17,11 +17,12 @@ type SequenceSource = SequenceDefinition[] | (() => SequenceDefinition[]);
 
 const createHotkeysMock = mock((_hotkeys: HotkeySource, _options: () => HotkeyOptions) => undefined);
 const createHotkeySequencesMock = mock((_sequences: SequenceSource, _options: () => HotkeyOptions) => undefined);
+const { formatForDisplay } = await import("@tanstack/solid-hotkeys");
 
 mock.module("@tanstack/solid-hotkeys", () => ({
   createHotkeys: createHotkeysMock,
   createHotkeySequences: createHotkeySequencesMock,
-  formatForDisplay: (hotkey: string) => hotkey,
+  formatForDisplay,
 }));
 
 import { IdeWorkbench, isIdeProjectSwitcherModKHotkey } from "./ide-workbench";
@@ -166,6 +167,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("marks the selected IDE activity tab active when the sidebar is open", () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       sidebarOpen: true,
       activityView: "source-control",
     });
@@ -180,6 +182,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("does not mark an IDE activity tab active while the sidebar is hidden", () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       sidebarOpen: false,
       activityView: "source-control",
     });
@@ -194,6 +197,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("removes the active IDE activity styling when the sidebar is collapsed", async () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       sidebarOpen: true,
       activityView: "source-control",
     });
@@ -224,6 +228,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("renders IDE chrome for editor work", async () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       treeEntries: [
         { path: "harness", name: "harness", kind: "directory", depth: 0 },
         {
@@ -295,6 +300,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("applies nested git status color classes to folders and files", () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       treeEntries: [
         { path: "src", name: "src", kind: "directory", depth: 0 },
         {
@@ -328,6 +334,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("aggregates git status on folders without inheriting it to files", () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       treeEntries: [
         { path: "docs", name: "docs", kind: "directory", depth: 0 },
         {
@@ -377,6 +384,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("uses orange over green when folder children include modified and untracked files", () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       treeEntries: [
         { path: "docs", name: "docs", kind: "directory", depth: 0 },
         {
@@ -428,7 +436,8 @@ createUiTest("IdeWorkbench", () => {
 
     render(() => <IdeWorkbench />);
     await new Promise((resolve) => window.setTimeout(resolve, 0));
-    ideStore.loadProject("project-1");
+    expect(commands.filter((command) => typeof command === "object" && command !== null && "type" in command && command.type === "ide.fileTree.list")).toHaveLength(1);
+    expect(commands.filter((command) => typeof command === "object" && command !== null && "type" in command && command.type === "ide.git.status")).toHaveLength(1);
     ideStore.applyServerEvent({
       type: "ide.fileTree.listed",
       requestId: "req-tree",
@@ -536,6 +545,7 @@ createUiTest("IdeWorkbench", () => {
     render(() => <IdeWorkbench />);
 
     const editor = requireTextArea(screen.getByLabelText("Edit app.ts"));
+    expect(ideStore.state.treeLoading).toBe(true);
     fireEvent.input(editor, {
       target: { value: "export const ok = false;\n" },
     });
@@ -555,6 +565,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("updates the editor model when typing text", () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       openPaths: ["src/app.ts"],
       activePath: "src/app.ts",
       filesByPath: {
@@ -577,7 +588,7 @@ createUiTest("IdeWorkbench", () => {
 
     const editor = requireTextArea(screen.getByLabelText("Edit app.ts"));
     fireEvent.input(editor, {
-      target: { value: "words", selectionStart: 5, selectionEnd: 5 },
+      target: { value: "words" },
     });
     expect(ideStore.state.filesByPath["src/app.ts"]?.content).toBe("words");
     expect(editor.value).toBe("words");
@@ -585,6 +596,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("applies word wrap to both the visible code layer and editor input", () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       openPaths: ["src/app.ts"],
       activePath: "src/app.ts",
       editorSettings: { ...DEFAULT_IDE_EDITOR_SETTINGS, wordWrap: "on" },
@@ -622,6 +634,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("keeps overflowing editor tabs scrollable without a visible tab strip scrollbar", () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       openPaths: ["src/one.ts", "src/two.ts"],
       activePath: "src/one.ts",
       filesByPath: {
@@ -662,6 +675,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("prevents browser default when closing a focused editor tab with Mod+W", async () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       openPaths: ["src/app.ts"],
       activePath: "src/app.ts",
       filesByPath: {
@@ -691,6 +705,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("closes a focused editor tab with Alt+W", async () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       openPaths: ["src/app.ts"],
       activePath: "src/app.ts",
       filesByPath: {
@@ -720,6 +735,7 @@ createUiTest("IdeWorkbench", () => {
 
   it("closes all editor tabs with Alt+Shift+W", async () => {
     ideStore.resetForTests({
+      projectId: "project-1",
       openPaths: ["src/app.ts", "src/two.ts"],
       activePath: "src/app.ts",
       filesByPath: {

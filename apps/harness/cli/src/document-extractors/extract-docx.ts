@@ -1,13 +1,14 @@
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 import {
-  getChildObject,
-  getChildObjects,
-  getNodeText,
-  enforceExtractedTextBudget,
-  normalizeExtractedText,
-  parseXmlDocument,
-  readOfficeZipEntries
+enforceExtractedTextBudget,
+getChildObject,
+getChildObjects,
+getNodeText,
+normalizeExtractedText,
+parseXmlDocument,
+readOfficeZipEntries
 } from "./extract-office-zip";
-import type { DocumentExtractionOptions, DocumentExtractionResult } from "./types";
+import type { DocumentExtractionOptions,DocumentExtractionResult } from "./types";
 
 export async function extractDocxText(
   input: ArrayBuffer | Uint8Array | Buffer,
@@ -132,9 +133,6 @@ function readWordInlineText(node: Record<string, unknown>): string {
   return parts.join("");
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function normalizeInlineText(text: string) {
   return text

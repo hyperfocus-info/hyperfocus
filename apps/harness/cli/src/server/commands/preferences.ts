@@ -1,10 +1,11 @@
 import type { ServerCommandContext } from "./context";
+import { createSharedAiPreferencesStore, type SharedAiPreferencesStore } from "@hyperfocus/ai-runtime/preferences";
 import { sendEvent } from "../transport/events";
 import { applyAdapterAutoCompactionThreshold, setRepositoryAutoArchiveCompletedThreadsDefault, testProviderConnection } from "../workspace/preferences";
 import { emitProjectUpdated, emitWorkspaceUpdated } from "../workspace/project-events";
 import type { ClientCommand } from "@hyperfocus/ai-core/protocol";
 
-type PreferencesCommandContext = Pick<ServerCommandContext, "ws" | "runtime" | "repository" | "adapter" | "runtimeRegistry" | "getCurrentPreferencesState" | "emitSetupRefresh">;
+type PreferencesCommandContext = Pick<ServerCommandContext, "ws" | "runtime" | "repository" | "adapter" | "runtimeRegistry" | "getCurrentPreferencesState" | "emitSetupRefresh"> & { sharedAiPreferencesStore?: SharedAiPreferencesStore };
 
 export async function handlePreferencesCommand(command: ClientCommand, context: PreferencesCommandContext) {
   const { ws, runtime, repository, adapter, runtimeRegistry, getCurrentPreferencesState, emitSetupRefresh } = context;
@@ -64,6 +65,11 @@ case "project.context.save": {
       return;
     }
 case "preferences.save": {
+      // Only the explicit AI-default controls publish machine-level preferences.
+      // Other preference saves must never overwrite defaults from another app.
+      if (command.payload.sharedAiPreferences) {
+        (context.sharedAiPreferencesStore ?? createSharedAiPreferencesStore()).write(command.payload.sharedAiPreferences);
+      }
       if (command.payload.openAiApiKey) {
         repository.setStoredOpenAiApiKey(command.payload.openAiApiKey);
         adapter.setApiKey("openai", command.payload.openAiApiKey);

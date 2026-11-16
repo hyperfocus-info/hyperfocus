@@ -1,5 +1,7 @@
 import type { AuthAdapter, AuthResult } from "../core/types.ts";
 import type { SignedSessionAuthority } from "../operations/operations.ts";
+import { createMatchmakingGroup } from "./matchmaking/group.ts";
+import { createMatchmakingRelease } from "./matchmaking/release.ts";
 import {
   auditRecordCodec,
   balanceCodec,
@@ -68,7 +70,7 @@ type DurableServiceContext = {
   idempotent<T>(transaction: DurableServiceTransaction, scope: string, key: string | undefined, fingerprint: string, codec: DurableCodec<T>, operation: () => T): T;
 };
 
-const BUCKETS = new Set(["inventory", "wallet", "guild", "guild-member", "moderation", "chat", "ticket", "ticket-owner", "idempotency", "audit"]);
+const BUCKETS = new Set(["inventory", "wallet", "guild", "guild-member", "moderation", "chat", "ticket", "ticket-owner", "idempotency", "audit", "combat-policy", "replay-share"]);
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MAX_SAFE_AMOUNT = 9_000_000_000_000;
 
@@ -179,8 +181,8 @@ export function createDurableMmoServices(store: DurableServiceStore, options: Du
   const maxChatRetention = bounded(options.maxChatMessagesPerChannel ?? 1_000, 1, 100_000, "maxChatMessagesPerChannel");
   const maxGuildMembers = bounded(options.maxGuildMembers ?? 500, 1, 100_000, "maxGuildMembers");
   const maxIdempotency = bounded(options.maxIdempotencyRecords ?? 100_000, 1, 1_000_000, "maxIdempotencyRecords");
-  const maxTicketTtl = bounded(options.maxTicketTtlMs ?? 30 * 60_000, 1_000, 24 * 60 * 60_000, "maxTicketTtlMs");
-  const maxHandoffTtl = bounded(options.maxHandoffTtlMs ?? 2 * 60_000, 1_000, 60 * 60_000, "maxHandoffTtlMs");
+  const maxTicketTtl = bounded(options.maxTicketTtlMs ?? 1800000, 1_000, 86400000, "maxTicketTtlMs");
+  const maxHandoffTtl = bounded(options.maxHandoffTtlMs ?? 120000, 1_000, 3600000, "maxHandoffTtlMs");
 
   function pageLimit(limit?: number) { return bounded(limit ?? 50, 1, maxPageSize, "page limit"); }
   function time() { const value = now(); if (!Number.isSafeInteger(value) || value < 0) throw new Error("Service clock must return a non-negative safe integer."); return value; }
@@ -414,8 +416,15 @@ function createCommunityDurableServices(context: DurableServiceContext) {
       },
     },
     matchmaking: {
+      matchGroup: createMatchmakingGroup({ store, time, maxHandoffTtl, audit, token: () => `${safeRandom(randomId())}.${safeRandom(randomId())}` }),
+      release: createMatchmakingRelease({ store, audit, once: (tx, key, fingerprint, run) => idempotent(tx, "matchmaking.release", key, fingerprint, booleanCodec, run) }),
+      async assignment(request: { roomId: string }) {
+        assertId(request.roomId, "roomId");
+        return store.transaction(tx => tx.scan("ticket", { limit: 100_000 }).map(({ value }) => matchmakingTicketCodec.decode(value))
+          .filter(ticket => ticket.handoff?.roomId === request.roomId));
+      },
       async enqueue(playerId: string, queue: string, request: { ttlMs?: number; attributes?: Record<string, DurableJson>; idempotencyKey: string }) {
-        assertId(playerId, "playerId"); assertId(queue, "queue"); const ttlMs = bounded(request.ttlMs ?? 5 * 60_000, 1_000, maxTicketTtl, "ticket ttlMs");
+        assertId(playerId, "playerId"); assertId(queue, "queue"); const ttlMs = bounded(request.ttlMs ?? 300000, 1_000, maxTicketTtl, "ticket ttlMs");
         validateJson(request.attributes ?? {});
         return store.transaction((tx) => idempotent(tx, `matchmaking.enqueue/${playerId}`, request.idempotencyKey, stable({ queue, ttlMs, attributes: request.attributes ?? {} }), matchmakingTicketCodec, () => {
           const existingId = tx.get("ticket-owner", playerId);
@@ -424,6 +433,9 @@ function createCommunityDurableServices(context: DurableServiceContext) {
             if (storedTicket !== undefined) {
               const existing = matchmakingTicketCodec.decode(storedTicket);
               if ((existing.state === "waiting" || existing.state === "matched" || existing.state === "claimed") && existing.expiresAt > time()) return existing;
+              const expired: MatchmakingTicket = { id: existing.id, playerId: existing.playerId, queue: existing.queue, createdAt: existing.createdAt,
+                expiresAt: existing.expiresAt, attributes: existing.attributes, state: "expired" };
+              tx.put("ticket", existing.id, matchmakingTicketCodec.encode(expired));
             }
           }
           const id = unique("ticket", tx); const createdAt = time();
@@ -451,6 +463,7 @@ function createCommunityDurableServices(context: DurableServiceContext) {
             if (matched.length >= capacity) break;
             if (candidate.expiresAt <= at) {
               tx.put("ticket", candidate.id, matchmakingTicketCodec.encode({ ...candidate, state: "expired" }));
+              if (tx.get("ticket-owner", candidate.playerId) === candidate.id) tx.delete("ticket-owner", candidate.playerId);
               continue;
             }
             const token = `${safeRandom(randomId())}.${safeRandom(randomId())}`;
@@ -537,13 +550,13 @@ export async function createDurableServiceBackup(store: DurableServiceStore, cre
   const payload = { format: "hyperfocus-durable-services-backup", version: 1, createdAt, records };
   const checksum = await sha256(stable(payload));
   const bytes = new TextEncoder().encode(`${stable({ ...payload, checksum })}\n`);
-  if (bytes.byteLength > 1024 * 1024 * 1024) throw new Error("Durable service backup exceeds byte limit.");
+  if (bytes.byteLength > 1073741824) throw new Error("Durable service backup exceeds byte limit.");
   return bytes;
 }
 
 export async function restoreDurableServiceBackup(store: DurableServiceStore, source: Uint8Array | string): Promise<void> {
   const text = typeof source === "string" ? source : new TextDecoder("utf-8", { fatal: true }).decode(source);
-  if (new TextEncoder().encode(text).byteLength > 1024 * 1024 * 1024) throw new Error("Durable service backup exceeds byte limit.");
+  if (new TextEncoder().encode(text).byteLength > 1073741824) throw new Error("Durable service backup exceeds byte limit.");
   const parsed: unknown = JSON.parse(text);
   const value = record(parsed);
   if (!value || value.format !== "hyperfocus-durable-services-backup" || value.version !== 1 || !Array.isArray(value.records) || typeof value.checksum !== "string") throw new Error("Durable service backup format is invalid.");
@@ -618,9 +631,20 @@ export function validateDurableServiceRecords(records: readonly DurableStoreReco
       ticketOwners.set(item.key, item.value);
       continue;
     }
+    // Combat policy envelopes are application-owned; validate them at the host boundary.
+    if (item.bucket === "combat-policy") {
+      if (typeof item.value !== "string") throw new Error("Combat policy records must be encoded strings.");
+      continue;
+    }
 
     const value = requireDomainRecord(item);
     switch (item.bucket) {
+      case "replay-share":
+        assertDomainShape(value, ["owner", "digest", "expires", "payload"], [], item);
+        assertDomainId(value.owner, "replay owner");
+        assertDomainTimestamp(value.expires, "replay expiry");
+        if (typeof value.digest !== "string" || !/^[a-f0-9]{64}$/.test(value.digest) || typeof value.payload !== "string") throw new Error("Invalid replay share envelope.");
+        break;
       case "inventory":
         assertDomainShape(value, ["ownerId", "quantity", "sku", "updatedAt"], ["metadata"], item);
         assertDomainId(value.ownerId, "inventory ownerId");
@@ -799,7 +823,7 @@ export function validateDurableStoreRecord(item: DurableStoreRecord, allowSequen
   if (item.bucket === "$sequence" && allowSequence) assertId(item.key, "sequence key");
   else { if (!BUCKETS.has(item.bucket)) throw new Error(`Unknown durable store bucket ${item.bucket}.`); assertKey(item.key, "record key"); }
   validateJson(item.value);
-  if (new TextEncoder().encode(stable(item.value)).byteLength > 1024 * 1024) throw new Error(`Durable store record ${item.bucket}/${item.key} exceeds 1 MiB.`);
+  if (new TextEncoder().encode(stable(item.value)).byteLength > 1048576) throw new Error(`Durable store record ${item.bucket}/${item.key} exceeds 1 MiB.`);
 }
 
 export function parseDurableJson(value: unknown): DurableJson {

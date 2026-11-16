@@ -52,8 +52,12 @@ export type JoinRoomResult =
   | { ok: false; reason: string; player?: never; room?: never };
 
 export type AuthoritativeServerOptions = {
+  /** Retain a disconnected authenticated seat for 0..30000ms. Default 0 disables recovery. */
+  reconnectGraceMs?: number;
   transport: "websocket";
   port: number;
+  /** Optional bind address; local development hosts should use 127.0.0.1. */
+  hostname?: string;
   tickRate?: number;
   maxPlayersPerRoom?: number;
   rooms: readonly RoomType[];
@@ -72,6 +76,8 @@ export type AuthoritativeServerOptions = {
     batchSize?: number;
   };
   devMode?: boolean;
+  /** Synchronous request boundary before built-in HTTP routes or WebSocket upgrade. */
+  requestGuard?: (request: Request) => Response | undefined;
   /** Optional same-origin HTTP fallback after health, stats, and WebSocket upgrade handling. */
   httpHandler?: (request: Request) => Response | undefined | Promise<Response | undefined>;
   scale?: MmoScalePreset;

@@ -1,3 +1,5 @@
+import { extractAuditStoryIds } from "../.agents/skills/user-audit/scripts/stories/inventory";
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
@@ -19,7 +21,7 @@ function findTemporaryMarkdownNameViolations(paths: readonly string[]) {
 }
 
 async function trackedMarkdownFiles() {
-  const result = Bun.spawnSync({
+  const result = spawnBackgroundProcessSync({
     cmd: ["git", "ls-files", "*.md"],
     cwd: repoRoot,
     stdout: "pipe",
@@ -30,7 +32,7 @@ async function trackedMarkdownFiles() {
 }
 
 async function trackedJavaScriptRuntimeFiles() {
-  const result = Bun.spawnSync({
+  const result = spawnBackgroundProcessSync({
     cmd: ["git", "ls-files", "*.js", "*.jsx", "*.mjs", "*.cjs"],
     cwd: repoRoot,
     stdout: "pipe",
@@ -97,6 +99,8 @@ async function brokenLocalMarkdownLinks(filePaths: readonly string[]) {
       const absoluteTarget = target.startsWith("/")
         ? path.join(repoRoot, target.slice(1))
         : path.resolve(repoRoot, path.dirname(filePath), target);
+      // Local evidence is deliberately absent from a clean checkout.
+      if (path.relative(repoRoot, absoluteTarget).split(path.sep).includes(".local")) continue;
       if (!existsSync(absoluteTarget)) failures.push(`${filePath} -> ${rawTarget}`);
     }
   }
@@ -140,10 +144,11 @@ describe("documentation policy", () => {
       read("docs/pad-pilot/marketplace-user-stories.md"),
       read("docs/pad-pilot/coverage-matrix.md")
     ]);
-    const storyIds = `${appStories}\n${marketplaceStories}`.match(/^(?:PP|PPM)-[A-Z]+-\d{3}(?=:)/gm) ?? [];
+    const storyIds = extractAuditStoryIds(`${appStories}\n${marketplaceStories}`).filter(id => /^(?:PP|PPM)-/.test(id));
+    const coveredIds = new Set(extractAuditStoryIds(coverage));
     expect(storyIds.length).toBeGreaterThan(0);
     expect(new Set(storyIds).size).toBe(storyIds.length);
-    expect(storyIds.filter((storyId) => !coverage.includes(`| ${storyId} |`))).toEqual([]);
+    expect(storyIds.filter((storyId) => !coveredIds.has(storyId))).toEqual([]);
   });
 
   test("uses .tmp.md for tracked temporary Markdown files", async () => {
@@ -162,6 +167,20 @@ describe("documentation policy", () => {
       "apps/pad-pilot/.agents/skills"
     ]);
     expect(await brokenLocalMarkdownLinks(markdownFiles)).toEqual([]);
+  });
+
+  test("keeps shipping entrypoints and changed skill routes resolvable", async () => {
+    expect(await brokenLocalMarkdownLinks([
+      "AGENTS.md",
+      "README.md",
+      "docs/README.md",
+      "docs/shipping.md",
+      "docs/distribution.md",
+      "docs/versioning.md",
+      "docs/audits/shipping-system.md",
+      ".agents/skills/ship-readiness/SKILL.md",
+      ".agents/skills/improve-codebase-architecture/SKILL.md"
+    ])).toEqual([]);
   });
 
   test("keeps root repository scripts on Bun TypeScript", async () => {

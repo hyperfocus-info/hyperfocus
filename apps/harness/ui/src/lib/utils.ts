@@ -36,11 +36,11 @@ export function normalizeWindowsEscapedPath(value: string) {
 
 export function isAbsolutePath(value: string) {
   const normalizedValue = normalizeWindowsEscapedPath(value.trim());
-  return /^[a-zA-Z]:\\/.test(normalizedValue) || normalizedValue.startsWith("/");
+  return /^[a-zA-Z]:[\\/]/.test(normalizedValue) || normalizedValue.startsWith("/") || normalizedValue.startsWith("\\\\");
 }
 
 export function normalizePathForComparison(value: string) {
-  const normalizedValue = normalizeWindowsEscapedPath(value.trim()).replace(/[\\/]+$/, "");
+  const normalizedValue = normalizeWindowsEscapedPath(value.trim()).replaceAll("\\", "/").replace(/\/+$/, "");
   return isWindowsPlatform() ? normalizedValue.toLowerCase() : normalizedValue;
 }
 

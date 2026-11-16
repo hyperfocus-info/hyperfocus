@@ -1,53 +1,19 @@
 ---
 name: agi-tag-snapshot
-description: Build a compact AGI/XAG-aligned tag snapshot from playtest evidence JSON or markdown-derived observations, preserving provenance and confidence notes for later audit handoff.
+description: Convert existing playtest observations into an AGI/XAG-aligned tag snapshot with provenance and confidence. Use for evidence tagging or handoff, not to claim accessibility compliance or run a playtest.
 ---
 
-# AGI Tag Snapshot
+# AGI tag snapshot
 
-## Overview
+Run the bundled helper with Bun; replace `<skill>` with the directory containing
+this file. `--template` owns the input contract; no separate playtest skill is required.
 
-Use this skill when one playtest evidence bundle needs to be translated into a stable tag snapshot for later audit or handoff work.
-
-The helper reads JSON evidence directly or extracts a JSON observation block from markdown, then classifies the evidence into AGI/XAG-aligned tags for input and visual surfaces. It keeps evidence provenance, confidence, and claim notes intact and writes a new report without mutating the source artifact.
-
-## What It Produces
-
-- stable tags for input, visual, pacing, restart, recovery, and cue readability
-- provenance notes that point back to the source artifact and captured fields
-- confidence and claim notes so later operators know how far to trust each tag
-- JSON output plus a readable summary
-
-## Commands
-
-Print the template and expected input shape:
-
-```powershell
-bun.cmd .agents/skills/agi-tag-snapshot/scripts/agi_tag_snapshot.ts --template
+```text
+bun "<skill>/scripts/agi_tag_snapshot.ts" --template
+bun "<skill>/scripts/agi_tag_snapshot.ts" --observations "<evidence.json>" --json-out "<snapshot.json>"
 ```
 
-Build a snapshot from a JSON evidence file:
-
-```powershell
-bun.cmd .agents/skills/agi-tag-snapshot/scripts/agi_tag_snapshot.ts --observations ".local/playtest-session.json" --json-out ".local/playtest-session-agi-tags.json"
-```
-
-Build a snapshot from a markdown report that contains an observation JSON block:
-
-```powershell
-bun.cmd .agents/skills/agi-tag-snapshot/scripts/agi_tag_snapshot.ts --observations "game/playtest-evidence.md" --json-out ".local/game-agi-tags.json"
-```
-
-## Input Shape
-
-Use the existing playtest observation structure as the source of truth. The helper expects the same session fields already produced by playtest capture, then reads them as a stable input bundle for AGI/XAG tagging.
-
-## Output Shape
-
-- `AgiSnapshotReport`
-- `AgiSnapshotTag[]`
-- source provenance, confidence, and claim notes
-- summary counts for input and visual surfaces
-
-The observation JSON accepted by `--template` is the canonical input contract. Other
-playtest tools may produce that shape, but this skill does not require them.
+The input may also be a Markdown report containing fenced JSON observations.
+Use `--text-out <path>` for a readable report. Keep output separate from source
+evidence. Preserve missing observations, provenance, confidence, and claim notes;
+these heuristic tags are evidence organization, not AGI/XAG conformance certification.

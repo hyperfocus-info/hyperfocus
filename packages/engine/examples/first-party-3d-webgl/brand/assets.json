@@ -1,0 +1,59 @@
+{
+  "schema": "hyperfocus-brand-assets-v1",
+  "name": "3D WebGL",
+  "source": "symbol:orbit",
+  "sourceSha256": "939af4de541cf673547b2fd5acb5dca0fcf1ee0c761098ee62723057e9e8a207",
+  "customization": "Replace the source logo in brand.json, then regenerate this directory. Do not edit renditions.",
+  "files": [
+    {
+      "path": "logo.svg",
+      "sha256": "939af4de541cf673547b2fd5acb5dca0fcf1ee0c761098ee62723057e9e8a207",
+      "bytes": 279
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "e99f6592a6c93c7bee4734e6ded72fc80936e8c4b9a0998cd609596890bded2d",
+      "bytes": 546
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "aa97fa4a748cf69f20c493ca530ae580b9aa65e0cd43325c112715fb9181222c",
+      "bytes": 811
+    },
+    {
+      "path": "favicon-32.png",
+      "sha256": "fd6ed1e24cc05df01879407de5fb1fe24bdaf7b9a5f21ee36dbb608aa855e331",
+      "bytes": 789
+    },
+    {
+      "path": "icon-192.png",
+      "sha256": "0159a65f7b0922639a0f76d2dde1434170f07336f28c50aa56f826245f17f3af",
+      "bytes": 4257
+    },
+    {
+      "path": "icon-512.png",
+      "sha256": "eedcdd4f5e1a208e193b4b9fb2bcdad7764b436bf466e915dd2f7fe486738d3d",
+      "bytes": 12126
+    },
+    {
+      "path": "maskable-512.png",
+      "sha256": "566a2d99f9c480c0d9f28be0edd2de905f94b63e5d23c3a467adab9647c2861d",
+      "bytes": 8427
+    },
+    {
+      "path": "apple-touch-icon.png",
+      "sha256": "d4cc025ca94f27bbe8896d0a06fb292c6a727490fb2fd53ac7eb236b1a20983d",
+      "bytes": 3216
+    },
+    {
+      "path": "social.png",
+      "sha256": "9e28ae585d651f09c7b22a60673d1e3e1c83df1bb071243801d520087d9fc50b",
+      "bytes": 12715
+    },
+    {
+      "path": "site.webmanifest",
+      "sha256": "ce799b584456e64ca29a2bbfc62249c915fd0ba0a70e6aebe85363dcdaad85c5",
+      "bytes": 492
+    }
+  ]
+}

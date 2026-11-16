@@ -202,7 +202,7 @@ function createNotificationId(kind: string, primaryId: string, secondaryId: stri
 
 function buildBackgroundRoutinePrompt(job: BackgroundJob, repository: WorkspaceRepository) {
   if (job.definition.kind !== "ai-routine") return "";
-  const contract = job.intentContract ?? compileBackgroundJobIntentContract(job);
+  const contract = compileBackgroundJobIntentContract(job);
   const assistantId = job.assistantId;
   const assistant = assistantId ? repository.getAssistant(assistantId) : undefined;
   const activeTodos = assistantId
@@ -220,7 +220,7 @@ function buildBackgroundRoutinePrompt(job: BackgroundJob, repository: WorkspaceR
 
   return [
     renderIntentContractPrompt(contract),
-    "Runtime instruction: treat the IntentContract as authority. Use job prompt, assistant persona, todos, questions, and learnings as supporting context.",
+    "Runtime instruction: explicit user requirements and exclusions in the job and assistant goal remain authoritative. The inferred intent contract, generated routines, todos, and learnings must not expand that scope.",
     renderBackgroundJobSupportContext(job),
     assistant ? renderAssistantPromptContext(assistant, job.definition.prompt) : renderUnownedRoutineContext(job),
     renderActiveTodos(activeTodos, activeTodoCount),

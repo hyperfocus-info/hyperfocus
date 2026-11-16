@@ -1,39 +1,14 @@
 #!/usr/bin/env bun
 
+import { parseDownloadPlan } from "./download-plan-input";
+
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  CraftpixDownloadError,
+  createCraftpixDownloadError,
   DEFAULT_TIMEOUT,
   executeDownload,
 } from "./craftpix";
-
-type PlanDefaults = {
-  cookieFile?: string;
-  outputDir?: string;
-  overwrite?: boolean;
-  resolveOnly?: boolean;
-  timeout?: number;
-  debug?: boolean;
-};
-
-type PlanItem = {
-  sourceUrl?: string;
-  outputDir?: string;
-  cookieFile?: string;
-  filename?: string;
-  subitem?: string;
-  overwrite?: boolean;
-  resolveOnly?: boolean;
-  timeout?: number;
-  debug?: boolean;
-  note?: string;
-};
-
-type DownloadPlan = {
-  defaults?: PlanDefaults;
-  downloads?: PlanItem[];
-};
 
 type CliOptions = {
   planFile: string;
@@ -47,7 +22,7 @@ function printUsage(): void {
   console.log(`Run a Craftpix download plan from a local JSON file.
 
 Usage:
-  bun .agents/skills/craftpix-download/scripts/download_plan.ts <plan_file> [options]
+  bun "<skill>/scripts/download_plan.ts" <plan_file> [options]
 
 Arguments:
   <plan_file>             JSON file with defaults and downloads[]
@@ -91,12 +66,12 @@ function parseArgs(argv: string[]): CliOptions {
         debug = true;
         break;
       default:
-        throw new CraftpixDownloadError(`Unknown argument: ${arg}`);
+        throw createCraftpixDownloadError(`Unknown argument: ${arg}`);
     }
   }
 
   if (positionals.length !== 1) {
-    throw new CraftpixDownloadError("Expected exactly one plan file path.");
+    throw createCraftpixDownloadError("Expected exactly one plan file path.");
   }
 
   return {
@@ -108,27 +83,21 @@ function parseArgs(argv: string[]): CliOptions {
   };
 }
 
-function readPlan(planFile: string): DownloadPlan {
+function readPlan(planFile: string) {
   const resolvedPlanFile = resolve(planFile);
   let raw: string;
   try {
     raw = readFileSync(resolvedPlanFile, "utf8");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new CraftpixDownloadError(`Could not read plan file ${resolvedPlanFile}: ${message}`);
+    throw createCraftpixDownloadError(`Could not read plan file ${resolvedPlanFile}: ${message}`);
   }
 
   try {
-    return JSON.parse(raw) as DownloadPlan;
+    return parseDownloadPlan(JSON.parse(raw));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new CraftpixDownloadError(`Plan file is not valid JSON: ${message}`);
-  }
-}
-
-function validatePlan(plan: DownloadPlan): asserts plan is { defaults?: PlanDefaults; downloads: PlanItem[] } {
-  if (!Array.isArray(plan.downloads) || plan.downloads.length === 0) {
-    throw new CraftpixDownloadError("Plan file must include a non-empty downloads array.");
+    throw createCraftpixDownloadError(`Plan file is not valid JSON: ${message}`);
   }
 }
 
@@ -136,7 +105,6 @@ async function main(): Promise<number> {
   try {
     const cli = parseArgs(process.argv.slice(2));
     const plan = readPlan(cli.planFile);
-    validatePlan(plan);
 
     const defaults = plan.defaults ?? {};
     let failures = 0;
@@ -144,14 +112,14 @@ async function main(): Promise<number> {
     for (let index = 0; index < plan.downloads.length; index += 1) {
       const item = plan.downloads[index];
       if (!item.sourceUrl) {
-        throw new CraftpixDownloadError(`Plan item ${index + 1} is missing sourceUrl.`);
+        throw createCraftpixDownloadError(`Plan item ${index + 1} is missing sourceUrl.`);
       }
 
       const resolveOnly = cli.forceResolveOnly || item.resolveOnly || defaults.resolveOnly || false;
       const overwrite = cli.forceOverwrite || item.overwrite || defaults.overwrite || false;
       const timeout = item.timeout ?? defaults.timeout ?? DEFAULT_TIMEOUT;
       if (!Number.isFinite(timeout) || timeout <= 0) {
-        throw new CraftpixDownloadError(`Plan item ${index + 1} has an invalid timeout.`);
+        throw createCraftpixDownloadError(`Plan item ${index + 1} has an invalid timeout.`);
       }
 
       try {

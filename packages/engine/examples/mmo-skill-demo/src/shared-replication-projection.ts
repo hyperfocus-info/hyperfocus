@@ -1,3 +1,6 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
+import { isRecord as isUnknownRecord } from "@hyperfocus/utilities/records";
 import { getMmoSkillDemoAnchorTile, zoneForMmoSkillDemoTile } from "./data/world.ts";
 import { type CompactTransientEffect } from "@hyperfocus/engine/server";
 import { type MmoSkillDemoEntity, type MmoSkillDemoState, type NpcEntity, type PlayerEntity, type ZoneId } from "./shared-contracts.ts";
@@ -5,9 +8,7 @@ import { attachMmoEntityViews } from "./shared-entity-registry.ts";
 import { u16Ms, validAction } from "./shared-replication-values.ts";
 import { TILE } from "./shared-world-catalog.ts";
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+
 
 function u32Ms(value: number) {
   return Math.max(0, Math.min(0xffffffff, Math.floor(Number.isFinite(value) ? value : 0)));
@@ -34,9 +35,7 @@ function u32Value(value: unknown) {
   return u32Ms(typeof value === "number" ? value : 0);
 }
 
-function isUnknownRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function isNumberRecord(value: Record<string, unknown>): value is Record<string, number> {
   return Object.values(value).every((entry) => typeof entry === "number");

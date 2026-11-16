@@ -10,13 +10,14 @@
       main { box-sizing: border-box; width: min(100%, 688px); margin-inline: auto; padding: clamp(12px, 4vw, 24px); }
       canvas { box-sizing: border-box; display: block; width: 100%; height: auto; background: #17212b; border: 1px solid #344252; touch-action: none; }
       canvas:focus-visible { outline: 3px solid #7dd3fc; outline-offset: 3px; }
+      summary { cursor: pointer; }
       #telemetry { overflow-wrap: anywhere; color: #bdc9d6; }
     </style>
-  </head>
+  <!-- app-brand:start --><link rel="icon" type="image/svg+xml" href="./brand/favicon.svg"><link rel="icon" type="image/png" sizes="32x32" href="./brand/favicon-32.png"><link rel="apple-touch-icon" href="./brand/apple-touch-icon.png"><link rel="manifest" href="./brand/site.webmanifest"><meta property="og:type" content="website"><meta property="og:site_name" content="MMO Field"><meta property="og:title" content="MMO Field"><meta property="og:description" content="MMO Field interactive example."><meta property="og:locale" content="en_US"><meta property="og:image:alt" content="MMO Field logo"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="MMO Field"><meta name="twitter:description" content="MMO Field interactive example."><meta name="twitter:image:alt" content="MMO Field logo"><!-- app-brand:end --></head>
   <body>
     <main>
       <h1>MMO Field</h1>
-      <p id="controls">Move with WASD or the arrow keys.</p>
+      <details><summary>Controls</summary><p id="controls">Move with WASD or the arrow keys.</p></details>
       <canvas id="field" width="640" height="360" tabindex="0" aria-label="Authoritative multiplayer field" aria-describedby="controls">Your browser does not support this demo's canvas.</canvas>
       <p id="status" role="status" aria-live="polite" aria-atomic="true">Connecting...</p>
       <p id="telemetry" aria-live="off"></p>

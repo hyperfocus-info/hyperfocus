@@ -61,7 +61,7 @@ createUiTest("ThreadCleanupDialog", () => {
     expect(submissions).toEqual([
       {
         projectIds: ["project-cleanup"],
-        olderThanMs: 30 * 24 * 60 * 60 * 1000
+        olderThanMs: 2592000000
       }
     ]);
   });

@@ -372,7 +372,7 @@ export type GamepadPollerOptions = {
 
 /** Polls gamepads independently from requestAnimationFrame rendering. */
 export function createGamepadPoller(options: GamepadPollerOptions = {}) {
-  const intervalMs = options.intervalMs ?? 1000 / 120;
+  const intervalMs = options.intervalMs ?? 8.333333333333334;
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) throw new RangeError("gamepad polling intervalMs must be positive and finite");
   const now = options.now ?? (() => performance.now());
   const schedule = options.schedule ?? ((callback, delay) => setInterval(callback, delay));

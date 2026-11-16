@@ -1,4 +1,4 @@
 interface:
   display_name: "Player Progression"
-  short_description: "Design durable MMO player loops."
-  default_prompt: "Use $player-progression to audit and extend the MMO player's world progression loops."
+  short_description: "Design MMO demo onboarding and player loops"
+  default_prompt: "Use $player-progression to improve the requested MMO demo progression loop."

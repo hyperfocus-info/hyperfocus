@@ -118,6 +118,24 @@ describe("toast store", () => {
     expect(manual.activeCount()).toBe(0);
   });
 
+  test("coalesces repeated active errors and refreshes their dismissal window", () => {
+    const manual = createManualScheduler();
+    const store = createToastStoreForProvider({ scheduler: manual.scheduler });
+
+    store.push({ title: "Harness command failed", description: "Project drive Z: is unavailable", tone: "error" });
+    store.push({ title: "Harness command failed", description: "Project drive Z: is unavailable", tone: "error" });
+
+    expect(store.toasts).toHaveLength(1);
+    expect(store.pendingTimerCount).toBe(1);
+    expect(manual.activeCount()).toBe(1);
+    expect(manual.pending.map((entry) => entry.cancelled)).toEqual([true, false]);
+
+    manual.flushNext();
+    expect(store.toasts).toHaveLength(1);
+    manual.flushNext();
+    expect(store.toasts).toHaveLength(0);
+  });
+
   test("pushToast gives source-less toasts the current default destination", () => {
     const manual = createManualScheduler();
     const store = createToastStoreForProvider({ scheduler: manual.scheduler });

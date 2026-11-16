@@ -1,18 +1,19 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { createRequestId,type ProjectSearchResult } from "@hyperfocus/ai-core/protocol";
+import { Input } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
-import { FolderOpen, Search } from "lucide-solid";
-import { createRequestId, type ProjectSearchResult } from "@hyperfocus/ai-core/protocol";
+import { FolderOpen,Search } from "lucide-solid";
+import { For,Show,createEffect,createMemo,createSignal,onCleanup } from "solid-js";
 import { harnessStore } from "../harness-store";
+import { getWorkspaceMatchKind,inferFrameworks } from "../lib/project-search/display-values";
 import {
-  isAbsolutePath,
-  isPathPrefixMatch,
-  normalizePathForComparison,
-  truncateMiddle
+isAbsolutePath,
+isPathPrefixMatch,
+normalizePathForComparison,
+normalizeWindowsEscapedPath,
 } from "../lib/utils";
 import { ActionButton } from "./action-button";
-import { Dialog } from "./primitives/dialog";
-import { Input } from "./primitives/input";
 import { Button } from "./primitives/button";
+import { Dialog } from "./primitives/dialog";
 import { Tooltip } from "./primitives/tooltip";
 import { projectNavigationStyles as styles } from "./project-navigation.styles";
 
@@ -113,6 +114,7 @@ function createProjectSwitcherResults(
   const exactPathResult = createMemo<DialogResult | undefined>(() => {
     if (!isAbsolutePath(trimmedQuery())) return undefined;
     const queryKey = normalizePathForComparison(trimmedQuery());
+    const normalizedRootPath = normalizeWindowsEscapedPath(trimmedQuery());
     const alreadyRepresented =
       workspaceMatches().some((result) => normalizePathForComparison(result.rootPath) === queryKey) ||
       filesystemMatches().some((result) => normalizePathForComparison(result.rootPath) === queryKey);
@@ -120,8 +122,8 @@ function createProjectSwitcherResults(
     return {
       key: `exact:${queryKey}`,
       source: "exact-path",
-      name: trimmedQuery().split(/[\\/]/).filter(Boolean).at(-1) || trimmedQuery(),
-      rootPath: trimmedQuery(),
+      name: normalizedRootPath.split(/[\\/]/).filter(Boolean).at(-1) || normalizedRootPath,
+      rootPath: normalizedRootPath,
       repoKind: "folder",
       actionLabel: "Create/open folder"
     };
@@ -168,13 +170,33 @@ function createProjectSwitcherResults(
       ? getProjectSwitcherAutocompleteSuffix(trimmedQuery(), topResult.rootPath, topResult.source)
       : undefined;
   });
-  return { workspaceMatches, filesystemMatches, exactPathResult, mergedResults, completionSuffix };
+  const defaultResultIndex = createMemo(() => {
+    if (!isAbsolutePath(trimmedQuery())) return 0;
+    const exactPathKey = normalizePathForComparison(trimmedQuery());
+    const exactIndex = mergedResults().findIndex(
+      (result) => normalizePathForComparison(result.rootPath) === exactPathKey
+    );
+    return Math.max(exactIndex, 0);
+  });
+  const exactIntentResult = createMemo(() =>
+    isAbsolutePath(trimmedQuery()) ? mergedResults()[defaultResultIndex()] : undefined
+  );
+  return {
+    workspaceMatches,
+    filesystemMatches,
+    exactPathResult,
+    exactIntentResult,
+    mergedResults,
+    completionSuffix,
+    defaultResultIndex
+  };
 }
 
 function createProjectSwitcherEffects(options: {
   open: () => boolean;
   focusInput: () => void;
   mergedResults: () => DialogResult[];
+  defaultResultIndex: () => number;
   setSelectedIndex: (index: number) => void;
   trimmedQuery: () => string;
   sendCommand: typeof harnessStore.actions.sendCommand;
@@ -194,7 +216,7 @@ function createProjectSwitcherEffects(options: {
   createEffect(() => {
     if (!options.open()) return;
     options.mergedResults().length;
-    options.setSelectedIndex(0);
+    options.setSelectedIndex(options.defaultResultIndex());
   });
   createEffect(() => {
     if (!options.open()) return;
@@ -248,12 +270,21 @@ export function ProjectSwitcherDialog() {
 
   const query = () => state.projectSearchQuery;
   const trimmedQuery = () => query().trim();
-  const { workspaceMatches, filesystemMatches, exactPathResult, mergedResults, completionSuffix } =
+  const {
+    workspaceMatches,
+    filesystemMatches,
+    exactPathResult,
+    exactIntentResult,
+    mergedResults,
+    completionSuffix,
+    defaultResultIndex
+  } =
     createProjectSwitcherResults(state, trimmedQuery);
   createProjectSwitcherEffects({
     open: () => state.projectSwitcherOpen,
     focusInput: () => inputRef?.focus(),
     mergedResults,
+    defaultResultIndex,
     setSelectedIndex,
     trimmedQuery,
     sendCommand
@@ -297,7 +328,7 @@ export function ProjectSwitcherDialog() {
 
     if (event.key === "Enter") {
       event.preventDefault();
-      openResult(mergedResults()[selectedIndex()]);
+      openResult(exactIntentResult() ?? mergedResults()[selectedIndex()]);
     }
   }
 
@@ -310,7 +341,7 @@ export function ProjectSwitcherDialog() {
       open={state.projectSwitcherOpen}
       title="Open or switch project"
       eyebrow="Projects"
-      description="Cmd/Ctrl+K reliable. Cmd/Ctrl+Space works when browser receives it."
+      description="Choose a recent project, search local folders, or enter an absolute path."
       class={stylex.attrs(styles.switcherDialog).class}
       onClose={() => harnessStore.closeProjectSwitcher()}
       footer={
@@ -330,6 +361,8 @@ export function ProjectSwitcherDialog() {
             ref={inputRef}
             value={query()}
             placeholder="Search recent projects or type a path"
+            aria-label="Search projects or enter a folder path"
+            aria-describedby="project-switcher-help project-switcher-selection"
             class={stylex.attrs(styles.searchInput).class}
             data-project-switcher-input="true"
             onInput={(event) => harnessStore.setProjectSearchQuery(event.currentTarget.value)}
@@ -337,7 +370,7 @@ export function ProjectSwitcherDialog() {
           />
           <Show when={completionSuffix()}>
             {(suffix) => (
-              <div class={stylex.attrs(styles.completionOverlay).class}>
+              <div aria-hidden="true" class={stylex.attrs(styles.completionOverlay).class}>
                 <span class={stylex.attrs(styles.completionPrefix).class}>{query()}</span>
                 <span class={stylex.attrs(styles.completionSuffix).class}>{suffix()}</span>
               </div>
@@ -346,10 +379,13 @@ export function ProjectSwitcherDialog() {
           <Search class={stylex.attrs(styles.searchIcon).class} />
         </div>
 
-        <div class={stylex.attrs(styles.keyboardHints).class}>
+        <div id="project-switcher-help" class={stylex.attrs(styles.keyboardHints).class}>
           <span>Tab autocomplete</span>
           <span>Enter open</span>
           <span>↑↓ move</span>
+        </div>
+        <div id="project-switcher-selection" role="status" class={stylex.attrs(styles.keyboardHints).class}>
+          {mergedResults().length ? `${mergedResults().length} results · Enter: ${(exactIntentResult() ?? mergedResults()[selectedIndex()])?.name}` : "No matching projects. Browse a folder to get started."}
         </div>
 
         <div class={stylex.attrs(styles.resultGrid).class}>
@@ -456,6 +492,7 @@ function ResultRow(props: {
         props.selected ? "" : stylex.attrs(styles.resultRowIdle).class
       ].filter(Boolean).join(" ")}
       aria-label={`${props.result.actionLabel} ${props.result.rootPath}`}
+      aria-current={props.result.actionLabel === "Current" ? "true" : undefined}
       disabled={props.result.source === "workspace" && props.result.disabled}
       onMouseEnter={props.onHover}
       onClick={props.onOpen}
@@ -470,7 +507,7 @@ function ResultRow(props: {
           </span>
           <span class={stylex.attrs(styles.resultAction).class}>{props.result.actionLabel}</span>
         </div>
-        <div class={stylex.attrs(styles.resultPath).class}>{truncateMiddle(props.result.rootPath, 52)}</div>
+        <div class={stylex.attrs(styles.resultPath).class}>{props.result.rootPath}</div>
         <ProjectActivityBadges result={props.result} />
       </div>
     </Button>
@@ -511,43 +548,7 @@ function getWorkspaceProjectActivity(project: (typeof harnessStore.state.workspa
   return { activeRunCount, pendingApprovalCount, pendingQuestionCount, lastThreadPreview, detectedFrameworks };
 }
 
-function inferFrameworks(rootPath: string) {
-  const lower = rootPath.toLowerCase();
-  return [
-    lower.includes("react") ? "React" : undefined,
-    lower.includes("solid") ? "Solid" : undefined,
-    lower.includes("next") ? "Next" : undefined,
-    lower.includes("bun") ? "Bun" : undefined
-  ].filter((entry): entry is string => Boolean(entry));
-}
 
-function getWorkspaceMatchKind(
-  normalizedQuery: string,
-  normalizedName: string,
-  normalizedRootPath: string
-): ProjectSearchResult["matchKind"] | undefined {
-  if (!normalizedQuery) {
-    return "substring";
-  }
-
-  if (normalizedRootPath === normalizedQuery) {
-    return "exact";
-  }
-
-  if (normalizedRootPath.startsWith(normalizedQuery)) {
-    return "path-prefix";
-  }
-
-  if (normalizedName.startsWith(normalizedQuery)) {
-    return "name-prefix";
-  }
-
-  if (normalizedName.includes(normalizedQuery) || normalizedRootPath.includes(normalizedQuery)) {
-    return "substring";
-  }
-
-  return undefined;
-}
 
 export function getProjectSwitcherAutocompleteSuffix(
   query: string,

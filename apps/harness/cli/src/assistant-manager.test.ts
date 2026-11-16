@@ -1,24 +1,25 @@
-import { describe, expect, test } from "bun:test";
+import {
+createAssistantId,
+createAssistantLearningId,
+createAssistantLogEntryId,
+createAssistantQuestionId,
+createAssistantTodoId,
+createBackgroundJobId,
+createThreadId,
+type AgentRuntimeCapability,type Assistant,type AssistantLearning,type ProviderBrand
+} from "@hyperfocus/ai-core/protocol";
 import { Database } from "bun:sqlite";
+import { describe,expect,test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import {
-  createAssistantId,
-  createAssistantLearningId,
-  createAssistantLogEntryId,
-  createBackgroundJobId,
-  createThreadId,
-  createAssistantQuestionId,
-  createAssistantTodoId,
-  type AgentRuntimeCapability, type Assistant, type AssistantLearning, type ProviderBrand
-} from "@hyperfocus/ai-core/protocol";
 import type { AgentRuntime } from "./agent-runtimes/agent-runtime";
 import { createAgentRuntimeRegistry } from "./agent-runtimes/runtime-registry";
-import { createAssistantManager, renderAssistantPromptMemoryBlock, selectAssistantPromptLearnings, selectAssistantPromptQuestions } from "./assistant-manager";
-import type { PiAgentAdapter, PiAgentExecutionController, PiAgentPromptRequest, PiAgentPromptResult } from "./pi-agent-adapter";
+import { createAssistantManager,renderAssistantPromptMemoryBlock,selectAssistantPromptLearnings,selectAssistantPromptQuestions } from "./assistant-manager";
+import type { PiAgentAdapter,PiAgentExecutionController,PiAgentPromptRequest,PiAgentPromptResult } from "./pi-agent-adapter";
 import { DEFAULT_CODING_STACK_GUIDANCE } from "./prompts/coding-stack-defaults";
+import { bootstrapResult } from "./test-support/fixtures/assistant-results";
 import { resolveHarnessTestTempRoot } from "./test-support/test-temp-root";
-import { createWorkspaceRepository, type WorkspaceRepository, type AssistantQuestionAnswerWrite } from "./workspace-repository";
+import { createWorkspaceRepository,type AssistantQuestionAnswerWrite,type WorkspaceRepository } from "./workspace-repository";
 function createTempDir() {
   return resolveHarnessTestTempRoot();
 }
@@ -69,15 +70,6 @@ async function waitForCondition(predicate: () => boolean) {
 }
 async function waitForCalls(adapter: DeferredAdapter, count: number) { await waitForCondition(() => adapter.calls.length >= count); }
 
-function bootstrapResult(title: string) {
-  return {
-    text: JSON.stringify({
-      researchSummary: title,
-      initialTodos: [{ title, workKind: "app-code", workTarget: "src/app.ts" }],
-      remainIdle: true
-    })
-  };
-}
 
 function createQuestionAnswerWrite(
   assistantId: string,
@@ -136,7 +128,7 @@ describe("assistant manager bootstrap", () => {
       .filter((question) => question.prompt.includes("Recommended default: TypeScript, Bun runtime"));
     expect(stackQuestions).toHaveLength(1);
     expect(stackQuestions[0]?.prompt).toContain("SolidJS + StyleX");
-    expect(stackQuestions[0]?.prompt).toContain("documentation comments for new functions and variables");
+    expect(stackQuestions[0]?.prompt).not.toContain("documentation comments for new functions and variables");
 
     const retried = manager.retryBootstrap(assistant.id);
     await waitForCalls(adapter, 2);
@@ -305,7 +297,7 @@ describe("assistant manager bootstrap", () => {
 
   test("recovers stale persisted running bootstrap as retryable failure", () => {
     const repository = createRepository();
-    const oldStartedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const oldStartedAt = new Date(Date.now() - 3600000).toISOString();
     const assistant = createAssistant(repository, {
       bootstrapState: "running",
       bootstrapAttemptId: "attempt-old",
@@ -314,7 +306,7 @@ describe("assistant manager bootstrap", () => {
     const changed: string[][] = [];
     const manager = createManager(repository, DeferredAdapter(), { onAssistantDetailsChanged(ids) { changed.push(ids); } });
 
-    manager.recoverStaleBootstrapRuns(30 * 60 * 1000);
+    manager.recoverStaleBootstrapRuns(1800000);
 
     expect(repository.getAssistant(assistant.id)?.bootstrapState).toBe("failed");
     expect(changed).toEqual([[assistant.id]]);
@@ -324,7 +316,7 @@ describe("assistant manager bootstrap", () => {
   test("asks to bootstrap jobs after idle assistant has no jobs", () => {
     const repository = createRepository();
     const assistant = createAssistant(repository, {
-      createdAt: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+      createdAt: new Date(Date.now() - 660000).toISOString(),
       bootstrapState: "completed"
     });
     const changed: string[][] = [];
@@ -342,7 +334,7 @@ describe("assistant manager bootstrap", () => {
   test("does not ask to bootstrap jobs when assistant already owns a job", () => {
     const repository = createRepository();
     const assistant = createAssistant(repository, {
-      createdAt: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+      createdAt: new Date(Date.now() - 660000).toISOString(),
       bootstrapState: "completed"
     });
     const now = new Date().toISOString();
@@ -371,7 +363,7 @@ describe("assistant manager bootstrap", () => {
   test("dedupes repeated idle job bootstrap checks", () => {
     const repository = createRepository();
     const assistant = createAssistant(repository, {
-      createdAt: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+      createdAt: new Date(Date.now() - 660000).toISOString(),
       bootstrapState: "completed"
     });
     const manager = createManager(repository, DeferredAdapter());
@@ -385,7 +377,7 @@ describe("assistant manager bootstrap", () => {
   test("dedupes job bootstrap checks after the bootstrap question leaves the bounded recent page", () => {
     const repository = createRepository();
     const assistant = createAssistant(repository, {
-      createdAt: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+      createdAt: new Date(Date.now() - 660000).toISOString(),
       bootstrapState: "completed"
     });
     const manager = createManager(repository, DeferredAdapter());
@@ -479,7 +471,7 @@ describe("assistant manager chat", () => {
     expect(adapter.calls[0]?.prompt).toContain("Description: Tracks release risk.");
     expect(adapter.calls[0]?.prompt).toContain("# OPERATIONAL LOGIC (The Job)\nWatch release blockers.");
     expect(adapter.calls[0]?.prompt).toContain("# ACTIVE MISSION (The Request)\nNeed status");
-    expect(adapter.calls[0]?.prompt).toContain("invoke the assistant-actions skill before acting");
+    expect(adapter.calls[0]?.prompt).toContain("Use the assistant-actions skill for requests to inspect or manage Harness assistant state");
     expect(adapter.calls[0]?.prompt).not.toContain("Role:");
     expect(adapter.calls[0]?.prompt).not.toContain("First assistant message requirement:");
     expect(adapter.calls[0]?.prompt).not.toContain("Concise learnings report:");
@@ -498,7 +490,7 @@ describe("assistant manager chat", () => {
     const sent = manager.sendAssistantChat(assistant.id, "what jobs do you have queued");
     await waitForCalls(adapter, 1);
 
-    expect(adapter.calls[0]?.prompt).toContain("For every assistant-chat or project-chat request");
+    expect(adapter.calls[0]?.prompt).toContain("Ordinary project work follows its own instructions");
     expect(adapter.calls[0]?.prompt).toContain("assistant-actions skill");
 
     adapter.resolvers[0]?.({ text: "No queued jobs." });
@@ -1250,7 +1242,7 @@ describe("assistant manager background jobs", () => {
     await sent;
   });
 
-  test("turns soft question-like job failures into durable notes without tripping failures", async () => {
+  test("question-shaped runtime failures still increment the failure streak", async () => {
     const repository = createRepository();
     const assistant = createAssistant(repository);
     const manager = createManager(repository, DeferredAdapter());
@@ -1258,16 +1250,15 @@ describe("assistant manager background jobs", () => {
     const outcome = await manager.handleBackgroundJobRunOutcome({
       assistantId: assistant.id,
       status: "failed",
-      failureMessage:
-        "What should I calibrate against while I patrol: which current game or mechanic are you tuning, and what currently feels most good, bad, confusing, sticky, or exciting about it?"
+      failureMessage: "Connection refused. Is the service running?"
     });
 
     const questions = repository.getAssistantQuestions(assistant.id);
     const updatedAssistant = repository.getAssistant(assistant.id);
     expect(questions).toHaveLength(0);
     expect(outcome?.blocked).toBe(false);
-    expect(repository.getAssistantLearnings(assistant.id)[0]?.summary).toContain("Make a reasonable assumption");
-    expect(updatedAssistant?.failureStreakCount).toBe(0);
+    expect(repository.getAssistantLearnings(assistant.id).some((entry) => entry.source.startsWith("question-policy:"))).toBe(false);
+    expect(updatedAssistant?.failureStreakCount).toBe(1);
     expect(updatedAssistant?.circuitBreakerState).toBe("closed");
   });
 

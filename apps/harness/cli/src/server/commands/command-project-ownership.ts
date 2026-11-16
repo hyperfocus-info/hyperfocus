@@ -106,6 +106,8 @@ export function resolveCommandProjectOwnership(
     case "ide.search.cancel":
     case "ide.git.status":
     case "thread.create":
+    case "thread.message":
+    case "thread.input":
     case "thread.activate":
     case "thread.fork":
     case "thread.rename":
@@ -157,6 +159,7 @@ export function resolveCommandProjectOwnership(
     case "cli-updates.check":
     case "cli-updates.install":
     case "agent.list":
+    case "usage.refresh":
     case "usage.reset":
     case "agent.runtime.refresh":
     case "setup.refresh":

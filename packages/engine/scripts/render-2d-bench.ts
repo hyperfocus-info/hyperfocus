@@ -1,3 +1,6 @@
+import { makeTiles } from "./bench/render-workload.ts";
+import { argValue, numberArg, percentDelta } from "./bench/render-fields.ts";
+import { roundDecimal } from "@hyperfocus/utilities/math";
 import { dirname, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import {
@@ -245,14 +248,6 @@ function makeTextAndGradientCalls(count: number): Renderable[] {
   return calls;
 }
 
-function makeTiles(count: number) {
-  return Array.from({ length: count }, (_, index) => ({
-    id: index % 256,
-    x: (index % 128) * 16,
-    y: Math.floor(index / 128) * 16
-  }));
-}
-
 function createBenchContext() {
   const stats = { draws: 0, gradients: 0, measureText: 0 };
   const gradient = createCanvasGradientFixture();
@@ -346,28 +341,9 @@ function parseArgs(argv: string[]) {
   };
 }
 
-function argValue(argv: string[], name: string, fallback: string) {
-  const equals = `--${name}=`;
-  const index = argv.indexOf(`--${name}`);
-  if (index >= 0) return argv[index + 1] ?? fallback;
-  return argv.find((arg) => arg.startsWith(equals))?.slice(equals.length) ?? fallback;
-}
-
-function numberArg(argv: string[], name: string, fallback: number) {
-  const value = Number(argValue(argv, name, String(fallback)));
-  if (!Number.isFinite(value) || value < 0) throw new Error(`--${name} must be a non-negative number`);
-  return value;
-}
-
 function percentile(values: readonly number[], p: number) {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * p)))] ?? 0;
 }
 
-function percentDelta(value: number, baseline: number) {
-  return ((value - baseline) / Math.max(0.001, baseline)) * 100;
-}
-
-function round(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
+function round(value: number) { return roundDecimal(value, 3); }

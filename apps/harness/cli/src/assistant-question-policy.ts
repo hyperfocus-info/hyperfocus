@@ -53,7 +53,7 @@ export function createAssistantQuestionPolicyEffects(
   return {
     learning: { id: createAssistantLearningId(), assistantId,
       summary: `${autoAnswered ? "Auto-answered assistant question" : "Did not ask assistant question"}: ${summary}. ${autoAnswered ? decision.answerText : decision.note}`,
-      source: `question-policy:${decision.category}`, confidence: "high" as const, createdAt },
+      source: `question-policy:${decision.category}`, confidence: decision.kind === "note" ? "low" as const : "high" as const, createdAt },
     log: { id: createAssistantLogEntryId(), assistantId, level: "info" as const,
       summary: autoAnswered ? "Question auto-answered" : "Question suppressed", detail: decision.reason,
       detailsJson: { prompt, decision }, createdAt }
@@ -85,7 +85,7 @@ export function readAssistantPendingPromptQuestions(
   readPage: (cursor: string | undefined) => { items: AssistantQuestion[]; nextCursor?: string }, limit: number = 32
 ) {
   const selected: AssistantQuestion[] = []; let cursor: string | undefined;
-  do { const page = readPage(cursor); selected.push(...page.items.filter((entry) => entry.status === "pending")
+  do { const page = readPage(cursor); selected.push(...page.items.filter((entry) => entry.status === "pending" || entry.status === "deferred")
       .slice(0, limit - selected.length)); cursor = selected.length < limit ? page.nextCursor : undefined;
   } while (cursor !== undefined);
   return selected;
@@ -150,14 +150,25 @@ export function evaluateAssistantQuestionPolicy(input: EvaluateAssistantQuestion
   const normalizedPrompt = normalizeQuestionText(prompt);
   const category = classifyAssistantQuestion(prompt);
 
+  if (input.forceBlocking || category === "schedule-or-job-selection" || category === "todo-or-question-selection" || category === "recovery-or-safety") {
+    return { kind: "ask", category, reason: "This question requires an explicit answer before work can continue." };
+  }
+  if (isHighRiskQuestion(prompt)) {
+    return { kind: "ask", category, reason: "Question involves irreversible or high-risk work." };
+  }
+  if (input.autoApproveNonBlocking === false) {
+    return { kind: "ask", category, reason: "Auto-approval for non-blocking assistant questions is disabled." };
+  }
+  if (category === "unknown") {
+    return { kind: "ask", category, reason: "This question has no recognized non-blocking policy." };
+  }
+
   const existingQuestion = findExistingQuestion(category, normalizedPrompt, input.questions);
   if (existingQuestion?.status === "pending" || existingQuestion?.status === "deferred") {
     return {
-      kind: "suppress",
+      kind: "ask",
       category,
-      reason: "An equivalent assistant question is already open.",
-      matchingQuestionId: existingQuestion.id,
-      note: `Suppressed duplicate question: ${prompt}`
+      reason: "An equivalent assistant question is still awaiting an answer."
     };
   }
 
@@ -234,30 +245,6 @@ export function evaluateAssistantQuestionPolicy(input: EvaluateAssistantQuestion
       category,
       reason: "Runtime is writable, so the access blocker is likely stale or hallucinated.",
       note: "Verify with tools and continue instead of asking for write access."
-    };
-  }
-
-  if (input.forceBlocking || category === "schedule-or-job-selection" || category === "todo-or-question-selection" || category === "recovery-or-safety") {
-    return {
-      kind: "ask",
-      category,
-      reason: "This question can affect the wrong assistant, schedule, job, todo, or recovery path."
-    };
-  }
-
-  if (isHighRiskQuestion(prompt)) {
-    return {
-      kind: "ask",
-      category,
-      reason: "Question involves irreversible or high-risk work."
-    };
-  }
-
-  if (input.autoApproveNonBlocking === false) {
-    return {
-      kind: "ask",
-      category,
-      reason: "Auto-approval for non-blocking assistant questions is disabled."
     };
   }
 
@@ -355,7 +342,7 @@ function shouldAutoAnswer(category: AssistantQuestionCategory, answerText: strin
   if (!isDurableSuppressingAnswer(answerText)) {
     return false;
   }
-  return category === "target-selection" || category === "unknown";
+  return category === "target-selection";
 }
 
 function isDurableSuppressingAnswer(answerText: string) {

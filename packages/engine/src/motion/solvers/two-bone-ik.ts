@@ -7,6 +7,8 @@ export type TwoBoneIKQuery = {
   upperLength: number;
   lowerLength: number;
   maxStretch?: number;
+  /** Keeps the chain away from its undefined perfectly straight singularity. */
+  extensionMarginRatio?: number;
 };
 
 export type TwoBoneIKResult = {
@@ -37,6 +39,7 @@ export function solveTwoBoneIK(
   const upperLength = positiveFinite(query.upperLength, "two-bone IK upper length");
   const lowerLength = positiveFinite(query.lowerLength, "two-bone IK lower length");
   const maxStretch = finiteAtLeast(query.maxStretch ?? 1, 1, "two-bone IK maxStretch");
+  const extensionMarginRatio = finiteRange(query.extensionMarginRatio ?? 0, 0, .1, "two-bone IK extensionMarginRatio");
   if (out.knee.length < 3 || out.end.length < 3) throw new RangeError("two-bone IK outputs must contain three values");
 
   const rootX = query.root[0];
@@ -61,7 +64,7 @@ export function solveTwoBoneIK(
   const stretch = Math.min(maxStretch, Math.max(1, requestedDistance / naturalLength));
   const stretchedUpper = upperLength * stretch;
   const stretchedLower = lowerLength * stretch;
-  const maximumDistance = Math.max(1e-8, stretchedUpper + stretchedLower - 1e-7);
+  const maximumDistance = Math.max(1e-8, stretchedUpper + stretchedLower - Math.max(1e-7, naturalLength * extensionMarginRatio));
   const minimumDistance = Math.min(maximumDistance, Math.abs(stretchedUpper - stretchedLower) + 1e-7);
   const solvedDistance = Math.max(minimumDistance, Math.min(maximumDistance, requestedDistance));
 
@@ -116,5 +119,11 @@ function positiveFinite(value: unknown, label: string) {
 function finiteAtLeast(value: unknown, minimum: number, label: string) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < minimum) throw new RangeError(`${label} must be at least ${minimum}`);
+  return number;
+}
+
+function finiteRange(value: unknown, minimum: number, maximum: number, label: string) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > maximum) throw new RangeError(`${label} must be from ${minimum} through ${maximum}`);
   return number;
 }

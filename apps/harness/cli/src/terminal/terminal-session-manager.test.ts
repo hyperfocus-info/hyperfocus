@@ -74,7 +74,7 @@ describe("TerminalSessionManager", () => {
     const socket = { send(data: Uint8Array) { frames.push(data); return 1; }, close() {} };
     expect(testExports.sendTerminalReplay(socket, "😀".repeat(150_000))).toBe(true);
     expect(frames.at(-1)).toEqual(new Uint8Array([2]));
-    expect(frames.slice(0, -1).every((frame) => frame.byteLength <= 64 * 1024 + 1)).toBe(true);
+    expect(frames.slice(0, -1).every((frame) => frame.byteLength <= 65537)).toBe(true);
     expect(new TextDecoder().decode(concat(frames.slice(0, -1).map((frame) => frame.slice(1))))).toBe("😀".repeat(150_000));
   });
 

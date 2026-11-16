@@ -1,3 +1,4 @@
+import { escapeCell } from "./world-analysis.ts";
 import {
   analyzeWorld,
   filterChunks,
@@ -97,8 +98,4 @@ function printActions(data: WorldAnalysis) {
     console.log(`Action: ${chunk.recommendation}`);
     if (chunk.questHooks.length > 0) console.log(`Quest: ${chunk.questHooks.join(" / ")}`);
   }
-}
-
-function escapeCell(value: string) {
-  return value.replace(/\|/g, "/");
 }

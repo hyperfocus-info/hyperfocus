@@ -311,7 +311,7 @@ function deletionFixture() {
     definition: { kind: "ai-routine", prompt: "Run work." },
     schedule: { type: "one-off", runAt: now, sourceText: "now" }, scheduleInput: "now", nextRunAt: now,
     createdAt: now, updatedAt: now };
-  const job = repository.saveBackgroundJob(backgroundJob).jobs[0]!;
+  const job = repository.saveBackgroundJob(backgroundJob);
   return { repository, project, job, dbPath };
 }
 

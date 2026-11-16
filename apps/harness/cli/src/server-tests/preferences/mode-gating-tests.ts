@@ -54,7 +54,7 @@ export function registerModeGatingTests(serverTest: ServerTestRegistrar, fixture
         expect(ready.payload.run.plan?.gating.mode).toBe("approve");
         socket.close();
     });
-    serverTest("saved plan gate preference overrides plan mode approval default", async () => {
+    serverTest("plan mode requires approval even with a saved immediate preference", async () => {
         const { repository, projectRoot, port } = fixture;
         repository.setPlanExecutionModeDefault("immediate");
         const socket = createSocket(port);
@@ -71,7 +71,7 @@ export function registerModeGatingTests(serverTest: ServerTestRegistrar, fixture
             modeId: "plan"
         })));
         const ready = await readyPromise;
-        expect(ready.payload.run.plan?.gating.mode).toBe("immediate");
+        expect(ready.payload.run.plan?.gating.mode).toBe("approve");
         socket.close();
     });
     serverTest("implement mode uses immediate gating for main-route plans", async () => {

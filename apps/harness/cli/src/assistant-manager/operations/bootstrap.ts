@@ -14,7 +14,7 @@ import { queueAssistantBootstrapFlight, recoverStaleAssistantBootstrapRuns, requ
 
 function createAssistantBootstrapSupportOperations(context: AssistantManagerContext) {
   const { repository, callbacks } = context;
-  function recoverStaleBootstrapRuns(maxAgeMs: number = 30 * 60 * 1000) { recoverStaleAssistantBootstrapRuns(repository,
+  function recoverStaleBootstrapRuns(maxAgeMs: number = 1800000) { recoverStaleAssistantBootstrapRuns(repository,
       callbacks, assistantMaintenanceCandidates(repository), maxAgeMs); }
   function finishConflictedBootstrap(assistantId: string, attemptId: string) {
       const finishedAt = new Date().toISOString();

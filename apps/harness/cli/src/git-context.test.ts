@@ -1,3 +1,4 @@
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,7 +28,7 @@ describe("git prompt context", () => {
   test("reports repository folders with git command availability", () => {
     const root = createHarnessTestTempPath("git-context");
     mkdirSync(root, { recursive: true });
-    Bun.spawnSync({ cmd: ["git", "init"], cwd: root, stdout: "pipe", stderr: "pipe" });
+    spawnBackgroundProcessSync({ cmd: ["git", "init"], cwd: root, stdout: "pipe", stderr: "pipe" });
 
     try {
       const context = resolveGitRepositoryPromptContext(root);

@@ -29,11 +29,19 @@ export function syncBundledSkillsToGlobalRoot(options: {
       continue;
     }
 
-    cpSync(sourcePath, destinationPath, { recursive: true, force: true });
+    cpSync(sourcePath, destinationPath, { recursive: true, force: true, filter: isBundledSkillAsset });
     synced.push(skillName);
   }
 
   return synced;
+}
+
+// Shared by runtime synchronization and portable packaging; source helpers stay intact.
+export function isBundledSkillAsset(sourcePath: string) {
+  const name = path.basename(sourcePath);
+  return !["__pycache__", ".local", ".git", "node_modules"].includes(name)
+    && !/\.py[co]$/i.test(name)
+    && (name === ".env.example" || !/^\.env(?:\.|$)/i.test(name));
 }
 
 function discoverBundledSkillNames(sourceSkillsRoot: string) {

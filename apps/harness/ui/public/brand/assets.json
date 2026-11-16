@@ -1,0 +1,59 @@
+{
+  "schema": "hyperfocus-brand-assets-v1",
+  "name": "Harness",
+  "source": "logo.svg",
+  "sourceSha256": "a134f5721385f60388e9c1ebc3d402ca5531189e4cafd4ee3d3011d18da90ea9",
+  "customization": "Replace the source logo in brand.json, then regenerate this directory. Do not edit renditions.",
+  "files": [
+    {
+      "path": "logo.svg",
+      "sha256": "a134f5721385f60388e9c1ebc3d402ca5531189e4cafd4ee3d3011d18da90ea9",
+      "bytes": 215
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "26a0b8e771bc5d47426ce133e2e144309688a52cfb5f4ebde64c06f821f12043",
+      "bytes": 462
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "f424b03aae6731cf9044584d6de903b59d9f811734271eddd7a71404e8b610fc",
+      "bytes": 493
+    },
+    {
+      "path": "favicon-32.png",
+      "sha256": "1cea60996f92abf26e467206966a3e71867cfb1c59793b38f14009791c95126e",
+      "bytes": 471
+    },
+    {
+      "path": "icon-192.png",
+      "sha256": "b05296337a4777c39ffdf3173773ba38facd7fa06d4ca736285611ff8bc2999f",
+      "bytes": 3047
+    },
+    {
+      "path": "icon-512.png",
+      "sha256": "134fb6f5c36866c9dd2891c7bff3288e557c4157a2c568b0dcabe59d29ba709f",
+      "bytes": 8953
+    },
+    {
+      "path": "maskable-512.png",
+      "sha256": "b8616d511d6d18df9f99c92bc78261ba604027a5f91ecb199df6f3d126576de9",
+      "bytes": 7088
+    },
+    {
+      "path": "apple-touch-icon.png",
+      "sha256": "78016c4f6c273d63f1a46a9004abdfef8cbde35e5bf5fe711ba5148176b80d31",
+      "bytes": 2596
+    },
+    {
+      "path": "social.png",
+      "sha256": "c14b5d873b7beb3583baca3313af782af1f341644324792c02db970f2e6d602f",
+      "bytes": 11253
+    },
+    {
+      "path": "site.webmanifest",
+      "sha256": "8fb4c0fa5a0fccf4ef223a84e9ff60e0268ab653b14e4d2446d6912144650cc0",
+      "bytes": 490
+    }
+  ]
+}

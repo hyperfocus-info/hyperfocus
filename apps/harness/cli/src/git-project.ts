@@ -1,23 +1,68 @@
+import { spawnBackgroundProcess } from "@hyperfocus/desktop-runtime/process";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 
-export async function ensureProjectDirectory(rootPath: string) {
-  const normalizedPath = rootPath.trim();
-  if (!normalizedPath) {
+type ProjectDirectoryFileSystem = {
+  statPath?: (targetPath: string) => Promise<{ isDirectory(): boolean }>;
+  createDirectory?: (targetPath: string, options: { recursive: true }) => Promise<unknown>;
+};
+
+export async function ensureProjectDirectory(rootPath: string, fileSystem: ProjectDirectoryFileSystem = {}) {
+  const statPath = fileSystem.statPath ?? stat;
+  const createDirectory = fileSystem.createDirectory ?? mkdir;
+  const trimmedPath = rootPath.trim();
+  if (!trimmedPath) {
     throw new Error("Project path is required");
   }
+  const normalizedPath = path.normalize(trimmedPath);
 
   if (!path.isAbsolute(normalizedPath)) {
     throw new Error("Project path must be absolute");
   }
 
-  const existing = await stat(normalizedPath).catch(() => undefined);
+  const pathRoot = path.parse(normalizedPath).root;
+  let rootStats: { isDirectory(): boolean };
+  try {
+    rootStats = await statPath(pathRoot);
+  } catch (error) {
+    throw createUnavailableProjectRootError(pathRoot, error);
+  }
+  if (!rootStats.isDirectory()) {
+    throw createUnavailableProjectRootError(pathRoot);
+  }
+
+  let existing: { isDirectory(): boolean } | undefined;
+  try {
+    existing = normalizedPath === pathRoot ? rootStats : await statPath(normalizedPath);
+  } catch (error) {
+    if (!hasFileSystemCode(error, "ENOENT")) {
+      throw new Error(`Project path is unavailable: ${normalizedPath}`, { cause: error });
+    }
+  }
   if (existing && !existing.isDirectory()) {
     throw new Error(`Project path is not a directory: ${normalizedPath}`);
   }
 
-  await mkdir(normalizedPath, { recursive: true });
+  if (!existing) {
+    try {
+      await createDirectory(normalizedPath, { recursive: true });
+    } catch (error) {
+      throw new Error(`Could not create project folder: ${normalizedPath}`, { cause: error });
+    }
+  }
   return normalizedPath;
+}
+
+function createUnavailableProjectRootError(pathRoot: string, cause?: unknown) {
+  const drive = /^[a-z]:[\\/]$/i.test(pathRoot) ? pathRoot.slice(0, 2).toUpperCase() : undefined;
+  const message = drive
+    ? `Project drive ${drive} is unavailable. Connect the drive or choose another folder.`
+    : `Project path root is unavailable: ${pathRoot}`;
+  return new Error(message, cause === undefined ? undefined : { cause });
+}
+
+function hasFileSystemCode(error: unknown, code: string) {
+  return error instanceof Error && "code" in error && error.code === code;
 }
 
 export async function probeGitAvailable() {
@@ -70,7 +115,7 @@ export async function initializeGitBaseline(rootPath: string) {
 }
 
 async function runGit(args: string[], cwd: string, throwOnFailure = true) {
-  const process = Bun.spawn({
+  const process = spawnBackgroundProcess({
     cmd: ["git", ...args],
     cwd,
     stdout: "pipe",

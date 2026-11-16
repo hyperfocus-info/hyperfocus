@@ -24,7 +24,7 @@ function registerPlanningEntryTests(serverTest: ServerTestRegistrar, fixture: Se
             content: "simple task"
         });
         expect(complete.payload.projectId).toBe(projectId);
-        expect(complete.payload.assistantMessage.content).toBe("main execution result");
+        expect(complete.payload.assistantMessage.content).toBe("main execution result\n\nVerification unverified: no task-specific checks were established.");
         expect(adapter.calls.map((call) => call.kind)).toEqual(["executor"]);
         socket.close();
     });
@@ -63,7 +63,7 @@ function registerPlanningEntryTests(serverTest: ServerTestRegistrar, fixture: Se
             questionId: runUpdate.payload.run.questions[0].id,
             content: "api/users/[id]"
         });
-        expect(complete.payload.assistantMessage.content).toBe("main execution result");
+        expect(complete.payload.assistantMessage.content).toBe("main execution result\n\nVerification unverified: no task-specific checks were established.");
         expect(adapter.calls.map((call) => call.kind)).toEqual(["planner", "planner", "executor"]);
         socket.close();
     });

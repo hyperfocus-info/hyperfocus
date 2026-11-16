@@ -1,3 +1,5 @@
+import { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
+
 export type RectLike = {
   x: number;
   y: number;
@@ -57,9 +59,7 @@ export type RadiusCandidateVisit<TEntity> = (entity: TEntity, distanceSq: number
 
 export type RayBox = RectLike | readonly [x: number, y: number, w: number, h: number];
 
-export function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+export { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";
 
 export function rectsOverlap(a: RectLike, b: RectLike) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;

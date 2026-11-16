@@ -1,36 +1,23 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type JSX } from "solid-js";
+import { typography } from "@hyperfocus/ui";
+import {
+createRequestId
+} from "@hyperfocus/ai-core/protocol";
+import { Disclosure } from "@hyperfocus/ui";
 import * as stylex from "@stylexjs/stylex";
 import {
-  createRequestId,
-  type AssistantActionMessageMetadata,
-  type AgentRunState,
-  type AgentRunSummary,
-  type ChatAttachment,
-  type ChatMessage,
-  type ProviderBrand,
-  type SetupAction
-} from "@hyperfocus/ai-core/protocol";
+ArrowDown,
+Briefcase,
+CalendarClock,
+Split
+} from "lucide-solid";
+import { Match,Show } from "solid-js";
 import {
-  canSelectProviderBrand,
-  COMPOSER_REASONING_STRENGTHS,
-  getEffectiveProviderBrandForAgent,
-  getActiveMode,
-  getCapabilityTags,
-  getBlockingSetupCheck,
-  getComposerControlState,
-  getExecutionModelOptionsForAgent,
-  getFallbackExecutionModelIdForAgent,
-  getModelCapability,
-  getResolvedModes,
-  harnessStore,
-  hasUsableApiKeyForProvider,
-  persistMergedLocalPreferences,
-  resolveUsablePiProviderBrand,
-  shouldShowSetupChecklist,
-  type ChatPaneTab,
-  type ViewProjectState
+harnessStore
 } from "../../harness-store";
-import { ActionButton, ActionStatus } from "../action-button";
+import { ActionButton,ActionStatus } from "../action-button";
+import type { ChatPanelController } from "../chat-panel";
+import { chatPanelStyles as styles } from "../chat-panel.styles";
+import { chatUtilityStyles } from "../chat-panel.utilities";
 import { CliSessionPanel } from "../cli-session-panel";
 import { MarkdownContent } from "../markdown-content";
 import { ModeEditorPanel } from "../mode-editor-panel";
@@ -39,52 +26,16 @@ import { ScrollArea } from "../primitives/scroll-area";
 import { Textarea } from "../primitives/textarea";
 import { Tooltip } from "../primitives/tooltip";
 import { VirtualList } from "../primitives/virtual-list";
-import {
-  Activity,
-  AlertTriangle,
-  Brain,
-  Bot,
-  Briefcase,
-  CalendarClock,
-  ClipboardList,
-  Clipboard,
-  Cpu,
-  Edit3,
-  FolderOpen,
-  Folder,
-  Gauge,
-  LoaderCircle,
-  MessageSquareMore,
-  Orbit,
-  Paperclip,
-  Pause,
-  Play,
-  RefreshCcw,
-  Plus,
-  ArrowDown,
-  Check,
-  File,
-  FileCode,
-  FileJson,
-  FileText,
-  Image,
-  SendHorizontal,
-  Settings,
-  Terminal,
-  WandSparkles,
-  X,
-  Split
-} from "lucide-solid";
-import { chatPanelStyles as styles } from "../chat-panel.styles";
-import { chatUtilityStyles } from "../chat-panel.utilities";
-import { CHAT_EVENT_LIMIT, CHAT_RUN_SUBTASK_LIMIT, CHAT_TRANSCRIPT_LIMIT, RunLedgerCompact, RunProofBundleCompact, estimateTranscriptRowSize } from "./chat-transcript-helpers";
-import type { ChatPanelController } from "../chat-panel";
+import { chatTaskStyles as taskStyles } from "./chat-task.styles";
+import { CHAT_EVENT_LIMIT,CHAT_RUN_SUBTASK_LIMIT,CHAT_TRANSCRIPT_LIMIT,RunLedgerCompact,RunProofBundleCompact,estimateTranscriptRowSize } from "./chat-transcript-helpers";
+import { useChatPanel } from "./state/panel-context";
 
-export function ChatTranscriptMessages(props: { controller: ChatPanelController; selectedTab: ReturnType<ChatPanelController["currentTab"]> }) {
+export function ChatTranscriptMessages(props: { selectedTab: ReturnType<ChatPanelController["currentTab"]> }) {
+  const controller = useChatPanel();
   const {
     project, refs, renderTranscriptRow, scrollToBottom, stickToBottom,
     transcriptRows, updateScrollLock,
-  } = props.controller;
+  } = controller;
   return <Match when={props.selectedTab === "chat"}>
                       <div class={stylex.attrs(chatUtilityStyles.relative, chatUtilityStyles.flex, chatUtilityStyles.minH0, chatUtilityStyles.flex1, chatUtilityStyles.flexCol).class}>
                         <Show when={project().messagesNextCursor}>
@@ -94,7 +45,7 @@ export function ChatTranscriptMessages(props: { controller: ChatPanelController;
                             variant="secondary"
                             onClick={() => harnessStore.actions.requestEarlierProjectMessages(project().id)}
                           >
-                            Load earlier messages
+                            {project().messagesNextCursor === "__start__" ? "Load saved messages" : "Load earlier messages"}
                           </ActionButton>
                         </Show>
                         <VirtualList
@@ -113,8 +64,10 @@ export function ChatTranscriptMessages(props: { controller: ChatPanelController;
                           stickToEnd
                           onScroll={updateScrollLock}
                           empty={
-                            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH44, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite38, chatUtilityStyles.p6, chatUtilityStyles.textCenter, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
-                              No messages in this thread yet. Send a task from the composer.
+                            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH44, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite38, chatUtilityStyles.p6, chatUtilityStyles.textCenter, typography.body, chatUtilityStyles.textVariableMuted).class}>
+                              {project().messagesNextCursor
+                                ? "Saved messages are not loaded yet. Use Load saved messages to retry."
+                                : "No messages in this thread yet. Send a task from the composer."}
                             </div>
                           }
                         >
@@ -138,28 +91,29 @@ export function ChatTranscriptMessages(props: { controller: ChatPanelController;
                     </Match>;
 }
 
-export function ChatTranscriptPlan(props: { controller: ChatPanelController; selectedTab: ReturnType<ChatPanelController["currentTab"]> }) {
+export function ChatTranscriptPlan(props: { selectedTab: ReturnType<ChatPanelController["currentTab"]> }) {
+  const controller = useChatPanel();
   const {
     activeMode, chatFileLinks, currentExecutionPlan, handleModeSelect, handleSaveProjectContext,
     isAutoModeSelected, modeDropdownOptions, project, projectRulesDraft, renderPlanRunAction,
     selectedModeValue, sendCommand, setProjectRulesDraft,
-  } = props.controller;
+  } = controller;
   return <Match when={props.selectedTab === "plan"}>
                 <ScrollArea class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}>
                   <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap4).class}>
                     <Show
                       when={currentExecutionPlan()}
                       fallback={
-                        <div class={stylex.attrs(chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite45, chatUtilityStyles.p5, chatUtilityStyles.text0675rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
+                        <div class={stylex.attrs(chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite45, chatUtilityStyles.p5, typography.body, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
                           No saved execution plan yet. Ask for a plan from Chat, then review it here before files change.
                         </div>
                       }
                     >
                       {(plan) => (
-                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderVariableAccent35, chatUtilityStyles.bgWhite70, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
+                        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderVariableAccent35, chatUtilityStyles.bgWhite70, chatUtilityStyles.p4, typography.body, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
                           <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
                             <div>
-                              <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableAccentStrong).class}>Plan ready for review</div>
+                              <div class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableAccentStrong).class}>Plan ready for review</div>
                               <div class={stylex.attrs(chatUtilityStyles.mt1, chatUtilityStyles.textVariableMuted).class}>Confirm scope and verification before execution.</div>
                             </div>
                             <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
@@ -177,7 +131,7 @@ export function ChatTranscriptPlan(props: { controller: ChatPanelController; sel
                     <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
                       <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap3, chatUtilityStyles.mdGridCols2).class}>
                         <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
-                          <span class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Active mode</span>
+                          <span class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Active mode</span>
                           <DropdownControl
                             kind="select"
                             ariaLabel="Select active mode"
@@ -189,7 +143,7 @@ export function ChatTranscriptPlan(props: { controller: ChatPanelController; sel
                             onChange={handleModeSelect}
                           />
                         </label>
-                        <div class={stylex.attrs(chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
+                        <div class={stylex.attrs(chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.p3, typography.body, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
                           {isAutoModeSelected()
                             ? "Interpret each prompt and choose the best implementation mode."
                             : activeMode()?.description ?? "Default implementation mode."}
@@ -200,8 +154,8 @@ export function ChatTranscriptPlan(props: { controller: ChatPanelController; sel
                     <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
                       <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
                         <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap1).class}>
-                          <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Project context</div>
-                          <div class={stylex.attrs(chatUtilityStyles.text0675rem, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
+                          <div class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Project context</div>
+                          <div class={stylex.attrs(typography.body, chatUtilityStyles.leading5, chatUtilityStyles.textVariableMuted).class}>
                             Prefer the project AGENTS.md for durable direction. These explicit rules are the typed override sent to planning and execution.
                           </div>
                         </div>
@@ -211,23 +165,25 @@ export function ChatTranscriptPlan(props: { controller: ChatPanelController; sel
                       </div>
                       <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap3, chatUtilityStyles.pt4).class}>
                         <label class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
-                          <span class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Project rules</span>
+                          <span class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Project rules</span>
                           <Textarea rows="8" value={projectRulesDraft()} onInput={(event) => setProjectRulesDraft(event.currentTarget.value)} />
                         </label>
                       </div>
                     </div>
 
-                    <ModeEditorPanel
+                    <Show when={project().id} keyed>{projectId => <ModeEditorPanel
                       title="Project custom modes"
                       scope="project"
                       modes={project().projectModes ?? []}
+                      draftOwner={harnessStore}
+                      draftKey={projectId}
                       onSave={(mode) =>
-                        sendCommand({
+                        harnessStore.actions.saveMode({
                           type: "mode.save",
                           requestId: createRequestId(),
                           payload: {
                             scope: "project",
-                            projectId: project().id,
+                            projectId,
                             mode
                           }
                         })
@@ -238,31 +194,32 @@ export function ChatTranscriptPlan(props: { controller: ChatPanelController; sel
                           requestId: createRequestId(),
                           payload: {
                             scope: "project",
-                            projectId: project().id,
+                            projectId,
                             modeId
                           }
                         })
                       }
-                    />
+                    />}</Show>
 
                   </div>
                 </ScrollArea>
                     </Match>;
 }
 
-export function ChatTranscriptRun(props: { controller: ChatPanelController; selectedTab: ReturnType<ChatPanelController["currentTab"]> }) {
+export function ChatTranscriptRun(props: { selectedTab: ReturnType<ChatPanelController["currentTab"]> }) {
+  const controller = useChatPanel();
   const {
     chatFileLinks, currentBackgroundRun, currentExecutionPlan, currentRun, experimentRun,
     handleDiscardExperiment, handleInspectExperiment, handleOpenCurrentRunJob, handlePromoteExperiment, handlePromoteScheduledRun,
     renderPlanRunAction, runDetailRecovery, runSubtasks,
-  } = props.controller;
+  } = controller;
   return <Match when={props.selectedTab === "run"}>
                 <ScrollArea class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}>
                   <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap4).class}>
                     <CliSessionPanel />
-                    <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
-                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
-                        <div class={stylex.attrs(chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Run summary</div>
+                    <div class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4, typography.body, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
+                      <div class={stylex.attrs(taskStyles.row).class}>
+                        <div class={stylex.attrs(typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking018em, chatUtilityStyles.textVariableMuted).class}>Run summary</div>
                         <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2).class}>
                           <Show when={currentBackgroundRun()}>
                             <ActionButton
@@ -302,9 +259,6 @@ export function ChatTranscriptRun(props: { controller: ChatPanelController; sele
                       </div>
                       <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minW0, chatUtilityStyles.flexCol, chatUtilityStyles.gap1, chatUtilityStyles.pt2).class}>
                         <Show when={runDetailRecovery()}>{(recovery) => <ActionStatus message={recovery().status === "loading" ? "Loading full run details. Run actions remain disabled." : "Full run details are unavailable. Run actions remain disabled."} actionLabel={recovery().status === "loading" ? "Loading details" : "Retry details"} tooltip="Retry loading full run details" disabled={recovery().status === "loading"} disabledReason="Run details are already loading" onAction={() => recovery().retry()} />}</Show>
-                        <div>Status: {currentRun()?.status ?? "idle"}</div>
-                        <div>Retryable: {currentRun()?.retryable ? "yes" : "no"}</div>
-                        <div>Resumable: {currentRun()?.resumable ? "yes" : "no"}</div>
                         <Show when={currentRun()?.failureMessage}>
                           {(failure) => <div class={stylex.attrs(chatUtilityStyles.mt2, chatUtilityStyles.roundedLg, chatUtilityStyles.border, chatUtilityStyles.borderRose300, chatUtilityStyles.bgRose50, chatUtilityStyles.p3, chatUtilityStyles.fontMedium, chatUtilityStyles.textRose800).class}>Failure: {failure()}</div>}
                         </Show>
@@ -319,6 +273,11 @@ export function ChatTranscriptRun(props: { controller: ChatPanelController; sele
                             </div>
                           </div>
                         </Show>
+                        <Disclosure title="Run state">
+                        <div>Status: {currentRun()?.status ?? "idle"}</div>
+                        <div>Retryable: {currentRun()?.retryable ? "yes" : "no"}</div>
+                        <div>Resumable: {currentRun()?.resumable ? "yes" : "no"}</div>
+                        </Disclosure>
                         <RunLedgerCompact run={currentRun()} />
                         <RunProofBundleCompact run={currentRun()} />
                         <Tooltip
@@ -350,10 +309,10 @@ export function ChatTranscriptRun(props: { controller: ChatPanelController; sele
                       getKey={(task, index) => `${task.id ?? task.title}-${index}`}
                       estimateSize={150}
                       pagination={{ kind: "reverse", initialCount: CHAT_RUN_SUBTASK_LIMIT, batchSize: CHAT_RUN_SUBTASK_LIMIT }}
-                      empty={<div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>No subtasks yet.</div>}
+                      empty={<div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4, typography.body, chatUtilityStyles.textVariableMuted).class}>No subtasks yet.</div>}
                     >
                       {(task) => (
-                        <div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p4, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
+                        <div class={stylex.attrs(chatUtilityStyles.rounded12rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p4, typography.body, chatUtilityStyles.leading6, chatUtilityStyles.textVariableForeground).class}>
                           <div class={stylex.attrs(chatUtilityStyles.fontSemibold).class}>{task.title}</div>
                           <div class={stylex.attrs(chatUtilityStyles.textVariableMuted).class}>Status: {task.status} | Attempts: {task.attemptCount}</div>
                           <Show when={task.output}>
@@ -374,10 +333,11 @@ export function ChatTranscriptRun(props: { controller: ChatPanelController; sele
                     </Match>;
 }
 
-export function ChatTranscriptEvents(props: { controller: ChatPanelController; selectedTab: ReturnType<ChatPanelController["currentTab"]> }) {
+export function ChatTranscriptEvents(props: { selectedTab: ReturnType<ChatPanelController["currentTab"]> }) {
+  const controller = useChatPanel();
   const {
     chatFileLinks, projectTraces,
-  } = props.controller;
+  } = controller;
   return <Match when={props.selectedTab === "events"}>
                 <VirtualList
                   class={stylex.attrs(chatUtilityStyles.flex1, chatUtilityStyles.minH0, chatUtilityStyles.pr2).class}
@@ -388,14 +348,14 @@ export function ChatTranscriptEvents(props: { controller: ChatPanelController; s
                   estimateSize={145}
                   pagination={{ kind: "reverse", initialCount: CHAT_EVENT_LIMIT, batchSize: CHAT_EVENT_LIMIT }}
                   empty={
-                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH56, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.rounded3xl, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite40, chatUtilityStyles.p8, chatUtilityStyles.textCenter, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted).class}>
+                    <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.minH56, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter, chatUtilityStyles.rounded3xl, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite40, chatUtilityStyles.p8, chatUtilityStyles.textCenter, typography.body, chatUtilityStyles.textVariableMuted).class}>
                       No model trace events yet. Tool commands and subtask activity appear in Run and Developer trace.
                     </div>
                   }
                 >
                   {(trace) => (
                     <article class={stylex.attrs(chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite55, chatUtilityStyles.p4).class}>
-                      <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableAccentStrong).class}>
+                      <div class={stylex.attrs(taskStyles.eventHeader).class}>
                         <span>{trace.stage}</span>
                         <span>{trace.modelId ?? "n/a"}</span>
                       </div>

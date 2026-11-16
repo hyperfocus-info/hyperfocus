@@ -112,7 +112,7 @@ test("Three beginner facade drives MotionRoot and uploads a finite semantic pose
   const player = createThreeHumanoidMotionController({ root: fixture.root, skeleton: fixture.skeleton });
   const pose = player.state.pose;
   player.move([0, 0, 2]);
-  for (let frame = 0; frame < 60; frame += 1) player.update(1 / 60);
+  for (let frame = 0; frame < 60; frame += 1) player.update(0.016666666666666666);
 
   expect(player.state.pose).toBe(pose);
   expect(fixture.root.position.z).toBeGreaterThan(1.5);

@@ -1,3 +1,5 @@
+import { asObject as asRecord } from "@hyperfocus/utilities/records";
+
 import { type PlayerEntity } from "../shared-contracts.ts";
 
 export const COMBAT_SLOTS = ["LMB", "RMB", "Space", "Q", "E", "R"] as const;
@@ -16,13 +18,9 @@ type LoosePlayer = PlayerEntity & {
   rushMs?: unknown;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
-}
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {};
-}
+
+
 
 function numberField(value: unknown, fallback = 0) {
   const number = typeof value === "number" ? value : Number(value);

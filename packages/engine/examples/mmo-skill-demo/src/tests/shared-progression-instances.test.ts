@@ -101,8 +101,8 @@ test("MMO Skill Demo snapshots keep nearby cross-zone actors stable at zone seam
   expect(join.ok).toBe(true);
   const player = room.ctx.state.players[join.player!.id];
   player.zoneId = "port-marrow";
-  player.x = 32 * 32;
-  player.y = 18 * 32;
+  player.x = 1024;
+  player.y = 576;
   const elder = Object.values(room.ctx.state.npcs).find((npc) => npc.kind === "elder-rowan")!;
   elder.x = player.x + 34;
   elder.y = player.y;
@@ -587,7 +587,7 @@ test("MMO Skill Demo throttles Deep Fissure golem overdrive hazards", async () =
   player.x = golem.x - 72;
   player.y = golem.y;
   golem.projectileCooldownMs = 0;
-  await server.tick(1 / 60);
+  await server.tick(0.016666666666666666);
 
   expect(Object.values(room.ctx.state.hazards).filter((hazard) => hazard.ownerId === golem.id)).toHaveLength(6);
 });
@@ -806,8 +806,8 @@ test("MMO Skill Demo live world events reward players in the active event zone",
   rallyPlayer.x = wolf.x - 34;
   rallyPlayer.y = wolf.y;
   rallyPlayer.zoneId = wolf.zoneId;
-  distantPlayer.x = 18 * 32 + 16;
-  distantPlayer.y = 18 * 32 + 16;
+  distantPlayer.x = 592;
+  distantPlayer.y = 592;
   distantPlayer.zoneId = "crags";
   wolf.hp = 1;
 

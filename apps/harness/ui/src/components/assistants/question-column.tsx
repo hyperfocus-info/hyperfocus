@@ -1,16 +1,24 @@
-import { For, Show } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import { Check, Save } from "lucide-solid";
 import type { AssistantQuestion } from "@hyperfocus/ai-core/protocol";
+import * as stylex from "@stylexjs/stylex";
+import { Check,Save } from "lucide-solid";
+import { createContext,For,Show,useContext,type ComponentProps } from "solid-js";
 import { getAssistantQuestionDefaultChoices } from "../../assistant-question-defaults";
 import { formatShortTimestamp } from "../../lib/time-format";
 import { submitOnEnter } from "../../textarea-submit";
 import { ActionButton } from "../action-button";
-import { assistantPanelStyles, assistantUtilityStyles } from "../assistants-panel.styles";
-import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
-import { StatusChip, type StatusChipTone } from "../primitives/status-chip";
+import { assistantPanelStyles,assistantUtilityStyles } from "../assistants-panel.styles";
+import { FileLinkedText,type FileLinkConfig } from "../file-linked-text";
+import { StatusChip,type StatusChipTone } from "../primitives/status-chip";
 import { Textarea } from "../primitives/textarea";
 import { VirtualList } from "../primitives/virtual-list";
+import { detailStyles } from "./assistant-detail.styles";
+
+const QuestionColumnContext = createContext<ComponentProps<typeof QuestionColumn>>();
+function useQuestionColumn() {
+  const column = useContext(QuestionColumnContext);
+  if (!column) throw new Error("Question rows require their column provider.");
+  return column;
+}
 
 function questionStatusTone(status: AssistantQuestion["status"]): StatusChipTone {
   switch (status) {
@@ -21,14 +29,9 @@ function questionStatusTone(status: AssistantQuestion["status"]): StatusChipTone
   }
 }
 
-function PendingQuestionAnswer(props: {
-  question: AssistantQuestion;
-  disabled: boolean;
-  disabledReason?: string;
-  answer: string;
-  onAnswerInput: (questionId: string, value: string) => void;
-  onAnswer: (question: AssistantQuestion, answerText?: string) => void;
-}) {
+function PendingQuestionAnswer(props: { question: AssistantQuestion }) {
+  const column = useQuestionColumn();
+  const answer = () => column.questionAnswers[props.question.id] ?? "";
   return (
     <div class={stylex.attrs(assistantUtilityStyles.mt3, assistantUtilityStyles.flex,
       assistantUtilityStyles.flexCol, assistantUtilityStyles.gap2).class}>
@@ -37,14 +40,14 @@ function PendingQuestionAnswer(props: {
           {(choice) => (
             <ActionButton
               tooltip={choice.description}
-              disabled={props.disabled}
-              disabledReason={props.disabledReason}
+              disabled={column.disabled}
+              disabledReason={column.disabledReason}
               icon={choice.recommended
                 ? <Check class={stylex.attrs(assistantUtilityStyles.h4, assistantUtilityStyles.w4).class} />
                 : undefined}
               variant={choice.recommended ? "default" : "secondary"}
               class={stylex.attrs(assistantUtilityStyles.justifyStart).class}
-              onClick={() => props.onAnswer(props.question, choice.answerText)}
+              onClick={() => column.onAnswer(props.question, choice.answerText)}
             >
               {choice.label}
             </ActionButton>
@@ -52,19 +55,20 @@ function PendingQuestionAnswer(props: {
         </For>
       </div>
       <Textarea
-        rows="3"
-        disabled={props.disabled}
-        value={props.answer}
-        onKeyDown={submitOnEnter(() => props.onAnswer(props.question))}
-        onInput={(event) => props.onAnswerInput(props.question.id, event.currentTarget.value)}
+        rows="5"
+        aria-label={`Answer: ${props.question.prompt}`}
+        disabled={column.disabled}
+        value={answer()}
+        onKeyDown={submitOnEnter(() => { if (!column.disabled && answer().trim()) column.onAnswer(props.question); })}
+        onInput={(event) => column.onAnswerInput(props.question.id, event.currentTarget.value)}
         placeholder="Answer this question."
       />
       <ActionButton
         tooltip="Send answer to assistant"
-        disabled={props.disabled}
-        disabledReason={props.disabledReason}
+        disabled={column.disabled || !answer().trim()}
+        disabledReason={column.disabled ? column.disabledReason : "Enter an answer or choose a suggested response."}
         icon={<Save class={stylex.attrs(assistantUtilityStyles.h4, assistantUtilityStyles.w4).class} />}
-        onClick={() => props.onAnswer(props.question)}
+        onClick={() => { if (!column.disabled && answer().trim()) column.onAnswer(props.question); }}
       >
         Answer
       </ActionButton>
@@ -72,21 +76,16 @@ function PendingQuestionAnswer(props: {
   );
 }
 
-function QuestionCard(props: {
-  question: AssistantQuestion;
-  disabled: boolean;
-  disabledReason?: string;
-  answer: string;
-  onAnswerInput: (questionId: string, value: string) => void;
-  onAnswer: (question: AssistantQuestion, answerText?: string) => void;
-  fileLinks?: FileLinkConfig;
-}) {
+function QuestionCard(props: { question: AssistantQuestion }) {
+  const column = useQuestionColumn();
   return (
     <article class={stylex.attrs(
+      detailStyles.readable,
       assistantUtilityStyles.borderL2,
       assistantUtilityStyles.py3,
       assistantUtilityStyles.pl4,
       assistantUtilityStyles.pr2,
+      detailStyles.questionInset,
       props.question.status === "answered"
         ? assistantPanelStyles.borderEmerald
         : props.question.status === "pending"
@@ -97,7 +96,7 @@ function QuestionCard(props: {
     ).class}>
       <div class={stylex.attrs(assistantUtilityStyles.text075, assistantUtilityStyles.fontSemibold,
         assistantUtilityStyles.textForeground).class}>
-        <FileLinkedText text={props.question.prompt} fileLinks={props.fileLinks} />
+        <FileLinkedText text={props.question.prompt} fileLinks={column.fileLinks} />
       </div>
       <div class={stylex.attrs(assistantUtilityStyles.mt1, assistantUtilityStyles.flex,
         assistantUtilityStyles.flexWrap, assistantUtilityStyles.itemsCenter, assistantUtilityStyles.gap2,
@@ -109,18 +108,13 @@ function QuestionCard(props: {
       <Show when={props.question.status === "pending"}>
         <PendingQuestionAnswer
           question={props.question}
-          disabled={props.disabled}
-          disabledReason={props.disabledReason}
-          answer={props.answer}
-          onAnswerInput={props.onAnswerInput}
-          onAnswer={props.onAnswer}
         />
       </Show>
       <Show when={props.question.answerText}>
         {(answer) => (
           <div class={stylex.attrs(assistantUtilityStyles.mt3, assistantUtilityStyles.text0675,
             assistantUtilityStyles.leading5, assistantUtilityStyles.textMuted).class}>
-            <FileLinkedText text={answer()} fileLinks={props.fileLinks} />
+            <FileLinkedText text={answer()} fileLinks={column.fileLinks} />
           </div>
         )}
       </Show>
@@ -139,17 +133,21 @@ export function QuestionColumn(props: {
   onAnswer: (question: AssistantQuestion, answerText?: string) => void;
   fileLinks?: FileLinkConfig;
 }) {
+  const renderQuestion = (question: AssistantQuestion) => <QuestionCard question={question} />;
   return (
-    <section class={stylex.attrs(assistantUtilityStyles.flex, assistantUtilityStyles.minH0,
+    <QuestionColumnContext.Provider value={props}><section class={stylex.attrs(props.questions.length > 8 ? detailStyles.collection : detailStyles.questionFlow, detailStyles.readable, assistantUtilityStyles.flex, assistantUtilityStyles.minH0,
       assistantUtilityStyles.flexCol).class}>
       <div class={stylex.attrs(assistantUtilityStyles.mb3, assistantUtilityStyles.text0585,
         assistantUtilityStyles.fontSemibold, assistantUtilityStyles.uppercase, assistantUtilityStyles.tracking018,
         assistantUtilityStyles.textMuted).class}>
         {props.title}
       </div>
-      <VirtualList
-        class={stylex.attrs(assistantUtilityStyles.minH0, assistantUtilityStyles.flex1,
-          assistantUtilityStyles.pr2).class}
+      <Show when={props.questions.length > 8} fallback={
+        <For each={props.questions} fallback={<p class={stylex.attrs(detailStyles.caption).class}>{props.emptyMessage}</p>}>
+          {renderQuestion}
+        </For>
+      }><VirtualList
+        class={stylex.attrs(assistantUtilityStyles.minH0, assistantUtilityStyles.flex1).class}
         contentClass={stylex.attrs(assistantUtilityStyles.wFull).class}
         itemClass={stylex.attrs(assistantUtilityStyles.pb3).class}
         items={props.questions}
@@ -165,18 +163,8 @@ export function QuestionColumn(props: {
           </div>
         }
       >
-        {(question) => (
-          <QuestionCard
-            question={question}
-            disabled={props.disabled}
-            disabledReason={props.disabledReason}
-            answer={props.questionAnswers[question.id] ?? ""}
-            onAnswerInput={props.onAnswerInput}
-            onAnswer={props.onAnswer}
-            fileLinks={props.fileLinks}
-          />
-        )}
-      </VirtualList>
-    </section>
+        {renderQuestion}
+      </VirtualList></Show>
+    </section></QuestionColumnContext.Provider>
   );
 }

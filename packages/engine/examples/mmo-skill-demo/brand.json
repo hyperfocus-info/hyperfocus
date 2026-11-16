@@ -1,0 +1,10 @@
+{
+  "name": "MMO Skill Demo",
+  "description": "MMO Skill Demo interactive example.",
+  "branding": {
+    "mark": "shield",
+    "color": "#c399fb",
+    "background": "#15131c"
+  },
+  "social": {}
+}

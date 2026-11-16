@@ -1,15 +1,10 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX, type Setter } from "solid-js";
+import {    type JSX } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowUp, ArrowUpRight, Brain, Bot, Calendar, Check, CheckSquare2, CircleAlert, CirclePause,
-  CircleHelp, CirclePlay, ClipboardList, CopyPlus, Cpu, FlaskConical, Folder, Gauge, Globe, ListFilter, ListChecks,
-  Logs, MessageSquare, Plus, RefreshCcw, Save, Split, Square, SquarePen, Trash2 } from "lucide-solid";
-import { cn, toProperCase } from "../../lib/utils";
-import { type AssistantEditorDraft, type AssistantDetailTab, type BackgroundJobEditorDraft, COMPOSER_REASONING_STRENGTHS,
-  DEFAULT_COMPOSER_REASONING_STRENGTH, type AssistantRosterSort, getComposerControlState, getExecutionModelOptionsForAgent,
-  getSelectedAssistant, getVisibleAssistants, harnessStore } from "../../harness-store";
-import { DetailEmptyState, LeftPaneEmptyState, LeftPaneFilterBlock, LeftPaneHeader, LeftPaneListSection,
-  LeftPaneSearchInput, LeftPaneSearchMenu, LeftPaneShell, type LeftPaneSearchMenuItem } from "../primitives/left-pane";
-import { assistantPanelStyles, assistantUtilityStyles } from "../assistants-panel.styles";
+import { ArrowDown, Bot, Calendar, CirclePause, CirclePlay, Folder, Globe, ListFilter, ListChecks, Trash2 } from "lucide-solid";
+import {  toProperCase } from "../../lib/utils";
+import {    type AssistantRosterSort, harnessStore } from "../../harness-store";
+import {     type LeftPaneSearchMenuItem } from "../primitives/left-pane";
+import {  assistantUtilityStyles } from "../assistants-panel.styles";
 
 function assistantScopeMenuItem(
   state: typeof harnessStore.state,

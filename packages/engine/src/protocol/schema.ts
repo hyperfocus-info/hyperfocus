@@ -1,3 +1,4 @@
+import { isRecord as isPlainObject } from "@hyperfocus/utilities/records";
 export type PrimitiveFieldType = "u8" | "u16" | "u32" | "i16" | "i32" | "f32" | "f64" | "bool";
 export type StringFieldType = `string:${number}`;
 export type ScalarFieldType = PrimitiveFieldType | StringFieldType;
@@ -185,9 +186,7 @@ function parseStringType(type: StringFieldType) {
   return maxLength;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function isSchemaDefinition(value: unknown): value is SchemaDefinition {
   return isPlainObject(value);

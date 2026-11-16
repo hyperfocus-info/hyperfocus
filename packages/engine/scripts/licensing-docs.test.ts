@@ -1,3 +1,4 @@
+import { annualRoyalty } from "./test-support/licensing-oracle.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -8,10 +9,6 @@ const model = readFileSync(join(root, "docs", "licensing-model.md"), "utf8");
 const readme = readFileSync(join(root, "readme.md"), "utf8");
 const readiness = readFileSync(join(root, "docs", "readiness-roadmap.md"), "utf8");
 const publicLicensingText = [license, model, readme, readiness].join("\n");
-
-function annualRoyalty(adjustedRevenue: number): number {
-  return 0.05 * Math.max(0, adjustedRevenue - 50_000);
-}
 
 describe("public licensing contract", () => {
   test("uses a five-percent marginal royalty above USD 50,000", () => {

@@ -1,0 +1,28 @@
+[data-hf-table] [hidden]{display:none!important}
+[data-hf-table] th button{font:inherit;color:inherit;background:transparent;border:0;text-align:inherit;white-space:nowrap;min-height:32px;cursor:pointer;padding:4px;display:inline-flex;align-items:center;gap:6px}
+[data-hf-table] td{white-space:nowrap}
+.hf-table-sort{opacity:0;transition:opacity var(--hf-motion-fast,120ms) ease}
+[data-hf-table] th:hover .hf-table-sort,[data-hf-table] th:focus-within .hf-table-sort{opacity:.55}
+[data-hf-table] th .hf-table-sort[data-active=true]{opacity:1}
+.hf-table-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-block:12px;font-size:12px;color:var(--hf-table-muted,var(--hf-color-text-muted,var(--muted,GrayText)))}
+.hf-table-toolbar[data-inline]{margin:0}
+.hf-table-toolbar[data-inline]>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.hf-table-toolbar button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:6px 12px;font:inherit;font-size:var(--hf-font-body,14px);font-weight:400;color:var(--hf-table-text,var(--hf-color-text,CanvasText));background:var(--hf-table-surface,var(--hf-color-surface,Canvas));border:1px solid var(--hf-table-border,var(--hf-color-border,GrayText));border-radius:var(--hf-radius,6px);cursor:pointer;transition:background-color var(--hf-motion-fast,100ms) ease}
+.hf-table-toolbar button:hover{background:var(--hf-color-selection,ButtonFace)}
+.hf-table-toolbar button:focus-visible{outline:2px solid var(--hf-table-focus,var(--hf-color-focus,Highlight));outline-offset:2px}
+.hf-table-columns{box-sizing:border-box;width:min(420px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;border:1px solid var(--hf-table-border,var(--hf-color-border,var(--line,GrayText)));border-radius:14px;background:var(--hf-table-surface,var(--hf-color-overlay,var(--surface,Canvas)));color:var(--hf-table-text,var(--hf-color-text,var(--text,CanvasText)));padding:20px;box-shadow:0 18px 64px rgb(0 0 0/.2)}
+.hf-table-columns::backdrop{background:rgb(0 0 0 / .55)}
+.hf-table-columns h2{padding:0;margin:0 0 12px;font-size:18px}.hf-table-columns p{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.hf-table-column-search{box-sizing:border-box;width:100%;padding:10px 12px;font:inherit;font-weight:400;border:1px solid var(--hf-table-border,var(--hf-color-border,GrayText));border-radius:8px;background:inherit;color:inherit}
+.hf-table-column-count{margin:12px 0 0;color:var(--hf-table-muted,var(--hf-color-text-muted,GrayText))}
+.hf-table-column-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;bottom:-20px;background:var(--hf-table-surface,var(--hf-color-overlay,var(--surface,Canvas)));padding:12px 0}
+.hf-table-columns button{font:inherit;font-weight:400;border:1px solid var(--hf-table-border,var(--hf-color-border,GrayText));border-radius:6px;background:inherit;color:inherit;cursor:pointer}
+.hf-table-columns li{padding:6px;border-radius:8px}.hf-table-columns li:hover{background:var(--hf-table-hover,var(--hf-color-selection,rgb(48 180 170/.08)))}
+.hf-table-columns .hf-table-column-grip{display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:36px;cursor:grab;border:0;color:var(--hf-table-muted,var(--hf-color-text-muted,GrayText))}
+.hf-table-columns li>button:not(.hf-table-column-grip){opacity:0}.hf-table-columns li:hover>button,.hf-table-columns li:focus-within>button{opacity:1}
+@media(hover:none),(pointer:coarse){.hf-table-columns li>button:not(.hf-table-column-grip){opacity:1}.hf-table-sort{opacity:.55}}
+@media(prefers-reduced-motion:reduce){.hf-table-sort{transition:none}}
+.hf-table-columns ol{list-style:none;margin:16px 0;padding:0;display:grid;gap:8px}
+.hf-table-columns li{display:flex;align-items:center;gap:8px}.hf-table-columns label{flex:1;min-width:0;display:flex;align-items:center;gap:10px;font-size:13px;overflow-wrap:anywhere}.hf-table-columns button{min-height:36px;min-width:36px}.hf-table-columns input[type=checkbox]{width:18px;height:18px;flex:none}.hf-table-done{margin-left:8px}
+.hf-table-columns :focus-visible,[data-hf-table] :focus-visible{outline:2px solid var(--hf-table-focus,var(--hf-color-focus,var(--accent,Highlight)));outline-offset:2px}
+@media(pointer:coarse){.hf-table-columns button,.hf-table-columns label,[data-hf-table] th button,.hf-table-toolbar button{min-height:44px}}

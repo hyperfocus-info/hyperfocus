@@ -87,6 +87,28 @@ function registerWorkspaceProjectCommandTests(serverTest: ServerTestRegistrar, f
         expect(added.payload.resolution).toBe("created-project");
         socket.close();
     });
+    serverTest("rejects unavailable Windows project roots without changing workspace ownership", async () => {
+        if (process.platform !== "win32") return;
+        const unavailableDrive = "ZYXWVUTSRQPONMLKJIHGFED".split("")
+            .find((drive) => !existsSync(`${drive}:\\`));
+        if (!unavailableDrive) return;
+        const { port, repository } = fixture;
+        const projectsBefore = repository.loadWorkspace().projects.map((project) => project.id);
+        const socket = createSocket(port);
+        await waitForEvent(socket, "connection.ready");
+        const rejectedPromise = waitForEvent(socket, "command.rejected",
+            (event) => event.requestId === "req-create-unavailable-drive");
+        socket.send(JSON.stringify({
+            type: "project.create",
+            requestId: "req-create-unavailable-drive",
+            payload: { rootPath: `${unavailableDrive}:\\missing-project` }
+        }));
+
+        const rejected = await rejectedPromise;
+        expect(rejected.payload.detail).toContain(`Project drive ${unavailableDrive}: is unavailable`);
+        expect(repository.loadWorkspace().projects.map((project) => project.id)).toEqual(projectsBefore);
+        socket.close();
+    });
     serverTest("initializes git with a baseline commit for non-git projects", async () => {
         const { port } = fixture;
         const nonGitRoot = fixture.createTempDir(`non-git-${crypto.randomUUID()}`);
@@ -237,7 +259,7 @@ function registerWorkspaceProjectLifecycleTests(serverTest: ServerTestRegistrar,
             questionId: questionRun.payload.run.questions[0]!.id,
             content: "api/users/[id]"
         });
-        expect(complete.payload.assistantMessage.content).toBe("main execution result");
+        expect(complete.payload.assistantMessage.content).toBe("main execution result\n\nVerification unverified: no task-specific checks were established.");
         socket.close();
     });
     serverTest("removes final project and returns to empty workspace", async () => {
@@ -301,7 +323,7 @@ function registerWorkspaceProjectLifecycleTests(serverTest: ServerTestRegistrar,
         expect(restoredProject.session.messages.length).toBeGreaterThanOrEqual(3);
         expect(restoredProject.session.messages[0].content).toBe("simple task");
         expect(restoredProject.session.messages.some((message: any) => message.kind === "run-milestones")).toBe(true);
-        expect(restoredProject.session.messages.at(-1).content).toBe("main execution result");
+        expect(restoredProject.session.messages.at(-1).content).toBe("main execution result\n\nVerification unverified: no task-specific checks were established.");
         expect(restoredProject.lastRun?.status).toBe("completed");
         expect(restoredProject.lastRun?.retryable).toBe(true);
         nextSocket.close();

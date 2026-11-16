@@ -1,5 +1,5 @@
 const DEFAULT_DATABASE_NAME = "hyperfocus-save-profiles";
-const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
+const DEFAULT_MAX_BYTES = 4194304;
 const DEFAULT_MAX_RETRIES = 16;
 const STORE_NAME = "profiles";
 

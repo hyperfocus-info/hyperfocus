@@ -1,3 +1,4 @@
+import { isFiniteNumber } from "@hyperfocus/utilities/math";
 import { finiteOr, rectHeight, rectWidth, type Renderable, type RenderRectLike, type RenderPoint, type RenderPointBuffer } from "./draw-data.ts";
 
 export type SpriteSheetFrameConfig = {
@@ -116,9 +117,7 @@ function renderableZ(call: Renderable) {
   return typeof call === "function" ? 0 : finiteOr(call.z, 0);
 }
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
+
 
 export function sortRenderCallsByY(calls: readonly Renderable[], getY?: (call: Renderable) => number | undefined): Renderable[] {
   return sortRenderCallsByYInto(calls, [], getY);

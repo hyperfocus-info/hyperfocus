@@ -1,3 +1,6 @@
+
+
+import { hypot } from '../math/simulation.ts';
 export const RIGID_DEBUG_SEGMENT_STRIDE_3D = 7;
 export const RIGID_DEBUG_STATIC_3D = 0;
 export const RIGID_DEBUG_DYNAMIC_3D = 1;
@@ -18,9 +21,18 @@ export const HANDLE_STRIDE = 65_536;
 export const MAX_GENERATION = 0xffff_ffff;
 export const POSITION_SLOP = 1e-5;
 export const POSITION_PERCENT = 0.8;
+export const POSITION_ANGULAR_LIMIT = 0.2;
 export const CCD_EPSILON = 1e-8;
 export const MAX_ABSOLUTE_SCALAR = 1e12;
 export const MIN_POSITIVE_SCALAR = 1e-12;
+
+/** Validation shared by creation and live rotation, before either mutates state. */
+export function rigidQuaternionLength(x: number, y: number, z: number, w: number): number {
+  finite(x, "rotationX"); finite(y, "rotationY"); finite(z, "rotationZ"); finite(w, "rotationW");
+  const length = x === 0 && y === 0 && z === 0 && (w === 1 || w === -1) ? 1 : hypot(x, y, z, w);
+  if (length <= MIN_POSITIVE_SCALAR) throw new RangeError("rotation quaternion must be non-zero.");
+  return length;
+}
 
 export type ContactScratch = {
   normalX: number;
@@ -40,7 +52,7 @@ export function rayAabbUnit(
   output: SweepScratch,
 ): boolean {
   if (ox >= minX && ox <= maxX && oy >= minY && oy <= maxY && oz >= minZ && oz <= maxZ) {
-    const length = Math.hypot(dx, dy, dz) || 1;
+    const length = hypot(dx, dy, dz) || 1;
     output.time = 0; output.normalX = -dx / length; output.normalY = -dy / length; output.normalZ = -dz / length;
     return true;
   }
@@ -103,6 +115,4 @@ export function uint32(value: number, label: string): number {
   return value >>> 0;
 }
 
-export function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.max(minimum, Math.min(maximum, value));
-}
+export { clampLowerFirst as clamp } from "@hyperfocus/utilities/math";

@@ -4,6 +4,12 @@
 
 `@hyperfocus/engine/ui` remains the zero-dependency default renderer. Pass the same controller to `createMmoUiShell` when a project wants the supplied DOM UI.
 
+Toolbar `icon` strings are text, never HTML. A browser host that owns authored SVG
+may provide `renderToolbarIcon({ action, document })` to return a DOM node; the
+renderer clones that node into its decorative icon slot. The controller's action
+data and `ui/core` stay DOM-free. The MMO Skill Demo uses this adapter for its
+local SVG paths; do not parse arbitrary action text as markup.
+
 ## Vanilla DOM renderer
 
 ```ts

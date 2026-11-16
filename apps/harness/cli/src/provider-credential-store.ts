@@ -1,4 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { spawnBackgroundProcessSync } from "@hyperfocus/desktop-runtime/process";
+import { encodeStorageValue,readStoredBytes } from "@hyperfocus/serialization";
+import { isRecord } from "@hyperfocus/utilities/records";
+import { existsSync,mkdirSync,readFileSync,renameSync,rmSync,writeFileSync } from "node:fs";
 import path from "node:path";
 
 export type ProviderCredential = "openai" | "google" | "anthropic";
@@ -107,7 +110,7 @@ function createWindowsDpapiProviderCredentialStore(filePath: string): ProviderCr
       return createEmptyEncryptedCredentialFile();
     }
 
-    const parsed: unknown = JSON.parse(readFileSync(filePath, "utf8"));
+    const parsed: unknown = readStoredBytes(readFileSync(filePath));
     if (!isRecord(parsed) || parsed.version !== 1 || parsed.protection !== "windows-dpapi-current-user" || !isRecord(parsed.credentials)) {
       throw new Error(`Unsupported provider credential file: ${filePath}`);
     }
@@ -129,7 +132,7 @@ function createWindowsDpapiProviderCredentialStore(filePath: string): ProviderCr
   function writeFile(file: EncryptedCredentialFile) {
     mkdirSync(path.dirname(filePath), { recursive: true });
     const tempPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-    writeFileSync(tempPath, `${JSON.stringify(file, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    writeFileSync(tempPath, encodeStorageValue(file), { mode: 0o600 });
     renameSync(tempPath, filePath);
   }
 
@@ -159,7 +162,7 @@ function createEmptyEncryptedCredentialFile(): EncryptedCredentialFile {
 }
 
 function runDpapi(script: string, input: string) {
-  const result = Bun.spawnSync({
+  const result = spawnBackgroundProcessSync({
     cmd: ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
     stdin: Buffer.from(input, "utf8"),
     stdout: "pipe",
@@ -177,8 +180,4 @@ function runDpapi(script: string, input: string) {
     throw new Error(`Windows credential protection failed${detail ? `: ${detail}` : "."}`);
   }
   return output;
-}
-
-function isRecord(input: unknown): input is Record<string, unknown> {
-  return Boolean(input) && typeof input === "object" && !Array.isArray(input);
 }

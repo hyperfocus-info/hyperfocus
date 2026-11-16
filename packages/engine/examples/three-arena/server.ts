@@ -1,8 +1,10 @@
+import { cleanName, cleanRoomId, cleanProgressionId, cleanEffectIds, clampNumber, boolFrom, objectFrom } from "./src/server-fields.ts";
+import { isRecord } from "@hyperfocus/utilities/records";
 import { dirname, extname, resolve, sep } from "node:path";
 import { threeArenaStateSchema, type ThreeArenaEncodedState } from "./binary-state.ts";
 import { createAuthoritativeServer, createProjectedRoomType, type AuthoritativePlayer } from "@hyperfocus/engine/server";
 import { assertDistinctPorts, parseTcpPort, relativePathWithin } from "@hyperfocus/engine/tooling/server";
-import { truncateUtf8 } from "@hyperfocus/engine/core";
+
 
 type WeaponProgressionState = {
   id: string;
@@ -80,6 +82,7 @@ const MAX_ROOM_SHOTS = 256;
 const ARENA_LIMIT = 5_000;
 
 const mimeTypes: Record<string, string> = {
+  ".webmanifest": "application/manifest+json",
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
@@ -107,54 +110,21 @@ function makeId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-function cleanName(value: unknown): string {
-  if (typeof value !== "string") return `Player ${Math.floor(Math.random() * 900 + 100)}`;
-  const cleaned = truncateUtf8(value.trim().replace(/\s+/g, " "), 32);
-  return cleaned || `Player ${Math.floor(Math.random() * 900 + 100)}`;
-}
 
-function cleanRoomId(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const cleaned = value.trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
-  return cleaned || null;
-}
 
-function cleanProgressionId(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const cleaned = value.trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48);
-  return cleaned || null;
-}
 
-function cleanEffectIds(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  for (const entry of value.slice(0, 8)) {
-    const id = cleanProgressionId(entry);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    ids.push(id);
-  }
-  return ids;
-}
 
-function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue)) return fallback;
-  return Math.max(min, Math.min(max, numberValue));
-}
 
-function boolFrom(value: unknown): boolean {
-  return value === true || value === 1 || value === "true" || value === "1";
-}
 
-function objectFrom(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {};
-}
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
+
+
+
+
+
+
+
 
 function joinRequestName(request: unknown, player: AuthoritativePlayer): string {
   const data = objectFrom(request);
@@ -451,6 +421,7 @@ const threeArenaRoomType = createProjectedRoomType<ThreeArenaRoom, ThreeArenaEnc
 
 const authoritative = createAuthoritativeServer({
   transport: "websocket",
+  hostname: process.env.HOST?.trim() || "127.0.0.1",
   port: WS_PORT,
   tickRate: STATE_HZ,
   rooms: [threeArenaRoomType],
@@ -521,8 +492,9 @@ async function serveStatic(request: Request): Promise<Response> {
 
   const extension = extname(routePath).toLowerCase();
   const publicFile = routePath === "client.html" || routePath === "dist/client.js";
+  const publicBrand = /^brand\/[a-z0-9-]+\.(svg|png|ico|json|webmanifest)$/.test(routePath);
   const publicAsset = routePath.startsWith("assets/") && RUNTIME_ASSET_EXTENSIONS.has(extension);
-  if (!publicFile && !publicAsset) return new Response("Not found", { status: 404 });
+  if (!publicFile && !publicAsset && !publicBrand) return new Response("Not found", { status: 404 });
 
   return serveFile(resolve(STATIC_ROOT, routePath), STATIC_ROOT, request.method === "HEAD");
 }

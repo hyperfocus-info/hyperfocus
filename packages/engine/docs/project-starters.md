@@ -27,7 +27,23 @@ bun run create:project -- check ./my-game
 bun run build:game -- --project ./my-game
 ```
 
-`build:game` writes one disposable standalone HTML file under `dist/`. It does not add wrappers to `.hyperfocus` or generate one source file per scene, entity, or component. If you later add an ordinary TypeScript behavior, keep that authored file outside `.hyperfocus`; the source-aware build bundles it directly into the single HTML output.
+An installed `@hyperfocus/engine` also supports the same authoring lifecycle, without
+an editor checkout. With Bun and the package installed, create `author.ts`:
+
+```ts
+import { createProjectStarter } from "@hyperfocus/engine/tooling/create-project";
+import { buildPortableProject } from "@hyperfocus/engine/tooling/build-project";
+
+await createProjectStarter({ template: "top-down", outputDirectory: "./my-game" });
+console.log(await buildPortableProject({ projectDirectory: "./my-game" }));
+```
+
+Run `bun author.ts`. For an existing project, omit creation, which intentionally
+refuses to overwrite a directory. The installed package includes its standalone
+runtime, authoring bundles, declarations and esbuild dependency. Authoring requires
+Bun; browser engine imports do not load this host tooling.
+
+`build:game` defaults to a streaming web directory under `dist/web/`; `--offline` produces a complete HTML download. It does not add wrappers to `.hyperfocus`. Keep authored TypeScript outside `.hyperfocus`; literal dynamic imports become optional web chunks. See [asset delivery](project-delivery.md) for hosting and selection policies.
 
 ## Starter scope
 

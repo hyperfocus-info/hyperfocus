@@ -4,16 +4,16 @@ import type { ServerCommandContext } from "./context";
 import { emitExecutionControlUpdatedToAll, sendEvent } from "../transport/events";
 import { resolveProjectAgentRuntime } from "../workspace/preferences";
 import { emitProjectTrace, emitRunUpdated } from "../workspace/project-events";
-import { completeRunWithAssistantMessage, handleRunFailure } from "../execution/completion";
+import { handleRunFailure } from "../execution/completion";
 import { assertGlobalExecutionNotPaused, executeRunLifecycle } from "../execution/lifecycle";
 import { assertActiveThread, assertNoOtherWorkingRun, buildReadyPlanFromRun, requirePersistedThreadRun, requireRunById } from "../execution/state";
 import { createRunBudgetAdapter } from "../execution/run-context";
 import { enforceExecutionPreflight } from "../execution/preflight";
-import { assertExperimentPromotionPreconditions, createExperimentCommit, createExperimentLease, resolveGitHead, resolveGitRepoRoot, scheduleBranchfsRetentionPrune } from "../workspace/branchfs-guards";
+import { assertExperimentPromotionPreconditions, createExperimentCommit, createExperimentLease, resolveGitHead, resolveGitRepoRoot } from "../workspace/branchfs-guards";
 import { createMemoryEntryId, type ClientCommand } from "@hyperfocus/ai-core/protocol";
 import { emitNotificationsUpdatedToAll } from "../automation/background-events";
 
-type RunsCommandContext = Pick<ServerCommandContext, "ws" | "runtime" | "repository" | "runtimeRegistry" | "pendingBrowserApprovals" | "connections" | "osAdapters" | "derivedProgressHeartbeatMs" | "tokenUsageSession">;
+type RunsCommandContext = Pick<ServerCommandContext, "ws" | "runtime" | "repository" | "runtimeRegistry" | "pendingBrowserApprovals" | "connections" | "osAdapters" | "derivedProgressHeartbeatMs" | "tokenUsageSession"> & { queuedThreadInput?: boolean };
 
 const RUNS_PRIMARY_TYPES: ReadonlySet<ClientCommand["type"]> = new Set(["run.execute", "run.complete", "experiment.inspect", "experiment.promote"]);
 type MemoryCommand = Extract<ClientCommand, { type: "memory.create" | "memory.list" | "memory.inspect" | "memory.update" | "memory.reorder" | "memory.delete" }>;
@@ -96,15 +96,15 @@ case "run.execute": {
       assertGlobalExecutionNotPaused(repository);
       const projectId = command.payload.projectId;
       const project = runtime.getProject(projectId);
-      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project);
-      assertActiveThread(project, command.payload.threadId);
+      if (!context.queuedThreadInput) assertActiveThread(project, command.payload.threadId);
       assertNoOtherWorkingRun(repository, runtime, projectId, command.payload.threadId, command.payload.runId);
       const activeRun = requirePersistedThreadRun(repository, projectId, command.payload.threadId, command.payload.runId);
+      const agentRuntime = resolveProjectAgentRuntime(runtimeRegistry, project, activeRun);
       if (activeRun.status !== "ready") {
         throw new Error(`Run status ${activeRun.status} is not executable`);
       }
       await enforceExecutionPreflight(ws, command.requestId, runtime, repository, project, osAdapters);
-      const providerBrand = repository.getProviderBrand();
+      const providerBrand = activeRun.launchProfile?.providerBrand ?? repository.getProviderBrand();
       runtime.setProjectError(projectId, undefined, command.payload.threadId);
       runtime.setProjectStreaming(projectId, true, command.payload.threadId);
       runtime.clearStreaming(projectId, command.payload.threadId);
@@ -123,8 +123,8 @@ case "run.execute": {
           readyPlan: buildReadyPlanFromRun(activeRun),
           executionPlan: activeRun.plan,
           executionTarget: command.payload.target ?? activeRun.executionTarget ?? "current-project",
-          reasoningStrength: command.payload.reasoningStrength,
-          fastMode: command.payload.fastMode,
+          reasoningStrength: command.payload.reasoningStrength ?? activeRun.launchProfile?.reasoningStrength,
+          fastMode: command.payload.fastMode ?? activeRun.launchProfile?.fastMode,
           abortSignal: abortController.signal,
           derivedProgressHeartbeatMs,
           tokenUsageSession
@@ -154,18 +154,10 @@ case "run.execute": {
       return;
     }
 case "run.complete": {
-      const projectId = command.payload.projectId;
-      const project = runtime.getProject(projectId);
+      const project = runtime.getProject(command.payload.projectId);
       assertActiveThread(project, command.payload.threadId);
-      await completeRunWithAssistantMessage(ws, command.requestId, runtime, repository, pendingBrowserApprovals, connections, {
-        projectId,
-        threadId: command.payload.threadId,
-        runId: command.payload.runId,
-        assistantMessageContent: command.payload.assistantMessageContent,
-        partialReason: command.payload.partialReason
-      });
-      scheduleBranchfsRetentionPrune(project.rootPath);
-      return;
+      // Retain a typed rejection for older clients; only the execution owner may finalize work.
+      throw new Error("Run completion is owned by execution. Use run.execute or run.resume to finish the task.");
     }
 case "experiment.inspect": {
       const project = runtime.getProject(command.payload.projectId);

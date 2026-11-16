@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import {
   CLASS_LEVEL_STORAGE_KEY,
   CLASS_LOADOUT_STORAGE_KEY,
@@ -8,9 +9,7 @@ import {
 } from "./content-runtime.ts";
 import type { ClassLoadouts, NumericSettingKey, Settings } from "./content-runtime.ts";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 export function readStorageRecord(key: string): Record<string, unknown> {
   try {

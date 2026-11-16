@@ -1,4 +1,5 @@
-import { createPiSdkAgentAdapter, type PiApiKeyProvider, type PiSdkPromptWorkerRequest, type PiSdkPromptWorkerResponse } from "./pi-agent-adapter";
+import { createPiSdkAgentAdapter,type PiSdkPromptWorkerRequest,type PiSdkPromptWorkerResponse } from "./pi-agent-adapter";
+import { isPiApiKeyProvider } from "./pi-agent/provider-config";
 
 type PromptWorkerScope = {
   onmessage: ((event: MessageEvent<PiSdkPromptWorkerRequest>) => void | Promise<void>) | null;
@@ -47,8 +48,4 @@ function isPromptWorkerScope(value: unknown): value is PromptWorkerScope {
   return typeof value === "object" && value !== null
     && "onmessage" in value
     && typeof Reflect.get(value, "postMessage") === "function";
-}
-
-function isPiApiKeyProvider(value: string): value is PiApiKeyProvider {
-  return value === "openai" || value === "google" || value === "anthropic";
 }

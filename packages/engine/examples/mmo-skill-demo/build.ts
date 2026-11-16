@@ -1,3 +1,4 @@
+import { buildConfiguredBrand } from '@hyperfocus/branding/config';
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildExampleBundles } from "@hyperfocus/engine/tooling/example-build";
@@ -23,3 +24,5 @@ await buildExampleBundles("MMO Skill Demo", resolve(here, "dist"), [
 ]);
 
 console.info("Built MMO Skill Demo bundles.");
+
+await buildConfiguredBrand({configPath:import.meta.dir+'/brand.json',directory:import.meta.dir+'/brand',htmlPath:import.meta.dir+'/client.html'});

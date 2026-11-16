@@ -4,7 +4,7 @@ import { type MmoSkillDemoInput, type MmoSkillDemoState, type PlayerEntity } fro
 import { weaponMetadata } from "../shared-ability-catalog.ts";
 import { COMBAT_SLOTS, energyMax, energyValue } from "./combat-view.ts";
 import { abilityNameForSlot, labelize, panelRenderKey, worldEventLine } from "./live-ui-model.ts";
-import { ensureLiveUiStyle, toolbarIcons } from "./live-ui-style.ts";
+import { ensureLiveUiStyle, renderToolbarIcon, toolbarIcons } from "./live-ui-style.ts";
 import { panelSection, panelStack, statChip, statGrid, textRows } from "./live-ui-elements.ts";
 import { createCatalogPanel } from "./live-ui-catalog.ts";
 import { createCraftPanel } from "./live-ui-craft.ts";
@@ -139,6 +139,7 @@ export function setupUi(
   });
 
   const shell = createMmoUiShell({
+    renderToolbarIcon,
     root,
     login: false,
     title: "MMO Skill Demo",

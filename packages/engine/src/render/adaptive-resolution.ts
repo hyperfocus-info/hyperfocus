@@ -38,7 +38,7 @@ function unitInterval(value: number, label: string): number {
 
 /** Creates hysteretic dynamic-resolution policy without owning render targets. */
 export function createAdaptiveResolutionController(options: AdaptiveResolutionOptions = {}) {
-  const targetFrameMs = positiveFinite(options.targetFrameMs ?? 1000 / 60, "targetFrameMs");
+  const targetFrameMs = positiveFinite(options.targetFrameMs ?? 16.666666666666668, "targetFrameMs");
   const minScale = unitInterval(options.minScale ?? 0.5, "minScale");
   const maxScale = unitInterval(options.maxScale ?? 1, "maxScale");
   if (minScale > maxScale) throw new RangeError("minScale must not exceed maxScale.");

@@ -61,14 +61,17 @@ describe("ChatTranscript", () => {
     const message: TranscriptMessage = {
       id: "safe",
       role: "assistant",
-      content: "| A | B |\n| - | - |\n| 1 | 2 |\n\n<script>bad()</script>"
+      content: "| A | B |\n| - | - |\n| 1 | 2 |\n\n<script>bad()</script>\n\n[Unsafe](javascript:alert(1))"
     };
     const dispose = render(() => <ChatTranscript messages={[message]} stickToEnd={false} />, host);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(host.querySelector('[role="log"]')?.getAttribute("aria-label")).toBe("Chat transcript");
+    expect(host.querySelector('[role="log"]')?.getAttribute("aria-live")).toBe("off");
+    expect(host.querySelector('[role="log"]')?.getAttribute("tabindex")).toBe("0");
     expect(host.querySelector("table")).not.toBeNull();
     expect(host.querySelector("script")).toBeNull();
+    expect(host.querySelector("a")?.getAttribute("href") ?? "").not.toStartWith("javascript:");
     dispose();
 
     const emptyDispose = render(() => <ChatTranscript messages={[]} emptyMessage="Nothing here" />, host);

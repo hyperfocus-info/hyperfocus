@@ -14,5 +14,8 @@
     "bench:dungeon:quick": "bun run ./scripts/dungeon-20-player-bench.ts --ticks=60 --warmup=20",
     "audit:loops": "bun run ./scripts/gameplay-loop-audit.ts",
     "test": "bun test src/tests"
+  },
+  "dependencies": {
+    "@hyperfocus/utilities": "workspace:*"
   }
 }

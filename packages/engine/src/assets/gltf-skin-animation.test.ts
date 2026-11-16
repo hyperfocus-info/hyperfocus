@@ -6,9 +6,14 @@ import {
   GLTF_ANIMATION_PATH_TRANSLATION,
   cookGltfSkinAnimations,
   createGltfPoseOutput,
+  inspectGltfRigRestPose,
   evaluateGltfAnimationPose,
+  applyGltfAnimationClip,
+  resetGltfPose,
+  writeGltfSkinPalette,
   resolveAndCookGltfSkinAnimations,
 } from "./gltf-skin-animation.ts";
+import { applyGltfModelPoseOverrides, applyGltfModelRotationDelta, rebuildGltfPoseMatrices, writeGltfMatrixQuaternion } from "./gltf-pose-overrides.ts";
 import {
   MATERIAL_FLAG_SKINNED_3D,
   RENDER_COMMAND_FLAG_SKINNED_3D,
@@ -42,6 +47,7 @@ describe("vendor-neutral glTF skin and animation cooking", () => {
     expect(first).toEqual(second);
     const rig = first.rig!;
     expect(rig.nodeCount).toBe(4);
+    expect(rig.nodeIds).toEqual(["RigRoot", "Hip", "Tip", "Mesh"]);
     expect([...rig.nodeParents]).toEqual([-1, 0, 1, -1]);
     expect([...rig.nodeTopologicalOrder]).toEqual([0, 3, 1, 2]);
     expect(rig.meshes).toHaveLength(1);
@@ -62,22 +68,30 @@ describe("vendor-neutral glTF skin and animation cooking", () => {
     expect(first.outputBytes).toBeGreaterThan(0);
   });
 
+  test("captures model-space rest transforms for portable physical authoring", async () => {
+    const { rig } = await cookedFixture();
+    const rest = inspectGltfRigRestPose(rig);
+    expect([...rest.positions.subarray(3, 6)]).toEqual([1, 0, 0]);
+    expect([...rest.positions.subarray(6, 9)]).toEqual([1, 1, 0]);
+    closeArray(rest.rotations.subarray(0, 4), [0, 0, 0, 1]);
+  });
+
   test("evaluates LINEAR TRS and STEP rotation into caller-owned mesh-local palettes", async () => {
     const { rig } = await cookedFixture();
     const pose = createGltfPoseOutput(rig), palette = new Float32Array(32);
     const sampled = evaluateGltfAnimationPose(rig, { skeleton: 0, clip: 0, timeSeconds: 0.25, meshNode: 3 }, pose, palette);
     expect(sampled).toBe(0.25);
-    expect(pose.translations[2 * 3 + 1]).toBeCloseTo(0.25);
-    expect(pose.rotations[1 * 4 + 3]).toBeCloseTo(1);
+    expect(pose.translations[7]).toBeCloseTo(0.25);
+    expect(pose.rotations[7]).toBeCloseTo(1);
     expect(palette[12]).toBeCloseTo(1);
-    expect(palette[16 + 12]).toBeCloseTo(1);
-    expect(palette[16 + 13]).toBeCloseTo(0.25);
+    expect(palette[28]).toBeCloseTo(1);
+    expect(palette[29]).toBeCloseTo(0.25);
 
     evaluateGltfAnimationPose(rig, { skeleton: 0, clip: 0, timeSeconds: 0.75, meshNode: 3 }, pose, palette);
-    expect(pose.rotations[1 * 4 + 2]).toBeCloseTo(Math.SQRT1_2);
-    expect(pose.rotations[1 * 4 + 3]).toBeCloseTo(Math.SQRT1_2);
-    expect(palette[16 + 12]).toBeCloseTo(0.25, 4);
-    expect(palette[16 + 13]).toBeCloseTo(0, 4);
+    expect(pose.rotations[6]).toBeCloseTo(Math.SQRT1_2);
+    expect(pose.rotations[7]).toBeCloseTo(Math.SQRT1_2);
+    expect(palette[28]).toBeCloseTo(0.25, 4);
+    expect(palette[29]).toBeCloseTo(0, 4);
 
     const looped = new Float32Array(32);
     expect(evaluateGltfAnimationPose(rig, { skeleton: 0, clip: 0, timeSeconds: 1.25, loop: true, meshNode: 3 }, pose, looped)).toBe(0.25);
@@ -87,6 +101,38 @@ describe("vendor-neutral glTF skin and animation cooking", () => {
       return expected;
     })());
     expect(() => evaluateGltfAnimationPose(rig, { skeleton: 0, clip: 0, timeSeconds: 0 }, pose, pose.localMatrices.subarray(0, 32))).toThrow("must not alias");
+  });
+
+  test("rebuilds the same palette after portable pose-layer edits", async () => {
+    const { rig } = await cookedFixture();
+    const pose = createGltfPoseOutput(rig), palette = new Float32Array(32);
+    resetGltfPose(rig, pose);
+    expect(applyGltfAnimationClip(rig, 0, 0.25, false, pose)).toBe(0.25);
+    pose.translations[8] = 0.5;
+    writeGltfSkinPalette(rig, { skeleton: 0, meshNode: 3 }, pose, palette);
+    expect(palette[30]).toBeCloseTo(0.5);
+  });
+
+  test("applies stable model-space physics targets without replacing the skeletal pose runtime", async () => {
+    const { rig } = await cookedFixture();
+    const pose = createGltfPoseOutput(rig), palette = new Float32Array(32);
+    resetGltfPose(rig, pose); applyGltfAnimationClip(rig, 0, 0.25, false, pose);
+    applyGltfModelPoseOverrides(rig, pose, { overrides: [{ nodeId: "Tip", position: [2, 3, 4], rotation: [0, 0, 0, 1] }] });
+    writeGltfSkinPalette(rig, { skeleton: 0, meshNode: 3 }, pose, palette);
+    expect([...pose.worldMatrices.slice(44, 47)]).toEqual([2, 3, 4]);
+    expect([...pose.rotations.slice(8, 12)]).toEqual([0, 0, 0, 1]);
+    expect(() => applyGltfModelPoseOverrides(rig, pose, { overrides: [{ nodeId: "missing", position: [0, 0, 0], rotation: [0, 0, 0, 1] }] })).toThrow("stable node missing");
+  });
+
+  test("applies rotation deltas in model axes independently of parent bind orientation", async () => {
+    const { rig } = await cookedFixture(), pose = createGltfPoseOutput(rig), half = Math.SQRT1_2;
+    resetGltfPose(rig, pose); pose.rotations.set([0, 0, half, half], 4); rebuildGltfPoseMatrices(rig, pose);
+    const before = new Float32Array(4), after = new Float32Array(4), delta = [half, 0, 0, half] as const;
+    writeGltfMatrixQuaternion(pose.worldMatrices, 32, before, 0); applyGltfModelRotationDelta(rig, pose, { nodeId: "Tip", rotation: delta }); writeGltfMatrixQuaternion(pose.worldMatrices, 32, after, 0);
+    const expected = [delta[3] * before[0]! + delta[0] * before[3]! + delta[1] * before[2]! - delta[2] * before[1]!, delta[3] * before[1]! - delta[0] * before[2]! + delta[1] * before[3]! + delta[2] * before[0]!, delta[3] * before[2]! + delta[0] * before[1]! - delta[1] * before[0]! + delta[2] * before[3]!, delta[3] * before[3]! - delta[0] * before[0]! - delta[1] * before[1]! - delta[2] * before[2]!];
+    expect(Math.abs(after.reduce((sum, value, index) => sum + value * expected[index]!, 0))).toBeCloseTo(1, 5);
+    const boneLocalOrder = [before[3]! * delta[0] + before[0]! * delta[3] + before[1]! * delta[2] - before[2]! * delta[1], before[3]! * delta[1] - before[0]! * delta[2] + before[1]! * delta[3] + before[2]! * delta[0], before[3]! * delta[2] + before[0]! * delta[1] - before[1]! * delta[0] + before[2]! * delta[3], before[3]! * delta[3] - before[0]! * delta[0] - before[1]! * delta[1] - before[2]! * delta[2]];
+    expect(Math.abs(after.reduce((sum, value, index) => sum + value * boneLocalOrder[index]!, 0))).toBeLessThan(.999);
   });
 
   test("evaluates scale channels and decodes Uint16 joints with normalized integer weights", async () => {
@@ -126,7 +172,7 @@ describe("vendor-neutral glTF skin and animation cooking", () => {
     const integerCook = cookGltfSkinAnimations(integerDocument, [bytes]);
     expect(integerCook.ok).toBe(true);
     expect(integerCook.rig!.meshes[0]!.joints).toBeInstanceOf(Uint16Array);
-    closeArray(integerCook.rig!.meshes[0]!.weights.subarray(0, 4), [128 / 255, 127 / 255, 0, 0]);
+    closeArray(integerCook.rig!.meshes[0]!.weights.subarray(0, 4), [0.5019607843137255, 0.4980392156862745, 0, 0]);
   });
 
   test("hands cooked streams and evaluated palettes to BoundedScene3D and WebGL2 contracts without Three", async () => {

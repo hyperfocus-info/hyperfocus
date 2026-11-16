@@ -6,6 +6,65 @@ The boundary is intentionally content-neutral. Game rules stay in room types, wh
 
 ## Wire the server
 
+Room handlers can send a low-rate event to selected authenticated peers with
+`ctx.broadcast(event, { recipients: [player.id] })`. Recipient lists contain at
+most 256 unique nonempty player IDs, each at most 128 UTF-8 bytes. The list is
+validated, detached and restricted to current room members when enqueued; delivery
+also requires a live room connection. Unknown IDs, departed peers and later
+connections do not receive queued targeted events. An empty list sends to nobody;
+omitting the list preserves ordinary room-wide broadcasts. Applications own
+authorization and consent before selecting recipients. Existing event messages
+and client `onMessage` handle delivery; no separate signaling transport is needed.
+
+The optional `durability: 'durable'` still persists one room event through the
+existing outbox, independently of recipient availability. It is not an offline
+mailbox and does not persist delivery scope. Use transient events for ephemeral
+connection negotiation; do not replay durable room event logs as private messages.
+
+Admission permits one active connection per authenticated user across all rooms.
+
+`createAuthoritativeServer({ reconnectGraceMs })` optionally reserves seats for
+transient transport outages (integer 0–30,000 ms; default 0). Unexpected close codes
+1001, 1006, 1011, 1012 and 1013, plus explicit suspension code 4002, detach the socket and replication baseline while
+retaining the player in presence and room capacity. `player.connection` becomes
+undefined and `player.reconnectUntil` uses the server's `now()` clock. A fresh
+authenticated admission with the same user, session ID, explicit room ID and room
+type reattaches the same player ID without calling `onJoin` again. Room code can
+pause from this metadata; it must separately preserve/reconcile its own inputs.
+
+Expiry runs independently of simulation ticks and calls `onLeave` with
+`reconnect-timeout`. Clean close 1000 means `leave`; shutdown means `server-stop`. On recovery-enabled
+hosts, other terminal close codes (including custom codes and empty close frames)
+mean `connection-close`, so game policies can settle a played match rather than
+misclassifying the departure as a host failure. Recovery-disabled hosts retain
+the legacy `disconnect` reason.
+
+The browser-safe application close code `4002` reserves a recoverable transport
+suspension. `client.close({ mode: 'suspend' })` publishes `recovering` and stops
+automatic retries until `client.connect()` explicitly resumes with fresh token
+acquisition. It preserves the previous session for that token provider. The host
+still expires the reservation on schedule; this is not an indefinite pause.
+Default `client.close()` sends a terminal clean leave. Other application close
+codes do not acquire this suspension behavior.
+
+Live duplicate-login replacement remains terminal. Mismatched recovery admissions
+cannot evict a reserved player. Fresh one-use tokens should come from the client's
+existing `getToken` callback and must retain the authenticated session identity.
+Credential requests are fenced by connection generation: a token that resolves
+after close and a new connect cannot replace the newer socket. A rejected stale
+reconnect request likewise cannot schedule retries against the current session.
+This is live-client transport recovery, not tab reload, process-crash or host
+restart recovery. Recipient-scoped queued events are pinned to the original
+connection and cannot cross into its reattached replacement.
+A new admission replaces that user's previous presence. The server closes the
+superseded socket with reserved code `4001` (`SESSION_SUPERSEDED_CLOSE_CODE`) and
+an explanation. The authoritative client reports a terminal `failed` state and
+does not automatically reconnect, preventing two devices from repeatedly evicting
+each other. A deliberate `client.connect()` is allowed and obtains a fresh token
+when a token provider is configured. Hosts should display recovery rather than
+leaving the old room on a waiting screen. Independent test clients need distinct
+identities even when their room IDs differ.
+
 Create one operations object and pass its adapters into the authoritative server:
 
 ```ts
@@ -37,6 +96,25 @@ const server = createAuthoritativeServer({
 ```
 
 For durable gameplay services, construct `createDurableMmoServices` over `createSqliteDurableServiceStore` (single-node) or another serializable atomic store. Wrap the same session authority with `createDurableServiceAuthAdapter` so an active durable ban rejects room admission. Keep the service store handle outside room snapshots and close it after the authoritative server has drained.
+
+Hosts with revocable credentials can implement
+`AuthAdapter.isCurrent(identity: Extract<AuthResult, { ok: true }>): boolean | Promise<boolean>`.
+Admission rechecks the verified identity after queued/asynchronous work and before
+publishing presence; reconnect checks inside the room lane before reattaching.
+The server awaits remote durable checks. False, a rejection or an exception rejects admission. If the room already joined the player,
+its leave hook receives `authentication-revoked` before presence is published.
+The check does not consume the one-use token again. Existing adapters can omit it.
+This closes in-flight admission races; hosts still explicitly evict already
+admitted sessions when credentials are revoked. Touch of Death guest recovery
+uses this hook to check its durable lease after account recovery.
+
+`AuthoritativeServerOptions.requestGuard(request)` is an optional synchronous
+HTTP boundary before `/healthz`, `/stats.json`, WebSocket upgrades, and the
+application HTTP handler. Return `undefined` to continue or a `Response` to end
+the request. Exceptions and invalid results (including promises) return a generic
+503 without exposing host error details. The default leaves existing routes
+unchanged. Touch of Death uses this boundary for its configured proxy/origin
+policy; applications own that policy and still authenticate socket admission.
 
 Generate at least 32 random bytes for every signing key and inject them through the deployment's secret mechanism. Do not put keys in project data, source control, backups, logs, health output, or client bundles. Terminate TLS before tokens reach this API.
 

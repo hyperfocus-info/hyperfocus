@@ -1,3 +1,4 @@
+import { tokens } from "@hyperfocus/ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 /** Atomic layout declarations shared by the assistant roster, inspector, and editor dialog. */
@@ -152,10 +153,10 @@ export const assistantUtilityStyles = stylex.create({
   smWAuto: { width: { default: null, "@media (min-width: 640px)": "auto" } },
   spaceY1: { gap: "0.25rem", display: "flex", flexDirection: "column", },
   spaceY2: { gap: "0.5rem", display: "flex", flexDirection: "column", },
-  text0575: { fontSize: "0.575rem" },
-  text0585: { fontSize: "0.585rem" },
-  text0625: { fontSize: "0.625rem" },
-  text0675: { fontSize: "0.675rem" },
+  text0575: { fontSize: tokens.fontCaption },
+  text0585: { fontSize: tokens.fontCaption },
+  text0625: { fontSize: tokens.fontCaption },
+  text0675: { fontSize: tokens.fontCaption },
   text075: { fontSize: "0.75rem" },
   text0775: { fontSize: "0.775rem" },
   text12: { fontSize: "1.2rem" },
@@ -164,17 +165,17 @@ export const assistantUtilityStyles = stylex.create({
   textForeground: { color: "var(--foreground)" },
   textLeft: { textAlign: "left" },
   textMuted: { color: "var(--muted)" },
-  tracking012: { letterSpacing: "0.12em" },
-  tracking014: { letterSpacing: "0.14em" },
-  tracking016: { letterSpacing: "0.16em" },
-  tracking018: { letterSpacing: "0.18em" },
+  tracking012: { letterSpacing: "normal" },
+  tracking014: { letterSpacing: "normal" },
+  tracking016: { letterSpacing: "normal" },
+  tracking018: { letterSpacing: "normal" },
   transition: {
     transitionDuration: "150ms",
     transitionProperty:
       "color, background-color, border-color, opacity, box-shadow, transform",
     transitionTimingFunction: "cubic-bezier(0.4, 0, 0.2, 1)",
   },
-  uppercase: { textTransform: "uppercase" },
+  uppercase: { textTransform: "none" },
   w3: { width: "0.75rem" },
   w35: { width: "0.875rem" },
   w4: { width: "1rem" },

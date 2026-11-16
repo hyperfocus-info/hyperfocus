@@ -158,6 +158,16 @@ test("transform hierarchy is fixed-capacity, reuses leaf slots, and has bounded 
   expect(hierarchy.count).toBe(capacity);
 });
 
+test('reapplying the same float32 pose does not dirty a subtree and real changes still propagate', () => {
+  const hierarchy = createTransformHierarchy3D(2), parent = hierarchy.create(), child = hierarchy.create(parent);
+  hierarchy.setPosition(parent, .1, .2, .3);hierarchy.setScale(parent, 1.1, 1.2, 1.3);hierarchy.setRotationQuaternion(parent, .1, .2, .3, .9);hierarchy.updateWorldMatrices();
+  const bytes = new Uint8Array(hierarchy.worldMatrices.buffer).slice();
+  hierarchy.setPosition(parent, .1, .2, .3);hierarchy.setScale(parent, 1.1, 1.2, 1.3);hierarchy.setRotationQuaternion(parent, .1, .2, .3, .9);
+  expect(hierarchy.updateWorldMatrices()).toBe(0);expect(new Uint8Array(hierarchy.worldMatrices.buffer)).toEqual(bytes);
+  hierarchy.setPosition(parent, .2, .2, .3);expect(hierarchy.updateWorldMatrices()).toBe(2);expect(hierarchy.worldMatrices[child * 16 + 12]).toBeCloseTo(.2);
+  expect(() => hierarchy.setPosition(parent, Infinity, 0, 0)).toThrow();expect(() => hierarchy.setRotationQuaternion(parent, 0, 0, 0, 0)).toThrow();
+});
+
 test("fixed inputs produce byte-identical matrices and visibility indexes", () => {
   const first = cameraFrustum();
   const second = cameraFrustum();

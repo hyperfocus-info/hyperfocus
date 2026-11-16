@@ -1,140 +1,100 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, getOwner, onCleanup, onMount, runWithOwner, type Accessor, type JSX, type Setter } from "solid-js";
+import { typography } from "@hyperfocus/ui";
+import { ProjectChatLayout } from "@hyperfocus/ui/composer";
+import {
+detectSupportedChatAttachment,
+isSupportedChatAttachment,
+MAX_CHAT_ATTACHMENT_COUNT
+} from "@hyperfocus/ai-core/chat-attachments";
+import {
+createRequestId,
+type AgentRunState,
+type AgentRunSummary,
+type AssistantActionMessageMetadata,
+type ChatAttachment,
+type ChatMessage,
+type ProviderBrand,
+type SetupAction
+} from "@hyperfocus/ai-core/protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
-  createRequestId,
-  type AssistantActionMessageMetadata,
-  type AgentRunState,
-  type AgentRunSummary,
-  type ChatAttachment,
-  type ChatMessage,
-  type ProviderBrand,
-  type SetupAction
-} from "@hyperfocus/ai-core/protocol";
-import {
-  detectSupportedChatAttachment,
-  isSupportedChatAttachment,
-  MAX_CHAT_ATTACHMENT_COUNT
-} from "@hyperfocus/ai-core/chat-attachments";
-import { ownCliStartingRequest } from "../terminal/terminal-transport";
-import {
-  canSelectProviderBrand,
-  COMPOSER_REASONING_STRENGTHS,
-  getEffectiveProviderBrandForAgent,
-  getActiveMode,
-  getCapabilityTags,
-  getBlockingSetupCheck,
-  getComposerControlState,
-  getExecutionModelOptionsForAgent,
-  getFallbackExecutionModelIdForAgent,
-  getModelCapability,
-  getResolvedModes,
-  harnessStore,
-  hasUsableApiKeyForProvider,
-  persistMergedLocalPreferences,
-  resolveUsablePiProviderBrand,
-  shouldShowSetupChecklist,
-  type ChatPaneTab,
-  type HarnessViewState,
-  type ViewProjectState
-} from "../harness-store";
-import { normalizeAppHotkeyPreferences } from "../lib/app-hotkeys";
-import { findChatFileReferenceAtPosition, findChatFileReferences, resolveChatFileTarget, type ChatFileLinkContext, type ChatFileTarget } from "../lib/chat-file-links";
-import { tooltipWithPrimaryHotkey } from "../lib/hotkey-hints";
-import { openIdeWindow } from "../lib/ide-window";
-import { uploadFiles } from "../lib/uploadthing";
-import { buildExperienceTimelineRows, type ChatTimelineRow, type TimelineLiveMessage } from "../lib/chat-timeline-model";
-import { formatShortTimestamp, resolveBrowserTimezone } from "../lib/time-format";
-import { getCompleteRun } from "../lib/run-status";
-import { runDetailRecoveries } from "../store/run-detail-state";
-import { formatProviderModelName } from "../lib/utils";
-import { pushToast } from "../toast-store";
-import { openBackgroundRunInJobsPane } from "../source-navigation";
-import { ActionButton, ActionStatus } from "./action-button";
-import { CliSessionPanel } from "./cli-session-panel";
-import { MarkdownContent } from "./markdown-content";
-import { MemoryPane } from "../memory/memory-pane";
-import { ModeEditorPanel } from "./mode-editor-panel";
-import { SetupChecklistCard } from "./setup-checklist-card";
-import { StreamedToolBlock } from "./streamed-tool-block";
-import { TerminalHistoryDialog } from "../terminal/terminal-history-dialog";
-import { ChatComposer } from "./primitives/chat-composer";
-import { Dialog } from "./primitives/dialog";
-import { CopyTextButton } from "./primitives/copy-text-button";
-import { DropdownControl } from "./primitives/dropdown";
-import { getAgentDropdownIcon, getModeDropdownIcon } from "./primitives/dropdown-option-icons";
-import { Input } from "./primitives/input";
-import { Popover } from "./primitives/popover";
-import { ScrollArea } from "./primitives/scroll-area";
-import { Textarea } from "./primitives/textarea";
-import { Tooltip } from "./primitives/tooltip";
-import { VirtualList } from "./primitives/virtual-list";
-import { Button } from "./primitives/button";
-import { persistDraftAttachments, readPersistedDraftAttachments } from "./chat/chat-draft-persistence";
-import {
-  Activity,
-  AlertTriangle,
-  Brain,
-  Bot,
-  Briefcase,
-  CalendarClock,
-  ClipboardList,
-  Clipboard,
-  Cpu,
-  Edit3,
-  FolderOpen,
-  Folder,
-  Gauge,
-  LoaderCircle,
-  MessageSquareMore,
-  Orbit,
-  Paperclip,
-  Pause,
-  Play,
-  RefreshCcw,
-  Plus,
-  ArrowDown,
-  Check,
-  File,
-  FileCode,
-  FileJson,
-  FileText,
-  Image,
-  SendHorizontal,
-  Terminal,
-  WandSparkles,
-  X,
-  Split
+Activity,
+AlertTriangle,
+Bot,
+Brain,
+Briefcase,
+CalendarClock,
+Check,
+Clipboard,
+ClipboardList,
+Cpu,
+File,
+Folder,
+FolderOpen,
+Gauge,
+MessageSquareMore,
+Orbit,
+Pause,
+Play,
+RefreshCcw,
+Split
 } from "lucide-solid";
+import { createEffect,createMemo,createSignal,For,getOwner,onCleanup,onMount,runWithOwner,Show,type Accessor,type JSX,type Setter } from "solid-js";
+import {
+canSelectProviderBrand,
+COMPOSER_REASONING_STRENGTHS,
+getActiveMode,
+getBlockingSetupCheck,
+getCapabilityTags,
+getComposerControlState,
+getEffectiveProviderBrandForAgent,
+getExecutionModelOptionsForAgent,
+getFallbackExecutionModelIdForAgent,
+getModelCapability,
+getResolvedModes,
+harnessStore,
+hasUsableApiKeyForProvider,
+persistMergedLocalPreferences,
+resolveUsablePiProviderBrand,
+shouldShowSetupChecklist,
+type ChatPaneTab,
+type HarnessViewState,
+type ViewProjectState
+} from "../harness-store";
+import { findChatFileReferenceAtPosition,findChatFileReferences,resolveChatFileTarget,type ChatFileLinkContext,type ChatFileTarget } from "../lib/chat-file-links";
+import { buildExperienceTimelineRows,type ChatTimelineRow,type TimelineLiveMessage } from "../lib/chat-timeline-model";
+import { openIdeWindow } from "../lib/ide-window";
+import { getCompleteRun } from "../lib/run-status";
+import { formatShortTimestamp,resolveBrowserTimezone } from "../lib/time-format";
+import { uploadFiles } from "../lib/uploadthing";
+import { formatProviderModelName } from "../lib/utils";
+import { openBackgroundRunInJobsPane } from "../source-navigation";
+import { runDetailRecoveries } from "../store/run-detail-state";
+import { TerminalHistoryDialog } from "../terminal/terminal-history-dialog";
+import { pushToast } from "../toast-store";
+import { ActionButton } from "./action-button";
 import { chatPanelStyles as styles } from "./chat-panel.styles";
 import { chatUtilityStyles } from "./chat-panel.utilities";
-import { TransientTranscriptRow } from "./chat-panel/transient-transcript-row";
-import { formatTokenCount, getComposerLookupOptionId } from "./chat-panel/chat-panel-model";
-export { formatCapabilityTag } from "./chat-panel/chat-panel-model";
-import { ChatSetupDialog } from "./chat-panel/chat-setup-dialog";
-import { ChatPanelHeader } from "./chat-panel/chat-panel-header";
-import { ChatTranscriptSurface } from "./chat-panel/chat-transcript-surface";
-import { ChatProjectSetupNotice } from "./chat-panel/chat-project-setup-notice";
 import { ChatComposerSurface } from "./chat-panel/chat-composer-surface";
 import { ChatExperimentDialog } from "./chat-panel/chat-experiment-dialog";
+import { ChatPanelHeader } from "./chat-panel/chat-panel-header";
+import { formatElapsedDuration,formatModeIntentLabel,formatTokenCount,getComposerLookup,getComposerLookupOptionId,getDirectoryName,getFastModeDescription,getFileName,getIdentityInitial,getSkillName } from "./chat-panel/chat-panel-model";
+import { ChatProjectSetupNotice } from "./chat-panel/chat-project-setup-notice";
+import { ChatSetupDialog } from "./chat-panel/chat-setup-dialog";
+import { ChatTranscriptSurface } from "./chat-panel/chat-transcript-surface";
+import { getCacheHitPercent } from "./chat-panel/context-usage";
+import { ChatPanelProvider,useChatPanel } from "./chat-panel/state/panel-context";
+import { TransientTranscriptRow } from "./chat-panel/transient-transcript-row";
+import { persistDraftAttachments,readPersistedDraftAttachments } from "./chat/chat-draft-persistence";
+import { MarkdownContent } from "./markdown-content";
+import { ModelSelect } from "./models/model-select";
+import { CopyTextButton } from "./primitives/copy-text-button";
+import { DropdownControl } from "./primitives/dropdown";
+import { getAgentDropdownIcon,getModeDropdownIcon } from "./primitives/dropdown-option-icons";
+import { SetupChecklistCard } from "./setup-checklist-card";
+export { formatCapabilityTag } from "./chat-panel/chat-panel-model";
 
-export function getReasoningStrengthDescription(strength: (typeof COMPOSER_REASONING_STRENGTHS)[number]) {
-  switch (strength) {
-    case "low":
-      return "Fastest pass with minimal internal deliberation.";
-    case "medium":
-      return "Balanced depth for routine implementation and review.";
-    case "high":
-      return "Default stronger reasoning for most coding work.";
-    case "extra-high":
-      return "Heaviest reasoning budget for hard debugging and planning.";
-  }
-}
-
-export function getFastModeDescription(enabled: boolean) {
-  return enabled
-    ? "Prefer lower-latency responses when current runtime and model support it."
-    : "Use standard response path with default latency and reasoning behavior.";
-}
+export { getReasoningStrengthDescription } from "./chat-panel/chat-panel-model";
+import { getReasoningStrengthDescription } from "./chat-panel/chat-panel-model";
 
 function isHarnessTranscriptMessage(message: ChatMessage) {
   return message.role === "assistant" || message.role === "system";
@@ -144,7 +104,6 @@ function getTranscriptRoleLabel(role: ChatMessage["role"]) {
   return role === "user" ? "You" : "Assistant";
 }
 
-function getIdentityInitial(label: string) { return label.trim().slice(0, 1).toUpperCase() || "A"; }
 
 function getCopyAriaLabel(message: ChatMessage) {
   return `Copy ${isHarnessTranscriptMessage(message) ? "harness" : message.role} message`;
@@ -614,6 +573,12 @@ function createChatSubmitAction(options: {
         return;
       }
       const content = project.draft.trim();
+      if ((project.session.isStreaming || project.threads.find(thread => thread.id === project.activeThreadId)?.lineage?.status === "running") && content) {
+        sendCommand({ type: "thread.input", requestId: createRequestId(), payload: {
+          projectId: project.id, threadId: project.activeThreadId, message: content, deliveryId: crypto.randomUUID(), mode: "queue"
+        } });
+        return;
+      }
       if (!content && draftAttachments().length === 0) {
         return;
       }
@@ -748,7 +713,7 @@ function createChatSetupActions(options: {
   autoExecutedRunId: Accessor<string | undefined>;
   executionPaused: () => boolean;
   getComposerControlPayload: () => { reasoningStrength: "low" | "medium" | "high" | "extra-high"; fastMode: boolean; };
-  handleExecuteRun: (runId: string) => void;
+  handleExecuteRun: (runId: string, useSavedControls?: boolean) => void;
   pendingQuestion: () => { status: "pending" | "deferred" | "answered"; id: string; prompt: string; required: boolean; askedAt: string; logicalQuestionId?: string | undefined; placeholder?: string | undefined; responseKind?: "choice" | "freeform" | undefined; answerText?: string | undefined; choices?: { id: string; description: string; label: string; answerText: string; recommended: boolean; }[] | undefined; intent?: { type: "assistant-create-intent"; projectId: string; threadId: string; sourcePrompt: string; suggestedName: string; defaultScope: "project" | "global"; purpose?: string | undefined; requiresPurpose?: boolean | undefined; } | { type: "assistant-action-intent"; sourcePrompt: string; actionKind: "pause" | "resume" | "create" | "chat" | "inspect" | "list-jobs" | "create-job" | "run-job" | "clone" | "answer-question" | "update-todo" | "recover"; questionId?: string | undefined; jobId?: string | undefined; jobPrompt?: string | undefined; todoId?: string | undefined; answerText?: string | undefined; assistantSelector?: string | undefined; candidateAssistantIds?: string[] | undefined; candidateJobIds?: string[] | undefined; candidateQuestionIds?: string[] | undefined; candidateTodoIds?: string[] | undefined; scheduleText?: string | undefined; } | undefined; answeredAt?: string | undefined; } | undefined;
   readyRun: Accessor<AgentRunState | undefined>;
   savePreferences: (overrides?: { providerBrand?: ProviderBrand; blockChatOnDirtyGitDefault?: boolean; }) => void;
@@ -775,7 +740,7 @@ function createChatSetupActions(options: {
           const next = Math.max(0, value - 100);
           if (next === 0 && readyRun()?.id === runId && autoExecutedRunId() !== runId && !executionPaused()) {
             clearCountdown();
-            handleExecuteRun(runId);
+            handleExecuteRun(runId, true);
             setAutoExecutedRunId(runId);
           }
           return next;
@@ -893,7 +858,7 @@ function createChatSetupActions(options: {
 }
 
 
-function createChatPanelController() {
+export function createChatPanelController() {
   const refs: {
     messageViewport?: HTMLDivElement;
     attachmentInput?: HTMLInputElement;
@@ -959,7 +924,7 @@ function createChatPanelController() {
       ? project.activeRun
       : undefined;
   };
-  const activeThreadIsStreaming = () => Boolean(workingRun());
+  const activeThreadIsStreaming = () => Boolean(workingRun()) || activeThread()?.lineage?.status === "running";
   const attachmentDraftKey = () => {
     const project = activeProject();
     return project ? `ai-harness:chat-draft:v2:${project.id}:${project.activeThreadId}` : undefined;
@@ -1230,7 +1195,7 @@ function createChatPanelController() {
     }
 
     if (activeThreadIsStreaming()) {
-      return { disabled: true, disabledReason: "Project is streaming", tooltip };
+      return { disabled: !content, disabledReason: content ? undefined : "Enter a follow-up message", tooltip: "Queue message · Ctrl+Enter sends now" };
     }
 
     if (uploadingAttachments()) {
@@ -1344,8 +1309,7 @@ function createChatPanelController() {
     />
   );
   const renderModelControl = (size: "sm" | "md" = "sm", className?: string, hideWhenSingleOption: boolean = true) => (
-    <DropdownControl
-      kind="select"
+    <ModelSelect
       ariaLabel="Select model"
       icon={<Cpu class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />}
       size={size}
@@ -1526,7 +1490,7 @@ function createChatPanelController() {
     if (executionPlan.gating.mode === "immediate") {
       clearCountdown();
       if (!executionPaused() && autoExecutedRunId() !== run.id) {
-        handleExecuteRun(run.id);
+        handleExecuteRun(run.id, true);
         setAutoExecutedRunId(run.id);
       }
       return;
@@ -1614,13 +1578,19 @@ function createChatPanelController() {
     activeProject, draftAttachments, hasVisionCapability, setDraftAttachments, setDraggingAttachments,
     setUploadingAttachments, state,
   });
-  const { handleAttachmentDragLeave, handleAttachmentDragOver, handleAttachmentDrop, handleRemoveAttachment, handleSelectAttachments, uploadAttachmentFiles } = attachmentActions;
+  const {
+    handleAttachmentDragLeave, handleAttachmentDragOver, handleAttachmentDrop,
+    handleRemoveAttachment, handleSelectAttachments,
+  } = attachmentActions;
 
   const composerLookupDomActions = createComposerLookupDomActions({
     composerLookupIndex, composerLookupKey, composerLookupOpen, owner, refs,
     setComposerCaret, setComposerLookupForcedClosed, setComposerLookupIndex, setDismissedComposerLookupKey,
   });
-  const { dismissComposerLookup, runWithChatPanelOwner, setComposerLookupActiveIndex, setComposerLookupMenuHidden, syncComposerCaret, syncComposerLookupDomVisibility, updateComposerLookupDomSelection } = composerLookupDomActions;
+  const {
+    dismissComposerLookup, runWithChatPanelOwner, setComposerLookupActiveIndex,
+    setComposerLookupMenuHidden, syncComposerCaret, syncComposerLookupDomVisibility,
+  } = composerLookupDomActions;
 
   const composerLookupActions = createComposerLookupActions({
     activeProject, chatFileLinkContext, composerLookup, composerLookupIndex, composerLookupKey,
@@ -1680,35 +1650,11 @@ function createChatPanelController() {
     return undefined;
   }
 
-  function handleStartLiveSession() {
-    if (executionPaused()) {
-      return;
-    }
-    const project = activeProject();
-    const runtime = selectedAgentRuntime();
-    if (!project || !runtime || runtime.agentId === "pi") return;
-    const requestId = createRequestId();
-    if (!sendCommand({
-      type: "cli-session.start",
-      requestId,
-      payload: {
-        projectId: project.id,
-        threadId: project.activeThreadId,
-        agentId: runtime.agentId,
-        cols: 120,
-        rows: 32,
-        prompt: project.draft.trim() || undefined,
-        runId: project.activeRun?.id
-      }
-    })) return;
-    ownCliStartingRequest(requestId, project.id, project.activeThreadId);
+  function handleExecuteRun(runId: string, useSavedControls = false) {
+    handleExecuteRunTarget(runId, "current-project", useSavedControls);
   }
 
-  function handleExecuteRun(runId: string) {
-    handleExecuteRunTarget(runId, "current-project");
-  }
-
-  function handleExecuteRunTarget(runId: string, target: "current-project" | "ephemeral-experiment") {
+  function handleExecuteRunTarget(runId: string, target: "current-project" | "ephemeral-experiment", useSavedControls = false) {
     if (executionPaused()) {
       return;
     }
@@ -1725,7 +1671,7 @@ function createChatPanelController() {
         threadId: project.activeThreadId,
         runId,
         target,
-        ...getComposerControlPayload()
+        ...(useSavedControls ? {} : getComposerControlPayload())
       }
     });
   }
@@ -1997,12 +1943,12 @@ function createChatPanelController() {
         }
       >
         <article class={stylex.attrs(chatUtilityStyles.themeSelectedSurface, chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded3xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.p4, chatUtilityStyles.shadowSm).class}>
-          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking02em, chatUtilityStyles.textVariableAccentStrong).class}>
+          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking02em, chatUtilityStyles.textVariableAccentStrong).class}>
             <Clipboard class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
             Plan summary
           </div>
           <MarkdownContent content={() => getPlanFromMessage(message)?.summary ?? ""} fileLinks={chatFileLinks()} />
-          <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted, chatUtilityStyles.mdGridCols2).class}>
+          <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap2, typography.body, chatUtilityStyles.textVariableMuted, chatUtilityStyles.mdGridCols2).class}>
             <div>Route: {getPlanFromMessage(message)?.route}</div>
             <div>Difficulty: {getPlanFromMessage(message)?.difficultyScore}%</div>
             <div>Parallel slots: {getPlanFromMessage(message)?.actualSubagentCount}</div>
@@ -2012,13 +1958,13 @@ function createChatPanelController() {
             <div>Correctness: {getPlanFromMessage(message)?.correctnessPolicy}</div>
           </div>
           <Show when={hasBranchfsSizeWarning()}>
-            <div class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.wFit, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap1, chatUtilityStyles.rounded, chatUtilityStyles.border, chatUtilityStyles.borderAmber300, chatUtilityStyles.bgAmber50, chatUtilityStyles.px2, chatUtilityStyles.py1, chatUtilityStyles.text0625rem, chatUtilityStyles.fontMedium, chatUtilityStyles.textAmber800).class}>
+            <div class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.wFit, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap1, chatUtilityStyles.rounded, chatUtilityStyles.border, chatUtilityStyles.borderAmber300, chatUtilityStyles.bgAmber50, chatUtilityStyles.px2, chatUtilityStyles.py1, typography.caption, chatUtilityStyles.fontMedium, chatUtilityStyles.textAmber800).class}>
               <AlertTriangle class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />
               BranchFS large
             </div>
           </Show>
           <div class={stylex.attrs(chatUtilityStyles.mt3, chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyBetween, chatUtilityStyles.gap3).class}>
-            <div class={stylex.attrs(chatUtilityStyles.minW0, chatUtilityStyles.text0575rem, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textVariableMuted).class}>
+            <div class={stylex.attrs(chatUtilityStyles.minW0, typography.caption, chatUtilityStyles.uppercase, chatUtilityStyles.tracking012em, chatUtilityStyles.textVariableMuted).class}>
               {formatShortTimestamp(message.createdAt)}
             </div>
             <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.justifyEnd, chatUtilityStyles.gap2).class}>
@@ -2349,7 +2295,7 @@ function createChatPanelController() {
       return undefined;
     }
 
-    const summary = `${Math.round(usage.usagePercent ?? 0)}% · ${formatTokenCount(usage.tokens)} / ${formatTokenCount(usage.contextWindow)} context used`;
+    const summary = usage.usagePercent === undefined ? "Current context usage unavailable" : `${Math.round(usage.usagePercent)}% · ${formatTokenCount(usage.tokens)} / ${formatTokenCount(usage.contextWindow)} context used`;
     const cacheHitPercent = getCacheHitPercent(usage);
     const cacheLine =
       cacheHitPercent === undefined
@@ -2360,15 +2306,6 @@ function createChatPanelController() {
     return [summary, cacheLine, totalProcessedLine, "Automatically compacts its context when needed."].filter(Boolean).join("\n");
   }
 
-  function getCacheHitPercent(usage: { tokens?: number; cachedInputTokens?: number }) {
-    const cachedInputTokens = usage.cachedInputTokens ?? 0;
-    const totalInputTokens = (usage.tokens ?? 0) + cachedInputTokens;
-    if (cachedInputTokens <= 0 || totalInputTokens <= 0) {
-      return undefined;
-    }
-
-    return Math.round((cachedInputTokens / totalInputTokens) * 100);
-  }
 
   function handleProviderBrandSelect(providerBrand: string) {
     if (providerBrand !== "gpt" && providerBrand !== "gemini" && providerBrand !== "claude") return;
@@ -2458,7 +2395,7 @@ function createChatPanelController() {
   }
 
   function renderComposerControlMenu() {
-    const disabledHint =
+    const disabledHint = () =>
       COMPOSER_REASONING_STRENGTHS.some((strength) => !composerControlState().availableStrengths.includes(strength)) ||
       !composerControlState().supportsFastMode
         ? "Unavailable for current runtime/model."
@@ -2467,18 +2404,19 @@ function createChatPanelController() {
     return (
       <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap2).class}>
         <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap05).class}>
-          <span class={stylex.attrs(chatUtilityStyles.px1, chatUtilityStyles.text0375rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Effort</span>
+          <span class={stylex.attrs(chatUtilityStyles.px1, typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableMuted).class}>Effort</span>
           <For each={COMPOSER_REASONING_STRENGTHS}>
             {(strength) => {
-              const enabled = composerControlState().availableStrengths.includes(strength);
-              const selected = selectedReasoningStrength() === strength;
+              const enabled = () => composerControlState().availableStrengths.includes(strength);
+              const selected = () => selectedReasoningStrength() === strength;
               return (
                   <button
                     type="button"
-                    disabled={!enabled}
-                    class={stylex.attrs(styles.composerMenuOption, chatUtilityStyles.wFull, chatUtilityStyles.roundedLg, chatUtilityStyles.px15, chatUtilityStyles.py1, chatUtilityStyles.textLeft, chatUtilityStyles.text0525rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.transition, chatUtilityStyles.hoverBgBlack5, chatUtilityStyles.disabledCursorNotAllowed, chatUtilityStyles.disabledOpacity50).class}
+                    disabled={!enabled()}
+                    aria-pressed={selected()}
+                    class={stylex.attrs(typography.control, styles.composerMenuOption).class}
                     onClick={() => {
-                      if (!enabled) {
+                      if (!enabled()) {
                         return;
                       }
                       handleReasoningStrengthSelect(strength);
@@ -2488,7 +2426,7 @@ function createChatPanelController() {
                       <span>{formatReasoningOptionLabel(strength)}</span>
                       <span class={stylex.attrs(styles.composerMenuOptionDescription).class}>{getReasoningStrengthDescription(strength)}</span>
                     </span>
-                    <Show when={selected}>
+                    <Show when={selected()}>
                       <Check class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />
                     </Show>
                   </button>
@@ -2498,18 +2436,19 @@ function createChatPanelController() {
         </div>
         <div class={stylex.attrs(chatUtilityStyles.hPx, chatUtilityStyles.bgBlack10).class} />
         <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap05).class}>
-          <span class={stylex.attrs(chatUtilityStyles.px1, chatUtilityStyles.text0375rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking016em, chatUtilityStyles.textVariableMuted).class}>Fast mode</span>
+          <span class={stylex.attrs(chatUtilityStyles.px1, typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.textVariableMuted).class}>Fast mode</span>
           <For each={[false, true] as const}>
             {(enabled) => {
-              const supported = !enabled || composerControlState().supportsFastMode;
-              const selected = selectedFastMode() === enabled;
+              const supported = () => !enabled || composerControlState().supportsFastMode;
+              const selected = () => selectedFastMode() === enabled;
               return (
                   <button
                     type="button"
-                    disabled={!supported}
-                    class={stylex.attrs(styles.composerMenuOption, chatUtilityStyles.wFull, chatUtilityStyles.roundedLg, chatUtilityStyles.px15, chatUtilityStyles.py1, chatUtilityStyles.textLeft, chatUtilityStyles.text0525rem, chatUtilityStyles.textVariableForeground, chatUtilityStyles.transition, chatUtilityStyles.hoverBgBlack5, chatUtilityStyles.disabledCursorNotAllowed, chatUtilityStyles.disabledOpacity50).class}
+                    disabled={!supported()}
+                    aria-pressed={selected()}
+                    class={stylex.attrs(typography.control, styles.composerMenuOption).class}
                     onClick={() => {
-                      if (!supported) {
+                      if (!supported()) {
                         return;
                       }
                       handleFastModeSelect(enabled);
@@ -2519,7 +2458,7 @@ function createChatPanelController() {
                       <span>{enabled ? "On" : "Off"}</span>
                       <span class={stylex.attrs(styles.composerMenuOptionDescription).class}>{getFastModeDescription(enabled)}</span>
                     </span>
-                    <Show when={selected}>
+                    <Show when={selected()}>
                       <Check class={stylex.attrs(chatUtilityStyles.h3, chatUtilityStyles.w3).class} />
                     </Show>
                   </button>
@@ -2527,8 +2466,8 @@ function createChatPanelController() {
             }}
           </For>
         </div>
-        <Show when={disabledHint}>
-          <div class={stylex.attrs(chatUtilityStyles.px1, chatUtilityStyles.text045rem, chatUtilityStyles.textVariableMuted).class}>{disabledHint}</div>
+        <Show when={disabledHint()}>
+          <div class={stylex.attrs(chatUtilityStyles.px1, typography.caption, chatUtilityStyles.textVariableMuted).class}>{disabledHint()}</div>
         </Show>
       </div>
     );
@@ -2723,11 +2662,11 @@ function createChatPanelController() {
   function renderAssistantActionCard(metadata: AssistantActionMessageMetadata) {
     return (
       <div data-test-assistant-action-card="" class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderTeal70020, chatUtilityStyles.bgWhite75, chatUtilityStyles.p3).class}>
-        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking02em, chatUtilityStyles.textVariableAccentStrong).class}>
+        <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, typography.caption, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking02em, chatUtilityStyles.textVariableAccentStrong).class}>
           <Bot class={stylex.attrs(chatUtilityStyles.h35, chatUtilityStyles.w35).class} />
           Assistant action
         </div>
-        <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap2, chatUtilityStyles.text0675rem, chatUtilityStyles.textVariableMuted, chatUtilityStyles.mdGridCols2).class}>
+        <div class={stylex.attrs(chatUtilityStyles.grid, chatUtilityStyles.gap2, typography.body, chatUtilityStyles.textVariableMuted, chatUtilityStyles.mdGridCols2).class}>
           <For each={metadata.summaryRows}>
             {(row) => (
               <div class={stylex.attrs(chatUtilityStyles.minW0).class}>
@@ -2803,41 +2742,19 @@ function createChatPanelController() {
 export type ChatPanelController = ReturnType<typeof createChatPanelController>;
 export function ChatPanel() {
   const controller = createChatPanelController();
-  return <ChatPanelView controller={controller} />;
+  return <ChatPanelProvider value={controller}><ChatPanelView /></ChatPanelProvider>;
 }
 
-function ChatPanelView(props: { controller: ChatPanelController }) {
+function ChatPanelView() {
+  const controller = useChatPanel();
   const {
-    activeMode, activeProject, activeThread, activeThreadIsStreaming, applyComposerLookupOption,
-    attachmentButtonDisabled, attachmentButtonReason, capabilityTags, chatFileLinks, composerLookup,
-    composerLookupActiveOptionId, composerLookupOpen, composerLookupRenderedOptions, composerReferenceBadges, composerSettingsOpen,
-    composerSubmitState, composerTimerState, contextUsage, countdownPaused, countdownReadyRun,
-    countdownRemainingMs, currentBackgroundRun, currentExecutionPlan, currentRun, currentTab,
-    desktopReasoningMenuOpen, draftAttachments, draggingAttachments, dropState, editingThreadTitle,
-    executionPauseReason, executionPaused, experimentDialogOpen, experimentRun, failedSubtaskCount,
-    getCacheHitPercent, getComposerPlaceholder, getContextUsageTooltip, handleAttachmentDragLeave, handleAttachmentDragOver,
-    handleAttachmentDrop, handleBrowseProject, handleCancelNonGitPreflight, handleCommitRenameThread, handleComposerBadgeClick,
-    handleComposerClick, handleComposerKeyDown, handleComposerLookupKeyDown, handleDisableDirtyGitCheck, handleDiscardExperiment,
-    handleForkThread, handleInitGitBaseline, handleInspectExperiment, handleModeSelect, handleOpenCurrentRunJob,
-    handleOpenThreadTerminalHistory, handlePauseAutoRun, handlePromoteExperiment, handlePromoteScheduledRun, handleQuestionChoice,
-    handleRemoveAttachment, handleReset, handleResume, handleResumeAutoRun, handleRetry,
-    handleSaveProjectContext, handleSelectAttachments, handleSelectPaneTab, handleSetupAction, handleStartRenameThread,
-    handleStop, handleSubmit, isAutoModeSelected, modeDropdownOptions,
-    pendingQuestion, project, projectRulesDraft, projectTraces,
-    renderAgentControl, renderComposerControlMenu, renderEffortControl, renderModeControl, renderModelControl,
-    renderPlanRunAction, renderProviderControl, renderTranscriptRow, resizeComposer, resumableRun,
-    retryableRun, runDetailRecovery, runSubtasks, runWithChatPanelOwner, scrollToBottom,
-    selectedAgentHealthMessage, selectedExperimentFilePath, selectedModeValue, sendCommand, setComposerLookupActiveIndex,
-    setComposerLookupForcedClosed, setComposerLookupMenuHidden, setComposerSettingsOpen, setDesktopReasoningMenuOpen, setDismissedComposerLookupKey,
-    setEditingThreadTitle, setExperimentDialogOpen, setProjectRulesDraft, setSelectedExperimentFilePath,
-    setTerminalHistoryOpen, setThreadTitleDraft, state, stickToBottom, syncComposerCaret,
-    syncComposerLookupDomVisibility, terminalHistoryOpen, terminalHistoryScope, threadTitleDraft, transcriptRows,
-    updateScrollLock, uploadingAttachments, visibleTabs,
-  } = props.controller;
+    activeProject, handleBrowseProject, handleSetupAction, setTerminalHistoryOpen, state,
+    terminalHistoryOpen, terminalHistoryScope,
+  } = controller;
   return (
     <>
     <section data-test-chat-panel="" class={stylex.attrs(chatUtilityStyles.panelShell, styles.panelContainer, state.experienceMode === "simple" ? styles.panelSimple : undefined, chatUtilityStyles.flex, chatUtilityStyles.hFull, chatUtilityStyles.wFull, chatUtilityStyles.minH0, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded2xl, chatUtilityStyles.p08rem).class}>
-<ChatSetupDialog controller={props.controller} />
+<ChatSetupDialog />
       <Show when={shouldShowSetupChecklist(state)}>
         <SetupChecklistCard
           checks={state.setup.checks}
@@ -2851,21 +2768,16 @@ function ChatPanelView(props: { controller: ChatPanelController }) {
       <Show
         when={activeProject()}
         fallback={
-          <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flex1, chatUtilityStyles.itemsCenter, chatUtilityStyles.justifyCenter).class}>
-            <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.wFull, chatUtilityStyles.maxW2xl, chatUtilityStyles.flexCol, chatUtilityStyles.gap4, chatUtilityStyles.rounded175rem, chatUtilityStyles.border, chatUtilityStyles.borderDashed, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite45, chatUtilityStyles.p6, chatUtilityStyles.shadowSm, chatUtilityStyles.mdP8).class}>
-              <div class={stylex.attrs(chatUtilityStyles.inlineFlex, chatUtilityStyles.itemsCenter, chatUtilityStyles.gap2, chatUtilityStyles.roundedFull, chatUtilityStyles.bgWhite65, chatUtilityStyles.px3, chatUtilityStyles.py1, chatUtilityStyles.text0585rem, chatUtilityStyles.fontSemibold, chatUtilityStyles.uppercase, chatUtilityStyles.tracking02em, chatUtilityStyles.textVariableMuted).class}>
-                First run
-              </div>
-              <h1 class={stylex.attrs(chatUtilityStyles.fontDisplay, chatUtilityStyles.text175rem, chatUtilityStyles.tracking006em, chatUtilityStyles.textVariableForeground, chatUtilityStyles.mdText21rem).class}>
-                Start with repo, import, or pasted spec
+          <div data-test-empty-project="" {...stylex.attrs(styles.emptyProject)}>
+            <div {...stylex.attrs(styles.emptyProjectContent)}>
+              <h1 {...stylex.attrs(styles.emptyProjectHeading)}>
+                Open a project to begin
               </h1>
-              <p class={stylex.attrs(chatUtilityStyles.maxW2xl, chatUtilityStyles.text075rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableMuted).class}>
-                Task-first flow: open codebase, optionally import local defaults, then ask for plan or implementation. No API-key wall.
-              </p>
-              <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexCol, chatUtilityStyles.gap3, chatUtilityStyles.rounded135rem, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite60, chatUtilityStyles.p4).class}>
-                <div class={stylex.attrs(chatUtilityStyles.flex, chatUtilityStyles.flexWrap, chatUtilityStyles.gap2).class}>
+
+                <div {...stylex.attrs(styles.emptyProjectActions)}>
                   <ActionButton
                     tooltip="Open project switcher"
+                    variant="default"
                     icon={<Folder class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
                     dataTourId="open-project"
                     onClick={() => harnessStore.openProjectSwitcher()}
@@ -2880,36 +2792,14 @@ function ChatPanelView(props: { controller: ChatPanelController }) {
                   >
                     Browse folder
                   </ActionButton>
-                  <ActionButton
-                    tooltip="Open import and workspace setup"
-                    icon={<Edit3 class={stylex.attrs(chatUtilityStyles.h4, chatUtilityStyles.w4).class} />}
-                    variant="secondary"
-                    dataTourId="help-preferences"
-                    onClick={() => harnessStore.openPreferencesModal()}
-                  >
-                    Import config
-                  </ActionButton>
                 </div>
-                <div class={stylex.attrs(chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableMuted).class}>
-                  Sample task: “Inspect recent auth changes, plan fix for flaky login, then implement with tests.”
-                </div>
-                <div class={stylex.attrs(chatUtilityStyles.rounded2xl, chatUtilityStyles.border, chatUtilityStyles.borderVariableBorder, chatUtilityStyles.bgWhite70, chatUtilityStyles.p3, chatUtilityStyles.text0675rem, chatUtilityStyles.leading6, chatUtilityStyles.textVariableMuted).class}>
-                  Open repo, attach screenshots, PDFs, or office docs, then ask for a plan. Images route to vision-capable models; text and document files get folded into prompt context.
-                </div>
-              </div>
             </div>
           </div>
         }
       >
           <>
-<ChatPanelHeader controller={props.controller} />
-
-<ChatTranscriptSurface controller={props.controller} />
-
-<ChatProjectSetupNotice controller={props.controller} />
-
-<ChatComposerSurface controller={props.controller} />
-<ChatExperimentDialog controller={props.controller} />
+<ProjectChatLayout compact={state.experienceMode === "simple"} header={<ChatPanelHeader />} transcript={<ChatTranscriptSurface />} status={<ChatProjectSetupNotice />} composer={<ChatComposerSurface />}/>
+<ChatExperimentDialog />
           </>
       </Show>
     </section>
@@ -2942,23 +2832,6 @@ function formatReasoningOptionLabel(strength: (typeof COMPOSER_REASONING_STRENGT
   return strength === "high" ? `${label} (default)` : label;
 }
 
-/** Translate technical mode names into the visible consequence of choosing them. */
-function formatModeIntentLabel(modeId: string, fallback: string) {
-  switch (modeId) {
-    case "ask":
-      return "Answer only";
-    case "plan":
-      return "Plan first";
-    case "implement":
-      return "Make changes";
-    case "debug":
-      return "Debug a problem";
-    case "review":
-      return "Review changes";
-    default:
-      return fallback;
-  }
-}
 
 function getStreamingLiveMessages(project: ViewProjectState): TimelineLiveMessage[] {
   const messages: TimelineLiveMessage[] = [];
@@ -3051,36 +2924,9 @@ function isBlockingRunStatus(status: AgentRunState["status"]) {
   return status === "planning" || status === "running-main" || status === "running-subagents" || status === "aggregating";
 }
 
-function getComposerLookup(draft: string, caret: number) {
-  const tokenStart = Math.max(draft.lastIndexOf(" ", caret - 1), draft.lastIndexOf("\n", caret - 1), draft.lastIndexOf("\t", caret - 1)) + 1;
-  const token = draft.slice(tokenStart, caret);
-  if (token.length < 1 || token.includes(" ")) {
-    return undefined;
-  }
-  if (token.startsWith("/") && token.length >= 1) {
-    return { kind: "skill" as const, query: token.slice(1), start: tokenStart, end: caret };
-  }
-  if (token.startsWith("@") && token.length >= 1) {
-    return { kind: "file" as const, query: token.slice(1), start: tokenStart, end: caret };
-  }
-  return undefined;
-}
 
-function getSkillName(skillPath: string) {
-  const parts = skillPath.replace(/\\/g, "/").split("/");
-  const skillMdIndex = parts.lastIndexOf("SKILL.md");
-  return skillMdIndex > 0 ? parts[skillMdIndex - 1]! : parts.at(-1) ?? skillPath;
-}
 
-function getFileName(filePath: string) {
-  return filePath.replace(/\\/g, "/").split("/").at(-1) ?? filePath;
-}
 
-function getDirectoryName(filePath: string) {
-  const normalized = filePath.replace(/\\/g, "/");
-  const index = normalized.lastIndexOf("/");
-  return index > 0 ? normalized.slice(0, index) : ".";
-}
 
 function getComposerReferenceBadges(
   draft: string,
@@ -3162,23 +3008,9 @@ function formatChatFileTarget(target: ChatFileTarget) {
   return `${target.path}${line}${column}`;
 }
 
-function formatElapsedDuration(elapsedMs: number) {
-  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (totalMinutes < 60) {
-    return `${totalMinutes}m ${seconds}s`;
-  }
-
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return minutes > 0 ? `${hours}h ${minutes}m ${seconds}s` : `${hours}h ${seconds}s`;
-}
 
 function formatResponseTime(timestampMs: number) {
   return formatShortTimestamp(timestampMs);
 }
+
+export { getFastModeDescription } from "./chat-panel/chat-panel-model";

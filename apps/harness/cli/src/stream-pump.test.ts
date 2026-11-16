@@ -1,7 +1,65 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createStreamPump, drainStreamPumps } from "./stream-pump";
 
 describe("StreamPump", () => {
+  test("UTF-8 counting does not allocate encoded arrays per character", async () => {
+    const encode = spyOn(TextEncoder.prototype, "encode");
+    const pump = createStreamPump({ flushIntervalMs: 10_000, maxBufferedBytes: 8192, onFlush() {} });
+    try {
+      pump.push("a".repeat(4096));
+      await pump.end();
+      expect(encode).toHaveBeenCalledTimes(2);
+    } finally { pump.close(); encode.mockRestore(); }
+  });
+
+  test("flushes successive timed windows and re-arms after a size flush", async () => {
+    const flushed: string[] = [];
+    let next = Promise.withResolvers<void>();
+    const pump = createStreamPump({ flushIntervalMs: 5, maxBufferedBytes: 4,
+      onFlush(text) { flushed.push(text); next.resolve(); } });
+    try {
+      for (const text of ["a", "b", "1234", "c", "d"]) {
+        next = Promise.withResolvers<void>();
+        if (text === "1234") { pump.push("12"); pump.push("34"); }
+        else pump.push(text);
+        await next.promise;
+      }
+      await pump.end();
+      expect(flushed).toEqual(["a", "b", "1234", "c", "d"]);
+    } finally { pump.close(); }
+  }, 1000);
+
+  test("byte counting preserves multibyte code points and lone surrogates", async () => {
+    const text = "a\u00e9\u0800\ud83d\ude00\ud800z\udc00";
+    const flushed: string[] = [];
+    const pump = createStreamPump({ flushIntervalMs: 10_000, maxBufferedBytes: 4,
+      onFlush(chunk) { flushed.push(chunk); } });
+    pump.push(text);
+    await pump.end();
+    expect(flushed.join("")).toBe(text);
+    expect(flushed.map((chunk) => new TextEncoder().encode(chunk).length)).toEqual([3, 3, 4, 4, 3]);
+  });
+
+  test("a synchronous first-flush failure does not latch the drain", async () => {
+    const flushed: string[] = [];
+    const pump = createStreamPump({ flushIntervalMs: 10_000, maxBufferedBytes: 1,
+      onFlush(text) { if (text === "a") throw new Error("first flush failed"); flushed.push(text); } });
+    pump.push("a");
+    pump.push("b");
+    await expect(pump.flush()).rejects.toThrow("first flush failed");
+    await pump.end();
+    expect(flushed).toEqual(["b"]);
+  });
+
+  test("reentrant pushes preserve serial callback order", async () => {
+    const flushed: string[] = [];
+    const pump = createStreamPump({ flushIntervalMs: 10_000, maxBufferedBytes: 1,
+      onFlush(text) { if (text === "a") pump.push("b"); flushed.push(text); } });
+    pump.push("a");
+    await pump.end();
+    expect(flushed).toEqual(["a", "b"]);
+  });
+
   test("coalesces chunks until flush", async () => {
     const flushed: string[] = [];
     const pump = createStreamPump({

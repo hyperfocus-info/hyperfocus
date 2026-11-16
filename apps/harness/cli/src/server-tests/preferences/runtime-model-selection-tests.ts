@@ -6,6 +6,25 @@ import { createSocket, openProject, sendChatUntilReady, waitForAdapterCall, wait
 import type { ServerSuiteFixture } from "../support/server-suite-fixture";
 import type { ServerTestRegistrar } from "../support/server-test-sharding";
 export function registerRuntimeModelSelectionTests(serverTest: ServerTestRegistrar, fixture: ServerSuiteFixture) {
+    serverTest("uses the explicitly selected economical Codex model for planning", async () => {
+        const { adapter, repository, projectRoot } = fixture;
+        repository.setPlanExecutionModeDefault("immediate");
+        await fixture.restart({ port: 0, adapter, repository,
+            runtimeRegistry: createAgentRuntimeRegistry([createPiRuntime(adapter), createFakeCodexRuntime(adapter)]), serverOnly: true });
+        const socket = createSocket(fixture.port);
+        await waitForEvent(socket, "connection.ready");
+        const opened = await openProject(socket, projectRoot);
+        const readyPromise = waitForEvent(socket, "run.updated", event => event.payload.run.status === "ready", 30000);
+        socket.send(JSON.stringify({ type: "chat.send", requestId: "economical-planner", payload: {
+            projectId: opened.payload.project.id, threadId: opened.payload.project.activeThreadId,
+            agentId: "codex-cli", executionModelId: "openai/gpt-5.4-mini", modeId: "plan", modeLocked: true,
+            content: "Plan a complete product with storage, UI, validation, and recovery." } }));
+        const ready = await readyPromise;
+        expect(adapter.calls[0]?.modelId).toBe("openai/gpt-5.4-mini");
+        expect(ready.payload.run.planningModelId).toBe("openai/gpt-5.4-mini");
+        expect(ready.payload.run.plan?.gating.mode).toBe("approve");
+        socket.close();
+    }, 60000);
     serverTest("uses gemini planning and subagent defaults when provider brand is gemini", async () => {
         const { adapter, repository, projectRoot, port } = fixture;
         repository.setStoredGoogleApiKey("AIza-gemini-123");
@@ -114,7 +133,7 @@ export function registerRuntimeModelSelectionTests(serverTest: ServerTestRegistr
         expect(subagentCalls.every((call) => call.modelId === "openai/gpt-5.4-mini")).toBe(true);
         socket.close();
     }, 60000);
-    serverTest("passes fast mode and low reasoning to same-worktree subagents", async () => {
+    serverTest("passes fast mode and persisted reasoning to same-worktree subagents", async () => {
         let { adapter, repository, extraProjectRoot, projectRoot, port } = fixture;
         repository.setProviderBrand("gemini");
         repository.setSubagentWorktreeStrategyDefault("same-worktree");
@@ -157,7 +176,7 @@ export function registerRuntimeModelSelectionTests(serverTest: ServerTestRegistr
         const subagentCalls = adapter.calls.filter((call) => call.kind === "subagent");
         expect(subagentCalls.length).toBeGreaterThan(0);
         expect(subagentCalls.every((call) => call.modelId === "openai/gpt-5.4-mini")).toBe(true);
-        expect(subagentCalls.every((call) => call.reasoningStrength === "low")).toBe(true);
+        expect(subagentCalls.every((call) => call.reasoningStrength === "extra-high")).toBe(true);
         expect(subagentCalls.every((call) => call.fastMode === true)).toBe(true);
         socket.close();
     }, 60000);

@@ -48,8 +48,8 @@ export const cliSessionSchema = z.object({
   cols: z.number().int().min(1).max(1000),
   rows: z.number().int().min(1).max(1000),
   attachState: cliSessionAttachStateSchema,
-  idleTimeoutMs: z.number().int().min(0).max(24 * 60 * 60 * 1000),
-  totalTimeoutMs: z.number().int().min(0).max(24 * 60 * 60 * 1000).optional(),
+  idleTimeoutMs: z.number().int().min(0).max(86400000),
+  totalTimeoutMs: z.number().int().min(0).max(86400000).optional(),
   lastStdoutAt: z.string().datetime().or(z.string().min(1)).optional(),
   lastStderrAt: z.string().datetime().or(z.string().min(1)).optional(),
   startedAt: z.string().datetime().or(z.string().min(1)),
@@ -201,7 +201,14 @@ export const projectThreadSummarySchema = z.object({
   lastUserMessageAt: z.string().datetime().or(z.string().min(1)).optional(),
   archivedAt: z.string().datetime().or(z.string().min(1)).optional(),
   updatedAt: z.string().datetime().or(z.string().min(1)),
-  forkedFromThreadId: threadIdSchema.optional()
+  forkedFromThreadId: threadIdSchema.optional(),
+  lineage: z.object({
+    parentThreadId: threadIdSchema,
+    relationship: z.enum(["fork", "subagent"]),
+    runId: runIdSchema.optional(),
+    subagentId: z.string().min(1).max(128).optional(),
+    status: z.enum(["running", "completed", "failed", "stopped"]).optional()
+  }).optional()
 });
 
 export const projectSearchResultSchema = z.object({
@@ -345,7 +352,22 @@ export const tokenUsageTotalsSchema = z.object({
   updatedAt: z.string().datetime().or(z.string().min(1)).optional()
 });
 
+export const codexLimitsSchema = z.object({
+  status: z.enum(["available", "unavailable", "error"]), checkedAt: z.string().datetime().optional(),
+  plan: z.string().optional(), reason: z.string().optional(),
+  windows: z.array(z.object({ id: z.enum(["primary", "secondary"]), usedPercent: z.number().finite().nonnegative(),
+    remainingPercent: z.number().min(0).max(100), windowDurationMins: z.number().finite().positive().optional(),
+    resetsAt: z.string().datetime().optional() })).max(2)
+});
+export const usageSourceSchema = z.object({ projectId: z.string().optional(), threadId: z.string().optional(),
+  sourceKind: z.enum(["planner", "main", "subagent", "aggregator"]), sourceLabel: z.string().min(1).max(128),
+  modelId: executionModelIdSchema, runtime: z.string().optional(), totals: tokenUsageTotalsSchema });
+export type CodexLimits = z.infer<typeof codexLimitsSchema>;
+export type UsageSource = z.infer<typeof usageSourceSchema>;
+
 export const tokenUsageStateSchema = z.object({
+  codexLimits: codexLimitsSchema.optional(),
+  sources: z.array(usageSourceSchema).optional(),
   session: tokenUsageTotalsSchema,
   lifetime: tokenUsageTotalsSchema,
   resetAt: z.string().datetime().or(z.string().min(1)).optional()

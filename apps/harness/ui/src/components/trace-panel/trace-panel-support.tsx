@@ -1,16 +1,15 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { toneForRisk, toneForStatus, isAttentionStatus, getAssistantJobStatusState, type AssistantJobStatusState } from "./status-values";
+import { createMemo, Show } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import { createRequestId, isTerminalAgentRunStatus, type AgentRunState, type BackgroundJob, type BackgroundJobRun, type ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
-import { getActiveProject, harnessStore } from "../../harness-store";
+import {   type AgentRunState, type BackgroundJob, type BackgroundJobRun, type ExecutionToolActivity } from "@hyperfocus/ai-core/protocol";
+import {  harnessStore } from "../../harness-store";
 import type { ChatFileTarget } from "../../lib/chat-file-links";
 import { openIdeWindow } from "../../lib/ide-window";
-import { getLatestTaskStatusText, getRunRefreshState, getVisibleProjectTraces, isRunWorking } from "../../lib/run-status";
 import { formatShortTimestamp } from "../../lib/time-format";
 import {
-  formatToolActivityCopyText,
-  formatToolActivityOwner,
-  formatToolActivitySnippet,
-  formatToolInvocationDescription,
+
+
+
   normalizeToolSnippet
 } from "../../lib/tool-activity-format";
 import { rightAlignedNumbersEnabled } from "../../lib/visual-flags";
@@ -18,35 +17,21 @@ import {
   getAssistantTracePanelSnapshot,
   getJobTracePanelSnapshot,
   getThreadTracePanelSnapshot,
-  getTracePanelExecutionLogEntries,
   getTracePanelRunningCounts,
   getTracePanelTitle,
   resolveTracePanelEntity
 } from "../../lib/trace-panel-model";
 import { ActionButton } from "../action-button";
 import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
-import { CopyTextButton } from "../primitives/copy-text-button";
-import { ExecutionLog } from "../primitives/execution-log";
-import { MarkdownContent } from "../markdown-content";
 import { Tooltip } from "../primitives/tooltip";
-import { VirtualList } from "../primitives/virtual-list";
-import { TerminalHistoryDialog } from "../../terminal/terminal-history-dialog";
 import { tracePanelStyles as styles, traceUtilityStyles as utilities } from "../trace-panel.styles";
 import {
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   Circle,
   CircleAlert,
-  CircleHelp,
-  ClipboardList,
   Eye,
   LoaderCircle,
   PanelRightOpen,
-  RefreshCcw,
-  ShieldCheck,
-  ShieldX,
-  Terminal,
   X
 } from "lucide-solid";
 
@@ -68,17 +53,13 @@ export function TraceContextSummary(props: {
         <div class={stylex.attrs(utilities.minW0).class}>
           <div class={stylex.attrs(styles.contextEyebrow).class}>{props.title.eyebrow}</div>
           <div class={stylex.attrs(styles.contextTitle).class}>{props.title.title}</div>
-          <div class={stylex.attrs(styles.contextSource).class}>
+          <Show when={!props.job}><div class={stylex.attrs(styles.contextSource).class}>
             <FileLinkedText text={`Source: ${props.title.source}`} fileLinks={props.fileLinks} />
-          </div>
-        </div>
-        <div class={props.runningCounts.current > 0 ? stylex.attrs(styles.agentPill, styles.agentPillActive).class : stylex.attrs(styles.agentPill).class}>
-          <span class={props.runningCounts.current > 0 ? stylex.attrs(styles.agentPillDot, styles.agentPillDotActive).class : stylex.attrs(styles.agentPillDot).class} />
-          <span class={rightAlignedNumbersEnabled() ? stylex.attrs(styles.numericFlagged).class : undefined}>{props.runningCounts.current}</span>
-          <span class={rightAlignedNumbersEnabled() ? stylex.attrs(utilities.textMuted, styles.numericFlagged).class : stylex.attrs(utilities.textMuted).class}>/ {props.runningCounts.total}</span>
+          </div></Show>
         </div>
       </div>
 
+      <Show when={!props.job}>
       <div class={stylex.attrs(styles.contextMetrics).class}>
         <Show when={props.assistant}>
           {(assistant) => (
@@ -110,6 +91,7 @@ export function TraceContextSummary(props: {
           )}
         </Show>
       </div>
+      </Show>
 
       <Show when={props.job}>
         <TraceJobRunSummary run={props.jobRun} fileLinks={props.fileLinks} />
@@ -174,6 +156,8 @@ function TraceJobRunSummary(props: { run?: BackgroundJobRun; fileLinks?: FileLin
             <span class={stylex.attrs(styles.contextRunDot).class} />
             <span>{run().status}</span>
           </div>
+          <details>
+          <summary class={stylex.attrs(styles.contextDisclosure).class}>Run context</summary>
           <div class={stylex.attrs(styles.contextRunFacts).class}>
             <span>Trigger: {run().triggerSource}</span>
             <span>Approval: {run().approvalStatus}</span>
@@ -181,6 +165,7 @@ function TraceJobRunSummary(props: { run?: BackgroundJobRun; fileLinks?: FileLin
           <div class={stylex.attrs(styles.contextRunCopy).class}>
             <FileLinkedText text={`Summary: ${run().summary ?? "n/a"}`} fileLinks={props.fileLinks} />
           </div>
+          </details>
           <Show when={run().failureMessage}>
             {(failure) => (
               <div class={stylex.attrs(styles.contextRunCopy, utilities.textRose900).class}>
@@ -195,34 +180,7 @@ function TraceJobRunSummary(props: { run?: BackgroundJobRun; fileLinks?: FileLin
   );
 }
 
-function toneForRisk(risk: string): "neutral" | "success" | "warning" | "danger" | "info" {
-  if (risk === "unsafe") {
-    return "danger";
-  }
-  if (risk === "slightly-unsafe") {
-    return "warning";
-  }
-  return "success";
-}
 
-function toneForStatus(status: string): "neutral" | "success" | "warning" | "danger" | "info" {
-  if (status.includes("failed") || status.includes("cancelled") || status.includes("error") || status.includes("open")) {
-    return "danger";
-  }
-  if (status.includes("partial-complete")) {
-    return "warning";
-  }
-  if (status.includes("running") || status.includes("queued") || status.includes("awaiting") || status.includes("pending") || status.includes("due")) {
-    return "warning";
-  }
-  if (status.includes("succeeded") || status.includes("completed") || status.includes("enabled") || status.includes("active") || status.includes("closed")) {
-    return "success";
-  }
-  if (status.includes("paused") || status.includes("idle")) {
-    return "info";
-  }
-  return "neutral";
-}
 
 export function TracePeekRail() {
   const state = harnessStore.state;
@@ -352,9 +310,6 @@ function TracePeekMetric(props: { label: string; value: string; tone: "neutral" 
   );
 }
 
-function isAttentionStatus(status: string) {
-  return status.includes("failed") || status.includes("cancelled") || status.includes("approval") || status.includes("running") || status.includes("queued");
-}
 
 export function ToolSnippetBlock(props: { title: string; value: string; tone?: "danger"; fileLinks?: FileLinkConfig }) {
   return (
@@ -373,25 +328,12 @@ export const TRACE_BROWSER_SESSION_LIMIT = 10;
 export const TRACE_BROWSER_ACTIVITY_LIMIT = 25;
 export const TRACE_EVENT_LIMIT = 80;
 
-type AssistantJobStatusState = "running" | "successful" | "error" | "idle";
 
 export function getAssistantJobStatusView(jobId: string, runs: { jobId: string; status: string; updatedAt: string }[]) {
   const run = runs.filter((entry) => entry.jobId === jobId).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
   return { state: getAssistantJobStatusState(run?.status) };
 }
 
-function getAssistantJobStatusState(status: string | undefined): AssistantJobStatusState {
-  if (status === "queued" || status === "awaiting-approval" || status === "awaiting-user-input" || status === "running") {
-    return "running";
-  }
-  if (status === "succeeded") {
-    return "successful";
-  }
-  if (status === "failed" || status === "cancelled") {
-    return "error";
-  }
-  return "idle";
-}
 
 export function getAssistantJobStatusText(job: { kind: string; status: string; riskLevel: string; nextRunAt?: string }, statusState: AssistantJobStatusState) {
   return [job.kind, job.status, job.riskLevel, job.nextRunAt && statusState !== "running" ? `next ${formatShortTimestamp(job.nextRunAt)}` : undefined]

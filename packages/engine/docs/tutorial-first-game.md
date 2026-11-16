@@ -49,7 +49,12 @@ Stop the development server with Ctrl+C, then run:
 bun run build:game -- --project ./my-first-game
 ```
 
-The result is one HTML file under `my-first-game/dist/`. It contains the validated project pair, runtime, renderer, and assets; it has no CDN or editor-storage dependency. The `dist` directory is disposable build output, not canonical project state.
+The result is one playable HTML file under `my-first-game/dist/`, accompanied by
+`<game>.html.receipt.json`. The HTML contains the validated project pair, runtime,
+renderer, and assets; it has no CDN or editor-storage dependency. The receipt
+identifies that exact artifact and its build inputs; it is not required to play.
+The `dist` directory is disposable build output, not canonical project state.
+See [build receipt verification](project-development.md#build-receipt).
 
 ## Verify the entire journey
 

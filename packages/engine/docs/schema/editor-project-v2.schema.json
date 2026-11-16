@@ -101,16 +101,34 @@
         "size": { "type": "number", "minimum": 0, "maximum": 10000000000 },
         "lastModified": { "type": "number", "minimum": 0, "maximum": 10000000000000 },
         "source": { "enum": ["imported", "generated"] },
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "audioMetadata": { "$ref": "#/$defs/audioAssetMetadata" }
       },
       "allOf": [
         {
           "if": { "properties": { "source": { "const": "imported" } }, "required": ["source"] },
           "then": { "required": ["sha256"] }
         },
-        { "not": { "required": ["objectUrl"] } }
+        { "not": { "required": ["objectUrl"] } },
+        { "if": { "required": ["audioMetadata"] }, "then": { "properties": { "kind": { "const": "audio" } } } }
       ],
       "additionalProperties": true
+    },
+    "audioAssetMetadata": {
+      "type": "object",
+      "required": ["bpmConfidence", "bpmSource", "bpmStatus"],
+      "properties": {
+        "bpm": { "type": "number", "minimum": 30, "maximum": 300 },
+        "bpmConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "bpmSource": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "bpmStatus": { "enum": ["tagged", "estimated", "undetected"] }
+      },
+      "oneOf": [
+        { "properties": { "bpmStatus": { "const": "estimated" } }, "required": ["bpm"] },
+        { "properties": { "bpmStatus": { "const": "tagged" }, "bpmConfidence": { "const": 1 } }, "required": ["bpm"] },
+        { "properties": { "bpmStatus": { "const": "undetected" }, "bpmConfidence": { "const": 0 } }, "not": { "required": ["bpm"] } }
+      ],
+      "additionalProperties": false
     },
     "tilemap": {
       "type": "object",
@@ -212,6 +230,8 @@
         "durationFrames": { "type": "number", "minimum": 0, "maximum": 1000000 },
         "trimStart": { "type": "number", "minimum": 0, "maximum": 1000000 },
         "trimEnd": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "sourceInSeconds": { "type": "number", "minimum": 0, "maximum": 86400 },
+        "sourceOutSeconds": { "type": "number", "exclusiveMinimum": 0, "maximum": 86400 },
         "fadeIn": { "type": "number", "minimum": 0, "maximum": 1000000 },
         "fadeOut": { "type": "number", "minimum": 0, "maximum": 1000000 },
         "loopStart": { "type": "number", "minimum": 0, "maximum": 1000000 },
@@ -267,7 +287,7 @@
     "videoExport": {
       "type": "object",
       "required": ["width", "height", "fps", "codec", "preset"],
-      "properties": { "width": { "type": "integer", "minimum": 16, "maximum": 8192 }, "height": { "type": "integer", "minimum": 16, "maximum": 8192 }, "fps": { "type": "number", "minimum": 1, "maximum": 240 }, "codec": { "enum": ["vp8", "vp9"] }, "preset": { "type": "string", "minLength": 1, "maxLength": 128 } },
+      "properties": { "width": { "type": "integer", "minimum": 16, "maximum": 8192 }, "height": { "type": "integer", "minimum": 16, "maximum": 8192 }, "fps": { "type": "number", "minimum": 1, "maximum": 240 }, "codec": { "enum": ["avc", "vp8", "vp9"] }, "preset": { "type": "string", "minLength": 1, "maxLength": 128 }, "fit": { "enum": ["contain", "cover", "stretch"] }, "textOverlay": { "type": "object", "required": ["text", "position", "startFrame", "endFrame"], "properties": { "text": { "type": "string", "minLength": 1, "maxLength": 280 }, "position": { "enum": ["top", "center", "bottom"] }, "startFrame": { "type": "integer", "minimum": 0, "maximum": 1000000 }, "endFrame": { "type": "integer", "minimum": 1, "maximum": 1000000 } }, "additionalProperties": false } },
       "additionalProperties": true
     },
     "reactiveBinding": {

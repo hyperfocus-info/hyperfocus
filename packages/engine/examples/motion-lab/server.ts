@@ -52,6 +52,7 @@ const server = Bun.serve({
       return new Response("Bad request", { status: 400 });
     }
 
+    if (/^\/brand\/[a-z0-9-]+\.(svg|png|ico|webmanifest|json)$/.test(pathname)) { const file=Bun.file(join(root,pathname.slice(1))); if(await file.exists())return new Response(file); }
     const staticRoute = staticRoutes[pathname];
     if (staticRoute) {
       return await serveFile(join(root, staticRoute.relativePath), staticRoute.contentType, staticRoute.cache);

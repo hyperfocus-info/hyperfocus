@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { decodeDelta } from "../protocol/delta.ts";
 import { decodeSnapshot } from "../protocol/encode.ts";
 import { decodeMultipartReplicationEnvelope, decodeReplicationFrame, type ReplicationEnvelopeSegment, type ReplicationFrameMeta } from "../protocol/frames.ts";
@@ -62,7 +63,7 @@ export type AuthoritativeSendResult =
 
 export type AuthoritativeClient<TState = unknown> = {
   connect(): Promise<AuthoritativeSession>;
-  close(): void;
+  close(options?: { mode?: 'leave' | 'suspend' }): void;
   sendInput(input: unknown): AuthoritativeSendResult;
   sendEvent(event: unknown): AuthoritativeSendResult;
   onState(listener: (state: AuthoritativeClientState) => void): () => void;
@@ -90,9 +91,7 @@ type ReplicationReceiver = {
   snapshot(): { lastSequence?: number; lastBaseline?: number };
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function isObjectState<TState extends object>(value: unknown): value is TState {
   return isRecord(value);

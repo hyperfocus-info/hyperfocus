@@ -215,3 +215,4 @@ export type {
   RoomTypeDefinition,
   ServerLogger
 } from "./core/types.ts";
+export { createCombatRelayRoom, type ConfirmedCombatFrames } from './combat-room/room.ts';

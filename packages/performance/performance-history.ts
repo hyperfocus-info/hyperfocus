@@ -32,9 +32,11 @@ export function appendPerformanceHistory(options: {
     const entries = byBenchmark.get(report.benchmark) ?? [];
     if (entries.some((entry) => entry.report.generatedAt === report.generatedAt)) continue;
     entries.push({ report });
+    byBenchmark.set(report.benchmark, entries);
+  }
+  for (const entries of byBenchmark.values()) {
     entries.sort(compareGeneratedAt);
     if (entries.length > limit) entries.splice(0, entries.length - limit);
-    byBenchmark.set(report.benchmark, entries);
   }
   const entries = [...byBenchmark.values()].flatMap((benchmarkEntries) => benchmarkEntries.map((entry, index) => {
     const previous = benchmarkEntries[index - 1]?.report;

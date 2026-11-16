@@ -1,0 +1,6 @@
+{
+  "name": "hyperfocus-swarm-node-dependencies",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": { "railway": "3.16.0" }
+}

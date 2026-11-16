@@ -1,3 +1,4 @@
+import { roundDecimal } from "@hyperfocus/utilities/math";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { createFixedGridSpatialIndex, type FixedGridSpatialItem } from "../src/math/fixed-grid.ts";
@@ -119,7 +120,7 @@ function structuralWork(targets: readonly Target[], queries: readonly { x: numbe
   }
   let candidateChecks = 0;
   let cellVisits = 0;
-  const range = Math.ceil((1 + 0.8) / cellSize);
+  const range = Math.ceil((1.8) / cellSize);
   for (const query of queries) {
     const centerX = Math.floor((query.x + worldSize / 2) / cellSize);
     const centerY = Math.floor((query.y + worldSize / 2) / cellSize);
@@ -162,6 +163,4 @@ function wrappedDelta(from: number, to: number) {
   return delta;
 }
 
-function round(value: number) {
-  return Math.round(value * 1_000) / 1_000;
-}
+function round(value: number) { return roundDecimal(value, 3); }

@@ -1,13 +1,14 @@
+import { getAssistantJobsListCommands } from "../utils/tests/assistant-commands";
 /** @jsxImportSource solid-js */
-import { beforeEach, expect, it } from "bun:test";
-import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { createEmptyAssistantsState, createInitialViewState, harnessStore, readBrowserUiSession, type AssistantWorkloadPageState, type HarnessViewState } from "../harness-store";
-import type { AssistantLearning, AssistantLogEntry, AssistantTodo, BackgroundJob, BackgroundJobRun, BackgroundJobsState, ClientCommand } from "@hyperfocus/ai-core/protocol";
+import type { AssistantLearning,BackgroundJob,BackgroundJobRun } from "@hyperfocus/ai-core/protocol";
+import { cleanup,fireEvent,render,screen,waitFor } from "@solidjs/testing-library";
+import { beforeEach,expect,it } from "bun:test";
+import { createEmptyAssistantsState,createInitialViewState,harnessStore,readBrowserUiSession,type HarnessViewState } from "../harness-store";
 import { formatShortTimestamp } from "../lib/time-format";
 import { toastStore } from "../toast-store";
-import { createUiTest, requireElement, requireTextArea } from "../utils/tests/test-harness";
-import { captureDispatchedCommands, clearBrowserStateForTests, requireCommand, seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
-import { createBackgroundJobFixture, createBackgroundJobRunFixture, createHarnessStateFixture, createViewProjectFixture } from "../utils/tests/test-fixtures";
+import { captureDispatchedCommands,clearBrowserStateForTests,requireCommand,seedHarnessStoreForTests } from "../utils/tests/store-test-utils";
+import { createBackgroundJobFixture,createBackgroundJobRunFixture,createHarnessStateFixture,createViewProjectFixture } from "../utils/tests/test-fixtures";
+import { createUiTest,requireElement,requireTextArea } from "../utils/tests/test-harness";
 import { AssistantsPanel } from "./assistants-panel";
 
 function defineScrollMetrics(scrollHeight: number, clientHeight: number) {
@@ -39,77 +40,8 @@ function defineScrollMetrics(scrollHeight: number, clientHeight: number) {
   };
 }
 
-function seedAssistantDetailState(input: {
-  assistantId: string;
-  projectId: string;
-  learnings?: AssistantLearning[];
-  logs?: AssistantLogEntry[];
-  todos?: AssistantTodo[];
-  jobs?: BackgroundJob[];
-  runs?: BackgroundJobRun[];
-  workloadPage?: AssistantWorkloadPageState;
-  backgroundJobs?: BackgroundJobsState;
-  selectedTab?: "chat" | "todos" | "questions" | "jobs" | "log" | "config" | "learnings";
-}) {
-  const now = new Date().toISOString();
-  const project = createViewProjectFixture({ id: input.projectId });
-  seedHarnessStoreForTests(
-    createHarnessStateFixture({
-      activeLeftTab: "assistants",
-      activeSurface: "assistants",
-      workspace: {
-        activeProjectId: project.id,
-        projects: [project]
-      },
-      assistants: {
-        ...createEmptyAssistantsState(),
-        assistants: [
-          {
-            id: input.assistantId,
-            name: "Repo helper",
-            scope: "project",
-            projectId: project.id,
-            description: "Handles repo tasks",
-            personalityPrompt: "Be helpful",
-            jobPrompt: "Do repo work",
-            agentId: "pi",
-            modeId: "implement",
-            executionModelId: "openai/gpt-5.4",
-            runState: "active",
-            bootstrapState: "completed",
-            failureStreakCount: 0,
-            circuitBreakerState: "closed",
-            unreadQuestionCount: 0,
-            createdAt: now,
-            updatedAt: now
-          }
-        ],
-        selectedAssistantId: input.assistantId,
-        loadedDetailAssistantIds: [input.assistantId],
-        selectedTab: input.selectedTab ?? "learnings",
-        learnings: input.learnings ?? [],
-        logs: input.logs ?? [],
-        todos: input.todos ?? [],
-        jobs: input.jobs ?? [],
-        runs: input.runs ?? [],
-        workloadPagesByAssistantId: input.workloadPage
-          ? { [input.assistantId]: input.workloadPage }
-          : {}
-      },
-      ...(input.backgroundJobs ? { backgroundJobs: input.backgroundJobs } : {})
-    })
-  );
-}
+import { seedAssistantDetailState } from "./assistants/test-state";
 
-function getAssistantJobsListCommands(commands: unknown[]) {
-  return commands.filter(
-    (command): command is Extract<ClientCommand, { type: "assistant.workloads.list" }> =>
-      typeof command === "object" &&
-      command !== null &&
-      "type" in command &&
-      command.type === "assistant.workloads.list"
-  );
-}
 
 createUiTest("AssistantsPanel", () => {
   beforeEach(() => {
@@ -441,7 +373,7 @@ createUiTest("AssistantsPanel", () => {
 
     render(() => <AssistantsPanel variant="detail" />);
 
-    expect(screen.getByText("No learnings yet.")).not.toBeNull();
+    expect(screen.getByText(/No learnings yet\./)).not.toBeNull();
   });
 
   it("renders assistant detail navigation as tabs", () => {
@@ -576,7 +508,7 @@ createUiTest("AssistantsPanel", () => {
     ]);
   });
 
-  it("sends server-owned assistant todo patch payloads", () => {
+  it("sends server-owned assistant todo patch payloads", async () => {
     const commands: unknown[] = [];
     const assistantId = "assistant-todo-patch";
     seedAssistantDetailState({
@@ -587,7 +519,8 @@ createUiTest("AssistantsPanel", () => {
     captureDispatchedCommands(commands);
 
     render(() => <AssistantsPanel variant="detail" />);
-    fireEvent.input(screen.getByPlaceholderText("Add manual todo."), { target: { value: "Write patch test" } });
+    fireEvent.input(screen.getByPlaceholderText("Describe the next task"), { target: { value: "Write patch test" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add todo to assistant list" }).hasAttribute("disabled")).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Add todo to assistant list" }));
 
     expect(commands).toHaveLength(1);
@@ -954,8 +887,9 @@ createUiTest("AssistantsPanel", () => {
     fireEvent.input(textarea, { target: { value: "Need status" } });
     fireEvent.click(screen.getByRole("button", { name: "Send message to assistant" }));
 
-    expect(commands).toHaveLength(1);
-    expect(commands[0]).toMatchObject({
+    const chatCommands = commands.filter((command) => typeof command === "object" && command !== null && "type" in command && command.type === "assistant.chat.send");
+    expect(chatCommands).toHaveLength(1);
+    expect(chatCommands[0]).toMatchObject({
       type: "assistant.chat.send",
       payload: {
         assistantId,
@@ -1016,7 +950,9 @@ createUiTest("AssistantsPanel", () => {
       }
     });
     seedHarnessStoreForTests(state);
-    harnessStore.actions.setCommandDispatcher(() => {
+    const failedDispatches: string[] = [];
+    harnessStore.actions.setCommandDispatcher((command) => {
+      failedDispatches.push(command.type);
       throw new Error("Socket closed");
     });
 
@@ -1027,6 +963,7 @@ createUiTest("AssistantsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send message to assistant" }));
 
     expect(textarea.value).toBe("Need status");
+    expect(failedDispatches).toEqual(["assistant.detail.get", "assistant.chat.send"]);
     expect(toastStore.toasts.some((toast) => toast.title === "Command failed")).toBe(true);
   });
 
@@ -1123,7 +1060,7 @@ createUiTest("AssistantsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(commands.map((command) => command.type)).toEqual(["assistant.circuit-breaker.retry"]);
+    expect(commands.map((command) => command.type).filter((type) => type !== "assistant.detail.get")).toEqual(["assistant.circuit-breaker.retry"]);
   });
 
   it("opens assistant log details in a dialog", async () => {
@@ -1424,54 +1361,47 @@ createUiTest("AssistantsPanel", () => {
     const project = createViewProjectFixture({ id: "project-assistant-jobs" });
     const assistantId = "assistant-jobs";
     const job: BackgroundJob = {
-      id: "job-assistant-jobs",
-      projectId: project.id,
-      assistantId,
-      automationThreadId: "thread-automation",
-      kind: "ai-routine",
-      name: "Release patrol",
-      status: "enabled",
-      riskLevel: "safe",
-      definition: {
-        kind: "ai-routine",
-        prompt: "Inspect release status."
-      },
-      schedule: {
-        type: "interval",
-        intervalSeconds: 600,
-        nextRunAt: now,
-        sourceText: "10m"
-      },
-      scheduleInput: "10m",
+      ...createBackgroundJobFixture({
+        id: "job-assistant-jobs",
+        projectId: project.id,
+        assistantId,
+        name: "Release patrol",
+        definition: {
+          kind: "ai-routine",
+          prompt: "Inspect release status."
+        },
+        schedule: {
+          type: "interval",
+          intervalSeconds: 600,
+          nextRunAt: now,
+          sourceText: "10m"
+        },
+        scheduleInput: "10m",
+        createdAt: now,
+        updatedAt: now
+      }),
       consecutiveFailureCount: 3,
-      backoffUntil: new Date(Date.parse(now) + 5 * 60_000).toISOString(),
+      backoffUntil: new Date(Date.parse(now) + 300000).toISOString(),
       lastFailureCategory: "controller-lost",
-      createdAt: now,
-      updatedAt: now
     };
     const run: BackgroundJobRun = {
-      id: "run-assistant-jobs",
-      jobId: job.id,
-      projectId: project.id,
-      assistantId,
-      automationThreadId: job.automationThreadId,
-      triggerSource: "retry",
-      status: "failed",
-      riskLevel: "safe",
-      approvalStatus: "not-needed",
-      skippedOccurrenceCount: 0,
-      failureMessage: "Background run interrupted before completion",
-      failureCategory: "controller-lost",
-      promptStats: {
-        promptChars: 1800,
-        promptHash: "hash-assistant"
-      },
-      queuedAt: now,
-      startedAt: now,
-      completedAt: now,
-      createdAt: now,
-      updatedAt: now,
-      events: []
+      ...createBackgroundJobRunFixture({
+        id: "run-assistant-jobs",
+        jobId: job.id,
+        projectId: project.id,
+        assistantId,
+        automationThreadId: job.automationThreadId,
+        triggerSource: "retry",
+        status: "failed",
+        failureMessage: "Background run interrupted before completion",
+        failureCategory: "controller-lost",
+        queuedAt: now,
+        startedAt: now,
+        completedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }),
+      promptStats: { promptChars: 1800, promptHash: "hash-assistant" },
     };
     seedAssistantDetailState({
       assistantId,

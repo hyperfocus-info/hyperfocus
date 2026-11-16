@@ -390,6 +390,49 @@ createUiTest("TerminalDrawer", () => {
     expect(terminalStore.state.transportStatusBySessionId[session.id]).toBe("connecting");
   });
 
+  it("remounts the selected terminal but retains live same-session metadata", () => {
+    const project = createViewProjectFixture({ id: "project-pane-lifetime" });
+    const a = createTerminalSession({ id: "a", projectId: project.id, name: "A" });
+    const b = createTerminalSession({ id: "b", projectId: project.id, name: "B" });
+    seedHarnessStoreForTests(createHarnessStateFixture({ workspace: { activeProjectId: project.id, projects: [project] } }));
+    terminalStore.resetForTests({ open: true, sessions: [a, b], focusedSessionId: a.id,
+      preferences: { scrollbackLimit: 10000, copyOnSelect: false, ctrlCMode: "auto", rendererMode: "solid-prototype" } });
+    const commands: unknown[] = []; captureDispatchedCommands(commands);
+    const result = render(() => <TerminalDrawer />);
+    const original = screen.getByRole("textbox", { name: "Terminal output" });
+    terminalStore.focusSession(b.id);
+    const next = screen.getByRole("textbox", { name: "Terminal output" });
+    expect(next).not.toBe(original);
+    expect(original.isConnected).toBe(false);
+    expect(result.container.querySelector("[data-test-terminal-pane]")?.getAttribute("data-test-terminal-pane")).toBe(b.id);
+    terminalStore.applyServerEvent({ type: "terminal.session.updated", requestId: createRequestId(), payload: {
+      session: { ...b, name: "Renamed B", inputMode: "read-only", inputLockReason: "New owner" }
+    } });
+    expect(screen.getByRole("textbox", { name: "Terminal output" })).toBe(next);
+    expect(next.getAttribute("aria-readonly")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Stop terminal" }));
+    expect(commands.at(-1)).toMatchObject({ type: "terminal.session.stop", payload: { projectId: project.id, sessionId: b.id } });
+  });
+
+  it("remounts CLI panes on selection and targets the newly selected command identity", () => {
+    const project = { ...createViewProjectFixture({ id: "project-cli-lifetime" }), cliSessions: [
+      createCliSession({ id: "cli-a", projectId: "project-cli-lifetime", threadId: "thread-a" }),
+      createCliSession({ id: "cli-b", projectId: "project-cli-lifetime", threadId: "thread-b" })
+    ] };
+    seedHarnessStoreForTests(createHarnessStateFixture({ workspace: { activeProjectId: project.id, projects: [project] } }));
+    terminalStore.focusSession("cli-a");
+    const commands: unknown[] = []; captureDispatchedCommands(commands);
+    render(() => <TerminalDrawer />);
+    const first = screen.getByRole("textbox", { name: "Terminal output" });
+    terminalStore.focusSession("cli-b");
+    expect(screen.getByRole("textbox", { name: "Terminal output" })).not.toBe(first);
+    expect(first.isConnected).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Stop CLI terminal" }));
+    expect(commands.at(-1)).toMatchObject({ type: "cli-session.stop", payload: {
+      projectId: project.id, threadId: "thread-b", sessionId: "cli-b"
+    } });
+  });
+
 });
 
 function createCliSession(overrides: Partial<CliSession> = {}): CliSession {
@@ -405,7 +448,7 @@ function createCliSession(overrides: Partial<CliSession> = {}): CliSession {
     cols: overrides.cols ?? 120,
     rows: overrides.rows ?? 32,
     attachState: overrides.attachState ?? "detached",
-    idleTimeoutMs: overrides.idleTimeoutMs ?? 30 * 60 * 1000,
+    idleTimeoutMs: overrides.idleTimeoutMs ?? 1800000,
     totalTimeoutMs: overrides.totalTimeoutMs,
     lastStdoutAt: overrides.lastStdoutAt,
     lastStderrAt: overrides.lastStderrAt,

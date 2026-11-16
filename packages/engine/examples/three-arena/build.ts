@@ -1,3 +1,4 @@
+import { buildConfiguredBrand } from '@hyperfocus/branding/config';
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildExampleBundles } from "@hyperfocus/engine/tooling/example-build";
@@ -22,3 +23,5 @@ await buildExampleBundles("Three Arena", resolve(here, "dist"), [
 ]);
 
 console.info("Built Three Arena bundles.");
+
+await buildConfiguredBrand({configPath:import.meta.dir+'/brand.json',directory:import.meta.dir+'/brand',htmlPath:import.meta.dir+'/client.html'});

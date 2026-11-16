@@ -1,61 +1,26 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX, type Setter } from "solid-js";
-import * as stylex from "@stylexjs/stylex";
-import { ArrowDown, ArrowUp, ArrowUpRight, Brain, Bot, Calendar, Check, CheckSquare2, CircleAlert, CirclePause,
-  CircleHelp, CirclePlay, ClipboardList, CopyPlus, Cpu, FlaskConical, Folder, Gauge, Globe, ListFilter, ListChecks,
-  Logs, MessageSquare, Plus, RefreshCcw, Save, Split, Square, SquarePen, Trash2 } from "lucide-solid";
 import {
-  createAssistantTodoId,
-  type BackgroundJob,
-  type BackgroundJobRun,
-  createRequestId,
-  type Assistant,
-  type AssistantLearning,
-  type AssistantQuestion,
-  type AssistantTodo,
-  type BulkOperationAction,
-  type BulkOperationTarget,
-  type ComposerReasoningStrength,
+type BackgroundJob,
+type BackgroundJobRun,
 } from "@hyperfocus/ai-core/protocol";
-import { formatShortTimestamp, resolveBrowserTimezone } from "../../lib/time-format";
+import * as stylex from "@stylexjs/stylex";
+import { ArrowUpRight,Plus } from "lucide-solid";
+import { Show } from "solid-js";
+import { type AssistantWorkloadCollectionState } from "../../assistant-workload-state";
+import { formatShortTimestamp } from "../../lib/time-format";
 import { ActionButton } from "../action-button";
-import { FileLinkedText, type FileLinkConfig } from "../file-linked-text";
+import { assistantPanelStyles,assistantUtilityStyles } from "../assistants-panel.styles";
+import { formatFailureCategory,formatFailureTracking } from "../background-jobs/job-diagnostics";
+import { FileLinkedText } from "../file-linked-text";
 import { Button } from "../primitives/button";
-import { StatusChip, type StatusChipTone } from "../primitives/status-chip";
+import { StatusChip,type StatusChipTone } from "../primitives/status-chip";
 import { VirtualList } from "../primitives/virtual-list";
-import { assistantPanelStyles, assistantUtilityStyles } from "../assistants-panel.styles";
-import { createAssistantWorkloadController, type AssistantWorkloadCollectionState } from "../../assistant-workload-state";
-import { ASSISTANT_DETAIL_CACHE_LIMIT, assistantDetailCollectionForTab, createAssistantDetailPageCommand } from "../../store/assistant-detail-state";
-import { createAssistantsPanelController, type AssistantsPanelController, type AssistantsPanelProps } from "./assistant-panel-controller";
-import { AssistantDetailPageControl } from "./assistant-detail-page-control";
+import { detailStyles } from "./assistant-detail.styles";
+import { useAssistantsPanel } from "./state/panel-context";
 
 function assistantWorkloadStatusSuffix(state: AssistantWorkloadCollectionState | undefined) {
   if (state?.status === "stale") return " · Refreshing...";
   if (state?.status !== "loading") return "";
   return ` · ${state.request?.kind === "load-more" ? "Loading more..." : state.request?.kind === "retry" ? "Retrying..." : "Loading..."}`;
-}
-
-function formatFailureCategory(value: string) {
-  return value.replace(/-/g, " ");
-}
-
-function formatFailureTracking(job: BackgroundJob) {
-  const streak = job.consecutiveFailureCount ?? 0;
-  const lastCategory = job.lastFailureCategory
-    ? formatFailureCategory(job.lastFailureCategory)
-    : undefined;
-  const backoffUntil = job.backoffUntil
-    ? formatShortTimestamp(job.backoffUntil)
-    : undefined;
-  if (streak <= 0 && !lastCategory && !backoffUntil) {
-    return undefined;
-  }
-  return [
-    streak > 0 ? `Failure streak ${streak}` : undefined,
-    lastCategory ? `last ${lastCategory}` : undefined,
-    backoffUntil ? `backoff until ${backoffUntil}` : undefined,
-  ]
-    .filter(Boolean)
-    .join(" | ");
 }
 
 function formatPromptStats(
@@ -67,15 +32,9 @@ function formatPromptStats(
   return `${promptStats.promptChars} chars, hash ${promptStats.promptHash}`;
 }
 
-export function AssistantJobsTab(props: { controller: AssistantsPanelController }) {
-  const {
-    activeTab, assistantChatFileLinks, assistantJobsEmptyMessage,
-    assistantRunsEmptyMessage, bootstrapAssistantJobs, canBootstrapAssistantJobs,
-    loadMoreAssistantJobs, loadMoreAssistantRuns, openAssistantBackgroundJob,
-    openAssistantBackgroundRun, openAssistantJobEditor, pendingJobSourceId,
-    pendingRunSourceId, retryAssistantJobs, retryAssistantRuns,
-    selectedWorkloadPage, variant, visibleJobs, visibleRuns,
-  } = props.controller;
+export function AssistantJobsTab() {
+  const controller = useAssistantsPanel();
+  const { activeTab } = controller;
   return (
     <Show when={activeTab() === "jobs"}>
       <section
@@ -85,24 +44,24 @@ export function AssistantJobsTab(props: { controller: AssistantsPanelController 
             assistantUtilityStyles.minH0,
             assistantUtilityStyles.flex1,
             assistantUtilityStyles.gap4,
-            assistantUtilityStyles.lgGridColsSplit,
+            detailStyles.columns,
           ).class
         }
       >
-        <AssistantJobsCollection controller={props.controller} />
-        <AssistantRunsCollection controller={props.controller} />
+        <AssistantJobsCollection />
+        <AssistantRunsCollection />
       </section>
     </Show>
   );
 }
 
-function AssistantJobsCollection(props: { controller: AssistantsPanelController }) {
+function AssistantJobsCollection() {
+  const controller = useAssistantsPanel();
   const {
-    assistantChatFileLinks, assistantJobsEmptyMessage, bootstrapAssistantJobs,
-    canBootstrapAssistantJobs, loadMoreAssistantJobs, openAssistantBackgroundJob,
-    openAssistantJobEditor, pendingJobSourceId, retryAssistantJobs,
-    selectedWorkloadPage, visibleJobs,
-  } = props.controller;
+    assistantJobsEmptyMessage, bootstrapAssistantJobs, canBootstrapAssistantJobs,
+    loadMoreAssistantJobs, openAssistantJobEditor, retryAssistantJobs, selectedWorkloadPage,
+    visibleJobs,
+  } = controller;
   return (
     <div
               class={stylex.attrs(assistantUtilityStyles.minW0).class}
@@ -113,7 +72,7 @@ function AssistantJobsCollection(props: { controller: AssistantsPanelController 
                     assistantUtilityStyles.mb3,
                     assistantUtilityStyles.flex,
                     assistantUtilityStyles.itemsCenter,
-                    assistantUtilityStyles.justifyBetween,
+                    assistantUtilityStyles.justifyBetween, assistantUtilityStyles.flexWrap,
                     assistantUtilityStyles.gap3,
                   ).class
                 }
@@ -146,7 +105,7 @@ function AssistantJobsCollection(props: { controller: AssistantsPanelController 
                   stylex.attrs(
                     assistantUtilityStyles.h120,
                     assistantUtilityStyles.pr2,
-                    assistantUtilityStyles.lgHFull,
+
                   ).class
                 }
                 contentClass={
@@ -200,7 +159,7 @@ function AssistantJobsCollection(props: { controller: AssistantsPanelController 
                   </div>
                 }
               >
-        {(job) => <AssistantJobCard controller={props.controller} job={job} />}
+        {(job) => <AssistantJobCard job={job} />}
               </VirtualList>
               <Show when={selectedWorkloadPage()?.jobs.nextCursor || selectedWorkloadPage()?.jobs.hasRequestedMore}>
                 <Button variant="secondary" size="sm"
@@ -214,19 +173,20 @@ function AssistantJobsCollection(props: { controller: AssistantsPanelController 
   );
 }
 
-function AssistantRunsCollection(props: { controller: AssistantsPanelController }) {
+function AssistantRunsCollection() {
+  const controller = useAssistantsPanel();
   const {
     assistantChatFileLinks, assistantRunsEmptyMessage, loadMoreAssistantRuns,
     openAssistantBackgroundRun, pendingRunSourceId, retryAssistantRuns,
     selectedWorkloadPage, visibleRuns,
-  } = props.controller;
+  } = controller;
   return (
     <div
               class={stylex.attrs(assistantUtilityStyles.minW0).class}
             >
               <div
                 class={stylex.attrs(
-                  assistantUtilityStyles.mb3, assistantUtilityStyles.flex, assistantUtilityStyles.itemsCenter, assistantUtilityStyles.justifyBetween,
+                  assistantUtilityStyles.mb3, assistantUtilityStyles.flex, assistantUtilityStyles.itemsCenter, assistantUtilityStyles.justifyBetween, assistantUtilityStyles.flexWrap,
                   assistantUtilityStyles.gap2, assistantUtilityStyles.text0585,
                   assistantUtilityStyles.fontSemibold, assistantUtilityStyles.uppercase, assistantUtilityStyles.tracking018, assistantUtilityStyles.textMuted,
                 ).class}
@@ -244,7 +204,7 @@ function AssistantRunsCollection(props: { controller: AssistantsPanelController 
                   stylex.attrs(
                     assistantUtilityStyles.h120,
                     assistantUtilityStyles.pr2,
-                    assistantUtilityStyles.lgHFull,
+
                   ).class
                 }
                 contentClass={
@@ -311,7 +271,7 @@ function AssistantRunsCollection(props: { controller: AssistantsPanelController 
                         stylex.attrs(
                           assistantUtilityStyles.flex,
                           assistantUtilityStyles.itemsCenter,
-                          assistantUtilityStyles.justifyBetween,
+                          assistantUtilityStyles.justifyBetween, assistantUtilityStyles.flexWrap,
                           assistantUtilityStyles.gap3,
                         ).class
                       }
@@ -320,7 +280,7 @@ function AssistantRunsCollection(props: { controller: AssistantsPanelController 
                         class={
                           stylex.attrs(
                             assistantUtilityStyles.minW0,
-                            assistantUtilityStyles.breakWords,
+                            assistantUtilityStyles.breakWords, detailStyles.readable,
                             assistantUtilityStyles.text075,
                             assistantUtilityStyles.fontSemibold,
                             assistantUtilityStyles.textForeground,
@@ -344,7 +304,7 @@ function AssistantRunsCollection(props: { controller: AssistantsPanelController 
                       class={
                         stylex.attrs(
                           assistantUtilityStyles.mt2,
-                          assistantUtilityStyles.breakWords,
+                          assistantUtilityStyles.breakWords, detailStyles.readable,
                           assistantUtilityStyles.text0675,
                           assistantUtilityStyles.leading5,
                           assistantUtilityStyles.textMuted,
@@ -410,8 +370,9 @@ function AssistantRunsCollection(props: { controller: AssistantsPanelController 
   );
 }
 
-function AssistantJobCard(props: { controller: AssistantsPanelController; job: BackgroundJob }) {
-  const { assistantChatFileLinks, openAssistantBackgroundJob, pendingJobSourceId } = props.controller;
+function AssistantJobCard(props: { job: BackgroundJob }) {
+  const controller = useAssistantsPanel();
+  const { assistantChatFileLinks, openAssistantBackgroundJob, pendingJobSourceId } = controller;
   const { job } = props;
   return (
     <article
@@ -437,7 +398,7 @@ function AssistantJobCard(props: { controller: AssistantsPanelController; job: B
                             stylex.attrs(
                               assistantUtilityStyles.flex,
                               assistantUtilityStyles.itemsStart,
-                              assistantUtilityStyles.justifyBetween,
+                              assistantUtilityStyles.justifyBetween, assistantUtilityStyles.flexWrap,
                               assistantUtilityStyles.gap3,
                             ).class
                           }
@@ -445,7 +406,7 @@ function AssistantJobCard(props: { controller: AssistantsPanelController; job: B
                           <div
                             class={
                               stylex.attrs(
-                                assistantUtilityStyles.breakWords,
+                                assistantUtilityStyles.breakWords, detailStyles.readable,
                                 assistantUtilityStyles.text075,
                                 assistantUtilityStyles.fontSemibold,
                                 assistantUtilityStyles.textForeground,
@@ -478,7 +439,7 @@ function AssistantJobCard(props: { controller: AssistantsPanelController; job: B
                           class={
                             stylex.attrs(
                               assistantUtilityStyles.mt2,
-                              assistantUtilityStyles.breakWords,
+                              assistantUtilityStyles.breakWords, detailStyles.readable,
                               assistantUtilityStyles.text0675,
                               assistantUtilityStyles.leading5,
                               assistantUtilityStyles.textMuted,

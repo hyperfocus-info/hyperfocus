@@ -1,4 +1,5 @@
 import { runtimeCallback } from "./runtime-ports.ts";
+import { installAppShortcuts } from "@hyperfocus/ui/shortcuts";
 const markManualAim = runtimeCallback("combatWeapons", "markManualAim");
 const clamp = runtimeCallback("hud", "clamp");
 const roundToStep = runtimeCallback("hud", "roundToStep");
@@ -38,7 +39,11 @@ import type { ArenaGamepadState, FocusItem, MenuDirection, MenuMove } from "./in
 import type { CameraRigSnapshot } from "./runtime-types.ts";
 
 export function setupInput(): void {
+  // The pause workspace owns settings; live gameplay keeps all of its input.
+  installAppShortcuts({ actions: [{ id: "settings", key: "Mod+,", allowInInput: true,
+    enabled: () => state.paused && state.pausePanel !== "confirm", run: openPauseSettings }] });
   window.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented) return;
     if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight", "Space"].includes(event.code)) event.preventDefault();
     if (state.levelChoice && /^Digit[1-3]$/.test(event.code)) {
       event.preventDefault();

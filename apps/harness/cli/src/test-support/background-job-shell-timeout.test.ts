@@ -8,13 +8,13 @@ import {
 
 describe("resolveShellTimeoutMs", () => {
   test("passes valid positive seconds through as milliseconds", () => {
-    expect(resolveShellTimeoutMs(30)).toBe(30 * 1000);
+    expect(resolveShellTimeoutMs(30)).toBe(30000);
     expect(resolveShellTimeoutMs(MAX_SHELL_TIMEOUT_SECONDS)).toBe(MAX_SHELL_TIMEOUT_SECONDS * 1000);
   });
 
   test("floors fractional seconds to whole seconds", () => {
     expect(resolveShellTimeoutMs(1.7)).toBe(MIN_SHELL_TIMEOUT_SECONDS * 1000);
-    expect(resolveShellTimeoutMs(5.9)).toBe(5 * 1000);
+    expect(resolveShellTimeoutMs(5.9)).toBe(5000);
   });
 
   test("clamps above-max values to the ceiling", () => {
@@ -37,6 +37,6 @@ describe("resolveShellTimeoutMs", () => {
   });
 
   test("accepts numeric strings as defense-in-depth against stale rows", () => {
-    expect(resolveShellTimeoutMs("45")).toBe(45 * 1000);
+    expect(resolveShellTimeoutMs("45")).toBe(45000);
   });
 });

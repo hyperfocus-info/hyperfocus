@@ -57,7 +57,7 @@ function readReferencedTests() {
     refs.add(match[0]!.replaceAll("/", path.sep));
   }
   return [...refs]
-    .map((testPath) => testPath.startsWith(`scripts${path.sep}`) ? path.join("apps", "harness", testPath) : testPath)
+    .map((testPath) => existsSync(path.join(repoRoot, testPath)) ? testPath : testPath.startsWith(`scripts${path.sep}`) ? path.join("apps", "harness", testPath) : testPath)
     .sort();
 }
 

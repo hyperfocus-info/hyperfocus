@@ -4,11 +4,11 @@ import { PHYSICS_DEBUG_CONTACT, PHYSICS_DEBUG_JOINT, PHYSICS_DEBUG_SEGMENT_STRID
 describe("first-party 2D physics world", () => {
   test("can round persistent state through float32 storage for JS/WASM parity", () => {
     const world = createPhysicsWorld2D({ capacity: 1, maxContacts: 1, maxJoints: 0, gravityY: 0, precision: "float32" });
-    world.addBody({ id: "body", shape: { kind: "circle", radius: 0.1 }, x: 1 / 3, velocityX: 1 / 7 });
-    world.step(1 / 60);
+    world.addBody({ id: "body", shape: { kind: "circle", radius: 0.1 }, x: 0.3333333333333333, velocityX: 0.14285714285714285 });
+    world.step(0.016666666666666666);
 
     expect(world.precision).toBe("float32");
-    expect(world.body("body")!.x).toBe(Math.fround(Math.fround(1 / 3) + Math.fround(1 / 7) * (1 / 60)));
+    expect(world.body("body")!.x).toBe(Math.fround(Math.fround(0.3333333333333333) + Math.fround(0.14285714285714285) * (0.016666666666666666)));
     expect(world.numericStorageBytes).toBeLessThan(createPhysicsWorld2D({ capacity: 1, maxContacts: 1, maxJoints: 0 }).numericStorageBytes);
   });
 
@@ -39,7 +39,7 @@ describe("first-party 2D physics world", () => {
     world.addBody({ id: "sensor", type: "static", trigger: true, shape: { kind: "box", halfWidth: 2, halfHeight: 2 } });
     world.addBody({ id: "actor", shape: { kind: "circle", radius: 1 }, x: 1 });
 
-    world.step(1 / 60);
+    world.step(0.016666666666666666);
     expect(world.contact(0)).toMatchObject({ trigger: true });
     expect(world.body("actor")!.x).toBe(1);
   });
@@ -48,7 +48,7 @@ describe("first-party 2D physics world", () => {
     const world = createPhysicsWorld2D({ capacity: 4, gravityY: 0 });
     world.addBody({ id: "a", shape: { kind: "box", halfWidth: 1, halfHeight: 1 }, collisionLayer: 1, collisionMask: 1 });
     world.addBody({ id: "b", shape: { kind: "box", halfWidth: 1, halfHeight: 1 }, collisionLayer: 2, collisionMask: 2 });
-    expect(world.step(1 / 60)).toBe(0);
+    expect(world.step(0.016666666666666666)).toBe(0);
     expect(world.diagnostics.candidatePairs).toBe(0);
   });
 
@@ -57,7 +57,7 @@ describe("first-party 2D physics world", () => {
     world.addBody({ id: "wall", type: "static", shape: { kind: "box", halfWidth: 0.1, halfHeight: 10 }, x: 5 });
     world.addBody({ id: "bullet", continuous: true, shape: { kind: "box", halfWidth: 0.25, halfHeight: 0.25 }, velocityX: 1_000 });
 
-    world.step(1 / 60);
+    world.step(0.016666666666666666);
     const bullet = world.body("bullet")!;
     expect(bullet.x).toBeLessThanOrEqual(4.65);
     expect(bullet.velocityX).toBe(0);
@@ -69,7 +69,7 @@ describe("first-party 2D physics world", () => {
     world.addBody({ id: "wall", type: "static", angle: Math.PI / 4, shape: { kind: "box", halfWidth: 0.1, halfHeight: 10 }, x: 5 });
     world.addBody({ id: "bullet", continuous: true, shape: { kind: "circle", radius: 0.25 }, velocityX: 1_000 });
 
-    world.step(1 / 60);
+    world.step(0.016666666666666666);
     const bullet = world.body("bullet")!;
     const wallNormalX = Math.SQRT1_2;
     const wallNormalY = Math.SQRT1_2;
@@ -124,16 +124,18 @@ describe("first-party 2D physics world", () => {
     const oldIndex = world.addBody({ id: "old", shape: { kind: "circle", radius: 1 } });
     world.removeBody("old");
     const newIndex = world.addBody({ id: "new", shape: { kind: "circle", radius: 2 } });
-    expect(newIndex).toBe(oldIndex);
+    expect(newIndex).not.toBe(oldIndex);
+    expect(world.body(oldIndex)).toBeUndefined();
+    expect(() => world.setPosition(oldIndex, 99, 100)).toThrow('Unknown physics body');
     expect(world.body("old")).toBeUndefined();
     expect(world.body("new")?.shape).toEqual({ kind: "circle", radius: 2 });
   });
 
   test("preallocates an inspectable numeric budget and reports contact overflow", () => {
     const world = createPhysicsWorld2D({ capacity: 3, maxContacts: 1, maxJoints: 0, gravityY: 0 });
-    expect(world.numericStorageBytes).toBe(472);
+    expect(world.numericStorageBytes).toBe(484);
     for (const id of ["a", "b", "c"]) world.addBody({ id, shape: { kind: "circle", radius: 2 } });
-    expect(world.step(1 / 60)).toBe(1);
+    expect(world.step(0.016666666666666666)).toBe(1);
     expect(world.diagnostics.candidatePairs).toBe(3);
     expect(world.diagnostics.contactOverflow).toBe(2);
   });
@@ -144,7 +146,7 @@ describe("first-party 2D physics world", () => {
       world.addBody({ id: "floor", type: "static", shape: { kind: "box", halfWidth: 20, halfHeight: 1 }, y: 8 });
       world.addBody({ id: "ball", shape: { kind: "circle", radius: 1 }, x: -2, velocityX: 5, restitution: 0.25 });
       world.applyImpulse("ball", 3, -2);
-      for (let tick = 0; tick < 120; tick += 1) world.step(1 / 120);
+      for (let tick = 0; tick < 120; tick += 1) world.step(0.008333333333333333);
       return { body: world.body("ball"), diagnostics: { ...world.diagnostics } };
     };
     expect(run()).toEqual(run());
@@ -166,7 +168,7 @@ describe("first-party 2D physics world", () => {
     const world = createPhysicsWorld2D({ capacity: 2, gravityY: 0 });
     world.addBody({ id: "wall", type: "static", shape: { kind: "box", halfWidth: 2, halfHeight: 1 } });
     world.addBody({ id: "sensor", trigger: true, shape: { kind: "circle", radius: 1 }, x: 1 });
-    world.step(1 / 60);
+    world.step(0.016666666666666666);
     expect(world.debugSegmentCount(4)).toBe(9);
     const output = new Float32Array(world.debugSegmentCount(4) * PHYSICS_DEBUG_SEGMENT_STRIDE);
     expect(world.writeDebugSegments(output, 4)).toBe(9);
@@ -224,7 +226,7 @@ describe("first-party 2D physics world", () => {
     const world = createPhysicsWorld2D({ capacity: 3, gravityY: 0 });
     world.addBody({ id: "rotated", type: "static", angle: Math.PI / 2, shape: { kind: "box", halfWidth: 2, halfHeight: 0.5 }, x: 4 });
     world.addBody({ id: "circle", shape: { kind: "circle", radius: 0.75 }, x: 3.5 });
-    expect(world.step(1 / 60)).toBe(1);
+    expect(world.step(0.016666666666666666)).toBe(1);
     expect(world.contact(0).penetration).toBeGreaterThan(0);
     expect(world.raycast(0, 1.5, 1, 0, 10, 1)).toMatchObject({ id: "rotated", distance: 3.5, normalX: -1 });
   });

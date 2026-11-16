@@ -51,7 +51,7 @@ export const DEFAULT_APP_HOTKEY_PREFERENCES: AppHotkeyPreferences = {
   openAssistants: ["Mod+2"],
   openJobs: ["Mod+3"],
   openRuns: ["Mod+4"],
-  openPreferences: ["Mod+5", "Mod+,"],
+  openPreferences: ["Mod+5", "Meta+,", "Control+,"],
   openIde: ["Mod+I"],
   toggleTerminalDrawer: ["Mod+`"],
   toggleTracePanel: ["Mod+T"],
@@ -293,9 +293,9 @@ export function normalizeAppHotkeys(value: unknown, fallback: Hotkey[]): Hotkey[
 export function normalizeAppHotkeyPreferences(input: unknown): AppHotkeyPreferences {
   const source = input && typeof input === "object" ? input : undefined;
   const read = (key: AppHotkeyId | "openProjectSwitcherAlternate") => source ? Reflect.get(source, key) : undefined;
-  const hasProjectSwitcherPreference =
+  const hasProjectSwitcherPreference = source !== undefined && (
     Object.prototype.hasOwnProperty.call(source, "openProjectSwitcher") ||
-    Object.prototype.hasOwnProperty.call(source, "openProjectSwitcherAlternate");
+    Object.prototype.hasOwnProperty.call(source, "openProjectSwitcherAlternate"));
 
   return {
     openProjectSwitcher: normalizeAppHotkeys(

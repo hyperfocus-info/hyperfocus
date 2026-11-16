@@ -87,6 +87,27 @@ createUiTest("ExecutionPlanDialog", () => {
     expect(harnessStore.state.executionPlanDialogOpen).toBe(false);
   });
 
+  it("leads with the summary and keeps expert details collapsed", () => {
+    const plan = createExecutionPlanFixture();
+    seedHarnessStoreForTests(createHarnessStateFixture({ executionPlanDialogOpen: true, selectedExecutionPlan: plan }));
+    render(() => <ExecutionPlanDialog executionPlan={harnessStore.state.selectedExecutionPlan} />);
+    const body = screen.getByRole("heading", { name: "Summary" }).parentElement?.parentElement;
+    expect(body?.firstElementChild?.textContent).toContain(plan.summary);
+    const disclosures = [...screen.getByRole("dialog").querySelectorAll("details")];
+    expect(disclosures.map(element => element.querySelector("summary")?.textContent)).toEqual(["Run details", "Execution brief"]);
+    expect(disclosures.every(element => !element.open)).toBe(true);
+    expect(screen.getByRole("heading", { name: "Prerequisites (1)" })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Contracts (1)" })).not.toBeNull();
+  });
+
+  it("explains empty prerequisites and contracts", () => {
+    const plan = createExecutionPlanFixture({ prerequisites: [], contracts: [] });
+    seedHarnessStoreForTests(createHarnessStateFixture({ executionPlanDialogOpen: true, selectedExecutionPlan: plan }));
+    render(() => <ExecutionPlanDialog executionPlan={harnessStore.state.selectedExecutionPlan} />);
+    expect(screen.getByText("No explicit prerequisites.")).not.toBeNull();
+    expect(screen.getByText("No contracts in this plan.")).not.toBeNull();
+  });
+
   it("shows branchfs size warning badge from active project traces", () => {
     const plan = createExecutionPlanFixture();
     const project = createViewProjectFixture({

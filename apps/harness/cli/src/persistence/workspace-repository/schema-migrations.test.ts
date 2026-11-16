@@ -108,7 +108,7 @@ function createLegacyPopulatedFixture() {
     nextRunAt: now,
     createdAt: now,
     updatedAt: now,
-  }).jobs[0]!;
+  });
   const run = repository.createBackgroundJobRun({
     jobId: job.id,
     projectId: project.id,

@@ -1,63 +1,67 @@
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Match,
-  onCleanup,
-  onMount,
-  Show,
-  Switch,
-  untrack,
-} from "solid-js";
 import * as stylex from "@stylexjs/stylex";
-import {
-  createHotkeys,
-  createHotkeySequences,
-  formatForDisplay,
-} from "@tanstack/solid-hotkeys";
 import type { CreateHotkeyDefinition } from "@tanstack/solid-hotkeys";
 import {
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Code2,
-  ExternalLink,
-  FileCode2,
-  Files,
-  Folder,
-  FolderOpen,
-  GitBranch,
-  GitCommit,
-  GitPullRequest,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Save,
-  Search,
-  Settings,
-  X,
+createHotkeys,
+createHotkeySequences,
+formatForDisplay,
+} from "@tanstack/solid-hotkeys";
+import {
+CheckCircle2,
+ChevronDown,
+ChevronRight,
+Code2,
+ExternalLink,
+FileCode2,
+Files,
+Folder,
+FolderOpen,
+GitBranch,
+GitCommit,
+GitPullRequest,
+PanelLeftClose,
+PanelLeftOpen,
+Save,
+Search,
+Settings,
+X,
 } from "lucide-solid";
+import {
+createContext,
+createEffect,
+createMemo,
+createSignal,
+For,
+Match,
+onCleanup,
+onMount,
+Show,
+Switch,
+untrack,
+useContext,
+} from "solid-js";
 import { ActionButton } from "../components/action-button";
 import {
-  ContextMenu,
-  type ContextMenuAction,
+ContextMenu,
+type ContextMenuAction,
 } from "../components/primitives/context-menu";
 import { Tooltip } from "../components/primitives/tooltip";
 import { harnessStore } from "../harness-store";
 import {
-  isValidAppHotkey, normalizeAppHotkeyPreferences,
-  type AppHotkeyId,
+isValidAppHotkey,normalizeAppHotkeyPreferences,
+type AppHotkeyId,
 } from "../lib/app-hotkeys";
+import { escapeRegExp } from "@hyperfocus/utilities/text";
 import { cn } from "../lib/utils";
 import { terminalStore } from "../terminal/terminal-store";
 import { pushToast } from "../toast-store";
-import {
-  ideStore,
-  type IdeActivityView,
-  type IdeEditorFile,
-} from "./ide-store";
-import { ideStyles, ideUtilityStyles } from "./ide-workbench.styles";
+import { applyCompletionAt,countDocumentMatches,getCompletionPrefix,getTextPosition,getWordAtPosition,inferLanguage,isIdeProjectSwitcherModKHotkey,normalizeGitStatusPath,normalizeHotkeyKey } from "./editor/text-operations";
 import { GlobalSearchView } from "./global-search-view";
+import {
+ideStore,
+type IdeActivityView,
+type IdeEditorFile,
+} from "./ide-store";
+import { ideStyles,ideUtilityStyles } from "./ide-workbench.styles";
 
 type IdeFile = Pick<
   IdeEditorFile,
@@ -445,7 +449,7 @@ function registerIdeWorkbenchDataEffects(
   });
   createEffect(() => {
     const projectId = state.activeProject()?.id;
-    if (projectId) ideStore.loadProject(projectId);
+    if (projectId) untrack(() => ideStore.loadProject(projectId));
   });
   createEffect(() => {
     const projectId = state.activeProject()?.id;
@@ -585,8 +589,15 @@ type IdeWorkbenchViewProps = {
   contextMenuActions: () => ContextMenuAction[];
 };
 
-function IdeWorkbenchSidebar(props: Pick<IdeWorkbenchViewProps, "state" | "actions">) {
-  const { state, actions } = props;
+const IdeWorkbenchContext = createContext<IdeWorkbenchViewProps>();
+function useIdeWorkbench() {
+  const workbench = useContext(IdeWorkbenchContext);
+  if (!workbench) throw new Error("IDE workbench requires its provider.");
+  return workbench;
+}
+
+function IdeWorkbenchSidebar() {
+  const { state, actions } = useIdeWorkbench();
   return (
     <>
       <Show
@@ -612,33 +623,8 @@ function IdeWorkbenchSidebar(props: Pick<IdeWorkbenchViewProps, "state" | "actio
             onCollapse={() => actions.setSidebarOpen(false)}
             onCollapseAll={ideStore.collapseAllFolders}
           />
-          <Show when={!ideStore.state.treeLoading} fallback={<SidebarSkeleton />}>
-            <SwitchSidebar
-              active={state.activityView()}
-              searchQuery={ideStore.state.searchQuery}
-              replaceQuery={ideStore.state.replaceQuery}
-              regexSearch={ideStore.state.regexSearch}
-              caseSensitiveSearch={ideStore.state.caseSensitiveSearch}
-              wholeWordSearch={ideStore.state.wholeWordSearch}
-              searchLoading={ideStore.state.searchLoading}
-              searchResults={ideStore.state.searchResults}
-              searchTruncated={ideStore.state.searchTruncated}
-              searchInputRef={(element) => { state.refs.globalSearchInput = element; }}
-              treeEntries={ideStore.state.treeEntries}
-              treeError={ideStore.state.treeError}
-              treeTruncated={ideStore.state.treeTruncated}
-              gitBranch={ideStore.state.gitBranch}
-              gitIsRepository={ideStore.state.gitIsRepository}
-              gitChanges={ideStore.state.gitChanges}
-              gitLoading={ideStore.state.gitLoading}
-              onSearchQuery={ideStore.setSearchQuery}
-              onReplaceQuery={ideStore.setReplaceQuery}
-              onRegexSearch={ideStore.setRegexSearch}
-              onCaseSensitiveSearch={ideStore.setCaseSensitiveSearch}
-              onWholeWordSearch={ideStore.setWholeWordSearch}
-              onOpenPath={actions.openFileByPath}
-              onContextMenu={actions.openContextMenu}
-            />
+          <Show when={!ideStore.state.treeLoading || ideStore.state.treeEntries.length > 0} fallback={<SidebarSkeleton />}>
+            <SwitchSidebar />
           </Show>
         </aside>
         <Sash
@@ -651,8 +637,8 @@ function IdeWorkbenchSidebar(props: Pick<IdeWorkbenchViewProps, "state" | "actio
   );
 }
 
-function IdeWorkbenchToolbar(props: Pick<IdeWorkbenchViewProps, "state" | "actions">) {
-  const { state, actions } = props;
+function IdeWorkbenchToolbar() {
+  const { state, actions } = useIdeWorkbench();
   const iconClass = stylex.attrs(ideUtilityStyles.h4, ideUtilityStyles.w4).class;
   const buttonClass = stylex.attrs(
     ideUtilityStyles.h8,
@@ -721,8 +707,8 @@ function IdeWorkbenchToolbar(props: Pick<IdeWorkbenchViewProps, "state" | "actio
   );
 }
 
-function IdeWorkbenchTabs(props: Pick<IdeWorkbenchViewProps, "state" | "actions">) {
-  const { state, actions } = props;
+function IdeWorkbenchTabs() {
+  const { state, actions } = useIdeWorkbench();
   return (
     <div
       class={stylex.attrs(
@@ -786,10 +772,10 @@ function IdeWorkbenchTabs(props: Pick<IdeWorkbenchViewProps, "state" | "actions"
   );
 }
 
-function IdeWorkbenchEditorArea(props: Pick<IdeWorkbenchViewProps, "state" | "actions">) {
-  const { state, actions } = props;
+function IdeWorkbenchEditorArea() {
+  const { state, actions } = useIdeWorkbench();
   return (
-    <Show when={!ideStore.state.treeLoading} fallback={<EditorSkeleton />}>
+    <Show when={!ideStore.state.treeLoading || Boolean(ideStore.state.filesByPath[ideStore.state.activePath ?? ""])} fallback={<EditorSkeleton />}>
       <div class={stylex.attrs(
         ideUtilityStyles.flex,
         ideUtilityStyles.minH0,
@@ -845,8 +831,8 @@ function IdeWorkbenchEditorArea(props: Pick<IdeWorkbenchViewProps, "state" | "ac
   );
 }
 
-function IdeWorkbenchView(props: IdeWorkbenchViewProps) {
-  const { state, actions } = props;
+function IdeWorkbenchView() {
+  const { state } = useIdeWorkbench();
   return (
     <section
       ref={(element) => { state.refs.workbench = element; }}
@@ -863,7 +849,7 @@ function IdeWorkbenchView(props: IdeWorkbenchViewProps) {
       ).class}
     >
       <div class={stylex.attrs(ideUtilityStyles.flex, ideUtilityStyles.minH0, ideUtilityStyles.flex1).class}>
-        <IdeWorkbenchSidebar state={state} actions={actions} />
+        <IdeWorkbenchSidebar />
         <div class={stylex.attrs(
           ideStyles.surface,
           ideUtilityStyles.flex,
@@ -871,9 +857,9 @@ function IdeWorkbenchView(props: IdeWorkbenchViewProps) {
           ideUtilityStyles.flex1,
           ideUtilityStyles.flexCol,
         ).class}>
-          <IdeWorkbenchToolbar state={state} actions={actions} />
-          <IdeWorkbenchTabs state={state} actions={actions} />
-          <IdeWorkbenchEditorArea state={state} actions={actions} />
+          <IdeWorkbenchToolbar />
+          <IdeWorkbenchTabs />
+          <IdeWorkbenchEditorArea />
           <StatusBar
             branch={ideStore.state.gitBranch ?? (ideStore.state.gitIsRepository ? "detached" : "no git")}
             dirtyCount={state.dirtyCount()}
@@ -887,7 +873,7 @@ function IdeWorkbenchView(props: IdeWorkbenchViewProps) {
       <CommandPalette
         open={ideStore.state.commandPaletteOpen}
         query={ideStore.state.commandQuery}
-        commands={props.commandPaletteCommands()}
+        commands={useIdeWorkbench().commandPaletteCommands()}
         onQuery={ideStore.setCommandQuery}
         onClose={() => ideStore.setCommandPalette(false, "")}
       />
@@ -896,7 +882,7 @@ function IdeWorkbenchView(props: IdeWorkbenchViewProps) {
         x={state.contextMenu()?.x ?? 0}
         y={state.contextMenu()?.y ?? 0}
         ariaLabel="IDE context menu"
-        actions={props.contextMenuActions()}
+        actions={useIdeWorkbench().contextMenuActions()}
         onClose={() => state.setContextMenu(undefined)}
       />
       <IdeToasts
@@ -932,12 +918,7 @@ export function IdeWorkbench(props?: IdeWorkbenchProps) {
     toggleActivityView: actions.toggleActivityView,
   });
   return (
-    <IdeWorkbenchView
-      state={state}
-      actions={actions}
-      commandPaletteCommands={commandPaletteCommands}
-      contextMenuActions={contextMenuActions}
-    />
+    <IdeWorkbenchContext.Provider value={{ state, actions, commandPaletteCommands, contextMenuActions }}><IdeWorkbenchView /></IdeWorkbenchContext.Provider>
   );
 }
 function ActivityBar(props: {
@@ -1159,61 +1140,26 @@ function SidebarHeader(props: {
   );
 }
 
-function SwitchSidebar(props: {
-  active: IdeActivityView;
-  searchQuery: string;
-  replaceQuery: string;
-  regexSearch: boolean;
-  caseSensitiveSearch: boolean;
-  wholeWordSearch: boolean;
-  searchLoading: boolean;
-  searchResults: import("@hyperfocus/ai-core/protocol").IdeSearchResult[];
-  searchTruncated: boolean;
-  searchInputRef: (element: HTMLInputElement | undefined) => void;
-  treeEntries: import("@hyperfocus/ai-core/protocol").IdeFileTreeEntry[];
-  treeError?: string;
-  treeTruncated: boolean;
-  gitBranch?: string;
-  gitIsRepository: boolean;
-  gitChanges: import("@hyperfocus/ai-core/protocol").IdeGitChange[];
-  gitLoading: boolean;
-  onSearchQuery: (value: string) => void;
-  onReplaceQuery: (value: string) => void;
-  onRegexSearch: (value: boolean) => void;
-  onCaseSensitiveSearch: (value: boolean) => void;
-  onWholeWordSearch: (value: boolean) => void;
-  onOpenPath: (path: string, line?: number, column?: number) => void;
-  onContextMenu: (
-    kind: IdeContextMenu["kind"],
-    event: MouseEvent,
-    filePath?: string,
-  ) => void;
-}) {
-  const active = createMemo(() => props.active);
+function SwitchSidebar() {
+  const { state, actions } = useIdeWorkbench();
   return (
-    <Switch
-      fallback={
-        <ExplorerView
-          entries={props.treeEntries}
-          error={props.treeError}
-          truncated={props.treeTruncated}
-          gitChanges={props.gitChanges}
-          onOpenPath={props.onOpenPath}
-          onContextMenu={props.onContextMenu}
-        />
-      }
-    >
-      <Match when={active() === "search"}>
-        <GlobalSearchView {...props} />
+    <Switch fallback={<ExplorerView entries={ideStore.state.treeEntries}
+      error={ideStore.state.treeError} truncated={ideStore.state.treeTruncated}
+      gitChanges={ideStore.state.gitChanges} onOpenPath={actions.openFileByPath}
+      onContextMenu={actions.openContextMenu} />}>
+      <Match when={state.activityView() === "search"}>
+        <GlobalSearchView searchQuery={ideStore.state.searchQuery} replaceQuery={ideStore.state.replaceQuery}
+          regexSearch={ideStore.state.regexSearch} caseSensitiveSearch={ideStore.state.caseSensitiveSearch}
+          wholeWordSearch={ideStore.state.wholeWordSearch} searchLoading={ideStore.state.searchLoading}
+          searchResults={ideStore.state.searchResults} searchTruncated={ideStore.state.searchTruncated}
+          searchInputRef={element => { state.refs.globalSearchInput = element; }}
+          onSearchQuery={ideStore.setSearchQuery} onReplaceQuery={ideStore.setReplaceQuery}
+          onRegexSearch={ideStore.setRegexSearch} onCaseSensitiveSearch={ideStore.setCaseSensitiveSearch}
+          onWholeWordSearch={ideStore.setWholeWordSearch} onOpenPath={actions.openFileByPath} />
       </Match>
-      <Match when={active() === "source-control"}>
-        <SourceControlView
-          branch={props.gitBranch}
-          isRepository={props.gitIsRepository}
-          changes={props.gitChanges}
-          loading={props.gitLoading}
-          onOpenPath={props.onOpenPath}
-        />
+      <Match when={state.activityView() === "source-control"}>
+        <SourceControlView branch={ideStore.state.gitBranch} isRepository={ideStore.state.gitIsRepository}
+          changes={ideStore.state.gitChanges} loading={ideStore.state.gitLoading} onOpenPath={actions.openFileByPath} />
       </Match>
     </Switch>
   );
@@ -1500,13 +1446,6 @@ function createFolderGitStatus(tone: GitStatusBadge["tone"]): GitStatusBadge {
   return { label: "*", tone, source: "folder" };
 }
 
-function normalizeGitStatusPath(path: string) {
-  return path
-    .replace(/\\/g, "/")
-    .replace(/^\.\//, "")
-    .replace(/^\/+|\/+$/g, "")
-    .toLowerCase();
-}
 
 function toGitStatusBadge(
   change: import("@hyperfocus/ai-core/protocol").IdeGitChange,
@@ -1910,13 +1849,18 @@ function createEditorSurfaceModel(props: EditorSurfaceProps) {
 }
 
 type EditorSurfaceModel = ReturnType<typeof createEditorSurfaceModel>;
+const EditorSurfaceContext = createContext<{ editor: EditorSurfaceProps; model: EditorSurfaceModel }>();
+function useEditorSurface() {
+  const surface = useContext(EditorSurfaceContext);
+  if (!surface) throw new Error("Editor controls require their surface provider.");
+  return surface;
+}
 
-function EditorFindControl(props: {
-  editor: EditorSurfaceProps;
-  model: EditorSurfaceModel;
-}) {
+
+function EditorFindControl() {
+  const { editor, model } = useEditorSurface();
   return (
-    <Show when={props.editor.documentFindOpen}>
+    <Show when={editor.documentFindOpen}>
       <div class={stylex.attrs(
         ideStyles.commandSurface,
         ideUtilityStyles.absolute,
@@ -1939,7 +1883,7 @@ function EditorFindControl(props: {
           ideUtilityStyles.textIdeMuted,
         ).class} />
         <input
-          ref={props.editor.findInputRef}
+          ref={editor.findInputRef}
           class={stylex.attrs(
             ideUtilityStyles.h7,
             ideUtilityStyles.w44,
@@ -1950,11 +1894,11 @@ function EditorFindControl(props: {
             ideUtilityStyles.outlineNone,
           ).class}
           aria-label="Find in current document"
-          value={props.editor.documentFindQuery}
+          value={editor.documentFindQuery}
           placeholder="Find"
-          onInput={(event) => props.editor.onDocumentFindQuery(event.currentTarget.value)}
+          onInput={(event) => editor.onDocumentFindQuery(event.currentTarget.value)}
           onKeyDown={(event) => {
-            if (event.key === "Escape") props.editor.onDocumentFindClose();
+            if (event.key === "Escape") editor.onDocumentFindClose();
           }}
         />
         <span class={stylex.attrs(
@@ -1963,7 +1907,7 @@ function EditorFindControl(props: {
           ideUtilityStyles.text065,
           ideUtilityStyles.textIdeMuted,
         ).class}>
-          {props.model.matchCount()}
+          {model.matchCount()}
         </span>
         <ActionButton
           tooltip="Close document search"
@@ -1976,7 +1920,7 @@ function EditorFindControl(props: {
             ideUtilityStyles.w7,
             ideUtilityStyles.roundedMd,
           ).class}
-          onClick={props.editor.onDocumentFindClose}
+          onClick={editor.onDocumentFindClose}
         />
       </div>
     </Show>
@@ -1985,9 +1929,8 @@ function EditorFindControl(props: {
 
 function EditorCodeLayer(props: {
   file: IdeFile;
-  editor: EditorSurfaceProps;
-  model: EditorSurfaceModel;
 }) {
+  const { editor, model } = useEditorSurface();
   return (
     <div
       class={stylex.attrs(
@@ -1999,17 +1942,17 @@ function EditorCodeLayer(props: {
         ideUtilityStyles.pr6,
       ).class}
       style={{
-        transform: `translate(${-props.model.scrollPosition().left}px, ${-props.model.scrollPosition().top}px)`,
+        transform: `translate(${-model.scrollPosition().left}px, ${-model.scrollPosition().top}px)`,
       }}
     >
-      <For each={props.model.displayedLines()}>
+      <For each={model.displayedLines()}>
         {(line, index) => (
           <div
             data-test-ide-code-line={String(index() + 1)}
-            data-word-wrap={props.editor.wordWrap}
+            data-word-wrap={editor.wordWrap}
             class={cn(
               stylex.attrs(ideStyles.codeLine, ideUtilityStyles.grid, ideUtilityStyles.gridCode).class,
-              props.editor.wordWrap === "on" ? stylex.attrs(ideStyles.codeLineWrap).class : undefined,
+              editor.wordWrap === "on" ? stylex.attrs(ideStyles.codeLineWrap).class : undefined,
             )}
           >
             <span class={stylex.attrs(
@@ -2024,8 +1967,8 @@ function EditorCodeLayer(props: {
               data-test-ide-code-text={String(index() + 1)}
               class={cn(
                 stylex.attrs(ideStyles.codeCell, ideUtilityStyles.whitespacePre).class,
-                props.editor.wordWrap === "on" ? stylex.attrs(ideStyles.codeCellWrap).class : undefined,
-                props.editor.bracketPairColorization ? stylex.attrs(ideStyles.codeColorized).class : undefined,
+                editor.wordWrap === "on" ? stylex.attrs(ideStyles.codeCellWrap).class : undefined,
+                editor.bracketPairColorization ? stylex.attrs(ideStyles.codeColorized).class : undefined,
               )}
             >
               <For each={syntaxHighlightLine(line, props.file.language)}>
@@ -2041,41 +1984,40 @@ function EditorCodeLayer(props: {
 
 function EditorTextarea(props: {
   file: IdeFile;
-  editor: EditorSurfaceProps;
-  model: EditorSurfaceModel;
 }) {
+  const { editor, model } = useEditorSurface();
   const handleKeyDown = (event: KeyboardEvent) => {
-    props.model.clearSymbolHover();
+    model.clearSymbolHover();
     if (eventMatchesHotkeys(
       event,
       normalizeAppHotkeyPreferences(harnessStore.state.appHotkeyPreferences).ideCloseEditor,
     )) {
       event.preventDefault();
       event.stopPropagation();
-      props.editor.onCloseTab();
+      editor.onCloseTab();
       return;
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
-      props.editor.onSave();
+      editor.onSave();
       return;
     }
     if (event.key === "F12") {
-      props.model.handleDefinition(event);
+      model.handleDefinition(event);
       return;
     }
     if ((event.ctrlKey || event.metaKey) && event.key === " ") {
       event.preventDefault();
-      props.model.showCompletions();
+      model.showCompletions();
       return;
     }
-    props.editor.onCompletionClose();
+    editor.onCompletionClose();
   };
   return (
     <textarea
-      ref={props.model.setTextareaRef}
+      ref={model.setTextareaRef}
       aria-label={`Edit ${props.file.name}`}
-      data-word-wrap={props.editor.wordWrap}
+      data-word-wrap={editor.wordWrap}
       spellcheck={false}
       class={cn(
         stylex.attrs(
@@ -2092,38 +2034,36 @@ function EditorTextarea(props: {
           ideUtilityStyles.leading6,
           ideUtilityStyles.outlineNone,
         ).class,
-        props.editor.wordWrap === "on" ? stylex.attrs(ideStyles.codeInputWrap).class : undefined,
+        editor.wordWrap === "on" ? stylex.attrs(ideStyles.codeInputWrap).class : undefined,
       )}
-      value={props.model.displayedText()}
-      onInput={(event) => props.model.handleInput(event.currentTarget)}
+      value={model.displayedText()}
+      onInput={(event) => model.handleInput(event.currentTarget)}
       onScroll={(event) => {
-        props.model.setScrollPosition({
+        model.setScrollPosition({
           left: event.currentTarget.scrollLeft,
           top: event.currentTarget.scrollTop,
         });
-        props.model.clearSymbolHover();
+        model.clearSymbolHover();
       }}
-      onMouseMove={props.model.scheduleSymbolHover}
-      onMouseLeave={props.model.clearSymbolHover}
+      onMouseMove={model.scheduleSymbolHover}
+      onMouseLeave={model.clearSymbolHover}
       onClick={(event) => {
-        props.model.clearSymbolHover();
-        props.model.updateCursor();
-        props.model.handleDefinition(event);
+        model.clearSymbolHover();
+        model.updateCursor();
+        model.handleDefinition(event);
       }}
-      onKeyUp={props.model.updateCursor}
-      onSelect={props.model.updateCursor}
+      onKeyUp={model.updateCursor}
+      onSelect={model.updateCursor}
       onKeyDown={handleKeyDown}
     />
   );
 }
 
-function EditorOverlays(props: {
-  editor: EditorSurfaceProps;
-  model: EditorSurfaceModel;
-}) {
+function EditorOverlays() {
+  const { editor, model } = useEditorSurface();
   return (
     <>
-      <Show when={props.editor.completionState}>
+      <Show when={editor.completionState}>
         {(completion) => (
           <div
             class={stylex.attrs(
@@ -2146,7 +2086,7 @@ function EditorOverlays(props: {
                   type="button"
                   class={stylex.attrs(ideStyles.completionRow).class}
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => props.editor.onCompletionSelect(item)}
+                  onClick={() => editor.onCompletionSelect(item)}
                 >
                   {item}
                 </button>
@@ -2155,7 +2095,7 @@ function EditorOverlays(props: {
           </div>
         )}
       </Show>
-      <Show when={props.model.symbolHover()}>
+      <Show when={model.symbolHover()}>
         {(hover) => (
           <div
             data-test-ide-symbol-tooltip=""
@@ -2199,14 +2139,11 @@ function EditorOverlays(props: {
   );
 }
 
-function EditorDocument(props: {
-  file?: IdeFile;
-  editor: EditorSurfaceProps;
-  model: EditorSurfaceModel;
-}) {
+function EditorDocument() {
+  const { editor } = useEditorSurface();
   return (
     <Show
-      when={props.file}
+      when={editor.file}
       fallback={<div class={stylex.attrs(
         ideUtilityStyles.flex,
         ideUtilityStyles.hFull,
@@ -2227,7 +2164,7 @@ function EditorDocument(props: {
             ideUtilityStyles.text078,
             ideUtilityStyles.leading6,
           ).class}
-          style={{ "tab-size": String(props.editor.tabSize) }}
+          style={{ "tab-size": String(editor.tabSize) }}
         >
           <Show
             when={!file().isBinary && !file().tooLarge}
@@ -2237,11 +2174,11 @@ function EditorDocument(props: {
               ideUtilityStyles.textIdeMuted,
             ).class}>Binary or oversized file preview is unavailable.</div>}
           >
-            <EditorCodeLayer file={file()} editor={props.editor} model={props.model} />
-            <EditorTextarea file={file()} editor={props.editor} model={props.model} />
-            <EditorOverlays editor={props.editor} model={props.model} />
+            <EditorCodeLayer file={file()} />
+            <EditorTextarea file={file()} />
+            <EditorOverlays />
           </Show>
-          <Show when={props.editor.dirty}>
+          <Show when={editor.dirty}>
             <div class={stylex.attrs(
               ideUtilityStyles.absolute,
               ideUtilityStyles.bottom3,
@@ -2267,7 +2204,7 @@ function EditorSurface(props: EditorSurfaceProps) {
   const model = createEditorSurfaceModel(props);
 
   return (
-    <div
+    <EditorSurfaceContext.Provider value={{ editor: props, model }}><div
       class={
         stylex.attrs(
           ideStyles.editorSurface,
@@ -2280,29 +2217,12 @@ function EditorSurface(props: EditorSurfaceProps) {
       style={{ width: `${props.widthPercent}%` }}
       onContextMenu={props.onContextMenu}
     >
-      <EditorFindControl editor={props} model={model} />
-      <EditorDocument file={props.file} editor={props} model={model} />
-    </div>
+      <EditorFindControl />
+      <EditorDocument />
+    </div></EditorSurfaceContext.Provider>
   );
 }
 
-function countDocumentMatches(lines: string[], query: string) {
-  const needle = query.trim().toLowerCase();
-  if (!needle) {
-    return "0/0";
-  }
-  const count = lines.reduce((sum, line) => {
-    const value = line.toLowerCase();
-    let index = value.indexOf(needle);
-    let matches = 0;
-    while (index >= 0) {
-      matches += 1;
-      index = value.indexOf(needle, index + Math.max(needle.length, 1));
-    }
-    return sum + matches;
-  }, 0);
-  return count ? `1/${count}` : "0/0";
-}
 
 type SyntaxToken = {
   text: string;
@@ -2536,12 +2456,6 @@ function syntaxHighlightLine(line: string, language: string): SyntaxToken[] {
   return tokens.length > 0 ? tokens : [{ text: "", kind: "plain" }];
 }
 
-function getWordAtPosition(line: string, column: number) {
-  const position = Math.max(0, column - 1);
-  const left = line.slice(0, position).match(/[A-Za-z_$][\w$]*$/)?.[0] ?? "";
-  const right = line.slice(position).match(/^[A-Za-z_$][\w$]*/)?.[0] ?? "";
-  return `${left}${right}`;
-}
 
 function findDefinitionLine(lines: string[], symbol: string) {
   if (!symbol) {
@@ -2564,9 +2478,6 @@ function findDefinitionLine(lines: string[], symbol: string) {
   return index >= 0 ? index + 1 : undefined;
 }
 
-function getCompletionPrefix(text: string, position: number) {
-  return text.slice(0, position).match(/[A-Za-z_$][\w$]*$/)?.[0] ?? "";
-}
 
 function buildCompletionItems(file: IdeFile, prefix: string) {
   const words = new Set<string>(languageKeywords.get(file.language) ?? []);
@@ -2639,40 +2550,9 @@ function describeSymbolHover(file: IdeFile, symbol: string) {
   return keyword ?? `${symbol}: symbol\n\nNo local definition found.`;
 }
 
-function getTextPosition(text: string, position: number) {
-  const before = text.slice(0, position).split("\n");
-  return { line: before.length, column: (before.at(-1)?.length ?? 0) + 1 };
-}
 
-function applyCompletionAt(
-  text: string,
-  position: number,
-  prefix: string,
-  completion: string,
-) {
-  return `${text.slice(0, Math.max(0, position - prefix.length))}${completion}${text.slice(position)}`;
-}
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
-function inferLanguage(name: string) {
-  const extension = name.split(".").at(-1)?.toLowerCase();
-  if (extension === "tsx" || extension === "ts") {
-    return "TypeScript";
-  }
-  if (extension === "jsx" || extension === "js") {
-    return "JavaScript";
-  }
-  if (extension === "md") {
-    return "Markdown";
-  }
-  if (extension === "json") {
-    return "JSON";
-  }
-  return "Plain Text";
-}
 
 function StatusBar(props: {
   branch: string;
@@ -2933,9 +2813,6 @@ function CommandPalette(props: {
   );
 }
 
-export function isIdeProjectSwitcherModKHotkey(hotkey: string) {
-  return hotkey.toLowerCase().replace(/\s+/g, "") === "mod+k";
-}
 
 function formatHotkeyDisplay(hotkey: string | undefined) {
   if (!hotkey) {
@@ -3015,11 +2892,6 @@ function normalizeHotkeyChord(hotkey: string) {
   };
 }
 
-function normalizeHotkeyKey(key: string) {
-  return key.length === 1
-    ? key.toLowerCase()
-    : key.toLowerCase().replace(/^arrow/, "");
-}
 
 function Sash(props: {
   label: string;
@@ -3223,3 +3095,5 @@ function IdeToasts(props: {
     </div>
   );
 }
+
+export { isIdeProjectSwitcherModKHotkey } from "./editor/text-operations";

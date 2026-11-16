@@ -1,3 +1,4 @@
+import { isObject as isRecord } from "@hyperfocus/utilities/records";
 import { TELEMETRY_FRAME_BUDGET_MS, TELEMETRY_PHASE_NAMES, TERRAIN_PLATFORM_CELL_SIZE, TERRAIN_PLATFORM_LAND_SNAP } from "./constants.ts";
 import { runtimeCallback } from "./runtime-ports.ts";
 const actorFeetY = runtimeCallback("terrain", "actorFeetY");
@@ -88,7 +89,7 @@ export function runPlatformLandingProbe() {
   const beforeFeetY = actorFeetY(player);
   player.x = probe.afterX;
   player.z = probe.afterZ;
-  resolvePlayerTerrainMotion(player, probe.beforeX, probe.beforeZ, beforeFeetY, 1 / 60);
+  resolvePlayerTerrainMotion(player, probe.beforeX, probe.beforeZ, beforeFeetY, 0.016666666666666666);
   setActorPosition(player, player.x, player.z);
   const feetY = actorFeetY(player);
   const ok = !player.terrainBlocked && (player.wallRunClock ?? 0) <= 0 && feetY >= probe.afterGround - TERRAIN_PLATFORM_LAND_SNAP;
@@ -109,9 +110,7 @@ export function readHeapBytes(): number {
   return isRecord(memory) && typeof memory.usedJSHeapSize === "number" ? memory.usedJSHeapSize : 0;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+
 
 export function recordSlowFrame(sample: TelemetrySample, topPhase: string, topPhaseMs: number, heapDeltaBytes: number): void {
   if (sample.frameMs <= TELEMETRY_FRAME_BUDGET_MS) return;

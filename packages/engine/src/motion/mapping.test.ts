@@ -1,8 +1,16 @@
+import { opaqueName } from "./mapping-fixture-names.ts";
 import { expect, test } from "bun:test";
 import { Matrix4, Quaternion, Vector3, type SkinnedMesh } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { autoMapHumanoidRig } from "./mapping.ts";
+import { autoMapHumanoidRig, inferHumanoidSemanticFromBoneName } from "./mapping.ts";
 import { requiredHumanoidSemantics, type HumanoidSemantic, type SourceRigDescriptor } from "./rig.ts";
+
+test('recognizes side-suffixed upper and lower leg joints', () => {
+  expect(inferHumanoidSemanticFromBoneName('upperleg.l')).toBe('leftUpperLeg');
+  expect(inferHumanoidSemanticFromBoneName('lowerleg.l')).toBe('leftLowerLeg');
+  expect(inferHumanoidSemanticFromBoneName('upperleg.r')).toBe('rightUpperLeg');
+  expect(inferHumanoidSemanticFromBoneName('lowerleg.r')).toBe('rightLowerLeg');
+});
 
 const semanticNames: Record<(typeof requiredHumanoidSemantics)[number], string> = {
   hips: "Hips",
@@ -86,10 +94,6 @@ const opaqueHumanoidDefinitions: readonly OpaqueBoneDefinition[] = [
   { parent: 22, translation: [0, -0.42, 0.08] },
   { parent: 23, translation: [0, 0, 0.12] },
 ];
-
-function opaqueName(ordinal: number) {
-  return `q${((ordinal + 17) * 7919).toString(36)}`;
-}
 
 function opaqueCanonicalHumanoid(order = opaqueHumanoidDefinitions.map((_entry, index) => index)): SourceRigDescriptor {
   const newIndexByOrdinal = new Map(order.map((ordinal, index) => [ordinal, index] as const));
@@ -253,6 +257,13 @@ test("Mixamo auto-mapping recognizes namespace-prefixed standard bones", () => {
     expect(result.document.semantics[semantic]?.confidence).toBe(1);
   }
   expect(JSON.stringify(source)).toBe(before);
+});
+
+test("common ball joint names identify the toe basis used by foot IK", () => {
+  expect(inferHumanoidSemanticFromBoneName("ball_l")).toBe("leftToes");
+  expect(inferHumanoidSemanticFromBoneName("ball_r")).toBe("rightToes");
+  expect(inferHumanoidSemanticFromBoneName("LeftBall")).toBe("leftToes");
+  expect(inferHumanoidSemanticFromBoneName("RightBall")).toBe("rightToes");
 });
 
 test("VRM hints authoritatively map arbitrary names", () => {

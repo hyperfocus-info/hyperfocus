@@ -16,8 +16,11 @@ import { scheduleBranchfsRetentionPrune } from "../workspace/branchfs-guards";
 import { resolveSubagentModelId, resolveSubagentReasoningStrength } from "../../subagent-defaults";
 import type { WorkspaceRepository } from "../../workspace-repository";
 import type { WorkspaceRuntimeStore } from "../../workspace-runtime-store";
-import { PLANNER_DIFFICULTY_THRESHOLD } from "@hyperfocus/ai-core/mode-intent";
 import type { AgentRunState, ComposerReasoningStrength, ExecutionPlan, PlannerReadyTurn, ProjectId, ProviderBrand, TokenUsageTotals } from "@hyperfocus/ai-core/protocol";
+import { runVerificationCommands } from "@hyperfocus/ai-runtime/quality/commands";
+import { createQualitySession } from "@hyperfocus/ai-runtime/quality";
+import { withQualityContext } from "../../verification/quality-adapter";
+import { assertOutcomeAdmission, checkOutcomeDispatch, freezeQualityChecks, runQualityChecks, changedQualityPaths, qualityChangedFiles } from "@hyperfocus/ai-runtime/quality/execution";
 
 type RunLifecycleOptions = {
   projectId: ProjectId; agentId: "pi" | "copilot-cli" | "codex-cli"; providerBrand: ProviderBrand;
@@ -25,12 +28,12 @@ type RunLifecycleOptions = {
   executionPlan?: ExecutionPlan; executionTarget?: "current-project" | "ephemeral-experiment";
   existingSubagentResults?: Parameters<typeof executeReadyRun>[1]["existingSubagentResults"];
   tasksToRun?: Parameters<typeof executeReadyRun>[1]["tasksToRun"]; resumeNote?: string;
-  reasoningStrength?: ComposerReasoningStrength; fastMode?: boolean; abortSignal?: AbortSignal;
+  reasoningStrength?: ComposerReasoningStrength; fastMode?: boolean; abortSignal: AbortSignal;
   derivedProgressHeartbeatMs: number; tokenUsageSession: TokenUsageTotals;
 };
 
 export async function executeRunLifecycle(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -40,6 +43,7 @@ export async function executeRunLifecycle(
   osAdapters: HarnessServerOsAdapters,
   options: RunLifecycleOptions
 ) {
+  if (!ownsExecution(runtime, options.projectId, options.runId, options.abortSignal)) return;
   const project = runtime.getProject(options.projectId);
   const activeRun = options.sourceRun;
   const threadSession = getThreadSessionState(runtime, repository, options.projectId, activeRun.threadId);
@@ -206,7 +210,7 @@ export async function executeRunLifecycle(
 }
 
 async function reviewAndFinalizeRun(input: {
-  ws: Bun.ServerWebSocket<HarnessConnection>; requestId: string; runtime: WorkspaceRuntimeStore;
+  ws: import("../transport/events").ControlEventSocket; requestId: string; runtime: WorkspaceRuntimeStore;
   repository: WorkspaceRepository; adapter: PiAgentAdapter;
   pendingBrowserApprovals: Map<string, PendingBrowserApproval>;
   connections: Set<Bun.ServerWebSocket<HarnessConnection>>; osAdapters: HarnessServerOsAdapters;
@@ -221,23 +225,22 @@ async function reviewAndFinalizeRun(input: {
   const reviewCwd = experimentLease?.projectMountPath ?? projectRootPath;
   executionCallbacks.onRunMilestone("Checking correctness.");
   const correctnessReview = await osAdapters.runCorrectnessReview(reviewCwd, executionPlan, outcome, options.readyPlan);
-  executionCallbacks.onRunMilestone(correctnessReview.status === "pass"
-    ? "Correctness review passed." : `Correctness review needs iteration. ${correctnessReview.summary}`);
+  if (!ownsExecution(runtime, options.projectId, options.runId, options.abortSignal)) return;
+  if (correctnessReview.status === "needs-iteration" && !correctnessReview.recommendedPlan) {
+    throw new Error("Correctness review requires more work but supplied no corrective plan. Retry or refine the task.");
+  }
+  executionCallbacks.onRunMilestone(correctnessReview.summary);
   const reviewedProject = repository.setAgentRunCorrectnessReview(options.projectId, options.runId, correctnessReview);
   runtime.upsertPersistedProject(reviewedProject);
   emitRunUpdatedById(ws, requestId, repository, options.projectId, options.runId, connections);
   if (correctnessReview.status === "needs-iteration" && correctnessReview.recommendedPlan) {
     const recommendedPlan = correctnessReview.recommendedPlan;
-    if (recommendedPlan.difficultyScore < PLANNER_DIFFICULTY_THRESHOLD && recommendedPlan.iteration < 5) {
-      await executeRunLifecycle(ws, requestId, runtime, repository, adapter, pendingBrowserApprovals, connections, osAdapters,
-        { ...options, readyPlan: buildReadyPlanFromExecutionPlan(recommendedPlan), executionPlan: recommendedPlan, executionTarget });
-      return;
-    }
     emitProjectTrace(ws, requestId, runtime, options.projectId, activeRun.threadId, {
       sessionId: threadSession.sessionId, stage: "correctness-gap", message: correctnessReview.summary,
       detail: correctnessReview.gaps.map((gap) => gap.description).join("\n")
     });
     await executionCallbacks.closeRunMilestones();
+    if (!ownsExecution(runtime, options.projectId, options.runId, options.abortSignal)) return;
     runtime.clearStreaming(options.projectId, activeRun.threadId);
     runtime.setProjectStreaming(options.projectId, false, activeRun.threadId);
     runtime.setProjectError(options.projectId, undefined, activeRun.threadId);
@@ -268,6 +271,7 @@ async function reviewAndFinalizeRun(input: {
   const completed = await completeRunWithAssistantMessage(
     ws, requestId, runtime, repository, pendingBrowserApprovals, connections, {
     projectId: options.projectId, threadId: activeRun.threadId, runId: options.runId,
+    abortSignal: options.abortSignal,
     assistantMessageContent: outcome.assistantMessage.content,
     partialReason: outcome.partial ? outcome.partialReason ?? "Some subagents failed." : undefined
   });
@@ -281,7 +285,7 @@ async function reviewAndFinalizeRun(input: {
 }
 
 export async function executeInlineSubagentRetryLifecycle(
-  ws: Bun.ServerWebSocket<HarnessConnection>,
+  ws: import("../transport/events").ControlEventSocket,
   requestId: string,
   runtime: WorkspaceRuntimeStore,
   repository: WorkspaceRepository,
@@ -364,7 +368,20 @@ export async function executeInlineSubagentRetryLifecycle(
     (options.sourceRun.subtasks.find((task) => task.id === options.targetTask.id)?.attemptCount ?? 0) + 1
   );
 
-  const retriedResult = await runInlineSubagentRetry(adapter, {
+  // A retry is a new implementation boundary. Never reuse the source run's passing receipts.
+  const quality = createQualitySession({ runId: options.runId, task: {
+    intent: options.sourceRun.latestUserPrompt,
+    paths: options.sourceRun.plan?.contracts.flatMap(contract => contract.ownedPaths),
+    project: /(?:^|[\\/])books$/.test(project.rootPath) ? "books" : undefined,
+  }, onTrace: callbacks.onQuality });
+  quality.select();
+  const frozen = await freezeQualityChecks(project.rootPath), before = await qualityChangedFiles(project.rootPath);
+  const governingContext = await checkOutcomeDispatch({ cwd: project.rootPath, plan: options.sourceRun.plan ?? options.readyPlan,
+    request: options.sourceRun.latestUserPrompt, signal: options.abortSignal });
+  const qualityAdapter = withQualityContext(adapter, quality, governingContext, () => {
+    assertOutcomeAdmission({ cwd: project.rootPath, plan: options.sourceRun.plan ?? options.readyPlan, request: options.sourceRun.latestUserPrompt });
+  });
+  const retriedResult = await runInlineSubagentRetry(qualityAdapter, {
     runId: options.runId,
     cwd: project.rootPath,
     agentId: options.agentId,
@@ -390,7 +407,7 @@ export async function executeInlineSubagentRetryLifecycle(
   );
 
   const assistantMessage = await aggregateSubagentResults(
-    adapter,
+    qualityAdapter,
     {
       cwd: project.rootPath,
       runId: options.runId,
@@ -408,22 +425,39 @@ export async function executeInlineSubagentRetryLifecycle(
     `Retry only ${options.targetTask.title}.`
   );
 
-  const partial = mergedResults.some((result) => result.status === "failed");
+  let partial = mergedResults.some((result) => result.status === "failed");
+  const changed = changedQualityPaths(before, await qualityChangedFiles(project.rootPath));
+  if (changed) quality.observePaths(changed);
+  const verification = await runVerificationCommands({ cwd: project.rootPath,
+    commands: options.sourceRun.plan?.contracts.flatMap((contract) => contract.verificationCommands) ?? [],
+    signal: options.abortSignal, onResult: callbacks.onRunMilestone });
+  assistantMessage.content += `\n\n${verification}`;
+  const report = await runQualityChecks(quality, frozen, !partial, options.abortSignal);
+  const qualityBlocked = report.rules.some(rule => rule.severity === "blocking" && rule.eligibility !== "no" && rule.status !== "PASSED");
+  partial ||= qualityBlocked;
+  if (report.counts.applicable) assistantMessage.content += `\n\nHost checks: ${report.technicalVerification}; parent outcome: ${report.outcomeVerification}; ${report.domainAcceptance}.`;
+  else if (governingContext) assistantMessage.content += "\n\nParent outcome: UNVERIFIED. Dispatch checks and child completion do not establish the requested experience.";
   if (partial) {
     callbacks.onRunMilestone?.("Run partial complete. Some retried subagents still failed.");
   } else {
     callbacks.onRunMilestone?.("Run completed.");
   }
+  await callbacks.closeRunMilestones();
   await completeRunWithAssistantMessage(ws, requestId, runtime, repository, pendingBrowserApprovals, connections, {
     projectId: options.projectId,
     threadId: options.sourceRun.threadId,
     runId: options.runId,
     assistantMessageContent: assistantMessage.content,
-    partialReason: partial ? "Some retried subagents still failed." : undefined
+    abortSignal: options.abortSignal,
+    partialReason: qualityBlocked ? "Retried work has unresolved mandatory quality evidence." : partial ? "Some retried subagents still failed." : undefined
   });
   } finally {
     await callbacks.closeRunMilestones?.();
   }
+}
+
+function ownsExecution(runtime: WorkspaceRuntimeStore, projectId: ProjectId, runId: string, signal: AbortSignal) {
+  return !signal.aborted && runtime.getAbortController(projectId, runId)?.signal === signal;
 }
 
 export function assertGlobalExecutionNotPaused(repository: WorkspaceRepository) {

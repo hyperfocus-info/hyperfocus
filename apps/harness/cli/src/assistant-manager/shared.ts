@@ -44,7 +44,7 @@ export const DEFAULT_CODING_STACK_QUESTION =
   `Which stack should this coding project use? Recommended default: ${DEFAULT_CODING_STACK}. Reply "default" to use that stack or describe another stack.`;
 
 export const ASSISTANT_ACTIONS_SKILL_PROMPT =
-  "For every assistant-chat or project-chat request addressed to this assistant, invoke the assistant-actions skill before acting when the user's prompt does not already include it.";
+  "Use the assistant-actions skill for requests to inspect or manage Harness assistant state, jobs, todos, questions, or recovery. Ordinary project work follows its own instructions and does not require assistant-actions.";
 
 export type ReprioritizeState = {
   timer?: ReturnType<typeof setTimeout>;

@@ -103,17 +103,17 @@ const COMBAT_STATE_CODES: Record<string, number> = {
 export const COMBAT_STATE_BY_CODE = new Map<number, string>(Object.entries(COMBAT_STATE_CODES).map(([state, code]) => [code, state]));
 
 const MMO_SHARED_STATUS_BITS = {
-  BOW_VULNERABLE: 1 << 0,
-  DEATHMARK: 1 << 1,
-  FRACTURED: 1 << 2,
-  SOULBOUND: 1 << 3,
-  HEX: 1 << 4,
-  POISON: 1 << 5,
-  MORTAL: 1 << 6,
-  ANTIHEAL: 1 << 7,
-  WEAKENED: 1 << 8,
-  ENFEEBLED: 1 << 9,
-  BLIND: 1 << 10
+  BOW_VULNERABLE: 1,
+  DEATHMARK: 2,
+  FRACTURED: 4,
+  SOULBOUND: 8,
+  HEX: 16,
+  POISON: 32,
+  MORTAL: 64,
+  ANTIHEAL: 128,
+  WEAKENED: 256,
+  ENFEEBLED: 512,
+  BLIND: 1024
 };
 
 const MMO_SHARED_STATUS_EXACT: Record<string, number> = {

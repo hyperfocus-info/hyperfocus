@@ -2,6 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { getBundledCodexInstallation, resolveBundledCodexExecutablePath, resolveBundledCodexTargetTriple } from "./codex-installation";
 
 describe("codex installation", () => {
+  test("resolves executable-adjacent portable Codex without node_modules", () => {
+    const candidate = "C:\\portable\\bin\\codex\\x86_64-pc-windows-msvc\\bin\\codex.exe";
+    expect(resolveBundledCodexExecutablePath({ platform: "win32", arch: "x64", executablePath: "C:\\portable\\pi-harness.exe",
+      resolvePackageJson() { throw new Error("No source packages in portable distribution"); },
+      pathExists: value => value === candidate })).toBe(candidate);
+  });
   test("resolves supported target triples", () => {
     expect(resolveBundledCodexTargetTriple("win32", "x64")).toBe("x86_64-pc-windows-msvc");
     expect(resolveBundledCodexTargetTriple("darwin", "arm64")).toBe("aarch64-apple-darwin");

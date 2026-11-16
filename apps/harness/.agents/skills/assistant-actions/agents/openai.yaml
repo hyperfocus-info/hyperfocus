@@ -1,4 +1,4 @@
 interface:
   display_name: "Assistant Actions"
   short_description: "Runbook for chat-driven assistant actions"
-  default_prompt: "Use assistant actions runbook."
+  default_prompt: "Use $assistant-actions to inspect or manage the requested Harness assistant."

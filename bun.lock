@@ -16,6 +16,7 @@
         "@hyperfocus/desktop-runtime": "workspace:*",
         "@hyperfocus/engine": "workspace:*",
         "@hyperfocus/pad-pilot": "workspace:*",
+        "@hyperfocus/pad-pilot-app": "workspace:*",
         "@hyperfocus/performance": "workspace:*",
         "@hyperfocus/review-store": "workspace:*",
         "@hyperfocus/serialization": "workspace:*",

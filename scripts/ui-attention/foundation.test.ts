@@ -1,9 +1,10 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { ESLint, RuleTester } from "eslint";
+import { runBunRuleTests } from "./bun-rule-tester";
 import { foundationRule } from "./foundation";
 
-test("foundation lint catches the audited small text and adaptive foreground bypasses", () => {
-  new RuleTester({ languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } } }).run("ui-foundation", foundationRule, {
+describe("foundation lint catches the audited small text and adaptive foreground bypasses", () => {
+  runBunRuleTests(new RuleTester({ languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } } }), "ui-foundation", foundationRule, {
     valid: [
       'const styles = { label: {fontSize: tokens.fontCaption}, action: {backgroundColor: tokens.accent, color: tokens.accentForeground} };',
       'const styles = {fontSize: "0.75rem", color: "white", backgroundColor: "#123456"};',

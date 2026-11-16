@@ -1,9 +1,10 @@
-import { test } from 'bun:test';
+import { describe } from 'bun:test';
 import { RuleTester } from 'eslint';
+import { runBunRuleTests } from './bun-rule-tester';
 import { attentionRule } from './eslint';
 
-test('attention checks distinguish competing actions from separate conditional views', () => {
-  new RuleTester({ languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } } }).run('attention', attentionRule, {
+describe('attention checks distinguish competing actions from separate conditional views', () => {
+  runBunRuleTests(new RuleTester({ languageOptions: { parserOptions: { ecmaFeatures: { jsx: true } } } }), 'attention', attentionRule, {
     valid: [
       '<main><Button variant="primary">Save</Button><Button variant="secondary">Cancel</Button></main>',
       '<main>{editing ? <Button variant="primary">Save</Button> : <Button variant="primary">Create</Button>}</main>',

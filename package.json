@@ -102,6 +102,7 @@
     "@hyperfocus/touch-of-death": "workspace:*",
     "@hyperfocus/ui": "workspace:*",
     "@hyperfocus/pad-pilot": "workspace:*",
+    "@hyperfocus/pad-pilot-app": "workspace:*",
     "@hyperfocus/performance": "workspace:*",
     "@stylexjs/babel-plugin": "^0.19.0",
     "@stylexjs/eslint-plugin": "^0.19.0",

@@ -22,8 +22,9 @@ export function createPathPredictor(options: PathPredictorOptions) {
   const capacity = positiveInteger(options.capacity ?? Math.min(nodeCount * 4, 65_536), "capacity");
   const maxPathLength = positiveInteger(options.maxPathLength ?? Math.min(nodeCount, 4_096), "maxPathLength");
   const nodes = new Int32Array(capacity); nodes.fill(-1);
-  const goals = new Int32Array(capacity); goals.fill(-1);
-  const nextNodes = new Int32Array(capacity); nextNodes.fill(-1);
+  // The nodes sentinel marks empty slots; payload arrays are read only for occupied slots.
+  const goals = new Int32Array(capacity);
+  const nextNodes = new Int32Array(capacity);
   const confidenceValues = new Uint16Array(capacity);
   const scratch = new Int32Array(maxPathLength);
   const nodeValue = (value: number, label: string) => {
@@ -97,9 +98,6 @@ export function createPathPredictor(options: PathPredictorOptions) {
     },
     clear() {
       nodes.fill(-1);
-      goals.fill(-1);
-      nextNodes.fill(-1);
-      confidenceValues.fill(0);
     },
   });
 }

@@ -37,12 +37,12 @@ export async function packageHarnessNpm() {
       engines: { bun: ">=1.4.0" }, publishConfig: { access: "public" },
       os: ["win32"], cpu: ["x64"], bin: { harness: "harness.cjs" },
       files: ["harness.cjs", "runtime", "LICENSE", "THIRD_PARTY_NOTICES.md", "README.md"] }, null, 2));
-    await Bun.write(join(staging, "README.md"), "# Hyperfocus Harness\n\nRun `bunx @hyperfocus/harness` on Windows x64 with Bun 1.4 or newer. No checkout is required. This candidate must first be published before that registry command is available. Provider use requires separate account setup. Use `--no-open` to print the local URL without opening a browser.\n");
+    await Bun.write(join(staging, "README.md"), "# Hyperfocus Harness\n\nRun `bunx @hyperfocus-info/harness` on Windows x64 with Bun 1.4 or newer. No checkout is required. This candidate must first be published before that registry command is available. Provider use requires separate account setup. Use `--no-open` to print the local URL without opening a browser.\n");
     const filename = await command([process.execPath, "pm", "pack", "--ignore-scripts", "--destination", output, "--quiet"], staging);
     const artifact = resolve(staging, filename);
     await Bun.write(join(consumer, "package.json"), JSON.stringify({ private: true, dependencies: { [manifest.name]: artifact } }));
     await command([process.execPath, "install", "--ignore-scripts"], consumer, { BUN_INSTALL_CACHE_DIR: join(consumer, ".cache") });
-    const installed = join(consumer, "node_modules/@hyperfocus/harness");
+    const installed = join(consumer, "node_modules/@hyperfocus-info/harness");
     const requiredFiles = ["harness.cjs", "runtime/pi-harness.exe", "runtime/agents.md", "runtime/dist/ui/index.html",
       "runtime/dist/ui/main.js", "runtime/bin/rg.exe", "runtime/bin/codex/x86_64-pc-windows-msvc/bin/codex.exe",
       "runtime/.agents/skills/assistant-actions/SKILL.md", "runtime/.agents/skills/verify-html/verify-html.ts"];
@@ -52,7 +52,7 @@ export async function packageHarnessNpm() {
     // Same package-name binary lookup as the requested command, with network installation forbidden.
     let persistedProjectId: string | undefined;
     for (let pass = 0; pass < 2; pass++) {
-    const result = await runLauncherUiSmoke({ cmd: [process.execPath, "x", "--no-install", "@hyperfocus/harness", "--no-open"], cwd: consumer, home: join(consumer, ".persistence-home"),
+    const result = await runLauncherUiSmoke({ cmd: [process.execPath, "x", "--no-install", "@hyperfocus-info/harness", "--no-open"], cwd: consumer, home: join(consumer, ".persistence-home"),
       verify: async ({ serverUrl }) => {
         const response = await fetch(`${serverUrl}/main.js`);
         if (!response.ok || !(await response.text()).length) throw new Error("Packed UI JavaScript is unavailable.");
@@ -91,7 +91,7 @@ export async function packageHarnessNpm() {
     }
     const evidence = { artifact, version: manifest.version, platform: process.platform, arch: process.arch,
       sha256: new Bun.CryptoHasher("sha256").update(await Bun.file(artifact).arrayBuffer()).digest("hex"),
-      command: "bunx --no-install @hyperfocus/harness --no-open", consumer, requiredFiles, protocolPing: true,
+      command: "bunx --no-install @hyperfocus-info/harness --no-open", consumer, requiredFiles, protocolPing: true,
       projectAndThreadCreated: true, projectAndThreadSurvivedRestart: true, passed: true, registryPublished: false };
     await Bun.write(join(output, "smoke.json"), JSON.stringify(evidence, null, 2));
     return evidence;

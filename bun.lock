@@ -63,7 +63,7 @@
       },
     },
     "apps/harness": {
-      "name": "@hyperfocus/harness",
+      "name": "@hyperfocus-info/harness",
       "version": "0.0.1",
       "dependencies": {
         "@google/genai": "^1.49.0",
@@ -734,7 +734,7 @@
 
     "@hyperfocus/engine": ["@hyperfocus/engine@workspace:packages/engine"],
 
-    "@hyperfocus/harness": ["@hyperfocus/harness@workspace:apps/harness"],
+    "@hyperfocus-info/harness": ["@hyperfocus-info/harness@workspace:apps/harness"],
 
     "@hyperfocus/pad-pilot": ["@hyperfocus/pad-pilot@workspace:packages/pad-pilot"],
 

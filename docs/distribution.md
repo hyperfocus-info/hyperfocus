@@ -18,7 +18,7 @@ Prepare the Windows x64 npm candidate with `bun run package:harness:npm`. It pac
 the portable launcher, installs it outside the checkout, and verifies the UI and
 authenticated command channel through package-name binary resolution. After an
 authorized npm publication, users with Bun 1.4 or newer can run
-`bunx @hyperfocus/harness` without a checkout. This preparation does not publish
+`bunx @hyperfocus-info/harness` without a checkout. This preparation does not publish
 the package or establish other platform support.
 
 The harness retains its standalone launcher packaging flow. GitHub releases attach a

@@ -109,12 +109,12 @@ describe("release readiness policy", () => {
   test("keeps all versioned manifests on the root SemVer", () => {
     expect(findPackageVersionViolations([
       { path: "package.json", name: "hyperfocus", version: "0.0.1" },
-      { path: "apps/harness/package.json", name: "@hyperfocus/harness", version: "0.0.1" },
+      { path: "apps/harness/package.json", name: "@hyperfocus-info/harness", version: "0.0.1" },
     ])).toEqual([]);
 
     expect(findPackageVersionViolations([
       { path: "package.json", name: "hyperfocus", version: "0.0.1" },
-      { path: "apps/harness/package.json", name: "@hyperfocus/harness", version: "0.0.2" },
+      { path: "apps/harness/package.json", name: "@hyperfocus-info/harness", version: "0.0.2" },
       { path: "packages/ui/package.json", name: "@hyperfocus/ui", version: "0.0.1-beta.1" },
     ])).toEqual([
       "apps/harness/package.json uses 0.0.2; expected 0.0.1 to match package.json",

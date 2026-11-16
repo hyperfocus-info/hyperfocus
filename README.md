@@ -32,7 +32,7 @@ The governing rule is simple: consumers install the smallest package that solves
 - `@hyperfocus/ui` owns Solid/StyleX presentation: primitives, composer, transcript, terminal surface, workbench, and source editor.
 - `@hyperfocus/pad-pilot` owns portable Module/capability identities, schemas, limits, and bounded utilities.
 - `hyperfocus-editor` is the portable editor application and future `bunx hyperfocus-editor` package.
-- `@hyperfocus/harness` owns runtime execution, credentials, SQLite persistence, terminal sessions, and agent state.
+- `@hyperfocus-info/harness` owns runtime execution, credentials, SQLite persistence, terminal sessions, and agent state.
 - `@hyperfocus/pad-pilot-app` owns the JUCE VST3/standalone host, embedded Solid UI, QuickJS runtime, factory Modules, and host validation.
 - `@hyperfocus/pad-pilot-marketplace` owns independently deployable auth, billing, SQLite, uploads, catalog, and update delivery.
 

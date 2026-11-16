@@ -5,7 +5,13 @@ percentages, reset times and local token sources. Limits refresh on connection,
 every five minutes while visible, and on demand. Account quotas cover all Codex
 clients; Harness attribution covers only observed calls, grouped by available
 project, thread, role, model and runtime. Historical unknown attribution stays
-explicit. **Reset usage** clears local session/lifetime counters and source totals
+explicit. Source details show up to 100 identities in first-observed order;
+additional sources and individually oversized identities appear as an explicit
+aggregate with input/output/cached totals, separate from unknown attribution.
+Full identities remain in the local database. Indexed replay receipts survive
+reset and restart; disk history grows with observations, while updates and
+reconnect summaries stay bounded. **Reset usage** clears local session/lifetime
+counters and source totals
 after server acknowledgement; it cannot restore Codex account quota.
 Run `bun apps/harness/scripts/usage/verify-ui.ts` for the disposable-database
 browser journey (read-only live account probe, fixture counters only).

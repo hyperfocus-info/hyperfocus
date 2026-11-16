@@ -77,10 +77,6 @@ function PreferencePanelSection(props: PreferencePanelSectionProps) {
   );
 }
 
-type PreferencePanelComponent = ((props: PreferencePanelProps) => JSX.Element) & {
-  Section: typeof PreferencePanelSection;
-};
-
-export const PreferencePanel = PreferencePanelRoot as PreferencePanelComponent;
+export const PreferencePanel = Object.assign(PreferencePanelRoot, { Section: PreferencePanelSection });
 
 PreferencePanel.Section = PreferencePanelSection;

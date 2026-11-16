@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hashBoundedFile, readBoundedFileBytes } from "../bounded-file";
+import { hashBoundedFile, readBoundedFileBytes } from "@hyperfocus/pad-pilot/bounded-file";
 
 import { scoreAudioFile } from "./audio-orchestrator";
 import { boundedFetchBytes, decodeUtf8 } from "./bounded-fetch";
@@ -28,10 +28,7 @@ type CandidateEntry = {
   readonly metrics: Awaited<ReturnType<typeof scoreAudioFile>>["metrics"];
 };
 
-type BenchmarkEntry = CandidateEntry & {
-  readonly label: "good" | "average";
-  readonly labelMethod: string;
-};
+
 
 type GeneratedEntry = {
   readonly source: "generated-local";
@@ -52,7 +49,7 @@ const BENCHMARK_VERSION = 1;
 const TARGET_PER_CLASS = 50;
 const REAL_CANDIDATE_TARGET = 125;
 const MAX_SOURCE_BYTES = 4_500_000;
-const MAX_TREE_BYTES = 10 * 1024 * 1024;
+const MAX_TREE_BYTES = 10485760;
 const MIN_SOURCE_BYTES = 500_000;
 const MIN_REAL_TRACK_SECONDS = 25;
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -105,14 +102,14 @@ export async function buildBenchmark() {
   const sorted = [...scored].sort((left, right) => right.overallScore - left.overallScore);
   const good = sorted.slice(0, TARGET_PER_CLASS).map((entry) => ({
     ...entry,
-    label: "good",
-    labelMethod: "top-50 raw heuristic score from deterministic CC0 candidate pool",
-  } satisfies BenchmarkEntry));
+    label: "good" as const,
+    labelMethod: "top-50 raw heuristic score from deterministic CC0 candidate pool" as const,
+  }));
   const average = sorted.slice(TARGET_PER_CLASS, TARGET_PER_CLASS * 2).map((entry) => ({
     ...entry,
-    label: "average",
-    labelMethod: "rank-51-to-100 raw heuristic score from deterministic CC0 candidate pool",
-  } satisfies BenchmarkEntry));
+    label: "average" as const,
+    labelMethod: "rank-51-to-100 raw heuristic score from deterministic CC0 candidate pool" as const,
+  }));
   const bad = await generateBadSongs(TARGET_PER_CLASS);
 
   const manifest = {
@@ -151,7 +148,7 @@ async function fetchSoundSafariTree() {
     throw new Error(`GitHub tree fetch failed ${response.status}: ${decodeUtf8(response.bytes)}`);
   }
 
-  const payload = JSON.parse(decodeUtf8(response.bytes)) as unknown;
+  const payload: unknown = JSON.parse(decodeUtf8(response.bytes));
   if (!payload || typeof payload !== "object" || Reflect.get(payload, "truncated") === true) {
     throw new Error("GitHub tree response was invalid or truncated.");
   }
@@ -237,17 +234,17 @@ async function downloadAndScoreCandidate(entry: GitHubTreeEntry) {
   }
 
   return {
-    source: "SoundSafari/CC0-1.0-Music",
+    source: "SoundSafari/CC0-1.0-Music" as const,
     sourcePath: entry.path,
     sourceUrl,
     localPath,
-    license: "CC0-1.0",
+    license: "CC0-1.0" as const,
     sha256: await hashFile(localPath),
     sizeBytes: Bun.file(localPath).size,
     durationSeconds: scored.durationSeconds,
     overallScore: scored.overallScore,
     metrics: scored.metrics,
-  } satisfies CandidateEntry;
+  };
 }
 
 async function generateBadSongs(count: number) {

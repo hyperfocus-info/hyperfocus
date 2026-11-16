@@ -18,10 +18,10 @@ afterEach(() => {
 
 describe("createMarketplaceCheckoutSession", () => {
   it("surfaces plain-text API failures without crashing JSON parsing", async () => {
-    globalThis.fetch = mock(async () =>
+    globalThis.fetch = Object.assign(mock(async () =>
       new Response("You may only specify one of these parameters: product, product_data.", {
         status: 400,
-      })) as unknown as typeof fetch;
+      })), { preconnect: globalThis.fetch.preconnect });
 
     await expect(createMarketplaceCheckoutSession("padpilot_lifetime_outright"))
       .rejects
@@ -30,7 +30,7 @@ describe("createMarketplaceCheckoutSession", () => {
 
   it("binds paid-module checkout to the selected module id", async () => {
     let requestBody = "";
-    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = Object.assign(mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       requestBody = String(init?.body ?? "");
       return new Response(JSON.stringify({
         amountCents: 1200,
@@ -38,7 +38,7 @@ describe("createMarketplaceCheckoutSession", () => {
         checkoutUrl: "https://checkout.stripe.test/session",
         pricing,
       }));
-    }) as unknown as typeof fetch;
+    }), { preconnect: globalThis.fetch.preconnect });
 
     await createMarketplaceCheckoutSession("module_purchase", "module-1");
 
@@ -46,12 +46,12 @@ describe("createMarketplaceCheckoutSession", () => {
   });
 
   it("rejects unsafe checkout redirect schemes", async () => {
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(mock(async () => new Response(JSON.stringify({
       amountCents: 1200,
       checkoutId: "checkout-1",
       checkoutUrl: "javascript:alert(1)",
       pricing,
-    }))) as unknown as typeof fetch;
+    }))), { preconnect: globalThis.fetch.preconnect });
 
     await expect(createMarketplaceCheckoutSession("module_purchase", "module-1"))
       .rejects
@@ -59,9 +59,9 @@ describe("createMarketplaceCheckoutSession", () => {
   });
 
   it("rejects oversized marketplace JSON before buffering it", async () => {
-    globalThis.fetch = mock(async () => new Response("", {
-      headers: { "content-length": String(2 * 1024 * 1024 + 1) },
-    })) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(mock(async () => new Response("", {
+      headers: { "content-length": String(2097153) },
+    })), { preconnect: globalThis.fetch.preconnect });
 
     await expect(createMarketplaceCheckoutSession("module_purchase", "module-1"))
       .rejects
@@ -78,7 +78,7 @@ describe("createMarketplaceCheckoutSession", () => {
         controller.enqueue(Uint8Array.of(0x20));
       },
     });
-    globalThis.fetch = mock(async () => new Response(stream)) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(mock(async () => new Response(stream)), { preconnect: globalThis.fetch.preconnect });
 
     await expect(createMarketplaceCheckoutSession("module_purchase", "module-1"))
       .rejects
@@ -88,19 +88,19 @@ describe("createMarketplaceCheckoutSession", () => {
   });
 
   it("fails closed on malformed or empty successful JSON responses", async () => {
-    globalThis.fetch = mock(async () => new Response("not-json")) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(mock(async () => new Response("not-json")), { preconnect: globalThis.fetch.preconnect });
     await expect(createMarketplaceCheckoutSession("module_purchase", "module-1"))
       .rejects
       .toThrow("Marketplace returned malformed JSON.");
 
-    globalThis.fetch = mock(async () => new Response("   ")) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(mock(async () => new Response("   ")), { preconnect: globalThis.fetch.preconnect });
     await expect(createMarketplaceCheckoutSession("module_purchase", "module-1"))
       .rejects
       .toThrow("Marketplace returned an empty JSON response.");
   });
 
   it("rejects successful JSON with a malformed endpoint payload", async () => {
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({ checkoutUrl: 42 }))) as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(mock(async () => new Response(JSON.stringify({ checkoutUrl: 42 }))), { preconnect: globalThis.fetch.preconnect });
 
     await expect(createMarketplaceCheckoutSession("padpilot_lifetime_outright"))
       .rejects
@@ -110,11 +110,11 @@ describe("createMarketplaceCheckoutSession", () => {
   it("deletes abandoned draft modules through the owner rollback endpoint", async () => {
     let method = "";
     let url = "";
-    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = Object.assign(mock(async (input: RequestInfo | URL, init?: RequestInit) => {
       method = init?.method ?? "";
       url = input.toString();
       return new Response(JSON.stringify({ ok: true }));
-    }) as unknown as typeof fetch;
+    }), { preconnect: globalThis.fetch.preconnect });
 
     await deleteMarketplaceModule("draft-1");
 

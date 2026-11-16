@@ -2,11 +2,11 @@ import { extname } from "node:path";
 
 import { type EvaluationState } from "./base-analyzer";
 import { evaluateAudioFile, isAudioPath, summarizeAudioReport, type AudioEvaluationState } from "./audio-orchestrator";
-import { BehaviorSynthesizer } from "./behavior-synthesizer";
+import { createBehaviorSynthesizer as createSynthesizer } from "./behavior-synthesizer";
 import { readBoundedStream } from "./bounded-fetch";
-import { SkillManager, type EvaluationReport } from "./skill-manager";
+import { createSkillManager, type SkillManager, type EvaluationReport } from "./skill-manager";
 
-const MAX_MIDI_INPUT_BYTES = 4 * 1024 * 1024;
+const MAX_MIDI_INPUT_BYTES = 4194304;
 
 export type SynaestheticEvaluatorOptions = {
   readonly manager?: SkillManager;
@@ -14,47 +14,41 @@ export type SynaestheticEvaluatorOptions = {
   readonly bufferCapacity?: number;
 };
 
-export class SynaestheticEvaluator {
-  private readonly manager: SkillManager;
-  private readonly buffer: Uint8Array;
-  private readonly state: EvaluationState;
-  private length = 0;
+export type SynaestheticEvaluator = ReturnType<typeof createSynaestheticEvaluator>;
+export function createSynaestheticEvaluator(options: SynaestheticEvaluatorOptions = {}) {
+  let length = 0;
 
-  constructor(options: SynaestheticEvaluatorOptions = {}) {
-    this.manager = options.manager ?? new SkillManager();
-    this.buffer = new Uint8Array(options.bufferCapacity ?? 64 * 1024);
-    this.state = options.state ?? {};
+  const manager = options.manager ?? createSkillManager();
+  const buffer = new Uint8Array(options.bufferCapacity ?? 65536);
+  const defaultState = options.state ?? {};
+
+  async function start() {
+    await manager.loadAll();
+    manager.startWatching();
   }
-
-  async start() {
-    await this.manager.loadAll();
-    this.manager.startWatching();
+  function stop() {
+    manager.stopWatching();
   }
-
-  stop() {
-    this.manager.stopWatching();
+  async function evaluateBytes(midi: Uint8Array, state: EvaluationState = {}) {
+    return manager.evaluate(midi, { ...defaultState, ...state });
   }
-
-  async evaluateBytes(midi: Uint8Array, state: EvaluationState = {}) {
-    return this.manager.evaluate(midi, { ...this.state, ...state });
-  }
-
-  async pushMidiBytes(chunk: Uint8Array, state: EvaluationState = {}) {
-    if (chunk.length >= this.buffer.length) {
-      this.buffer.set(chunk.subarray(chunk.length - this.buffer.length));
-      this.length = this.buffer.length;
+  async function pushMidiBytes(chunk: Uint8Array, state: EvaluationState = {}) {
+    if (chunk.length >= buffer.length) {
+      buffer.set(chunk.subarray(chunk.length - buffer.length));
+      length = buffer.length;
     } else {
-      const overflow = Math.max(0, this.length + chunk.length - this.buffer.length);
+      const overflow = Math.max(0, length + chunk.length - buffer.length);
       if (overflow > 0) {
-        this.buffer.copyWithin(0, overflow, this.length);
-        this.length -= overflow;
+        buffer.copyWithin(0, overflow, length);
+        length -= overflow;
       }
-      this.buffer.set(chunk, this.length);
-      this.length += chunk.length;
+      buffer.set(chunk, length);
+      length += chunk.length;
     }
 
-    return this.evaluateBytes(this.buffer.slice(0, this.length), state);
+    return evaluateBytes(buffer.slice(0, length), state);
   }
+  return { start: start, stop: stop, evaluateBytes: evaluateBytes, pushMidiBytes: pushMidiBytes };
 }
 
 export async function evaluateMidiFile(filePath: string, state: EvaluationState = {}) {
@@ -62,7 +56,7 @@ export async function evaluateMidiFile(filePath: string, state: EvaluationState 
     throw new Error(`SynaestheticEvaluator consumes MIDI files. Use evaluateMediaFile or evaluateAudioFile for audio: ${filePath}`);
   }
   const bytes = await readBoundedStream(Bun.file(filePath).stream(), MAX_MIDI_INPUT_BYTES, "MIDI input");
-  const evaluator = new SynaestheticEvaluator({ state });
+  const evaluator = createSynaestheticEvaluator({ state });
   await evaluator.start();
   try {
     return await evaluator.evaluateBytes(bytes);
@@ -90,7 +84,7 @@ export async function evaluateMediaFile(filePath: string, state: EvaluationState
 }
 
 export function createBehaviorSynthesizer(manager: SkillManager) {
-  return new BehaviorSynthesizer({ manager });
+  return createSynthesizer({ manager });
 }
 
 export function summarizeReport(report: EvaluationReport) {

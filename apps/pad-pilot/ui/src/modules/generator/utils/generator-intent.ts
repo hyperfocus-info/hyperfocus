@@ -1,7 +1,9 @@
+import { asRecord } from "@hyperfocus/utilities/records";
 import { GENERATOR_MIDI_BEATS_PER_BAR, GENERATOR_MIDI_TICKS_PER_QUARTER } from "./midi-encoder";
 import { clamp01Or } from "../../../utils/math";
-import { buildGeneratorSelectorState, buildGeneratorSelectorPromptTags, createEmptyGeneratorFields, mergeGeneratorIntentTags, normalizeGeneratorIntentTags, normalizeGeneratorLengthBars, normalizeGeneratorScaleMode, type GeneratorIntentTags, type GeneratorLengthBars, type GeneratorWeightedSelectorTag } from "./generator-options";
-import { GENERATOR_MODEL_SCHEMA_VERSION, GENERATOR_TRACKER_GRAMMAR_VERSION, type GeneratorArrangementPlanHeader, type GeneratorChordPlanItem, type GeneratorGroovePlan, type GeneratorHarmonicToleranceMode, type GeneratorHarmonicTolerancePolicy, type GeneratorIntentPlan, type GeneratorLanePlanItem, type GeneratorMusicianPlan, type GeneratorPromptInput, harmonicToleranceModes } from "./generator-contracts";
+import { buildGeneratorSelectorState, buildGeneratorSelectorPromptTags, createEmptyGeneratorFields, mergeGeneratorIntentTags, normalizeGeneratorIntentTags, normalizeGeneratorLengthBars, normalizeGeneratorScaleMode } from "./generator-selector-options";
+import { type GeneratorIntentTags, type GeneratorLengthBars, type GeneratorWeightedSelectorTag } from "./generator-option-catalog";
+import { GENERATOR_MODEL_SCHEMA_VERSION, GENERATOR_TRACKER_GRAMMAR_VERSION, type GeneratorArrangementPlanHeader, type GeneratorHarmonicToleranceMode, type GeneratorHarmonicTolerancePolicy, type GeneratorIntentPlan, type GeneratorLanePlanItem, type GeneratorMusicianPlan, type GeneratorPromptInput, harmonicToleranceModes } from "./generator-contracts";
 
 export function uniqueStrings(values: readonly string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
@@ -109,7 +111,7 @@ export function extractGeneratorAiIntentTags(rawTracker: string) {
   return {
     grooveTags: normalizeGeneratorIntentTags(splitIntentTagValue(grooveValue)),
     themeTags: normalizeGeneratorIntentTags(splitIntentTagValue(themeValue)),
-  } satisfies GeneratorIntentTags;
+  };
 }
 
 export function planHeaderField(planLine: string, key: string) {
@@ -128,7 +130,7 @@ export function extractGeneratorArrangementPlan(rawTracker: string) {
     phraseFunction: normalizeGeneratorIntentTags([planHeaderField(planLine, "PHRASE")])[0] ?? "",
     roles: normalizeGeneratorIntentTags(splitIntentTagValue(planHeaderField(planLine, "ROLES"))),
     style: normalizeGeneratorIntentTags([planHeaderField(planLine, "STYLE")])[0] ?? "",
-  } satisfies GeneratorArrangementPlanHeader;
+  };
 }
 
 export function optionalString(value: unknown) {
@@ -152,7 +154,7 @@ export function normalizeArrangementPlan(value: unknown) {
   if (!value || typeof value !== "object") {
     return undefined;
   }
-  const plan = value as Record<string, unknown>;
+  const plan = asRecord(value);
   const confidence = optionalNumber(plan.confidence);
   const fields = ["bass", "confidence", "form", "grid", "motif", "phraseFunction", "roles", "style"];
   if (!objectHasSchemaFields(plan, fields) || !objectHasOnlySchemaFields(plan, fields)) {
@@ -177,14 +179,14 @@ export function normalizeArrangementPlan(value: unknown) {
     phraseFunction: normalizeGeneratorIntentTags([phraseFunction])[0] ?? phraseFunction,
     roles: normalizeGeneratorIntentTags(roles),
     style: normalizeGeneratorIntentTags([style])[0] ?? style,
-  } satisfies GeneratorArrangementPlanHeader;
+  };
 }
 
 export function normalizeLanePlanItem(value: unknown) {
   if (!value || typeof value !== "object") {
     return undefined;
   }
-  const item = value as Record<string, unknown>;
+  const item = asRecord(value);
   const fields = ["bassRole", "function", "lane", "name", "role"];
   if (!objectHasSchemaFields(item, fields) || !objectHasOnlySchemaFields(item, fields)) {
     return undefined;
@@ -208,7 +210,7 @@ export function normalizeLanePlanItem(value: unknown) {
     ...(optionalString(item.lane) ? { lane: normalizeGeneratorIntentTags([optionalString(item.lane)!])[0] ?? optionalString(item.lane)! } : {}),
     ...(optionalString(item.name) ? { name: optionalString(item.name)! } : {}),
     role,
-  } satisfies GeneratorLanePlanItem;
+  };
 }
 
 export function normalizeLanePlan(value: unknown) {
@@ -233,14 +235,14 @@ export function arrangementPlanWithLaneRoles(arrangementPlan: GeneratorArrangeme
       ...lanePlan.map((lane) => lane.function ?? ""),
       ...lanePlan.map((lane) => lane.bassRole ?? ""),
     ], 48),
-  } satisfies GeneratorArrangementPlanHeader;
+  };
 }
 
 export function normalizeGroovePlan(value: unknown) {
   if (!value || typeof value !== "object") {
     return undefined;
   }
-  const plan = value as Record<string, unknown>;
+  const plan = asRecord(value);
   const fields = ["anchors", "grid", "microtiming", "rhythmCell", "swing"];
   if (!objectHasSchemaFields(plan, fields) || !objectHasOnlySchemaFields(plan, fields)) {
     return undefined;
@@ -258,14 +260,14 @@ export function normalizeGroovePlan(value: unknown) {
     microtiming,
     rhythmCell: normalizeGeneratorIntentTags([rhythmCell])[0] ?? rhythmCell,
     swing: plan.swing,
-  } satisfies GeneratorGroovePlan;
+  };
 }
 
 export function normalizeChordPlanItem(value: unknown) {
   if (!value || typeof value !== "object") {
     return undefined;
   }
-  const item = value as Record<string, unknown>;
+  const item = asRecord(value);
   const fields = ["bar", "bassRelation", "function", "inversion", "quality", "resolutionTarget", "roman", "root", "tensionClass", "topNoteIntent", "voicingRange"];
   if (!objectHasSchemaFields(item, fields) || !objectHasOnlySchemaFields(item, fields)) {
     return undefined;
@@ -282,7 +284,7 @@ export function normalizeChordPlanItem(value: unknown) {
     ...(optionalString(item.tensionClass) ? { tensionClass: normalizeGeneratorIntentTags([optionalString(item.tensionClass)!])[0] ?? optionalString(item.tensionClass)! } : {}),
     ...(optionalString(item.topNoteIntent) ? { topNoteIntent: optionalString(item.topNoteIntent)! } : {}),
     ...(optionalString(item.voicingRange) ? { voicingRange: normalizeGeneratorIntentTags([optionalString(item.voicingRange)!])[0] ?? optionalString(item.voicingRange)! } : {}),
-  } satisfies GeneratorChordPlanItem;
+  };
 }
 
 export function normalizeChordPlan(value: unknown) {
@@ -310,7 +312,7 @@ export function planIntentTags(plan: GeneratorMusicianPlan) {
       plan.style.bassRole,
       plan.style.melodicRole,
     ]),
-  } satisfies GeneratorIntentTags;
+  };
 }
 
 export function rawIntentTagEntries(input: GeneratorPromptInput) {
@@ -420,7 +422,7 @@ export function buildGeneratorIntentPlanFromSelection(input: GeneratorPromptInpu
       minPhraseVariations: plan.quality.minPhraseVariations,
       minTracks: plan.layers.minTracks,
     },
-  } satisfies GeneratorIntentPlan;
+  };
 }
 
 export function resolveGeneratorIntentTags(input: GeneratorPromptInput, plan: GeneratorMusicianPlan, rawTracker: string) {
@@ -486,7 +488,7 @@ export function normalizeHarmonicTolerancePolicy(value: unknown) {
   if (!value || typeof value !== "object") {
     return undefined;
   }
-  const policy = value as Record<string, unknown>;
+  const policy = asRecord(value);
   const fields = ["absoluteWrong", "allowedTensions", "avantAllowed", "fixingFactor", "mode", "source"];
   if (!objectHasSchemaFields(policy, fields) || !objectHasOnlySchemaFields(policy, fields)) {
     return undefined;
@@ -506,7 +508,7 @@ export function normalizeHarmonicTolerancePolicy(value: unknown) {
     fixingFactor: clamp01Or(fixingFactor, 0.5),
     mode: normalizeHarmonicToleranceMode(policy.mode),
     source,
-  } satisfies GeneratorHarmonicTolerancePolicy;
+  };
 }
 
 export function derivedHarmonicTolerancePolicy(input: GeneratorPromptInput, intentTags: GeneratorIntentTags, plan: GeneratorMusicianPlan, modelPolicy?: GeneratorHarmonicTolerancePolicy) {
@@ -549,7 +551,7 @@ export function derivedHarmonicTolerancePolicy(input: GeneratorPromptInput, inte
     fixingFactor,
     mode,
     source: modelPolicy ? "model+local" : "local",
-  } satisfies GeneratorHarmonicTolerancePolicy;
+  };
 }
 
 export function explicitNoDrumsRequested(input: GeneratorPromptInput) {

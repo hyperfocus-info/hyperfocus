@@ -1,10 +1,11 @@
+import { formatFileSize } from "./utils/update-modal-values";
 import { Show } from "solid-js";
 import { Button } from "./elements/button";
 import { Modal } from "./elements/modal";
 import { useMarketplaceStore } from "../state/marketplace-store";
 import styles from "./update-modal.stylex";
 
-const formatFileSize = (value: number) => `${(value / (1024 * 1024)).toFixed(2)} MB`;
+
 
 export function UpdateModal() {
   const { actions, state } = useMarketplaceStore();

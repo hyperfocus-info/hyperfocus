@@ -1,3 +1,4 @@
+import { editorSelect } from "../components/editor-select-controls";
 import type { EditorEntityData, EditorProject } from "@hyperfocus/engine/project";
 import { applyChoreographyRecipe2D, type ChoreographyRecipeId } from "./choreography-recipes.ts";
 
@@ -42,12 +43,12 @@ export function createTimelineAuthoringPanels(context: TimelineAuthoringPanelCon
   };
 
   const renderClipCuePanel = (message?: string) => {
-    const select = required<HTMLSelectElement>("#clip-cue-select");
+    const select = editorSelect("#clip-cue-select");
     const button = required<HTMLButtonElement>("#set-clip-cue");
     const selected = selectedAtlasSprite();
     const clips = context.getAtlasClips();
     const previous = select.value;
-    select.innerHTML = clips.map((clip) => `<option value="${escapeMarkup(clip.id)}">${escapeMarkup(clip.name)} · ${clip.sequence.length} frames · ${clip.fps} fps</option>`).join("");
+    select.setOptions(clips.map(clip => ({ value: clip.id, label: `${clip.name} · ${clip.sequence.length} frames · ${clip.fps} fps` })));
     const cue = selected ? context.getTimeline().clipTracks?.find((track) => track.targetId === selected.id)?.keyframes.find((key) => key.frame === Math.round(context.getFrame())) : undefined;
     if (cue && clips.some((clip) => clip.id === cue.clipId)) select.value = cue.clipId;
     else if (clips.some((clip) => clip.id === previous)) select.value = previous;
@@ -59,7 +60,7 @@ export function createTimelineAuthoringPanels(context: TimelineAuthoringPanelCon
 
   const setClipCueAtPlayhead = () => {
     const selected = selectedAtlasSprite();
-    const clip = context.getAtlasClips().find((candidate) => candidate.id === required<HTMLSelectElement>("#clip-cue-select").value);
+    const clip = context.getAtlasClips().find((candidate) => candidate.id === editorSelect("#clip-cue-select").value);
     if (!selected || !clip) { renderClipCuePanel("Choose an Atlas sprite and named clip first."); return; }
     const timeline = context.getTimeline();
     timeline.clipTracks ??= [];
@@ -89,7 +90,7 @@ export function createTimelineAuthoringPanels(context: TimelineAuthoringPanelCon
     if (recipe === "bite" && !secondary) { renderChoreographyPanel("Bite exchange needs a second actor or hostile in this scene."); return; }
     try {
       const result = applyChoreographyRecipe2D({ timeline: context.getTimeline(), recipe, frame: Math.round(context.getFrame()), primary, secondary, id: `${recipe}-${Date.now().toString(36)}` });
-      context.setTimeline(result.timeline as EditorProject["timeline"]); context.enablePreview(result.contactFrame); context.clearKeySelection(); context.renderTimeline(); context.renderPreviews(); context.commit(`Apply ${recipe} choreography`);
+      context.setTimeline({ ...context.getTimeline(), ...result.timeline }); context.enablePreview(result.contactFrame); context.clearKeySelection(); context.renderTimeline(); context.renderPreviews(); context.commit(`Apply ${recipe} choreography`);
       renderChoreographyPanel(`${recipe.toUpperCase()} · ${result.changedTrackIds.length} editable tracks · ${result.effectIds.length} effects · contact ${context.formatTimecode(result.contactFrame)}`);
       context.log(`choreography → ${recipe} · ${primary.label}${secondary ? ` → ${secondary.label}` : ""} · contact frame ${result.contactFrame}`);
     } catch (cause) { renderChoreographyPanel(cause instanceof Error ? cause.message : String(cause)); }
@@ -107,5 +108,3 @@ function required<T extends Element>(selector: string) {
 }
 
 function setText(selector: string, value: string) { required<HTMLElement>(selector).textContent = value; }
-const escapes: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-function escapeMarkup(value: unknown) { return String(value).replace(/[&<>"']/g, (character) => escapes[character] ?? character); }

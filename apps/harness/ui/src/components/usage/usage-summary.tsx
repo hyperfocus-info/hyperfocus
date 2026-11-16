@@ -45,7 +45,7 @@ export function UsageSummary() {
   });
   const limits = () => state.tokenUsage.codexLimits;
   const summaryWindow = () => limits()?.windows.find(window => window.windowDurationMins === 10080) ?? limits()?.windows[0];
-  const unattributed = () => Math.max(0, state.tokenUsage.lifetime.totalProcessedTokens - (state.tokenUsage.sources ?? []).reduce((sum, source) => sum + source.totals.totalProcessedTokens, 0));
+  const unattributed = () => Math.max(0, state.tokenUsage.lifetime.totalProcessedTokens - (state.tokenUsage.sourceOverflow?.totals.totalProcessedTokens ?? 0) - (state.tokenUsage.sources ?? []).reduce((sum, source) => sum + source.totals.totalProcessedTokens, 0));
   const summary = () => {
     if (state.usageRefreshRequestId) return "Codex · Updating...";
     const window = summaryWindow();
@@ -80,10 +80,11 @@ export function UsageSummary() {
           <span {...stylex.attrs(styles.muted)}>Checked: {formatShortTimestamp(account().checkedAt)}</span>
         </>}</Show>
         <p {...stylex.attrs(styles.muted)}>Account-wide limits come from Codex. Local counters below cover only usage observed by this Harness server.</p>
-        <details data-test-usage-sources=""><summary>Local usage sources ({state.tokenUsage.sources?.length ?? 0})</summary>
+        <details data-test-usage-sources=""><summary>Local usage sources ({(state.tokenUsage.sources?.length ?? 0) + (state.tokenUsage.sourceOverflow?.count ?? 0)})</summary>
           <p {...stylex.attrs(styles.muted)}>Observed lifetime usage since local reset. Historical totals may have unknown attribution. Cached input is part of input, counted once.</p>
+          <Show when={state.tokenUsage.sourceOverflow?.count}>{count => <p data-test-usage-overflow="">Showing up to 100 sources in first-observed order. {count()} additional sources are aggregated: {formatTokenCount(state.tokenUsage.sourceOverflow!.totals.totalProcessedTokens)} tokens; Input {formatTokenCount(state.tokenUsage.sourceOverflow!.totals.inputTokens)}; Output {formatTokenCount(state.tokenUsage.sourceOverflow!.totals.outputTokens)}; Cached {formatTokenCount(state.tokenUsage.sourceOverflow!.totals.cachedInputTokens)}. Full identities remain in the local database; unusually large identities are included in this aggregate.</p>}</Show>
           <Show when={unattributed() > 0}><p>Unknown attribution: {formatTokenCount(unattributed())} lifetime tokens.</p></Show>
-          <Show when={state.tokenUsage.sources?.length} fallback={<p>No attributed sources available. Local totals may include unknown sources.</p>}>
+          <Show when={state.tokenUsage.sources?.length} fallback={<p>{state.tokenUsage.sourceOverflow?.count ? "All attributed sources are included in the aggregate above." : "No attributed sources available. Local totals may include unknown sources."}</p>}>
             <For each={state.tokenUsage.sources}>{source => <div data-test-usage-source="" {...stylex.attrs(styles.source)}>
               <strong>{source.sourceLabel || "Unknown role"}</strong>
               <span>Project: {state.workspace.projects.find(project => project.id === source.projectId)?.name ?? source.projectId ?? "Unknown project"}</span>

@@ -2,7 +2,7 @@ import { GeneratorFieldKey, GeneratorAdvancedKey, GENERATOR_FIELD_KEYS, genreLab
 
 export type MagicProfile = Record<GeneratorFieldKey, readonly string[]>;
 
-export const profilePresets = {
+export const profilePresets: Record<string, MagicProfile> = {
   bass: {
     complexity: ["Syncopated Groove", "Double Time", "Percussion Forward", "Bassline First", "Polyrhythmic", "Drop Template"],
     era: ["Jungle 1994", "UKG 1998", "London Pirate Radio", "Rave 1992", "Bristol 1995", "Garage Revival"],
@@ -220,9 +220,9 @@ export const profilePresets = {
     mood: ["Hypnotic", "Urgent", "Cosmic", "Restless", "Futuristic", "Euphoric"],
     scaleKey: ["Phrygian", "Dorian", "Natural Minor", "Persian", "Hungarian Minor", "Chromatic"],
   },
-} as const satisfies Record<string, MagicProfile>;
+} as const;
 
-export const GENERATOR_MAGIC_GENRE_PROFILES = {
+export const GENERATOR_MAGIC_GENRE_PROFILES: Record<(typeof genreLabels)[number], MagicProfile> = {
   "Synthwave": profilePresets.retroElectronic,
   "Lofi": profilePresets.chilled,
   "Liquid Drum & Bass": profilePresets.bass,
@@ -323,7 +323,7 @@ export const GENERATOR_MAGIC_GENRE_PROFILES = {
   "Drone": profilePresets.cinematic,
   "Shoegaze": profilePresets.rockFolk,
   "Math Rock": profilePresets.rockFolk,
-} as const satisfies Record<(typeof genreLabels)[number], MagicProfile>;
+} as const;
 
 export function fallbackMagicProfile(_key: GeneratorFieldKey, _value: string) {
   return profilePresets.neutral;
@@ -345,7 +345,7 @@ export const moodOnlyRegionalProfiles = new Set<MagicProfile>([
 
 export function directGenreMagicProfile(value: string) {
   const option = GENERATOR_OPTION_GROUPS.genre.find((item) => item.label.toLowerCase() === value.toLowerCase());
-  return option ? GENERATOR_MAGIC_GENRE_PROFILES[option.label as keyof typeof GENERATOR_MAGIC_GENRE_PROFILES] : undefined;
+  return option ? Object.entries(GENERATOR_MAGIC_GENRE_PROFILES).find(([key]) => key === option.label)?.[1] : undefined;
 }
 
 export const typedMagicProfileRules: ReadonlyArray<{ match: RegExp; profiles: readonly MagicProfile[] }> = [
@@ -458,13 +458,13 @@ export type MagicFactor = {
   risk?: number;
 };
 
-export const profileInfluence = {
+export const profileInfluence: Record<GeneratorFieldKey, Record<GeneratorFieldKey, number>> = {
   complexity: { complexity: 0.25, era: 0.45, genre: 0.52, mood: 0.42, scaleKey: 0.34 },
   era: { complexity: 0.42, era: 0.25, genre: 0.58, mood: 0.34, scaleKey: 0.24 },
   genre: { complexity: 0.95, era: 1, genre: 0.2, mood: 0.82, scaleKey: 0.7 },
   mood: { complexity: 0.38, era: 0.32, genre: 0.28, mood: 0.18, scaleKey: 0.34 },
   scaleKey: { complexity: 0.22, era: 0.1, genre: 0.12, mood: 0.16, scaleKey: 0.18 },
-} satisfies Record<GeneratorFieldKey, Record<GeneratorFieldKey, number>>;
+};
 
 export const magicInteractionFactors: readonly MagicFactor[] = [
   {
@@ -564,7 +564,7 @@ export const magicInteractionFactors: readonly MagicFactor[] = [
   },
 ];
 
-export const advancedProfileTargets = [
+export const advancedProfileTargets: ReadonlyArray<{ profile: MagicProfile; target: MagicAdvancedTargets }> = [
   { profile: profilePresets.bass, target: { creativity: 0.74, density: 0.82, humanize: 0.36, lengthBars: 8, temperature: 0.68 } },
   { profile: profilePresets.ukGarage, target: { creativity: 0.66, density: 0.72, humanize: 0.52, lengthBars: 8, temperature: 0.62 } },
   { profile: profilePresets.futureGarage, target: { creativity: 0.62, density: 0.5, humanize: 0.58, lengthBars: 8, temperature: 0.58 } },
@@ -594,4 +594,4 @@ export const advancedProfileTargets = [
   { profile: profilePresets.retroElectronic, target: { creativity: 0.68, density: 0.62, humanize: 0.34, lengthBars: 8, temperature: 0.62 } },
   { profile: profilePresets.rockFolk, target: { creativity: 0.56, density: 0.44, humanize: 0.72, lengthBars: 4, temperature: 0.44 } },
   { profile: profilePresets.soul, target: { creativity: 0.6, density: 0.52, humanize: 0.74, lengthBars: 4, temperature: 0.48 } },
-] as const satisfies ReadonlyArray<{ profile: MagicProfile; target: MagicAdvancedTargets }>;
+] as const;

@@ -5,7 +5,14 @@ import { resolveHostStorageConfig } from '@hyperfocus/touch-of-death/host/postgr
 
 test('saved native runs reuse the lab server implementation without needing or replacing its active artifact',()=>{
   const surface=resolveDevSurface('touch-of-death-runs')!,lab=resolveDevSurface('touch-of-death-lab')!;
-  expect(surface.command(resolve('.'))).toEqual(lab.command(resolve('.')));
+  const previous = process.env.PERF_LAB_ARTIFACT_DIR;
+  try {
+    process.env.PERF_LAB_ARTIFACT_DIR = '.local/lab-artifact';
+    expect(surface.command(resolve('.'))).toEqual(lab.command(resolve('.')));
+  } finally {
+    if (previous === undefined) delete process.env.PERF_LAB_ARTIFACT_DIR;
+    else process.env.PERF_LAB_ARTIFACT_DIR = previous;
+  }
   expect(surface.defaultPort).not.toBe(lab.defaultPort);
   expect(surface.environment(8828).PERF_NATIVE_SHARES_ONLY).toBe('1');
   expect(surface.environment(8828).PORT).toBe('8828');
@@ -103,4 +110,16 @@ test('managed storage rejects invalid mode and cannot override a real Railway de
     const overrides = resolveDevSurface('combat-relay')!.environment(8811);
     expect(() => resolveHostStorageConfig({ environment: { RAILWAY_ENVIRONMENT_ID: 'production', ...overrides } })).toThrow('sqlite is not allowed');
   });
+});
+
+test('external surfaces require explicit artifacts and never refer to excluded application sources', () => {
+ for (const [name, variable, entry] of [['books','BOOKS_ARTIFACT_DIR','server.js'],['trade-bot','TRADE_ARTIFACT_DIR','server.js'],['touch-of-death-lab','PERF_LAB_ARTIFACT_DIR','serve.js'],['touch-of-death-runs','PERF_LAB_ARTIFACT_DIR','serve.js']]) {
+ const previous = process.env[variable!];
+ try {
+ delete process.env[variable!];const surface = resolveDevSurface(name!)!;
+ expect(() => surface.command(resolve('.'))).toThrow(variable!);
+ process.env[variable!] = '.local/external-artifact';
+ expect(surface.command(resolve('.'))).toEqual([process.execPath, '--cwd', resolve('.local/external-artifact'), resolve('.local/external-artifact', entry!)]);
+ } finally { if (previous === undefined) delete process.env[variable!];else process.env[variable!] = previous; }
+ }
 });

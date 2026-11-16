@@ -41,14 +41,14 @@ type RigidQueryApi = Pick<RigidWorld3D, "queryAabb" | "raycast" | "sweepSphere">
 type RigidDebugApi = Pick<RigidWorld3D, "debugSegmentCount" | "writeDebugSegments">;
 type RigidCheckpointApi = Pick<RigidWorld3D, "checkpoint" | "restoreCheckpoint">;
 
-function createRigidBodyApi(context: RigidOperationContext, operations: RigidOperations, constraintStore: RigidConstraintStore3D): RigidBodyApi {
-  const { config, bodies, contactStorage, diagnostics, mutable } = context;
-  const { capacity,  } = config;
-  const { alive, bodyType, shapeKind, flags, generation, layer, mask, positionX, positionY, positionZ, previousX, previousY, previousZ, velocityX, velocityY, velocityZ, rotationX, rotationY, rotationZ, rotationW, previousRotationX, previousRotationY, previousRotationZ, previousRotationW, angularVelocityX, angularVelocityY, angularVelocityZ, linearDamping, angularDamping, extentX, extentY, extentZ, inverseMass, inverseInertiaX, inverseInertiaY, inverseInertiaZ, restitution, friction, gravityScale, fractureEnergyJoules, retainedEnergyRatio, free, ids, indexById } = bodies;
-  const {  } = contactStorage;
-  const { handleAt, resolve, resolveOptional, setQuaternion, state, updateAabb } = operations;
-  const torqueImpulseScratch = [0, 0, 0];
-  const addBody: RigidWorld3D["addBody"] = (definition) => {
+function createRigidBodyApi(context: RigidOperationContext, operations: RigidOperations, constraintStore: RigidConstraintStore3D, precision: RigidPhysicsPrecision3D): RigidBodyApi & RigidSimulationApi & RigidCheckpointApi {
+const { config, bodies, contactStorage, diagnostics, mutable } = context;
+const { capacity, velocityIterations, positionIterations, gravityX, gravityY, gravityZ, maxContacts } = config;
+const { alive, bodyType, shapeKind, flags, generation, layer, mask, positionX, positionY, positionZ, previousX, previousY, previousZ, velocityX, velocityY, velocityZ, rotationX, rotationY, rotationZ, rotationW, previousRotationX, previousRotationY, previousRotationZ, previousRotationW, angularVelocityX, angularVelocityY, angularVelocityZ, linearDamping, angularDamping, extentX, extentY, extentZ, inverseMass, inverseInertiaX, inverseInertiaY, inverseInertiaZ, restitution, friction, gravityScale, fractureEnergyJoules, retainedEnergyRatio, free, ids, indexById } = bodies;
+const { contactA, contactB, contactNormalX, contactNormalY, contactNormalZ, contactPenetration, contactPointX, contactPointY, contactPointZ, contactTrigger, contactClosingSpeed, contactEffectiveMass, contactImpactEnergy, contactNormalImpulse, contactFailedBody, contactManifoldPointCount, contactWarmStartedPointCount, contactManifoldPointX, contactManifoldPointY, contactManifoldPointZ, contactManifoldNormalImpulse, contactManifoldFrictionX, contactManifoldFrictionY, contactManifoldFrictionZ } = contactStorage;
+const { handleAt, resolve, resolveOptional, setQuaternion, state, updateAabb, collectContacts, dampLinearVelocity, integrateRotation, runCcd, solvePosition, solveVelocity, warmStart } = operations;
+const torqueImpulseScratch = [0, 0, 0];
+const addBody: RigidWorld3D["addBody"] = (definition) => {
         if (!definition || typeof definition !== "object") throw new TypeError("Rigid body definition must be an object.");
         for (const key of ["constraints", "joints", "torque", "quaternion", "angle"]) if (Reflect.get(definition, key) !== undefined) {
           throw new Error(`${key} is not an inline body property; use the bounded rigid-world rotation/constraint methods.`);
@@ -122,7 +122,7 @@ function createRigidBodyApi(context: RigidOperationContext, operations: RigidOpe
         mutable.bodyCount += 1; diagnostics.bodies = mutable.bodyCount;
         return handleAt(index);
       };
-  const removeBody: RigidWorld3D["removeBody"] = (handleOrId) => {
+const removeBody: RigidWorld3D["removeBody"] = (handleOrId) => {
         const index = resolveOptional(handleOrId);
         if (index === undefined) return false;
         indexById.delete(ids[index]!); ids[index] = undefined; alive[index] = 0; flags[index] = 0;
@@ -140,18 +140,18 @@ function createRigidBodyApi(context: RigidOperationContext, operations: RigidOpe
         }
         return true;
       };
-  const hasBody: RigidWorld3D["hasBody"] = (handleOrId) => { return resolveOptional(handleOrId) !== undefined; };
-  const body: RigidWorld3D["body"] = (handleOrId) => {
+const hasBody: RigidWorld3D["hasBody"] = (handleOrId) => { return resolveOptional(handleOrId) !== undefined; };
+const body: RigidWorld3D["body"] = (handleOrId) => {
         const index = resolveOptional(handleOrId);
         return index === undefined ? undefined : state(index);
       };
-  const readVelocity: RigidWorld3D['readVelocity'] = (handleOrId, output) => {
+const readVelocity: RigidWorld3D['readVelocity'] = (handleOrId, output) => {
         const index = resolveOptional(handleOrId);
         if (index === undefined) return undefined;
         output.x = velocityX[index]!;output.y = velocityY[index]!;output.z = velocityZ[index]!;
         return bodyType[index] === TYPE_STATIC ? 'static' : bodyType[index] === TYPE_DYNAMIC ? 'dynamic' : 'kinematic';
       };
-  const configureBody: RigidWorld3D["configureBody"] = (handleOrId, update) => {
+const configureBody: RigidWorld3D["configureBody"] = (handleOrId, update) => {
         const index = resolve(handleOrId);
         if (!update || typeof update !== "object") throw new TypeError("Rigid body runtime configuration must be an object.");
         const priorType = bodyType[index] === TYPE_STATIC ? "static" : bodyType[index] === TYPE_DYNAMIC ? "dynamic" : "kinematic";
@@ -180,7 +180,7 @@ function createRigidBodyApi(context: RigidOperationContext, operations: RigidOpe
         updateAabb(index);
         return state(index);
       };
-  const setPosition: RigidWorld3D["setPosition"] = (handleOrId, x, y, z) => {
+const setPosition: RigidWorld3D["setPosition"] = (handleOrId, x, y, z) => {
         const index = resolve(handleOrId);
         x = finite(x, "x"); y = finite(y, "y"); z = finite(z, "z");
         finite(x - extentX[index]!, "shape minimum x"); finite(x + extentX[index]!, "shape maximum x");
@@ -189,24 +189,24 @@ function createRigidBodyApi(context: RigidOperationContext, operations: RigidOpe
         positionX[index] = x; positionY[index] = y; positionZ[index] = z;
         previousX[index] = positionX[index]!; previousY[index] = positionY[index]!; previousZ[index] = positionZ[index]!; updateAabb(index);
       };
-  const setVelocity: RigidWorld3D["setVelocity"] = (handleOrId, x, y, z) => {
+const setVelocity: RigidWorld3D["setVelocity"] = (handleOrId, x, y, z) => {
         const index = resolve(handleOrId);
         if (bodyType[index] === TYPE_STATIC) throw new Error("Static bodies cannot have velocity.");
         velocityX[index] = finite(x, "velocityX"); velocityY[index] = finite(y, "velocityY"); velocityZ[index] = finite(z, "velocityZ");
       };
-  const setRotation: RigidWorld3D["setRotation"] = (handleOrId, x, y, z, w) => { setQuaternion(resolve(handleOrId), x, y, z, w); };
-  const setAngularVelocity: RigidWorld3D["setAngularVelocity"] = (handleOrId, x, y, z) => {
+const setRotation: RigidWorld3D["setRotation"] = (handleOrId, x, y, z, w) => { setQuaternion(resolve(handleOrId), x, y, z, w); };
+const setAngularVelocity: RigidWorld3D["setAngularVelocity"] = (handleOrId, x, y, z) => {
         const index = resolve(handleOrId); if (bodyType[index] === TYPE_STATIC) throw new Error("Static bodies cannot have angular velocity.");
         angularVelocityX[index] = finite(x, "angularVelocityX"); angularVelocityY[index] = finite(y, "angularVelocityY"); angularVelocityZ[index] = finite(z, "angularVelocityZ");
       };
-  const applyTorqueImpulse: RigidWorld3D["applyTorqueImpulse"] = (handleOrId, x, y, z) => {
+const applyTorqueImpulse: RigidWorld3D["applyTorqueImpulse"] = (handleOrId, x, y, z) => {
         const index = resolve(handleOrId); if (bodyType[index] !== TYPE_DYNAMIC) throw new Error("Torque impulses can be applied only to dynamic bodies.");
         const angular = operations.applyInverseInertia(index, finite(x, "torqueImpulseX"), finite(y, "torqueImpulseY"), finite(z, "torqueImpulseZ"), torqueImpulseScratch);
         angularVelocityX[index] = finite(angularVelocityX[index]! + angular[0]!, "resulting angularVelocityX");
         angularVelocityY[index] = finite(angularVelocityY[index]! + angular[1]!, "resulting angularVelocityY");
         angularVelocityZ[index] = finite(angularVelocityZ[index]! + angular[2]!, "resulting angularVelocityZ");
       };
-  const applyImpulse: RigidWorld3D["applyImpulse"] = (handleOrId, x, y, z) => {
+const applyImpulse: RigidWorld3D["applyImpulse"] = (handleOrId, x, y, z) => {
         const index = resolve(handleOrId);
         if (bodyType[index] !== TYPE_DYNAMIC) throw new Error("Impulses can be applied only to dynamic bodies.");
         const nextX = velocityX[index]! + finite(x, "impulseX") * inverseMass[index]!;
@@ -214,8 +214,8 @@ function createRigidBodyApi(context: RigidOperationContext, operations: RigidOpe
         const nextZ = velocityZ[index]! + finite(z, "impulseZ") * inverseMass[index]!;
         velocityX[index] = finite(nextX, "resulting velocityX"); velocityY[index] = finite(nextY, "resulting velocityY"); velocityZ[index] = finite(nextZ, "resulting velocityZ");
       };
-  const pointImpulseScratch = [0, 0, 0];
-  const applyImpulseAtPoint: RigidWorld3D["applyImpulseAtPoint"] = (handleOrId, impulseX, impulseY, impulseZ, pointX, pointY, pointZ) => {
+const pointImpulseScratch = [0, 0, 0];
+const applyImpulseAtPoint: RigidWorld3D["applyImpulseAtPoint"] = (handleOrId, impulseX, impulseY, impulseZ, pointX, pointY, pointZ) => {
         const index = resolve(handleOrId);
         if (bodyType[index] !== TYPE_DYNAMIC) throw new Error("Point impulses can be applied only to dynamic bodies.");
         impulseX = finite(impulseX, "impulseX"); impulseY = finite(impulseY, "impulseY"); impulseZ = finite(impulseZ, "impulseZ");
@@ -229,16 +229,7 @@ function createRigidBodyApi(context: RigidOperationContext, operations: RigidOpe
         angularVelocityY[index] = finite(angularVelocityY[index]! + pointImpulseScratch[1]!, "resulting angularVelocityY");
         angularVelocityZ[index] = finite(angularVelocityZ[index]! + pointImpulseScratch[2]!, "resulting angularVelocityZ");
       };
-  return { addBody, removeBody, hasBody, body, readVelocity, configureBody, setPosition, setVelocity, setRotation, setAngularVelocity, applyTorqueImpulse, applyImpulse, applyImpulseAtPoint };
-}
-
-function createRigidSimulationApi(context: RigidOperationContext, operations: RigidOperations, constraintStore: RigidConstraintStore3D): RigidSimulationApi {
-  const { config, bodies, contactStorage, diagnostics, mutable } = context;
-  const { capacity, velocityIterations, positionIterations, gravityX, gravityY, gravityZ } = config;
-  const { alive, bodyType, flags, positionX, positionY, positionZ, previousX, previousY, previousZ, velocityX, velocityY, velocityZ, rotationX, rotationY, rotationZ, rotationW, previousRotationX, previousRotationY, previousRotationZ, previousRotationW, gravityScale, ids } = bodies;
-  const { contactA, contactB, contactNormalX, contactNormalY, contactNormalZ, contactPenetration, contactPointX, contactPointY, contactPointZ, contactTrigger, contactClosingSpeed, contactEffectiveMass, contactImpactEnergy, contactNormalImpulse, contactFailedBody, contactManifoldPointCount, contactWarmStartedPointCount } = contactStorage;
-  const { collectContacts, dampLinearVelocity, handleAt, integrateRotation, runCcd, solvePosition, solveVelocity, updateAabb, warmStart } = operations;
-  const step: RigidWorld3D["step"] = (seconds) => {
+const step: RigidWorld3D["step"] = (seconds) => {
         seconds = interval(seconds, Number.EPSILON, 0.25, "seconds");
         diagnostics.steps += 1; diagnostics.candidatePairs = 0; diagnostics.contacts = 0; diagnostics.ccdTests = 0; diagnostics.ccdAngularTests = 0; diagnostics.ccdEligiblePairs = 0; diagnostics.ccdBoundsRejects = 0;
         for (let index = 0; index < capacity; index += 1) {
@@ -279,8 +270,8 @@ function createRigidSimulationApi(context: RigidOperationContext, operations: Ri
         constraintStore.solve(seconds);
         return mutable.currentContacts;
       };
-  const contactCount: RigidWorld3D["contactCount"] = () => { return mutable.currentContacts; };
-  const contact: RigidWorld3D["contact"] = (index, target) => {
+const contactCount: RigidWorld3D["contactCount"] = () => { return mutable.currentContacts; };
+const contact: RigidWorld3D["contact"] = (index, target) => {
         if (!target || typeof target !== "object") throw new TypeError("Contact target is required.");
         if (!Number.isInteger(index) || index < 0 || index >= mutable.currentContacts) throw new RangeError(`Contact index ${index} is out of range.`);
         const a = contactA[index]!; const b = contactB[index]!;
@@ -295,17 +286,62 @@ function createRigidSimulationApi(context: RigidOperationContext, operations: Ri
         if (failed >= 0) { target.failedBody = handleAt(failed); target.failedBodyId = ids[failed]!; } else { delete target.failedBody; delete target.failedBodyId; }
         return target;
       };
-  return { step, contactCount, contact };
+const dynamicArrays = { positionX, positionY, positionZ, previousX, previousY, previousZ, velocityX, velocityY, velocityZ, rotationX, rotationY, rotationZ, rotationW, previousRotationX, previousRotationY, previousRotationZ, previousRotationW, angularVelocityX, angularVelocityY, angularVelocityZ };
+function checkpoint(): RigidWorldCheckpoint3D {
+    const count = mutable.currentContacts;
+    return {
+      version: 1, capacity, maxContacts, precision,
+      topology: { alive: alive.slice(), generation: generation.slice(), ids: [...ids] },
+      bodies: structuredClone(dynamicArrays),
+      contacts: { count, a: contactA.slice(0, count), b: contactB.slice(0, count), normalX: contactNormalX.slice(0, count), normalY: contactNormalY.slice(0, count), normalZ: contactNormalZ.slice(0, count), penetration: contactPenetration.slice(0, count), pointX: contactPointX.slice(0, count), pointY: contactPointY.slice(0, count), pointZ: contactPointZ.slice(0, count), trigger: contactTrigger.slice(0, count), manifoldPointCount: contactManifoldPointCount.slice(0, count), manifoldPointX: contactManifoldPointX.slice(0, count * 4), manifoldPointY: contactManifoldPointY.slice(0, count * 4), manifoldPointZ: contactManifoldPointZ.slice(0, count * 4), manifoldNormalImpulse: contactManifoldNormalImpulse.slice(0, count * 4), manifoldFrictionX: contactManifoldFrictionX.slice(0, count * 4), manifoldFrictionY: contactManifoldFrictionY.slice(0, count * 4), manifoldFrictionZ: contactManifoldFrictionZ.slice(0, count * 4), warmStartedPointCount: contactWarmStartedPointCount.slice(0, count), closingSpeedMetersPerSecond: contactClosingSpeed.slice(0, count), effectiveMassKg: contactEffectiveMass.slice(0, count), impactEnergyJoules: contactImpactEnergy.slice(0, count), normalImpulseNewtonSeconds: contactNormalImpulse.slice(0, count), failedBody: contactFailedBody.slice(0, count) },
+      constraints: constraintStore.checkpoint(), diagnostics: { ...diagnostics },
+    };
+  }
+function restoreCheckpoint(value: Readonly<RigidWorldCheckpoint3D>) {
+    assertRigidCheckpointTopology3D(value, { capacity, maxContacts, precision, topology: { alive, generation, ids } });
+    const checkpointArrays: Partial<Record<string, typeof positionX>> = value.bodies;
+    for (const [key, target] of Object.entries(dynamicArrays)) {
+      const source = checkpointArrays[key]
+        ?? (key === "previousRotationX" ? value.bodies.rotationX : key === "previousRotationY" ? value.bodies.rotationY : key === "previousRotationZ" ? value.bodies.rotationZ : key === "previousRotationW" ? value.bodies.rotationW : undefined);
+      if (!source || source.length !== capacity) throw new Error(`Rigid world checkpoint ${key} has the wrong capacity.`);
+      target.set(source);
+    }
+    const contacts = value.contacts;
+    if (!Number.isSafeInteger(contacts.count) || contacts.count < 0 || contacts.count > maxContacts) throw new Error("Rigid world checkpoint contact count is invalid.");
+    for (const source of [contacts.a, contacts.b, contacts.normalX, contacts.normalY, contacts.normalZ, contacts.penetration, contacts.pointX, contacts.pointY, contacts.pointZ, contacts.trigger, contacts.closingSpeedMetersPerSecond, contacts.effectiveMassKg, contacts.impactEnergyJoules, contacts.normalImpulseNewtonSeconds, contacts.failedBody]) if (source.length !== contacts.count) throw new Error("Rigid world checkpoint contact storage is inconsistent.");
+    contactA.set(contacts.a); contactB.set(contacts.b); contactNormalX.set(contacts.normalX); contactNormalY.set(contacts.normalY); contactNormalZ.set(contacts.normalZ); contactPenetration.set(contacts.penetration); contactPointX.set(contacts.pointX); contactPointY.set(contacts.pointY); contactPointZ.set(contacts.pointZ); contactTrigger.set(contacts.trigger); contactClosingSpeed.set(contacts.closingSpeedMetersPerSecond); contactEffectiveMass.set(contacts.effectiveMassKg); contactImpactEnergy.set(contacts.impactEnergyJoules); contactNormalImpulse.set(contacts.normalImpulseNewtonSeconds); contactFailedBody.set(contacts.failedBody);
+    const hasManifold = contacts.manifoldPointCount !== undefined || contacts.manifoldPointX !== undefined || contacts.manifoldPointY !== undefined || contacts.manifoldPointZ !== undefined;
+    if (hasManifold) {
+      if (!contacts.manifoldPointCount || !contacts.manifoldPointX || !contacts.manifoldPointY || !contacts.manifoldPointZ || contacts.manifoldPointCount.length !== contacts.count || contacts.manifoldPointX.length !== contacts.count * 4 || contacts.manifoldPointY.length !== contacts.count * 4 || contacts.manifoldPointZ.length !== contacts.count * 4) throw new Error("Rigid world checkpoint contact manifold storage is inconsistent.");
+      contactManifoldPointCount.set(contacts.manifoldPointCount); contactManifoldPointX.set(contacts.manifoldPointX); contactManifoldPointY.set(contacts.manifoldPointY); contactManifoldPointZ.set(contacts.manifoldPointZ);
+    } else for (let index = 0; index < contacts.count; index += 1) { contactManifoldPointCount[index] = 1; const offset = index * 4; contactManifoldPointX[offset] = contacts.pointX[index]!; contactManifoldPointY[offset] = contacts.pointY[index]!; contactManifoldPointZ[offset] = contacts.pointZ[index]!; }
+    const hasContactCache = contacts.manifoldNormalImpulse !== undefined || contacts.manifoldFrictionX !== undefined || contacts.manifoldFrictionY !== undefined || contacts.manifoldFrictionZ !== undefined || contacts.warmStartedPointCount !== undefined;
+    if (hasContactCache) {
+      if (!hasManifold) throw new Error("Rigid world checkpoint contact cache requires manifold storage.");
+      if (!contacts.manifoldNormalImpulse || !contacts.manifoldFrictionX || !contacts.manifoldFrictionY || !contacts.manifoldFrictionZ || !contacts.warmStartedPointCount || contacts.manifoldNormalImpulse.length !== contacts.count * 4 || contacts.manifoldFrictionX.length !== contacts.count * 4 || contacts.manifoldFrictionY.length !== contacts.count * 4 || contacts.manifoldFrictionZ.length !== contacts.count * 4 || contacts.warmStartedPointCount.length !== contacts.count) throw new Error("Rigid world checkpoint contact cache storage is inconsistent.");
+      contactManifoldNormalImpulse.set(contacts.manifoldNormalImpulse); contactManifoldFrictionX.set(contacts.manifoldFrictionX); contactManifoldFrictionY.set(contacts.manifoldFrictionY); contactManifoldFrictionZ.set(contacts.manifoldFrictionZ); contactWarmStartedPointCount.set(contacts.warmStartedPointCount);
+    } else {
+      contactManifoldNormalImpulse.fill(0, 0, contacts.count * 4); contactManifoldFrictionX.fill(0, 0, contacts.count * 4); contactManifoldFrictionY.fill(0, 0, contacts.count * 4); contactManifoldFrictionZ.fill(0, 0, contacts.count * 4); contactWarmStartedPointCount.fill(0, 0, contacts.count);
+    }
+    mutable.currentContacts = contacts.count;
+    const mutableDiagnostics: Record<string, number> = diagnostics, checkpointDiagnostics: Partial<Record<string, number>> = value.diagnostics;
+    for (const key of Object.keys(diagnostics)) { const item = checkpointDiagnostics[key] ?? (key === "ccdAngularTests" || key === "ccdAngularHits" || key === "ccdEligiblePairs" || key === "ccdBoundsRejects" ? 0 : undefined); if (typeof item !== "number" || !Number.isSafeInteger(item) || item < 0) throw new Error(`Rigid world checkpoint diagnostic ${key} is invalid.`); mutableDiagnostics[key] = item; }
+    constraintStore.restoreCheckpoint(value.constraints);
+    for (let index = 0; index < capacity; index += 1) if (alive[index]) operations.updateAabb(index);
+  }
+return { addBody, removeBody, hasBody, body, readVelocity, configureBody, setPosition, setVelocity, setRotation, setAngularVelocity, applyTorqueImpulse, applyImpulse, applyImpulseAtPoint, step, contactCount, contact, checkpoint, restoreCheckpoint };
 }
 
-function createRigidQueryApi(context: RigidOperationContext, operations: RigidOperations): RigidQueryApi {
-  const { config, bodies, contactStorage, diagnostics, sweepScratch } = context;
-  const { capacity,  } = config;
-  const { alive, shapeKind, layer, positionX, positionY, positionZ, rotationX, rotationY, rotationZ, rotationW, extentX, extentY, extentZ, aabbMinX, aabbMinY, aabbMinZ, aabbMaxX, aabbMaxY, aabbMaxZ, ids } = bodies;
-  const {  } = contactStorage;
-  const { handleAt, raySphere } = operations;
-  const rayLocalOrigin = [0, 0, 0], rayLocalDelta = [0, 0, 0], rayWorldNormal = [0, 0, 0];
-  const queryAabb: RigidWorld3D["queryAabb"] = (minX, minY, minZ, maxX, maxY, maxZ, output) => {
+
+
+function createRigidQueryApi(context: RigidOperationContext, operations: RigidOperations): RigidQueryApi & RigidDebugApi {
+const { config, bodies, contactStorage, diagnostics, sweepScratch, mutable } = context;
+const { capacity } = config;
+const { alive, shapeKind, layer, positionX, positionY, positionZ, rotationX, rotationY, rotationZ, rotationW, extentX, extentY, extentZ, aabbMinX, aabbMinY, aabbMinZ, aabbMaxX, aabbMaxY, aabbMaxZ, ids, bodyType, flags } = bodies;
+const { contactNormalX, contactNormalY, contactNormalZ, contactManifoldPointCount, contactManifoldPointX, contactManifoldPointY, contactManifoldPointZ } = contactStorage;
+const { handleAt, raySphere, writeBoxEdges } = operations;
+const rayLocalOrigin = [0, 0, 0], rayLocalDelta = [0, 0, 0], rayWorldNormal = [0, 0, 0];
+const queryAabb: RigidWorld3D["queryAabb"] = (minX, minY, minZ, maxX, maxY, maxZ, output) => {
         // Mutators, integration, solvers and restore keep bounds current. Reading
         // them need not recompute every unchanged prop for every weapon probe.
         minX = finite(minX, "minX"); minY = finite(minY, "minY"); minZ = finite(minZ, "minZ");
@@ -322,7 +358,7 @@ function createRigidQueryApi(context: RigidOperationContext, operations: RigidOp
         if (truncated) diagnostics.queryTruncations += 1;
         return written;
       };
-  const raycast: RigidWorld3D["raycast"] = (ox, oy, oz, dx, dy, dz, maxDistance, queryMask, target) => {
+const raycast: RigidWorld3D["raycast"] = (ox, oy, oz, dx, dy, dz, maxDistance, queryMask, target) => {
         ox = finite(ox, "originX"); oy = finite(oy, "originY"); oz = finite(oz, "originZ");
         dx = finite(dx, "directionX"); dy = finite(dy, "directionY"); dz = finite(dz, "directionZ");
         maxDistance = positive(maxDistance, "maxDistance"); queryMask = uint32(queryMask, "layerMask");
@@ -356,7 +392,7 @@ function createRigidQueryApi(context: RigidOperationContext, operations: RigidOp
         target.normalX = bestNx; target.normalY = bestNy; target.normalZ = bestNz;
         return true;
       };
-  const sweepSphere: RigidWorld3D["sweepSphere"] = (ox, oy, oz, dx, dy, dz, radius, queryMask, target) => {
+const sweepSphere: RigidWorld3D["sweepSphere"] = (ox, oy, oz, dx, dy, dz, radius, queryMask, target) => {
         ox = finite(ox, "originX"); oy = finite(oy, "originY"); oz = finite(oz, "originZ");
         dx = finite(dx, "deltaX"); dy = finite(dy, "deltaY"); dz = finite(dz, "deltaZ");
         radius = positive(radius, "radius"); queryMask = uint32(queryMask, "layerMask");
@@ -397,23 +433,14 @@ function createRigidQueryApi(context: RigidOperationContext, operations: RigidOp
         target.normalX = bestNx; target.normalY = bestNy; target.normalZ = bestNz; target.conservative = conservative;
         return true;
       };
-  return { queryAabb, raycast, sweepSphere };
-}
-
-function createRigidDebugApi(context: RigidOperationContext, operations: RigidOperations): RigidDebugApi {
-  const { config, bodies, contactStorage, mutable } = context;
-  const { capacity,  } = config;
-  const { alive, bodyType, shapeKind, flags, positionX, positionY, positionZ, extentX,  } = bodies;
-  const { contactNormalX, contactNormalY, contactNormalZ, contactManifoldPointCount, contactManifoldPointX, contactManifoldPointY, contactManifoldPointZ } = contactStorage;
-  const { writeBoxEdges } = operations;
-  const debugSegmentCount: RigidWorld3D["debugSegmentCount"] = (sphereSegments = 12) => {
+const debugSegmentCount: RigidWorld3D["debugSegmentCount"] = (sphereSegments = 12) => {
         sphereSegments = boundedInteger(sphereSegments, 4, 64, "sphereSegments");
         let count = 0;
         for (let index = 0; index < mutable.currentContacts; index += 1) count += contactManifoldPointCount[index]!;
         for (let index = 0; index < capacity; index += 1) if (alive[index]) count += shapeKind[index] === SHAPE_SPHERE ? sphereSegments * 3 : 12;
         return count;
       };
-  const writeDebugSegments: RigidWorld3D["writeDebugSegments"] = (output, sphereSegments = 12) => {
+const writeDebugSegments: RigidWorld3D["writeDebugSegments"] = (output, sphereSegments = 12) => {
         sphereSegments = boundedInteger(sphereSegments, 4, 64, "sphereSegments");
         if (!(output instanceof Float32Array)) throw new TypeError("Debug output must be a Float32Array.");
         const required = debugSegmentCount(sphereSegments) * RIGID_DEBUG_SEGMENT_STRIDE_3D;
@@ -443,62 +470,12 @@ function createRigidDebugApi(context: RigidOperationContext, operations: RigidOp
         }
         return segment;
       };
-  return { debugSegmentCount, writeDebugSegments };
+return { queryAabb, raycast, sweepSphere, debugSegmentCount, writeDebugSegments };
 }
 
-function createRigidCheckpointApi(context: RigidOperationContext, operations: RigidOperations, constraintStore: RigidConstraintStore3D, precision: RigidPhysicsPrecision3D): RigidCheckpointApi {
-  const { config, bodies, contactStorage, diagnostics, mutable } = context;
-  const { capacity, maxContacts } = config;
-  const { alive, generation, ids, positionX, positionY, positionZ, previousX, previousY, previousZ, velocityX, velocityY, velocityZ, rotationX, rotationY, rotationZ, rotationW, previousRotationX, previousRotationY, previousRotationZ, previousRotationW, angularVelocityX, angularVelocityY, angularVelocityZ } = bodies;
-  const { contactA, contactB, contactNormalX, contactNormalY, contactNormalZ, contactPenetration, contactPointX, contactPointY, contactPointZ, contactTrigger, contactClosingSpeed, contactEffectiveMass, contactImpactEnergy, contactNormalImpulse, contactFailedBody, contactManifoldPointCount, contactManifoldPointX, contactManifoldPointY, contactManifoldPointZ, contactManifoldNormalImpulse, contactManifoldFrictionX, contactManifoldFrictionY, contactManifoldFrictionZ, contactWarmStartedPointCount } = contactStorage;
-  const dynamicArrays = { positionX, positionY, positionZ, previousX, previousY, previousZ, velocityX, velocityY, velocityZ, rotationX, rotationY, rotationZ, rotationW, previousRotationX, previousRotationY, previousRotationZ, previousRotationW, angularVelocityX, angularVelocityY, angularVelocityZ };
 
-  function checkpoint(): RigidWorldCheckpoint3D {
-    const count = mutable.currentContacts;
-    return {
-      version: 1, capacity, maxContacts, precision,
-      topology: { alive: alive.slice(), generation: generation.slice(), ids: [...ids] },
-      bodies: structuredClone(dynamicArrays),
-      contacts: { count, a: contactA.slice(0, count), b: contactB.slice(0, count), normalX: contactNormalX.slice(0, count), normalY: contactNormalY.slice(0, count), normalZ: contactNormalZ.slice(0, count), penetration: contactPenetration.slice(0, count), pointX: contactPointX.slice(0, count), pointY: contactPointY.slice(0, count), pointZ: contactPointZ.slice(0, count), trigger: contactTrigger.slice(0, count), manifoldPointCount: contactManifoldPointCount.slice(0, count), manifoldPointX: contactManifoldPointX.slice(0, count * 4), manifoldPointY: contactManifoldPointY.slice(0, count * 4), manifoldPointZ: contactManifoldPointZ.slice(0, count * 4), manifoldNormalImpulse: contactManifoldNormalImpulse.slice(0, count * 4), manifoldFrictionX: contactManifoldFrictionX.slice(0, count * 4), manifoldFrictionY: contactManifoldFrictionY.slice(0, count * 4), manifoldFrictionZ: contactManifoldFrictionZ.slice(0, count * 4), warmStartedPointCount: contactWarmStartedPointCount.slice(0, count), closingSpeedMetersPerSecond: contactClosingSpeed.slice(0, count), effectiveMassKg: contactEffectiveMass.slice(0, count), impactEnergyJoules: contactImpactEnergy.slice(0, count), normalImpulseNewtonSeconds: contactNormalImpulse.slice(0, count), failedBody: contactFailedBody.slice(0, count) },
-      constraints: constraintStore.checkpoint(), diagnostics: { ...diagnostics },
-    };
-  }
 
-  function restoreCheckpoint(value: Readonly<RigidWorldCheckpoint3D>) {
-    assertRigidCheckpointTopology3D(value, { capacity, maxContacts, precision, topology: { alive, generation, ids } });
-    const checkpointArrays: Partial<Record<string, typeof positionX>> = value.bodies;
-    for (const [key, target] of Object.entries(dynamicArrays)) {
-      const source = checkpointArrays[key]
-        ?? (key === "previousRotationX" ? value.bodies.rotationX : key === "previousRotationY" ? value.bodies.rotationY : key === "previousRotationZ" ? value.bodies.rotationZ : key === "previousRotationW" ? value.bodies.rotationW : undefined);
-      if (!source || source.length !== capacity) throw new Error(`Rigid world checkpoint ${key} has the wrong capacity.`);
-      target.set(source);
-    }
-    const contacts = value.contacts;
-    if (!Number.isSafeInteger(contacts.count) || contacts.count < 0 || contacts.count > maxContacts) throw new Error("Rigid world checkpoint contact count is invalid.");
-    for (const source of [contacts.a, contacts.b, contacts.normalX, contacts.normalY, contacts.normalZ, contacts.penetration, contacts.pointX, contacts.pointY, contacts.pointZ, contacts.trigger, contacts.closingSpeedMetersPerSecond, contacts.effectiveMassKg, contacts.impactEnergyJoules, contacts.normalImpulseNewtonSeconds, contacts.failedBody]) if (source.length !== contacts.count) throw new Error("Rigid world checkpoint contact storage is inconsistent.");
-    contactA.set(contacts.a); contactB.set(contacts.b); contactNormalX.set(contacts.normalX); contactNormalY.set(contacts.normalY); contactNormalZ.set(contacts.normalZ); contactPenetration.set(contacts.penetration); contactPointX.set(contacts.pointX); contactPointY.set(contacts.pointY); contactPointZ.set(contacts.pointZ); contactTrigger.set(contacts.trigger); contactClosingSpeed.set(contacts.closingSpeedMetersPerSecond); contactEffectiveMass.set(contacts.effectiveMassKg); contactImpactEnergy.set(contacts.impactEnergyJoules); contactNormalImpulse.set(contacts.normalImpulseNewtonSeconds); contactFailedBody.set(contacts.failedBody);
-    const hasManifold = contacts.manifoldPointCount !== undefined || contacts.manifoldPointX !== undefined || contacts.manifoldPointY !== undefined || contacts.manifoldPointZ !== undefined;
-    if (hasManifold) {
-      if (!contacts.manifoldPointCount || !contacts.manifoldPointX || !contacts.manifoldPointY || !contacts.manifoldPointZ || contacts.manifoldPointCount.length !== contacts.count || contacts.manifoldPointX.length !== contacts.count * 4 || contacts.manifoldPointY.length !== contacts.count * 4 || contacts.manifoldPointZ.length !== contacts.count * 4) throw new Error("Rigid world checkpoint contact manifold storage is inconsistent.");
-      contactManifoldPointCount.set(contacts.manifoldPointCount); contactManifoldPointX.set(contacts.manifoldPointX); contactManifoldPointY.set(contacts.manifoldPointY); contactManifoldPointZ.set(contacts.manifoldPointZ);
-    } else for (let index = 0; index < contacts.count; index += 1) { contactManifoldPointCount[index] = 1; const offset = index * 4; contactManifoldPointX[offset] = contacts.pointX[index]!; contactManifoldPointY[offset] = contacts.pointY[index]!; contactManifoldPointZ[offset] = contacts.pointZ[index]!; }
-    const hasContactCache = contacts.manifoldNormalImpulse !== undefined || contacts.manifoldFrictionX !== undefined || contacts.manifoldFrictionY !== undefined || contacts.manifoldFrictionZ !== undefined || contacts.warmStartedPointCount !== undefined;
-    if (hasContactCache) {
-      if (!hasManifold) throw new Error("Rigid world checkpoint contact cache requires manifold storage.");
-      if (!contacts.manifoldNormalImpulse || !contacts.manifoldFrictionX || !contacts.manifoldFrictionY || !contacts.manifoldFrictionZ || !contacts.warmStartedPointCount || contacts.manifoldNormalImpulse.length !== contacts.count * 4 || contacts.manifoldFrictionX.length !== contacts.count * 4 || contacts.manifoldFrictionY.length !== contacts.count * 4 || contacts.manifoldFrictionZ.length !== contacts.count * 4 || contacts.warmStartedPointCount.length !== contacts.count) throw new Error("Rigid world checkpoint contact cache storage is inconsistent.");
-      contactManifoldNormalImpulse.set(contacts.manifoldNormalImpulse); contactManifoldFrictionX.set(contacts.manifoldFrictionX); contactManifoldFrictionY.set(contacts.manifoldFrictionY); contactManifoldFrictionZ.set(contacts.manifoldFrictionZ); contactWarmStartedPointCount.set(contacts.warmStartedPointCount);
-    } else {
-      contactManifoldNormalImpulse.fill(0, 0, contacts.count * 4); contactManifoldFrictionX.fill(0, 0, contacts.count * 4); contactManifoldFrictionY.fill(0, 0, contacts.count * 4); contactManifoldFrictionZ.fill(0, 0, contacts.count * 4); contactWarmStartedPointCount.fill(0, 0, contacts.count);
-    }
-    mutable.currentContacts = contacts.count;
-    const mutableDiagnostics: Record<string, number> = diagnostics, checkpointDiagnostics: Partial<Record<string, number>> = value.diagnostics;
-    for (const key of Object.keys(diagnostics)) { const item = checkpointDiagnostics[key] ?? (key === "ccdAngularTests" || key === "ccdAngularHits" || key === "ccdEligiblePairs" || key === "ccdBoundsRejects" ? 0 : undefined); if (typeof item !== "number" || !Number.isSafeInteger(item) || item < 0) throw new Error(`Rigid world checkpoint diagnostic ${key} is invalid.`); mutableDiagnostics[key] = item; }
-    constraintStore.restoreCheckpoint(value.constraints);
-    for (let index = 0; index < capacity; index += 1) if (alive[index]) operations.updateAabb(index);
-  }
 
-  return { checkpoint, restoreCheckpoint };
-}
 
 export function createRigidWorld3DApi(options: {
   context: RigidOperationContext;
@@ -517,7 +494,7 @@ export function createRigidWorld3DApi(options: {
     precision,
     numericStorageBytes,
     diagnostics: context.diagnostics,
-    ...createRigidBodyApi(context, operations, constraintStore),
+    ...createRigidBodyApi(context, operations, constraintStore, precision),
     addDistanceConstraint: constraintStore.add,
     addPointConstraint: constraintStore.addPoint,
     addAngularMotorConstraint: constraintStore.addAngularMotor,
@@ -528,10 +505,10 @@ export function createRigidWorld3DApi(options: {
     constraint: constraintStore.get,
     constraintTelemetry: constraintStore.telemetry,
     constraintCount: constraintStore.count,
-    ...createRigidCheckpointApi(context, operations, constraintStore, precision),
+
     ...createPortableRigidContacts(context, operations),
-    ...createRigidSimulationApi(context, operations, constraintStore),
+
     ...createRigidQueryApi(context, operations),
-    ...createRigidDebugApi(context, operations),
+
   };
 }

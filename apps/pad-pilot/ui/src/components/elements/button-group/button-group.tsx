@@ -1,3 +1,5 @@
+import { shouldCollapseButtonGroup } from "./button-group-layout";
+import { requireElement } from "../../../utils/require-element";
 import * as stylex from "@stylexjs/stylex";
 import {
   Show,
@@ -40,9 +42,7 @@ export type ButtonGroupProps = JSX.HTMLAttributes<HTMLDivElement> & {
 
 export type ButtonGroupItemProps = ButtonProps;
 
-export function shouldCollapseButtonGroup(width: number, collapseWidth?: number) {
-  return typeof collapseWidth === "number" && width < collapseWidth;
-}
+
 
 /** ButtonGroup renders a row by default and can collapse into a menu. */
 export function ButtonGroup(props: ButtonGroupProps) {
@@ -93,7 +93,7 @@ export function ButtonGroup(props: ButtonGroupProps) {
           onContentKeyDown={(event) => {
             const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')];
             if (items.length === 0) return;
-            const current = items.indexOf(document.activeElement as HTMLButtonElement);
+            const current = items.indexOf(requireElement(document.activeElement, HTMLButtonElement));
             const nextIndex = event.key === "ArrowDown"
               ? (current + 1 + items.length) % items.length
               : event.key === "ArrowUp"

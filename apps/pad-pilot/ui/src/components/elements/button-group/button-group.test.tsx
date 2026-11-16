@@ -6,14 +6,10 @@ import { ButtonGroup } from "./button-group";
 createUiTest("ButtonGroup", () => {
   it("collapses into a keyboard-safe menu and closes after an action", async () => {
     const OriginalResizeObserver = globalThis.ResizeObserver;
-    globalThis.ResizeObserver = class {
-      constructor(private readonly callback: ResizeObserverCallback) {}
-      observe() {
-        this.callback([{ contentRect: { width: 120 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
-      }
-      disconnect() {}
-      unobserve() {}
-    } as unknown as typeof ResizeObserver;
+    Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, writable: true, value: function (callback: ResizeObserverCallback) {
+ const observer: ResizeObserver = { observe(target) { callback([{ target, contentRect: new DOMRect(0, 0, 120, 0), borderBoxSize: [], contentBoxSize: [], devicePixelContentBoxSize: [] }], observer); }, disconnect() {}, unobserve() {} };
+ return observer;
+} });
 
     try {
       let invoked = false;
@@ -45,14 +41,10 @@ createUiTest("ButtonGroup", () => {
 
   it("restores trigger focus when Escape closes the collapsed menu", async () => {
     const OriginalResizeObserver = globalThis.ResizeObserver;
-    globalThis.ResizeObserver = class {
-      constructor(private readonly callback: ResizeObserverCallback) {}
-      observe() {
-        this.callback([{ contentRect: { width: 120 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
-      }
-      disconnect() {}
-      unobserve() {}
-    } as unknown as typeof ResizeObserver;
+    Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, writable: true, value: function (callback: ResizeObserverCallback) {
+ const observer: ResizeObserver = { observe(target) { callback([{ target, contentRect: new DOMRect(0, 0, 120, 0), borderBoxSize: [], contentBoxSize: [], devicePixelContentBoxSize: [] }], observer); }, disconnect() {}, unobserve() {} };
+ return observer;
+} });
 
     try {
       render(() => (

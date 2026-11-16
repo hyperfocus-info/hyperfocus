@@ -36,12 +36,12 @@ describe("editor 3D declaration panels", () => {
     document.body.append(host);
     let dispose = render(() => <Editor3DInspector state={state()} />, host);
     expect(host.querySelector<HTMLInputElement>('[data-3d-field="position.0"]')?.value).toBe("0");
-    expect(host.querySelector<HTMLSelectElement>('[data-3d-field="physics.type"]')?.value).toBe("dynamic");
+    expect(host.querySelector<HTMLButtonElement>('[data-3d-field="physics.type"]')?.dataset.selectValue).toBe("dynamic");
     dispose();
 
     host.replaceChildren();
     dispose = render(() => <Editor3DInspector state={state({ activeKind: "material" })} />, host);
-    expect(host.querySelector<HTMLSelectElement>('[data-3d-field="selectedMaterial.shading"]')?.value).toBe("lit");
+    expect(host.querySelector<HTMLButtonElement>('[data-3d-field="selectedMaterial.shading"]')?.dataset.selectValue).toBe("lit");
     dispose();
 
     host.replaceChildren();

@@ -1,4 +1,6 @@
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { CompressorNodeConfigSchema, EqNodeConfigSchema, TransientShaperNodeConfigSchema, NoiseGateNodeConfigSchema, DelayNodeConfigSchema, ReverbNodeConfigSchema, ConvolverNodeConfigSchema, TapeSaturationNodeConfigSchema, BitcrusherNodeConfigSchema, ExciterNodeConfigSchema, ChorusNodeConfigSchema, PhaserNodeConfigSchema, AutoPanNodeConfigSchema, RotarySpeakerNodeConfigSchema, StereoImagerNodeConfigSchema, PitchDriftNodeConfigSchema, ReverseNodeConfigSchema, TremoloNodeConfigSchema, SaturationNodeConfigSchema } from "../../../proto/generated/fx-chain-pb";
+import { create, fromBinary, toBinary, isMessage, type DescMessage, type MessageShape, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { base64ToBytes, bytesToBase64 } from "../../../proto/base64";
 import { NodeParamStateSchema, type FxNodeType, type NodeParamState, type NodeState, type NodeVisualizerFrame } from "../../../proto/generated/fx-chain-pb";
 import type { TimingSyncValueMode } from "../timing-sync";
@@ -62,11 +64,11 @@ export type FxNodeDefinition<TConfig = any, TVisualizer = unknown> = {
   };
 };
 
-type CreateNodeDefinitionOptions<TConfig = any, TVisualizer = unknown> = {
+type CreateNodeDefinitionOptions<TConfig extends Message = Message, TVisualizer = unknown> = {
   type: FxNodeType;
   defaultName: string;
   configCase: NodeConfigCase;
-  configSchema: any;
+  configSchema: GenMessage<TConfig>;
   createDefaultConfig: () => TConfig;
   createLegacyParams: (config: TConfig) => NodeParamState[];
   rackControls: FxNodeControlDefinition<TConfig>[];
@@ -77,7 +79,7 @@ type CreateNodeDefinitionOptions<TConfig = any, TVisualizer = unknown> = {
 /**
  * Creates a serializable FX node definition used by the registry and UI shells.
  */
-export function createNodeDefinition<TConfig = any, TVisualizer = unknown>(
+export function createNodeDefinition<TConfig extends Message = Message, TVisualizer = unknown>(
   options: CreateNodeDefinitionOptions<TConfig, TVisualizer>,
 ) {
   const controlsByKey = new Map<string, FxNodeControlDefinition<TConfig>>();
@@ -103,13 +105,13 @@ export function createNodeDefinition<TConfig = any, TVisualizer = unknown>(
       inlineControlKeys,
     },
     preset: {
-      serialize: (config) => bytesToBase64(toBinary(options.configSchema, config as any)),
-      deserialize: (input) => fromBinary(options.configSchema, base64ToBytes(input)) as TConfig,
+      serialize: (config: TConfig) => bytesToBase64(toBinary(options.configSchema, config)),
+      deserialize: (input: string) => fromBinary(options.configSchema, base64ToBytes(input)),
     },
     visualizer: {
       selectPayload: options.selectPayload,
     },
-  } satisfies FxNodeDefinition<TConfig, TVisualizer>;
+  };
 }
 
 /**
@@ -125,11 +127,11 @@ export function createNumberControl<TConfig = any>(
   return {
     key,
     label,
-    kind: "knob",
+    kind: "knob" as const,
     getValue,
-    setValue: (config, value) => setValue(config, Number(value)),
+    setValue: (config: TConfig, value: FxNodeControlValue) => setValue(config, Number(value)),
     ...options,
-  } satisfies FxNodeControlDefinition<TConfig>;
+  };
 }
 
 /**
@@ -144,10 +146,10 @@ export function createToggleControl<TConfig = any>(
   return {
     key,
     label,
-    kind: "toggle",
+    kind: "toggle" as const,
     getValue,
-    setValue: (config, value) => setValue(config, Boolean(value)),
-  } satisfies FxNodeControlDefinition<TConfig>;
+    setValue: (config: TConfig, value: FxNodeControlValue) => setValue(config, Boolean(value)),
+  };
 }
 
 /**
@@ -163,11 +165,11 @@ export function createSelectControl<TConfig = any>(
   return {
     key,
     label,
-    kind: "select",
+    kind: "select" as const,
     options,
     getValue,
-    setValue: (config, value) => setValue(config, String(value)),
-  } satisfies FxNodeControlDefinition<TConfig>;
+    setValue: (config: TConfig, value: FxNodeControlValue) => setValue(config, String(value)),
+  };
 }
 
 /**
@@ -190,4 +192,32 @@ export function createLegacyParamState(
     defaultValue: value,
     unit,
   });
+}
+
+/** Narrow a foreign message using the protobuf runtime discriminator. */
+export function requireNodeMessage<D extends DescMessage>(value: unknown, schema: D): MessageShape<D> {
+ if (!isMessage(value, schema)) throw new TypeError("Unexpected FX message: " + schema.typeName);
+ return value;
+}
+
+export function nodeConfigValue(kind: NodeConfigCase, value: unknown): NodeState["config"] {
+ switch(kind) { case "compressorConfig": return { case: "compressorConfig", value: requireNodeMessage(value, CompressorNodeConfigSchema) };
+case "eqConfig": return { case: "eqConfig", value: requireNodeMessage(value, EqNodeConfigSchema) };
+case "transientShaperConfig": return { case: "transientShaperConfig", value: requireNodeMessage(value, TransientShaperNodeConfigSchema) };
+case "noiseGateConfig": return { case: "noiseGateConfig", value: requireNodeMessage(value, NoiseGateNodeConfigSchema) };
+case "delayConfig": return { case: "delayConfig", value: requireNodeMessage(value, DelayNodeConfigSchema) };
+case "reverbConfig": return { case: "reverbConfig", value: requireNodeMessage(value, ReverbNodeConfigSchema) };
+case "convolverConfig": return { case: "convolverConfig", value: requireNodeMessage(value, ConvolverNodeConfigSchema) };
+case "tapeSaturationConfig": return { case: "tapeSaturationConfig", value: requireNodeMessage(value, TapeSaturationNodeConfigSchema) };
+case "bitcrusherConfig": return { case: "bitcrusherConfig", value: requireNodeMessage(value, BitcrusherNodeConfigSchema) };
+case "exciterConfig": return { case: "exciterConfig", value: requireNodeMessage(value, ExciterNodeConfigSchema) };
+case "chorusConfig": return { case: "chorusConfig", value: requireNodeMessage(value, ChorusNodeConfigSchema) };
+case "phaserConfig": return { case: "phaserConfig", value: requireNodeMessage(value, PhaserNodeConfigSchema) };
+case "autoPanConfig": return { case: "autoPanConfig", value: requireNodeMessage(value, AutoPanNodeConfigSchema) };
+case "rotarySpeakerConfig": return { case: "rotarySpeakerConfig", value: requireNodeMessage(value, RotarySpeakerNodeConfigSchema) };
+case "stereoImagerConfig": return { case: "stereoImagerConfig", value: requireNodeMessage(value, StereoImagerNodeConfigSchema) };
+case "pitchDriftConfig": return { case: "pitchDriftConfig", value: requireNodeMessage(value, PitchDriftNodeConfigSchema) };
+case "reverseConfig": return { case: "reverseConfig", value: requireNodeMessage(value, ReverseNodeConfigSchema) };
+case "tremoloConfig": return { case: "tremoloConfig", value: requireNodeMessage(value, TremoloNodeConfigSchema) };
+case "saturationConfig": return { case: "saturationConfig", value: requireNodeMessage(value, SaturationNodeConfigSchema) }; }
 }

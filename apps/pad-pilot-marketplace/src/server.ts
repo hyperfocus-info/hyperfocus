@@ -3,99 +3,68 @@
  * Serves API routes, WebSocket for ui-update, and static UI assets.
  */
 import { Database } from "bun:sqlite";
-import { mkdirSync, rmSync } from "node:fs";
-import { extname, join } from "node:path";
+import {  rmSync } from "node:fs";
 import { Elysia } from "elysia";
 import { z } from "zod";
-import { authDto, subscriptionDto } from "./auth/account";
+import { authDto } from "./auth/account";
 import { verifyClerkSessionToken } from "./auth/auth";
 import { processStripeWebhook } from "./billing/billing-webhooks";
-import {
-  CodexGeneratorOutputLimitError,
-  CodexGeneratorTimeoutError,
+import {  isCodexGeneratorOutputLimitError, isCodexGeneratorTimeoutError,
   runCodexGenerator,
 } from "./codex-generator";
 import {
-  createBillingCheckout,
-  createModuleOrder,
-  createModule,
-  createModuleVersion,
+
+
+
   createSession,
-  deleteDraftModule,
   deleteSessionsByUserId,
   deleteSessionByTokenHash,
   describeMigrationRun,
-  finishDraftModuleDeletionCleanup,
-  findActiveBillingCheckoutByScope,
-  getDraftModuleDeletion,
-  getLatestAccessibleVersion,
-  getLatestDraftVersion,
-  getLatestPublishedVersion,
-  getModuleById,
-  getOrderById,
   isMigrationRequested,
   listModulesForUser,
   nowIso,
   openMarketplaceDatabase,
-  publishModule,
   sha256,
-  updateModuleTimestamp,
-  updateBillingCheckoutSession,
-  updateBillingCheckoutStatusById,
-  updateModuleOrder,
   upsertUserFromClerk,
 } from "./db";
 import { marketplaceEnv as env, type MarketplaceEnv } from "./env";
 import {
-  canDownloadModule,
-  canViewModule,
-  effectiveModulePriceCents,
-  moduleDetailDto,
+
+
+
   moduleListDto,
 } from "./modules";
 import { fail, isApiPath, json } from "./responses";
 import { createRateLimiter } from "./rate-limit";
 import {
-  BundleIntegrityError,
   createBundleIntegrityVerifier,
   createInFlightLimiter,
-  createPermitBoundFileStream,
   type ModuleTransferLimits,
-  MultipartUploadError,
   normalizeModuleTransferLimits,
-  streamModuleUploadToFile,
 } from "./module-transfer";
 import { ensureSeedData } from "./seed";
 import { clearSessionCookie, cookies, makeCookieHeader, refreshSessionIfNeeded, userFromRequest } from "./auth/session";
-import { resolveContainedFile, serveStatic, staticCheckResponse } from "./static";
+import {  serveStatic, staticCheckResponse } from "./static";
 import {
   cancelStripeSubscription,
   createStripeCheckoutSession,
   verifyStripeWebhookSignature,
 } from "./billing/stripe";
-import { toSafeNameComponent } from "./safe-name";
 import { createUpdateRouteHandlers } from "./server/server-update-handlers";
 import { handleMarketplaceError } from "./server/server-error-handler";
 import { createModuleRouteHandlers } from "./server/server-module-handlers";
 import { createAccountRouteHandlers } from "./server/server-account-handlers";
 import {
   clerkExchangeBody,
-  createCheckoutSessionBody,
-  createModuleBody,
   moduleIdParams,
-  semanticVersion,
   staticCheckQuery,
 } from "@hyperfocus/pad-pilot/marketplace-schema";
 import {
-  cleanupDraftModuleFiles,
+
   marketplaceListenOptions,
-  maxMultipartOverheadBytes,
-  maxStripeWebhookBytes,
-  readBoundedBody,
   readBoundedJson,
   rejectCrossOriginCookieMutation,
   rejectUnsafeDevelopmentRequest,
-  requireAuthUser,
   withTimeout,
 } from "./server-utils";
 
@@ -222,12 +191,12 @@ export function createMarketplaceApp(options: {
     .post(
       "/api/auth/clerk/exchange",
       async ({ request, store }) => {
-        const limited = enforceRateLimit("auth-exchange", clientIdentity(request), 20, 10 * 60 * 1000);
+        const limited = enforceRateLimit("auth-exchange", clientIdentity(request), 20, 600000);
         if (limited) return limited;
         if (!store.env.isClerkConfigured) {
           return fail(503, "clerk_not_configured", "Clerk is not configured for this environment.");
         }
-        const requestBody = await readBoundedJson(request, 16 * 1024);
+        const requestBody = await readBoundedJson(request, 16384);
         if (requestBody.response) return requestBody.response;
         const parsed = clerkExchangeBody.safeParse(requestBody.data);
         if (!parsed.success) {
@@ -403,9 +372,9 @@ export function createMarketplaceApp(options: {
             app.server?.requestIP(request)?.address,
           );
           if (developmentRejection) return developmentRejection;
-          const limited = enforceRateLimit("dev-generator", clientIdentity(request), 20, 60 * 1000);
+          const limited = enforceRateLimit("dev-generator", clientIdentity(request), 20, 60000);
           if (limited) return limited;
-          const requestBody = await readBoundedJson(request, 256 * 1024);
+          const requestBody = await readBoundedJson(request, 262144);
           if (requestBody.response) return requestBody.response;
           const parsed = codexGeneratorBody.safeParse(requestBody.data);
           if (!parsed.success) {
@@ -422,10 +391,10 @@ export function createMarketplaceApp(options: {
             const response = await store.services.runCodexGenerator(parsed.data);
             return json({ response, source: "codex-cli" });
           } catch (error) {
-            if (error instanceof CodexGeneratorTimeoutError) {
+            if (isCodexGeneratorTimeoutError(error)) {
               return fail(504, error.code, error.message);
             }
-            if (error instanceof CodexGeneratorOutputLimitError) {
+            if (isCodexGeneratorOutputLimitError(error)) {
               return fail(502, error.code, error.message);
             }
             return fail(502, "codex_generator_failed", error instanceof Error ? error.message : "Codex generator failed.");

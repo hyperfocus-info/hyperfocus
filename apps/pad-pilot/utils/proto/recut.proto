@@ -98,4 +98,5 @@ message RecutFrame {
   repeated uint32 playing_pad_indices = 20;
   float project_bpm = 21;
   uint64 analysis_revision = 22;
+  uint64 completed_analysis_request_id = 23;
 }

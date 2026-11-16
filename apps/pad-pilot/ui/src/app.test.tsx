@@ -1,3 +1,4 @@
+import { requireElement } from "./utils/require-element";
 import { afterEach, expect, it } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createUiTest } from "../../utils/tests/test-harness";
@@ -55,19 +56,13 @@ createUiTest("App", () => {
 
   it("switches into recut without locking the app shell", async () => {
     process.env.PADPILOT_DEVTOOLS_ENABLED = "false";
-    globalThis.fetch = ((async () => new Response(JSON.stringify(createBootstrapResponse()))) as unknown) as typeof fetch;
+    globalThis.fetch = Object.assign(async () => new Response(JSON.stringify(createBootstrapResponse())), { preconnect: globalThis.fetch.preconnect });
     let webSocketCreations = 0;
-    class MockWebSocket {
-      onerror: ((event: Event) => void) | null = null;
-      onmessage: ((event: MessageEvent) => void) | null = null;
-
-      constructor() {
-        webSocketCreations += 1;
-      }
-
-      close() {}
-    }
-    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+    function MockWebSocket() { webSocketCreations += 1;
+return { onerror: null,
+onmessage: null,
+close() {} }; }
+    Object.defineProperty(globalThis, "WebSocket", { configurable: true, writable: true, value: MockWebSocket });
 
     getDevHostRuntime().reset();
 
@@ -88,11 +83,10 @@ createUiTest("App", () => {
 
   it("moves model selection into the global settings drawer and links controller preferences from settings", async () => {
     process.env.PADPILOT_DEVTOOLS_ENABLED = "false";
-    globalThis.fetch = ((async () => new Response(JSON.stringify(createBootstrapResponse()))) as unknown) as typeof fetch;
-    class MockWebSocket {
-      close() {}
-    }
-    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+    globalThis.fetch = Object.assign(async () => new Response(JSON.stringify(createBootstrapResponse())), { preconnect: globalThis.fetch.preconnect });
+    function MockWebSocket() {
+return { close() {} }; }
+    Object.defineProperty(globalThis, "WebSocket", { configurable: true, writable: true, value: MockWebSocket });
 
     render(() => <App />);
     fireEvent.click(await screen.findByRole("button", { name: "Continue as guest" }));
@@ -100,8 +94,8 @@ createUiTest("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open settings" }));
 
     expect(await screen.findByText("Agent")).toBeTruthy();
-    expect((screen.getByLabelText("AI Provider") as HTMLInputElement).value).toBe("Cursor");
-    expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe("5.5 low fast");
+    expect((requireElement(screen.getByLabelText("AI Provider"), HTMLInputElement)).value).toBe("Cursor");
+    expect((requireElement(screen.getByLabelText("Model"), HTMLInputElement)).value).toBe("5.5 low fast");
 
     fireEvent.click(screen.getByRole("button", { name: "Controller Preferences" }));
 
@@ -110,11 +104,10 @@ createUiTest("App", () => {
 
   it("creates modules through the non-blocking shared modal", async () => {
     process.env.PADPILOT_DEVTOOLS_ENABLED = "false";
-    globalThis.fetch = ((async () => new Response(JSON.stringify(createBootstrapResponse()))) as unknown) as typeof fetch;
-    class MockWebSocket {
-      close() {}
-    }
-    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+    globalThis.fetch = Object.assign(async () => new Response(JSON.stringify(createBootstrapResponse())), { preconnect: globalThis.fetch.preconnect });
+    function MockWebSocket() {
+return { close() {} }; }
+    Object.defineProperty(globalThis, "WebSocket", { configurable: true, writable: true, value: MockWebSocket });
     window.prompt = () => {
       throw new Error("Blocking prompts must not be used.");
     };

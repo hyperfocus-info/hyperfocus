@@ -102,10 +102,10 @@ export function loadMarketplaceEnv() {
     dbPath: process.env.PADPILOT_DB_PATH ?? join(marketplaceRoot, "data", "db", "padpilot-dev.sqlite"),
     isClerkConfigured: Boolean(clerkPublishableKey && clerkSecretKey),
     maxUploadBytes: Math.min(
-      100 * 1024 * 1024,
-      readInteger(process.env.PADPILOT_MAX_UPLOAD_BYTES, 25 * 1024 * 1024, {
+      104857600,
+      readInteger(process.env.PADPILOT_MAX_UPLOAD_BYTES, 26214400, {
         label: "PADPILOT_MAX_UPLOAD_BYTES",
-        max: 100 * 1024 * 1024,
+        max: 104857600,
         min: 1024,
       }),
     ),

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from "node:fs";
@@ -58,10 +59,7 @@ describe("create-plugin-update", () => {
 
     const first = runGenerator(args, privateKeyPem);
     expect(first.exitCode, new TextDecoder().decode(first.stderr)).toBe(0);
-    const result = JSON.parse(new TextDecoder().decode(first.stdout)) as {
-      artifactPath: string;
-      manifestPath: string;
-    };
+    const result = z.object({ artifactPath: z.string(), manifestPath: z.string() }).passthrough().parse(JSON.parse(new TextDecoder().decode(first.stdout)));
     expect(existsSync(result.artifactPath)).toBe(true);
     expect(existsSync(result.manifestPath)).toBe(true);
     expect([...readFileSync(result.artifactPath).subarray(0, 2)]).toEqual([0x50, 0x4b]);
@@ -192,7 +190,7 @@ describe("create-plugin-update", () => {
     const target = path.join(tempRoot, "target", "PadPilot.vst3");
     createBundle(base, "old plugin");
     createBundle(target, "new plugin");
-    truncateSync(path.join(target, "Contents", "x86_64-win", "PadPilot.vst3"), 256 * 1024 * 1024 + 1);
+    truncateSync(path.join(target, "Contents", "x86_64-win", "PadPilot.vst3"), 268435457);
 
     const result = runGenerator([
       "--base", base,

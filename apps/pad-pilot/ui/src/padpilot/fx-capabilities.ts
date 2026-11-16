@@ -21,10 +21,6 @@ import {
   resolveSelectedCapabilityModuleId,
 } from "@hyperfocus/pad-pilot/module-identity";
 
-type FxVisualizerSubscription = {
-  close: () => void;
-  isClosed: () => boolean;
-};
 
 type FxVisualizerFrameListener = (frame: VisualizerFrame) => void;
 
@@ -154,7 +150,7 @@ export const fxVisualizer = {
         isClosed() {
           return true;
         },
-      } satisfies FxVisualizerSubscription;
+      };
     }
 
     const unsubscribe = subscribeCapabilityStream("fx-visualizer", handle, (frame) => {
@@ -176,6 +172,6 @@ export const fxVisualizer = {
       isClosed() {
         return closed;
       },
-    } satisfies FxVisualizerSubscription;
+    };
   },
 };

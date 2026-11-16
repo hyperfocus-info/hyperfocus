@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   closeSync,
   fstatSync,
@@ -112,10 +113,7 @@ export function ensureSeedData(db: Database, runtimeEnv: MarketplaceEnv = env) {
       username: ownerSlug,
     }, timestamp);
 
-    let seedModule = db.query("SELECT id, owner_user_id FROM modules WHERE slug = ?").get(moduleSlug) as {
-      id: string;
-      owner_user_id: string;
-    } | null;
+    let seedModule = z.union([z.object({ id: z.string(), owner_user_id: z.string() }).passthrough(), z.null()]).parse(db.query("SELECT id, owner_user_id FROM modules WHERE slug = ?").get(moduleSlug));
     if (seedModule && seedModule.owner_user_id !== seedUserId) {
       throw new Error("Development seed slug is already owned by another account.");
     }
@@ -142,16 +140,13 @@ export function ensureSeedData(db: Database, runtimeEnv: MarketplaceEnv = env) {
   ensureSeedBundle(bundlePath, bundleBytes);
 
   db.transaction(() => {
-    const seedModule = db.query("SELECT id, owner_user_id FROM modules WHERE id = ?").get(seedModuleId) as {
-      id: string;
-      owner_user_id: string;
-    } | null;
+    const seedModule = z.union([z.object({ id: z.string(), owner_user_id: z.string() }).passthrough(), z.null()]).parse(db.query("SELECT id, owner_user_id FROM modules WHERE id = ?").get(seedModuleId));
     if (!seedModule) {
       throw new Error("Development seed module disappeared before its bundle was registered.");
     }
-    const existingVersion = db
+    const existingVersion = z.union([z.object({ id: z.string() }).passthrough(), z.null()]).parse(db
       .query("SELECT id FROM module_versions WHERE module_id = ? AND version = ?")
-      .get(seedModule.id, version) as { id: string } | null;
+      .get(seedModule.id, version));
     if (!existingVersion) {
       db.query(
         "INSERT INTO module_versions (id, module_id, version, changelog, manifest_json, bundle_path, checksum_sha256, file_size_bytes, status, created_at, published_at) VALUES (?, ?, ?, '', '{}', ?, ?, ?, 'published', ?, ?)",

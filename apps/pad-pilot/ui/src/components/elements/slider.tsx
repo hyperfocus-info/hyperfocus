@@ -55,7 +55,7 @@ export type SliderProps = Omit<JSX.HTMLAttributes<HTMLDivElement>, "onChange"> &
 export function Slider(props: SliderProps) {
   const callHandler = (handler: unknown, event: Event) => {
     if (typeof handler === "function") {
-      (handler as (value: Event) => void)(event);
+      handler(event);
     }
   };
   const [local, others] = splitProps(props, [
@@ -287,7 +287,7 @@ export function Slider(props: SliderProps) {
           role="slider"
           tabindex={local.disabled ? -1 : 0}
           aria-disabled={local.disabled ? "true" : undefined}
-          aria-label={(others["aria-label"] as string | undefined) ?? local.label ?? local.tooltip}
+          aria-label={(others["aria-label"]) ?? local.label ?? local.tooltip}
           aria-orientation={orientation()}
           aria-valuemin={local.min}
           aria-valuemax={local.max}

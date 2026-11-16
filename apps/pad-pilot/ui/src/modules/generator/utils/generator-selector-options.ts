@@ -1,25 +1,26 @@
-import { GeneratorFieldKey, GeneratorLockKey, GeneratorDashboardFields, GeneratorFieldLocks, GeneratorAiSettings, GENERATOR_FIELD_KEYS, GENERATOR_LENGTH_OPTIONS, DEFAULT_GENERATOR_ADVANCED_SETTINGS, DEFAULT_GENERATOR_AI_SETTINGS, GENERATOR_OPTION_GROUPS, GeneratorSelectorPromptStrength, GeneratorSelectorPromptTag, GeneratorWeightedSelectorTag, GeneratorSelectorState, GeneratorIntentTags } from "./generator-option-catalog";
+import { asRecord } from "@hyperfocus/utilities/records";
+import { GeneratorFieldKey, GeneratorLockKey, GeneratorFieldLocks, GENERATOR_FIELD_KEYS, GENERATOR_LENGTH_OPTIONS, DEFAULT_GENERATOR_ADVANCED_SETTINGS, DEFAULT_GENERATOR_AI_SETTINGS, GENERATOR_OPTION_GROUPS, GeneratorSelectorPromptStrength, GeneratorSelectorPromptTag, GeneratorIntentTags } from "./generator-option-catalog";
 import { clamp01Or } from "../../../utils/math";
 
 export const GENERATOR_INTENT_TAG_LIMIT = 32;
 
-export const selectorFieldStrength = {
+export const selectorFieldStrength: Record<GeneratorFieldKey | "notes", number> = {
   complexity: 0.8,
   era: 0.62,
   genre: 0.86,
   mood: 0.54,
   notes: 0.72,
   scaleKey: 0.48,
-} as const satisfies Record<GeneratorFieldKey | "notes", number>;
+} as const;
 
-export const selectorFallbackTags = {
+export const selectorFallbackTags: Record<GeneratorFieldKey | "notes", ReadonlyArray<string>> = {
   complexity: ["arrangement grammar", "lane density", "phrase behavior", "performance articulation"],
   era: ["production period", "instrument palette", "tempo culture", "mix dialect"],
   genre: ["primary style lane", "tempo bias", "drum dialect", "instrument family"],
   mood: ["emotional color", "velocity curve", "register color", "space budget"],
   notes: ["user detail", "reference language", "specific instruction", "priority override"],
   scaleKey: ["pitch policy", "melodic color", "chord extension ceiling", "mode approximation caveat"],
-} as const satisfies Record<GeneratorFieldKey | "notes", ReadonlyArray<string>>;
+} as const;
 
 export const selectorTagRules: ReadonlyArray<{ match: RegExp; tags: ReadonlyArray<string> }> = [
   { match: /melodic|topline|earworm|hook|chorus|motif/i, tags: ["singable motif", "repeated contour", "phrase answer", "small novelty leap", "memorable hook cell"] },
@@ -58,7 +59,7 @@ export const selectorTagRules: ReadonlyArray<{ match: RegExp; tags: ReadonlyArra
   { match: /chromatic|altered|whole tone|enigmatic|messiaen|tritone|diminished/i, tags: ["altered color", "chromatic approach", "strict resolution target", "high creativity lane", "avoid random spray"] },
 ];
 
-export const intentTagAliases = {
+export const intentTagAliases: Record<string, string> = {
   "3-3-2": "three-three-two",
   "3+3+2": "three-three-two",
   "808 slides": "808-slide-pocket",
@@ -75,7 +76,7 @@ export const intentTagAliases = {
   "r and b": "rnb",
   "r&b": "rnb",
   "syncopation": "syncopated",
-} as const satisfies Record<string, string>;
+} as const;
 
 export const intentTagRules: ReadonlyArray<{ grooveTags?: readonly string[]; match: RegExp; themeTags?: readonly string[] }> = [
   { match: /boom.?bap|golden era|sample.?based/i, grooveTags: ["boom-bap", "backbeat", "swing-pocket"], themeTags: ["sample-based", "dusty-chops"] },
@@ -122,14 +123,14 @@ export const selectorSignalRules: ReadonlyArray<{ delta: number; match: RegExp }
   { delta: 0.3, match: /\bstrong\b|\bfront[-\s]?facing\b|\bcrazy\b|\bhuge\b|\bdominant\b|\baggressive\b|\bslam\b|\bwild\b/i },
 ];
 
-export const selectorFieldLabels = {
+export const selectorFieldLabels: Record<GeneratorFieldKey | "notes", string> = {
   complexity: "Complexity",
   era: "Era",
   genre: "Genre",
   mood: "Mood/Vibe",
   notes: "User Detail",
   scaleKey: "Scale/Mode",
-} as const satisfies Record<GeneratorFieldKey | "notes", string>;
+} as const;
 
 export function uniquePromptTags(values: readonly string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
@@ -143,7 +144,7 @@ export function normalizeGeneratorIntentTag(value: string) {
     .replace(/[^a-z0-9#+\s-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const aliased = intentTagAliases[cleaned as keyof typeof intentTagAliases] ?? cleaned;
+  const aliased = intentTagAliases[cleaned] ?? cleaned;
   return aliased
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
@@ -158,14 +159,14 @@ export function intentTagsForText(value: string) {
   return {
     grooveTags: normalizeGeneratorIntentTags(intentTagRules.flatMap((rule) => rule.match.test(value) ? rule.grooveTags ?? [] : [])),
     themeTags: normalizeGeneratorIntentTags(intentTagRules.flatMap((rule) => rule.match.test(value) ? rule.themeTags ?? [] : [])),
-  } satisfies GeneratorIntentTags;
+  };
 }
 
 export function mergeGeneratorIntentTags(values: readonly GeneratorIntentTags[]) {
   return {
     grooveTags: normalizeGeneratorIntentTags(values.flatMap((value) => value.grooveTags)),
     themeTags: normalizeGeneratorIntentTags(values.flatMap((value) => value.themeTags)),
-  } satisfies GeneratorIntentTags;
+  };
 }
 
 export function labelWordTags(value: string) {
@@ -279,11 +280,11 @@ export function buildGeneratorSelectorState(input: Partial<Record<GeneratorField
       provenance: promptTag.key,
       tag,
       weight,
-    } satisfies GeneratorWeightedSelectorTag));
+    }));
   });
-  const fields = Object.fromEntries(
+  const fields: Partial<Record<GeneratorFieldKey | "notes", string>> = Object.fromEntries(
     promptTags.map((tag) => [tag.key, tag.label]),
-  ) satisfies Partial<Record<GeneratorFieldKey | "notes", string>>;
+  );
   const avoidRules = uniquePromptTags(promptTags.flatMap((promptTag) => {
     const source = `${promptTag.label} ${promptTag.tags.join(" ")}`;
     const rules = [
@@ -304,7 +305,7 @@ export function buildGeneratorSelectorState(input: Partial<Record<GeneratorField
     fields,
     locks,
     weightedTags,
-  } satisfies GeneratorSelectorState;
+  };
 }
 
 export function buildGeneratorIntentPromptLines(input: Partial<Record<GeneratorFieldKey, string>> & { notes?: string }) {
@@ -348,13 +349,13 @@ export function normalizeGeneratorLengthBars(value: number | undefined) {
 export function createEmptyGeneratorFields() {
   return {
     ...DEFAULT_GENERATOR_ADVANCED_SETTINGS,
-    complexity: "",
-    era: "",
-    genre: "",
-    mood: "",
-    notes: "",
-    scaleKey: "",
-  } satisfies GeneratorDashboardFields;
+    complexity: "" as const,
+    era: "" as const,
+    genre: "" as const,
+    mood: "" as const,
+    notes: "" as const,
+    scaleKey: "" as const,
+  };
 }
 
 export function createUnlockedGeneratorFields() {
@@ -373,9 +374,18 @@ export function createUnlockedGeneratorFields() {
   return locks;
 }
 
-export function normalizeGeneratorAiSettings(input?: Partial<GeneratorAiSettings>) {
+export function normalizeGeneratorAiSettings(input?: unknown) {
+  const candidate = asRecord(input);
   return {
-    model: input?.model?.trim() || DEFAULT_GENERATOR_AI_SETTINGS.model,
-    provider: input?.provider === "cursor" ? "cursor" : DEFAULT_GENERATOR_AI_SETTINGS.provider,
-  } satisfies GeneratorAiSettings;
+    model: (typeof candidate.model === "string" ? candidate.model.trim() : "") || DEFAULT_GENERATOR_AI_SETTINGS.model,
+    provider: candidate.provider === "cursor" ? "cursor" : DEFAULT_GENERATOR_AI_SETTINGS.provider,
+  };
+}
+
+export function percent(value: number) {
+  return `${value.toFixed(1)}%`;
+}
+
+export function percentValue(value: number) {
+  return `${Math.round(value * 100)}%`;
 }

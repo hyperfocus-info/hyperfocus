@@ -1,0 +1,20 @@
+import { expect, it } from "bun:test";
+import { createDevHostRuntime } from "./runtime";
+it("isolates factory state and releases polling on repeated disposal", () => {
+  const first = createDevHostRuntime();
+  const second = createDevHostRuntime();
+  first.updateSettings({ running: false, tempo: 91 });
+  second.updateSettings({ running: false, tempo: 137 });
+  const unsubscribe = first.subscribe(() => undefined);
+  expect(first.getDebugState().tempo).toBe(91);
+  expect(second.getDebugState().tempo).toBe(137);
+  expect(first.controllerFrameHandle).not.toBeNull();
+  first.dispose();
+  first.dispose();
+  unsubscribe();
+  expect(first.controllerFrameHandle).toBeNull();
+  expect(first.tickHandle).toBeNull();
+  expect(first.hostListeners.size).toBe(0);
+  expect(second.getDebugState().tempo).toBe(137);
+  second.dispose();
+});

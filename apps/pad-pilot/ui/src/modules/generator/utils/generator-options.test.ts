@@ -1,28 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import {
-  buildGeneratorIntentPromptLines,
-  buildGeneratorSelectorPromptLines,
-  buildGeneratorSelectorState,
-  buildMagicSuggestion,
-  buildRandomSuggestion,
-  createEmptyGeneratorFields,
-  DEFAULT_GENERATOR_AI_SETTINGS,
-  DEFAULT_GENERATOR_ADVANCED_SETTINGS,
-  GENERATOR_AI_PROVIDER_OPTIONS,
-  GENERATOR_FIELD_KEYS,
-  GENERATOR_LENGTH_OPTIONS,
-  GENERATOR_MAGIC_GENRE_PROFILES,
-  GENERATOR_OPTION_GROUPS,
-  GENERATOR_OPTION_TOTAL,
-  normalizeGeneratorIntentTags,
-  resetGeneratorDropdowns,
-  resolveMagicSuggestionProfileLabels,
-  type GeneratorDashboardFields,
-  type GeneratorFieldKey,
-} from "./generator-options";
+import { buildGeneratorIntentPromptLines, buildGeneratorSelectorPromptLines, buildGeneratorSelectorState, createEmptyGeneratorFields, normalizeGeneratorIntentTags } from "./generator-selector-options";
+import { buildMagicSuggestion, buildRandomSuggestion, resetGeneratorDropdowns } from "./generator-magic-options";
+import { DEFAULT_GENERATOR_AI_SETTINGS, DEFAULT_GENERATOR_ADVANCED_SETTINGS, GENERATOR_AI_PROVIDER_OPTIONS, GENERATOR_FIELD_KEYS, GENERATOR_LENGTH_OPTIONS, GENERATOR_OPTION_GROUPS, GENERATOR_OPTION_TOTAL, type GeneratorDashboardFields, type GeneratorFieldKey } from "./generator-option-catalog";
+import { GENERATOR_MAGIC_GENRE_PROFILES, resolveMagicSuggestionProfileLabels } from "./generator-magic-profiles";
 
 function emptyFields() {
-  return createEmptyGeneratorFields() satisfies GeneratorDashboardFields;
+  return createEmptyGeneratorFields();
 }
 
 function fixedRng(value = 0) {
@@ -211,13 +194,13 @@ describe("generator options", () => {
   });
 
   it("spreads repeated suggestions across genre, mood, and paired buckets", () => {
-    const scenarios = [
+    const scenarios: Array<{ chaos: number; fields: Partial<Record<GeneratorFieldKey, string>>; seed: number }> = [
       { chaos: 0, fields: { genre: "Gospel" }, seed: 0x1001 },
       { chaos: 0, fields: { mood: "Gritty" }, seed: 0x1002 },
       { chaos: 0.35, fields: { genre: "Gospel", mood: "Dark" }, seed: 0x1003 },
       { chaos: 0.35, fields: { genre: "Gospel", mood: "Haunted" }, seed: 0x1004 },
       { chaos: 0.85, fields: { genre: "Acid Jazz" }, seed: 0x1005 },
-    ] satisfies Array<{ chaos: number; fields: Partial<Record<GeneratorFieldKey, string>>; seed: number }>;
+    ];
 
     for (const scenario of scenarios) {
       const sourceKeys = new Set(Object.keys(scenario.fields));

@@ -7,12 +7,12 @@ import { decodeRecutModuleState } from "./recut-state";
 describe("recut-state", () => {
   it("falls back when repeated fields are missing", () => {
     const fallback = createDefaultRecutModuleState();
-    const brokenState = {
+    const brokenState = ({
       ...fallback,
       chokeGroups: undefined,
       padAssignments: undefined,
       sliceMarkers: undefined,
-    } as unknown as typeof fallback;
+    });
 
     const normalized = normalizeRecutModuleState(brokenState);
 

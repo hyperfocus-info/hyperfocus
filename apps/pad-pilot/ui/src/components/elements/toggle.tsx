@@ -28,7 +28,7 @@ export type ToggleProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "onC
 export function Toggle(props: ToggleProps) {
   const callHandler = (handler: unknown, event: Event) => {
     if (typeof handler === "function") {
-      (handler as (value: Event) => void)(event);
+      handler(event);
     }
   };
   const [local, others] = splitProps(props, [
@@ -69,7 +69,7 @@ export function Toggle(props: ToggleProps) {
             local.value && styles.toggleOn,
             local.disabled && styles.buttonDisabled,
           ).class} ${local.class ?? ""}`.trim()}
-          aria-label={(others["aria-label"] as string | undefined) ?? local.label ?? local.tooltip}
+          aria-label={(others["aria-label"]) ?? local.label ?? local.tooltip}
           aria-pressed={local.value}
           onClick={(event) => {
             local.onChange(!local.value);

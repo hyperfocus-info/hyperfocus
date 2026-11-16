@@ -8,7 +8,7 @@ import {
   type MarketplaceBootstrap,
   type MarketplaceCatalogModule,
   type MarketplaceCheckoutKind,
-  MarketplaceApiError,
+  isMarketplaceApiError,
   type PluginUpdateChannel,
   createMarketplaceCheckoutSession,
   type MarketplaceModuleDetail,
@@ -502,7 +502,7 @@ function createMarketplaceStore() {
         try {
           await deleteMarketplaceModule(createdModuleId);
         } catch (caughtCleanupError) {
-          if (caughtCleanupError instanceof MarketplaceApiError && caughtCleanupError.code === "module_published") {
+          if (isMarketplaceApiError(caughtCleanupError) && caughtCleanupError.code === "module_published") {
             moduleWriteCommitted = true;
             publishConfirmedDuringCleanup = true;
           } else {

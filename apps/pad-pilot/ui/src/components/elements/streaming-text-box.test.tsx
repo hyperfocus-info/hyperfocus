@@ -1,3 +1,4 @@
+import { requireElement } from "../../utils/require-element";
 import { expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -40,7 +41,7 @@ createUiTest("StreamingTextBox", () => {
 
   it("shows a scroll-to-bottom button only after the user scrolls away from the bottom", () => {
     render(() => <StreamingTextBox lines={["boot", "done"]} />);
-    const viewport = screen.getByText("boot").parentElement as HTMLElement;
+    const viewport = requireElement(screen.getByText("boot").parentElement, HTMLElement);
     const metrics = { clientHeight: 100, scrollHeight: 400, scrollTop: 300 };
     setScrollMetrics(viewport, metrics);
     fireEvent.scroll(viewport);
@@ -68,7 +69,7 @@ createUiTest("StreamingTextBox", () => {
     }
 
     render(() => <Harness />);
-    const viewport = screen.getByText("boot").parentElement as HTMLElement;
+    const viewport = requireElement(screen.getByText("boot").parentElement, HTMLElement);
     const metrics = { clientHeight: 100, scrollHeight: 300, scrollTop: 200 };
     setScrollMetrics(viewport, metrics);
     fireEvent.scroll(viewport);

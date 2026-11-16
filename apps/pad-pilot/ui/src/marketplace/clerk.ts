@@ -4,10 +4,12 @@ import { exchangeMarketplaceSession, logoutMarketplaceSession } from "./api";
 
 type ClerkLoadOptions = Parameters<Clerk["load"]>[0];
 type ClerkLoadUi = NonNullable<ClerkLoadOptions>["ui"];
-const bundledClerkUi = ui as unknown as ClerkLoadUi;
+const bundledClerkUi: ClerkLoadUi = ui;
 
-export function createClerkLoader(createInstance = (publishableKey: string) => new Clerk(publishableKey)) {
-  let activeLoad: { publishableKey: string; promise: Promise<Clerk> } | null = null;
+export function createClerkLoader(): (publishableKey: string) => Promise<Clerk>;
+export function createClerkLoader<T extends Pick<Clerk, "load">>(createInstance: (publishableKey: string) => T): (publishableKey: string) => Promise<T>;
+export function createClerkLoader(createInstance: (publishableKey: string) => Pick<Clerk, "load"> = (publishableKey) => new Clerk(publishableKey)) {
+  let activeLoad: { publishableKey: string; promise: Promise<Pick<Clerk, "load">> } | null = null;
 
   return async (publishableKey: string) => {
     if (activeLoad?.publishableKey === publishableKey) {
@@ -15,7 +17,7 @@ export function createClerkLoader(createInstance = (publishableKey: string) => n
     }
 
     const instance = createInstance(publishableKey);
-    let loadPromise: Promise<Clerk>;
+    let loadPromise: Promise<Pick<Clerk, "load">>;
     loadPromise = instance.load({
       standardBrowser: true,
       ui: bundledClerkUi,

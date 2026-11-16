@@ -1,3 +1,4 @@
+import { formatSourceLabel } from "../utils/sample-labels";
 import { For, Show, createSignal, onCleanup } from "solid-js";
 import { Button } from "../../../components/elements/button";
 import { extractFileUploadSelection, FileUploadInput } from "../../../components/elements/file-upload-dropzone";
@@ -20,14 +21,7 @@ const ANALYSIS_MODE_OPTIONS = [
   { label: "Custom", value: String(RecutAnalysisMode.CUSTOM) },
 ];
 
-function formatSourceLabel(path: string) {
-  const trimmed = path.trim();
-  if (!trimmed) {
-    return "Drop sample or click to browse";
-  }
-  const parts = trimmed.split(/[\\/]/);
-  return parts[parts.length - 1] || trimmed;
-}
+
 
 function shouldUseNativeSampleBrowse() {
   return window.location.protocol !== "http:" && window.location.protocol !== "https:";
@@ -447,7 +441,7 @@ export function WaveformDisplay() {
             label="Analysis"
             value={String(store.derived.analysisMode())}
             options={ANALYSIS_MODE_OPTIONS}
-            onChange={(value) => store.actions.setAnalysisMode(Number(value) as RecutAnalysisMode)}
+            onChange={(value) => { const mode = Object.values(RecutAnalysisMode).find((mode): mode is RecutAnalysisMode => typeof mode === "number" && mode === Number(value)); if (mode !== undefined) store.actions.setAnalysisMode(mode); }}
           />
           <PadPilot.Button
             variant="secondary"

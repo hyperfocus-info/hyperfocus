@@ -1,3 +1,4 @@
+import { isMessage } from "@bufbuild/protobuf";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { base64ToBytes, bytesToBase64 } from "../../proto/base64";
 import { registerModuleStateCodec } from "../../proto/registry";
@@ -180,7 +181,7 @@ function expandPadAssignments(rawPadAssignments: readonly PadAssignment[], slice
   });
 }
 
-export function normalizeRecutModuleState(input: RecutModuleState | undefined) {
+export function normalizeRecutModuleState(input: (Omit<RecutModuleState, "chokeGroups" | "padAssignments" | "sliceMarkers"> & Partial<Pick<RecutModuleState, "chokeGroups" | "padAssignments" | "sliceMarkers">>) | undefined) {
   const fallback = createDefaultRecutModuleState();
   if (!input) {
     return fallback;
@@ -294,4 +295,6 @@ export function decodeRecutFrameBase64(value: string) {
 registerModuleStateCodec("recut", {
   decode: decodeRecutModuleState,
   encode: encodeRecutModuleState,
-});
+}, readrecutState);
+
+export function readrecutState(value: unknown) { if (!isMessage(value, RecutModuleStateSchema)) throw new TypeError("Invalid recut state"); return fromBinary(RecutModuleStateSchema, toBinary(RecutModuleStateSchema, value)); }

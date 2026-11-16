@@ -1,3 +1,4 @@
+import { requireBoolean, requireNumber, requireString, assert } from "./utils/verify-client-values";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -699,20 +700,11 @@ function requireRecord(value: unknown, label: string): JsonRecord {
   return Object.fromEntries(Object.entries(value));
 }
 
-function requireBoolean(value: unknown, label: string) {
-  if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
-  return value;
-}
 
-function requireNumber(value: unknown, label: string) {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} must be a finite number`);
-  return value;
-}
 
-function requireString(value: unknown, label: string) {
-  if (typeof value !== "string") throw new Error(`${label} must be a string`);
-  return value;
-}
+
+
+
 
 async function waitForExpression(session: CdpSession, expression: string, timeoutMs: number, label: string) {
   const startedAt = performance.now();
@@ -849,9 +841,7 @@ function argumentValue(name: string) {
   return prefixed?.slice(name.length + 1);
 }
 
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
+
 
 function delay(milliseconds: number) {
   return new Promise<void>((resolvePromise) => setTimeout(resolvePromise, milliseconds));

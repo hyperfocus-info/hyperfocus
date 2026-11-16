@@ -12,11 +12,11 @@ export type AudioEvaluationState = {
   readonly [key: string]: unknown;
 };
 
-export abstract class AudioAnalyzer {
-  abstract name: AudioMetricName | string;
-  abstract weight: number;
-  abstract evaluate(audio: AudioSummary, state: AudioEvaluationState): Promise<PerformanceMetric>;
-}
+export type AudioAnalyzer = {
+  name: AudioMetricName | string;
+  weight: number;
+  evaluate: (audio: AudioSummary, state: AudioEvaluationState) => Promise<PerformanceMetric>;
+};
 
 export type AudioSkillEvaluation = {
   readonly name: string;
@@ -77,78 +77,59 @@ export type AudioSkillManagerOptions = {
   readonly skillTimeoutMs?: number;
 };
 
-type AudioRunResult =
-  | { readonly ok: true; readonly value: AudioSkillEvaluation }
-  | { readonly ok: false; readonly value: AudioSkillFailure };
+function createBuiltInAudioAnalyzer(definition: typeof AUDIO_METRIC_DEFINITIONS[number]) {
+  const name = definition.name;
+  const weight = definition.weight;
+  const biologicalImpact = definition.biologicalImpact;
+  const description = definition.description;
 
-class BuiltInAudioAnalyzer extends AudioAnalyzer {
-  readonly name: AudioMetricName;
-  readonly weight: number;
-  private readonly biologicalImpact: PerformanceMetric["biologicalImpact"];
-  private readonly description: string;
-
-  constructor(definition: typeof AUDIO_METRIC_DEFINITIONS[number]) {
-    super();
-    this.name = definition.name;
-    this.weight = definition.weight;
-    this.biologicalImpact = definition.biologicalImpact;
-    this.description = definition.description;
-  }
-
-  async evaluate(audio: AudioSummary, state: AudioEvaluationState) {
-    const structured = scoreAudioFeatures(audio).find((entry) => entry.name === this.name);
-    const score = state.audioMetricScores?.[this.name] ?? structured?.score ?? 0;
+  async function evaluate(audio: AudioSummary, state: AudioEvaluationState) {
+    const structured = scoreAudioFeatures(audio).find((entry) => entry.name === name);
+    const score = state.audioMetricScores?.[name] ?? structured?.score ?? 0;
     return metric({
       score,
-      biologicalImpact: this.biologicalImpact,
-      justification: structured?.summary ?? buildJustification(this.name, this.description, score),
+      biologicalImpact: biologicalImpact,
+      justification: structured?.summary ?? buildJustification(name, description, score),
     });
   }
+  return { evaluate: evaluate, name: name, weight: weight };
 }
 
-export class AudioSkillManager {
-  private readonly analyzers: readonly AudioAnalyzer[];
-  private readonly skillTimeoutMs: number;
+export type AudioSkillManager = ReturnType<typeof createAudioSkillManager>;
+export function createAudioSkillManager(options: AudioSkillManagerOptions = {}) {
+  const analyzers = options.analyzers ?? AUDIO_METRIC_DEFINITIONS.map((definition) => createBuiltInAudioAnalyzer(definition));
+  const skillTimeoutMs = normalizeSkillTimeout(options.skillTimeoutMs);
 
-  constructor(options: AudioSkillManagerOptions = {}) {
-    this.analyzers = options.analyzers ?? AUDIO_METRIC_DEFINITIONS.map((definition) => new BuiltInAudioAnalyzer(definition));
-    this.skillTimeoutMs = normalizeSkillTimeout(options.skillTimeoutMs);
-  }
-
-  get skills() {
-    return [...this.analyzers];
-  }
-
-  async evaluate(audio: AudioSummary, state: AudioEvaluationState = {}) {
+  async function evaluate(audio: AudioSummary, state: AudioEvaluationState = {}) {
     const audioSummary = freezeAudioSummary(state.audioSummary ?? audio);
     const scoredFeatures = scoreAudioFeatures(audioSummary);
     const audioMetricScores = freezeAudioMetricScores(scoredFeatures);
-    const structuredScores = new Map(scoredFeatures.map((score) => [score.name, score]));
+    const structuredScores = new Map<string, ReturnType<typeof scoreAudioFeatures>[number]>(scoredFeatures.map((score) => [score.name, score]));
     const skillState = Object.freeze({ ...state, audioSummary, audioMetricScores });
     const results = await Promise.all(
-      this.analyzers.map(async (analyzer) => {
+      analyzers.map(async (analyzer) => {
         try {
           return {
-            ok: true,
+            ok: true as const,
             value: buildSkillEvaluation(
               analyzer.name,
               normalizeSkillWeight(analyzer.weight),
               normalizeMetric(await withSkillDeadline(
                 analyzer.evaluate(audioSummary, skillState),
-                this.skillTimeoutMs,
+                skillTimeoutMs,
                 analyzer.name,
               )),
-              structuredScores.get(analyzer.name as AudioMetricName),
+              structuredScores.get(analyzer.name),
             ),
-          } satisfies AudioRunResult;
+          };
         } catch (error) {
           return {
-            ok: false,
+            ok: false as const,
             value: {
               name: analyzer.name,
               error: error instanceof Error ? error.message : String(error),
             },
-          } satisfies AudioRunResult;
+          };
         }
       }),
     );
@@ -160,7 +141,7 @@ export class AudioSkillManager {
     const contributors = buildContributors(metrics);
 
     return {
-      kind: "audio",
+      kind: "audio" as const,
       successScore: evaluation.overall,
       overall: evaluation.overall,
       uncappedOverall: evaluation.uncappedOverall,
@@ -174,8 +155,13 @@ export class AudioSkillManager {
       metrics,
       failures,
       evaluatedAt: Date.now(),
-    } satisfies AudioEvaluationReport;
+    };
   }
+  return {
+    evaluate: evaluate, get skills() {
+      return [...analyzers];
+    }
+  };
 }
 
 function buildContributors(metrics: readonly AudioSkillEvaluation[]) {
@@ -199,7 +185,7 @@ function buildContributors(metrics: readonly AudioSkillEvaluation[]) {
       dimension,
       contribution,
       summary: `${humanize(facet)} scored ${percent(score)} in ${humanize(dimension)} with ${percent(confidence)} confidence.`,
-    } satisfies AudioContributor;
+    };
   });
 }
 
@@ -209,7 +195,7 @@ function buildSkillEvaluation(
   performance: PerformanceMetric,
   structured: ReturnType<typeof scoreAudioFeatures>[number] | undefined,
 ) {
-  const id = structured?.id ?? `audio.custom.${metricIdSegment(name)}` as MediumMetricId;
+  const id: MediumMetricId = structured?.id ?? `audio.custom.${metricIdSegment(name)}`;
   const dimension = structured?.dimension ?? dimensionForImpact(performance.biologicalImpact);
   const assessment = metricAssessment({
     id,
@@ -223,7 +209,7 @@ function buildSkillEvaluation(
     weight,
     evidence: structured?.evidence ?? Object.freeze({ justification: performance.justification }),
   });
-  return { name, id, weight, metric: performance, assessment } satisfies AudioSkillEvaluation;
+  return { name, id, weight, metric: performance, assessment };
 }
 
 function dimensionForImpact(impact: PerformanceMetric["biologicalImpact"]) {

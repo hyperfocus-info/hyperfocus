@@ -40,7 +40,7 @@ export async function runEvaluationCli(args: readonly string[], services: {
   readonly buildDashboard?: typeof buildSynaestheticDashboard;
   readonly log?: (message: string) => void;
   readonly openLibrary?: () => CliLibrary;
-  readonly serve?: typeof serveEvaluationDashboard;
+  readonly serve?: (options: Parameters<typeof serveEvaluationDashboard>[0]) => unknown;
 } = {}) {
   const log = services.log ?? console.log;
   const command = args[0];

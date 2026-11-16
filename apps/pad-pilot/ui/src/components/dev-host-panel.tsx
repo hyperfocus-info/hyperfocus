@@ -74,7 +74,7 @@ export function DevHostPanel() {
                 onQueryChange={setProfileQuery}
                 onSelect={(value) => {
                   setProfileQuery(value);
-                  runtime.updateSettings({ profile: value as DevSignalProfile });
+                  if (value === "idle" || value === "steady-tone" || value === "pulsed-groove" || value === "noise-burst" || value === "sweep") runtime.updateSettings({ profile: value });
                 }}
               />
             </div>

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, expect, it } from "bun:test";
 import { render, waitFor } from "@solidjs/testing-library";
 import { create, toBinary } from "@bufbuild/protobuf";
@@ -22,9 +23,9 @@ function installNativeBridgeRecorder() {
     backend: {
       addEventListener: () => 0,
       emitEvent: (_eventId, payload) => {
-        const bridgePayload = payload as { params?: unknown[] };
+        const bridgePayload = z.object({params:z.array(z.unknown()).optional()}).passthrough().parse(payload);
         const serializedIntent = String(bridgePayload.params?.[0] ?? "{}");
-        intents.push(JSON.parse(serializedIntent) as Record<string, unknown>);
+        intents.push(z.record(z.unknown()).parse(JSON.parse(serializedIntent)));
       },
     },
     initializationData: {

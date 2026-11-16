@@ -1,4 +1,5 @@
-import { buildMagicSuggestion, normalizeGeneratorLengthBars, normalizeGeneratorScaleMode } from "./generator-options";
+import { buildMagicSuggestion } from "./generator-magic-options";
+import { normalizeGeneratorLengthBars, normalizeGeneratorScaleMode } from "./generator-selector-options";
 import { type DnaBassRole, dnaBassRoleValues, type DnaDensityBudget, dnaDensityBudgetValues, type DnaFormArc, dnaFormArcValues, type DnaGrooveGrid, dnaGrooveGridValues, type DnaHarmonicDensity, dnaHarmonicDensityValues, type DnaHarmonicRhythm, dnaHarmonicRhythmValues, type DnaMelodicRole, dnaMelodicRoleValues, type DnaSyncopation, dnaSyncopationValues, type DnaVoicingWidth, dnaVoicingWidthValues, type GeneratorMusicianPlan, type GeneratorPromptInput, type GeneratorStyleDna } from "./generator-contracts";
 import { scaleRootName } from "./generator-selection";
 import { chordLanguageRanks, cleanField, dashboardFieldsFromPrompt, explicitNo808Requested, explicitNoDrumsRequested, promptIntentTags, selectorIntentTags, tagSetHas, uniqueStrings } from "./generator-intent";
@@ -38,10 +39,10 @@ export type DnaKeywordRule = {
 };
 
 export function dnaRecord<T extends string>(values: readonly T[], fallback: T) {
-  return values.reduce((record, value) => {
+  return values.reduce<Record<string, number>>((record, value) => {
     record[value] = value === fallback ? 1 : 0;
     return record;
-  }, {} as Record<T, number>);
+  }, {});
 }
 
 export function createDnaScores() {
@@ -55,20 +56,20 @@ export function createDnaScores() {
     melodicRole: dnaRecord(dnaMelodicRoleValues, "hook"),
     syncopation: dnaRecord(dnaSyncopationValues, "medium"),
     voicingWidth: dnaRecord(dnaVoicingWidthValues, "medium"),
-  } satisfies DnaScores;
+  };
 }
 
-export function addScore<T extends string>(bucket: Record<T, number>, patch: Partial<Record<T, number>> | undefined) {
+export function addScore(bucket: Record<string, number>, patch: Partial<Record<string, number>> | undefined) {
   if (!patch) {
     return;
   }
-  for (const [key, value] of Object.entries(patch) as Array<[T, number]>) {
-    bucket[key] = (bucket[key] ?? 0) + value;
+  for (const [key, value] of Object.entries(patch)) {
+    if (typeof value === "number") bucket[key] = (bucket[key] ?? 0) + value;
   }
 }
 
-export function bestScore<T extends string>(bucket: Record<T, number>, fallback: T) {
-  return (Object.keys(bucket) as T[]).reduce((best, value) => bucket[value] > bucket[best] ? value : best, fallback);
+export function bestScore<T extends string>(bucket: Record<string, number>, fallback: T, values: readonly T[]) {
+ return values.reduce((best, value) => (bucket[value] ?? 0) > (bucket[best] ?? 0) ? value : best, fallback);
 }
 
 export function addScaleScores(scaleScores: Record<string, number>, patch: Record<string, number> | undefined) {
@@ -535,19 +536,19 @@ export function inferStyleDna(input: GeneratorPromptInput) {
     .map(([scale]) => scale);
   const fallbackScaleBias = scaleBias.length > 0 ? scaleBias : ["Dorian", "Major Pentatonic", "Natural Minor"];
   const dna: GeneratorStyleDna = {
-    bassRole: bestScore(scores.bassRole, "root"),
-    densityBudget: bestScore(scores.densityBudget, "balanced"),
-    formArc: bestScore(scores.formArc, "starter-turnaround"),
-    grooveGrid: bestScore(scores.grooveGrid, "straight"),
-    harmonicDensity: bestScore(scores.harmonicDensity, "simple"),
-    harmonicRhythm: bestScore(scores.harmonicRhythm, "loop"),
+    bassRole: bestScore(scores.bassRole, "root", dnaBassRoleValues),
+    densityBudget: bestScore(scores.densityBudget, "balanced", dnaDensityBudgetValues),
+    formArc: bestScore(scores.formArc, "starter-turnaround", dnaFormArcValues),
+    grooveGrid: bestScore(scores.grooveGrid, "straight", dnaGrooveGridValues),
+    harmonicDensity: bestScore(scores.harmonicDensity, "simple", dnaHarmonicDensityValues),
+    harmonicRhythm: bestScore(scores.harmonicRhythm, "loop", dnaHarmonicRhythmValues),
     instrumentDialect: uniqueStrings(dialect.length > 0 ? dialect : ["genre-balanced arrangement", "clear motif identity", "style-correct space"]),
-    melodicRole: bestScore(scores.melodicRole, "hook"),
+    melodicRole: bestScore(scores.melodicRole, "hook", dnaMelodicRoleValues),
     avoid: uniqueStrings(avoid.length > 0 ? avoid : ["generic piano/bass/lead/drums defaults", "flat loop tiling across long forms"]),
     scaleBias: fallbackScaleBias,
     styleLabel: cleanField(input.genre) === "Any" ? matchedLabels[0] ?? "general" : cleanField(input.genre),
-    syncopation: bestScore(scores.syncopation, "medium"),
-    voicingWidth: bestScore(scores.voicingWidth, "medium"),
+    syncopation: bestScore(scores.syncopation, "medium", dnaSyncopationValues),
+    voicingWidth: bestScore(scores.voicingWidth, "medium", dnaVoicingWidthValues),
   };
   return dna;
 }
@@ -673,7 +674,7 @@ export function bassRoleLayers(style: GeneratorStyleDna, density: number) {
   return [primaryBassLayer(style)];
 }
 
-export function buildMusicianPlan(input: GeneratorPromptInput, selectedMode = selectedScaleMode(input)) {
+export function buildMusicianPlan(input: GeneratorPromptInput, selectedMode = selectedScaleMode(input)): GeneratorMusicianPlan {
   const joined = `${input.genre ?? ""} ${input.mood ?? ""} ${input.era ?? ""} ${input.complexity ?? ""} ${input.notes ?? ""}`.toLowerCase();
   const creativity = clamp01Or(input.creativity, 0.65);
   const density = clamp01Or(input.density, 0.55);
@@ -832,8 +833,8 @@ export function buildMusicianPlan(input: GeneratorPromptInput, selectedMode = se
       minPhraseVariations,
       minChordClusterSize: style.harmonicDensity === "sparse" ? 1 : Math.min(maxChordClusterSize, chordLanguage === "triads" ? 3 : harmonyProfile.voicingRange === "wide" && chordLanguage !== "sevenths" ? 5 : 4),
       minOffbeatRatio: syncopation === "low" ? 0.18 : syncopation === "high" ? 0.36 : 0.26,
-      minScore: 72,
+      minScore: 72 as const,
       phraseFillRequired: lengthBars >= 8 && drumsRequired && style.densityBudget !== "space",
     },
-  } satisfies GeneratorMusicianPlan;
+  };
 }

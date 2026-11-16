@@ -1,14 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import {
-  buildFallbackTracker,
-  buildGeneratorIntentPlan,
-  buildMusicianPlan,
-  generateMidiTemplate,
-  inferStyleDna,
-  parseDeltaTickTracker,
-  scoreGeneratorComposition,
-  validateGeneratorStyleFit,
-} from "./codex-client";
+import { buildFallbackTracker } from "./generator-fallback";
+import { buildGeneratorIntentPlan, buildMusicianPlan, inferStyleDna } from "./generator-prompt";
+import { generateMidiTemplate } from "./generator-client";
+import { parseDeltaTickTracker, scoreGeneratorComposition, validateGeneratorStyleFit } from "./generator-tracker";
 import {
   withDenseFirstTrackClusters,
   restoreCodexClientTestEnvironment,
@@ -26,9 +20,9 @@ describe("codex client style", () => {
       mood: "Dark",
     };
     const logs: string[] = [];
-    globalThis.fetch = ((async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(((async () => new Response(JSON.stringify({
       response: withDenseFirstTrackClusters(buildFallbackTracker(input)),
-    }))) as unknown) as typeof fetch;
+    })))), { preconnect() {} });
 
     const result = await generateMidiTemplate(input, { onLog: (line) => logs.push(line) });
     const parsed = parseDeltaTickTracker(result.rawTracker);
@@ -188,9 +182,9 @@ describe("codex client style", () => {
   });
 
   it("uses genre and mood DNA for blank scale selection only", async () => {
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = Object.assign(((async () => {
       throw new Error("offline");
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     const gospel = await generateMidiTemplate({
       genre: "Gospel",

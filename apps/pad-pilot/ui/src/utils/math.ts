@@ -1,9 +1,8 @@
 /**
  * Clamps a numeric value into the inclusive `[min, max]` range.
  */
-export function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
+import { clamp } from '@hyperfocus/utilities/math';
+export { clamp };
 
 export function clamp01(value: number) {
   return clamp(value, 0, 1);

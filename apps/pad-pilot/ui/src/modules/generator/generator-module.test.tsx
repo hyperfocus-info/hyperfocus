@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { asRecord } from "@hyperfocus/utilities/records";
 import { afterEach, expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createUiTest } from "../../../../utils/tests/test-harness";
@@ -27,9 +29,9 @@ createUiTest("GeneratorModule", () => {
   });
 
   it("shows the selected key and mode in the generated MIDI output header", async () => {
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = Object.assign(((async () => {
       throw new Error("offline");
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     render(() => (
       <PadPilotProvider>
@@ -62,18 +64,18 @@ createUiTest("GeneratorModule", () => {
       nextFrameHandle += 1;
       pendingFrames.set(handle, callback);
       return handle;
-    }) as typeof window.requestAnimationFrame;
+    });
     window.cancelAnimationFrame = ((handle: number) => {
       pendingFrames.delete(handle);
-    }) as typeof window.cancelAnimationFrame;
+    });
 
     const requestCapture: { signal: AbortSignal | null } = { signal: null };
-    globalThis.fetch = ((async (_input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = Object.assign(((async (_input: RequestInfo | URL, init?: RequestInit) => {
       requestCapture.signal = init?.signal ?? null;
       return await new Promise<Response>((_resolve, reject) => {
         requestCapture.signal?.addEventListener("abort", () => reject(requestCapture.signal?.reason), { once: true });
       });
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     const view = render(() => (
       <PadPilotProvider>
@@ -91,9 +93,9 @@ createUiTest("GeneratorModule", () => {
   });
 
   it("fills completed generation progress to 100 percent", async () => {
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = Object.assign(((async () => {
       throw new Error("offline");
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     render(() => (
       <PadPilotProvider>
@@ -110,9 +112,9 @@ createUiTest("GeneratorModule", () => {
   });
 
   it("shows fallback audit reason in the result panel", async () => {
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = Object.assign(((async () => {
       throw new Error("offline");
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     render(() => (
       <PadPilotProvider>
@@ -129,10 +131,10 @@ createUiTest("GeneratorModule", () => {
 
   it("shows dev original model MIDI for A/B comparison in dev mode", async () => {
     process.env.PADPILOT_DEVTOOLS_ENABLED = "true";
-    globalThis.fetch = ((async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(((async () => new Response(JSON.stringify({
       response: "!BPM:86!\\n#TRK:Original Keys,CH:0,PG:4\\n[0,57,80,480][480,60,78,480][480,64,76,480][480,69,78,480]",
       source: "codex-cli",
-    }))) as unknown) as typeof fetch;
+    })))), { preconnect() {} });
 
     render(() => (
       <PadPilotProvider>
@@ -152,16 +154,16 @@ createUiTest("GeneratorModule", () => {
       backend: {
         addEventListener: () => 0,
         emitEvent: (eventId, payload) => {
-          nativeInvocations.push({ eventId, payload: payload as Record<string, unknown> });
+          nativeInvocations.push({ eventId, payload: asRecord(payload) });
         },
       },
       initializationData: {
         __juce__functions: ["padpilotBridge"],
       },
     };
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = Object.assign(((async () => {
       throw new Error("offline");
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     const view = render(() => (
       <PadPilotProvider>
@@ -180,13 +182,13 @@ createUiTest("GeneratorModule", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 30));
 
     const generatorStateWrites = nativeInvocations.flatMap((invocation) => {
-      const params = invocation.payload.params as unknown[] | undefined;
-      const intent = JSON.parse(String(params?.[0] ?? "{}")) as { moduleId?: string; payload?: string; type?: string };
+      const params = z.array(z.unknown()).optional().parse(invocation.payload.params);
+      const intent = z.object({ moduleId: z.string().optional(), payload: z.string().optional(), type: z.string().optional() }).parse(JSON.parse(String(params?.[0] ?? "{}")));
       return intent.type === "setModuleState" && intent.moduleId === "generator" ? [intent] : [];
     });
     expect(generatorStateWrites.length).toBeGreaterThan(0);
     for (const write of generatorStateWrites) {
-      const state = JSON.parse(write.payload ?? "{}") as Record<string, unknown>;
+      const state = asRecord(JSON.parse(write.payload ?? "{}"));
       expect(state).not.toHaveProperty("run");
       expect(state).not.toHaveProperty("midiDrawerOpen");
       expect(state).not.toHaveProperty("statusDrawerOpen");

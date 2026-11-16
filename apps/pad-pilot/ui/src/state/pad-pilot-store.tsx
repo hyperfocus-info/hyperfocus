@@ -1,6 +1,9 @@
+import { toId } from "./module-slug";
+import { z } from "zod";
+import { installedModuleResultSchema } from "../bridge-native-contracts";
 import { ParentProps, createContext, onCleanup, onMount, useContext } from "solid-js";
 import { createStore } from "solid-js/store";
-import { subscribeHostState, type HostState, type InstalledModuleResult } from "../bridge";
+import { subscribeHostState, type HostState } from "../bridge";
 import { moduleSdk } from "../module-sdk";
 import { createFactoryModuleSummary, factoryModuleCatalog } from "@hyperfocus/pad-pilot/factory-modules";
 import { canonicalModuleId } from "@hyperfocus/pad-pilot/module-identity";
@@ -27,7 +30,7 @@ type PadPilotState = {
 
 const DEFAULT_MODULES: ModuleItem[] = factoryModuleCatalog.map(createFactoryModuleSummary);
 
-const toId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
 
 function sameModuleItem(left: ModuleItem, right: ModuleItem) {
   return left.id === right.id
@@ -123,7 +126,6 @@ function createPadPilotStore() {
 
   const actions = {
     setActiveModuleId: (id: string) => {
-      setState("activeModuleId", id);
       moduleSdk.selectModule(id);
     },
     openCreateModule: () => setState("isCreateModuleOpen", true),
@@ -138,11 +140,11 @@ function createPadPilotStore() {
     },
     pushToast: (message: string) => {
       const toastId = `padpilot-toast-${Date.now()}-${++toastIdCounter}`;
-      const toast = {
+      const toast: PadPilotState["toastQueue"][number] = {
         id: toastId,
         message,
         tone: "error",
-      } satisfies PadPilotState["toastQueue"][number];
+      };
       setState("toastQueue", (queue) => [toast, ...queue].slice(0, 4));
       const timeoutId = window.setTimeout(() => actions.dismissToast(toastId), 3600);
       toastTimeouts.set(toastId, timeoutId);
@@ -166,7 +168,6 @@ function createPadPilotStore() {
         loadStatus: "ready",
         capabilities: ["module-state", "script-runtime"],
       }]);
-      setState("activeModuleId", candidate);
       setState("isCreateModuleOpen", false);
       moduleSdk.createModule(trimmed);
     },
@@ -191,12 +192,10 @@ export function PadPilotStoreProvider(props: ParentProps) {
   onMount(() => {
     const unsubscribe = subscribeHostState(syncFromHost);
     const handleInstallResult = (event: Event) => {
-      const detail = (event as CustomEvent<{
-        error?: string;
-        module?: InstalledModuleResult | null;
-        path?: string;
-        success: boolean;
-      }>).detail;
+      if (!(event instanceof CustomEvent)) return;
+      const parsed = z.object({ error: z.string().optional(), module: installedModuleResultSchema.nullish(), path: z.string().optional(), success: z.boolean() }).safeParse(event.detail);
+      if (!parsed.success) return;
+      const detail = parsed.data;
       if (!detail) {
         return;
       }
@@ -210,10 +209,10 @@ export function PadPilotStoreProvider(props: ParentProps) {
       }
       actions.pushToast(`Installed ${detail.module?.name ?? "module"} ${detail.module?.version ?? ""}`.trim());
     };
-    window.addEventListener("padpilot-module-install-result", handleInstallResult as EventListener);
+    window.addEventListener("padpilot-module-install-result", handleInstallResult);
     onCleanup(unsubscribe);
     onCleanup(() => {
-      window.removeEventListener("padpilot-module-install-result", handleInstallResult as EventListener);
+      window.removeEventListener("padpilot-module-install-result", handleInstallResult);
     });
     onCleanup(() => {
       actions.dispose();

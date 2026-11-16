@@ -77,9 +77,9 @@ export async function createEditor3DPlaySession(options: CreateEditor3DPlaySessi
       if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) throw new RangeError(`3D editor deltaSeconds must be finite and non-negative; received ${deltaSeconds}.`);
       accumulator = Math.min(0.25, accumulator + deltaSeconds);
       const actions = resolveEditor3DActions(project, heldBindings, gamepadAxes);
-      while (accumulator >= 1 / 60) {
+      while (accumulator >= 0.016666666666666666) {
         runtime.step(actions);
-        accumulator -= 1 / 60;
+        accumulator -= 0.016666666666666666;
       }
       return runtime.snapshot();
     },

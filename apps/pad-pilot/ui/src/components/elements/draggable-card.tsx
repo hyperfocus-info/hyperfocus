@@ -33,10 +33,6 @@ export type DraggableCardProps = JSX.HTMLAttributes<HTMLElement> & {
   preview?: boolean;
 };
 
-type DraggableCardComponent = ((props: DraggableCardProps) => JSX.Element) & {
-  Handle: typeof DraggableCardHandle;
-};
-
 function DragGripIcon() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -77,7 +73,7 @@ export function DraggableCard(props: DraggableCardProps) {
       class={`${styles.card} ${local.isDragging ? styles["is-dragging"] : ""} ${local.isPlaceholder ? styles["is-placeholder"] : ""} ${local.preview ? styles["is-preview"] : ""} ${local.class ?? ""}`.trim()}
       classList={local.classList}
       data-variant={local.variant ?? "default"}
-      style={{ ...(others.style as JSX.CSSProperties | undefined), ...(local.dragStyle ?? {}) }}
+      style={{ ...(typeof others.style === "object" ? others.style : undefined), ...(local.dragStyle ?? {}) }}
       onPointerDown={local.onDragPointerDown}
     >
       <div class={styles["card-content"]}>
@@ -122,4 +118,4 @@ export function DraggableCardHandle() {
   );
 }
 
-(DraggableCard as DraggableCardComponent).Handle = DraggableCardHandle;
+DraggableCard.Handle = DraggableCardHandle;

@@ -60,13 +60,13 @@ function createNoUpdateResponse(url: URL) {
 
 async function renderGuestApp() {
   process.env.PADPILOT_DEVTOOLS_ENABLED = "false";
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = Object.assign(async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost");
     const payload = url.pathname === "/api/updates/vst3/latest"
       ? createNoUpdateResponse(url)
       : createBootstrapResponse();
     return new Response(JSON.stringify(payload));
-  }) as typeof fetch;
+  }, { preconnect: globalThis.fetch.preconnect });
   render(() => <App />);
   fireEvent.click(await screen.findByRole("button", { name: "Continue as guest" }));
 }
@@ -124,8 +124,8 @@ createUiTest("AppAcceptance", () => {
     expect(await screen.findByRole("button", { name: "Start recording" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Performance" }));
-    expect(await screen.findByRole("combobox", { name: "Root Note" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Scale" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Root Note" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scale" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Editor" }));
     fireEvent.click(await screen.findByRole("button", { name: "Add Binding" }));

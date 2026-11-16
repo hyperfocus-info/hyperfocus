@@ -8,9 +8,9 @@ import { cookies } from "./auth/session";
 import { resolveContainedFile } from "./static";
 import { BoundedStreamLimitError, readBoundedStreamBytes } from "@hyperfocus/pad-pilot/bounded-stream";
 
-export const maxMultipartOverheadBytes = 1024 * 1024;
-export const maxPluginUpdateArtifactBytes = 256 * 1024 * 1024;
-export const maxStripeWebhookBytes = 1024 * 1024;
+export const maxMultipartOverheadBytes = 1048576;
+export const maxPluginUpdateArtifactBytes = 268435456;
+export const maxStripeWebhookBytes = 1048576;
 const unsafeMethods = new Set(["DELETE", "PATCH", "POST", "PUT"]);
 
 function isLoopbackAddress(value: string) {
@@ -112,7 +112,7 @@ export async function readBoundedJson(request: Request, maxBytes: number) {
   }
   try {
     return {
-      data: JSON.parse(new TextDecoder().decode(bytes)) as unknown,
+      data: JSON.parse(new TextDecoder().decode(bytes)),
       response: null,
     };
   } catch {

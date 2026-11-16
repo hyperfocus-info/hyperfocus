@@ -126,7 +126,7 @@ export function renderVisualizerSummary(payload: unknown) {
   const entries = Object.entries(payload).filter(([, value]) => value !== undefined && value !== null);
   const arrays = entries.flatMap(([key, value]) =>
     Array.isArray(value) && value.every((entry) => typeof entry === "number")
-      ? [[key, value] satisfies [string, number[]]]
+      ? [[key, value] as const]
       : []
   );
   const scalars = entries.filter(([, value]) => !Array.isArray(value));

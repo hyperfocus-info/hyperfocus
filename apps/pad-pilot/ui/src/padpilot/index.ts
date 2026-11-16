@@ -1,3 +1,4 @@
+import { ModuleWorkspace } from "../components/elements/module-workspace/workspace";
 import { Button } from "../components/elements/button";
 import { ButtonGroup } from "../components/elements/button-group/button-group";
 import { Dropdown } from "../components/elements/dropdown";
@@ -29,7 +30,8 @@ import { analyzer, useAnalyzerFeed } from "./analyzer";
 import { askAgent } from "./agent";
 import { host } from "./host";
 import { midi } from "./midi";
-import { HostBpmButton, MidiDragBlock } from "./primitives";
+import { HostBpmButton } from "./primitives/host-bpm-button";
+import { MidiDragBlock } from "./primitives/midi-drag-block";
 import { getLatestHostState, installHostModuleBundle } from "../bridge";
 import { fxGraph, fxVisualizer } from "./fx-capabilities";
 import { hotkeys } from "./hotkeys";
@@ -119,6 +121,7 @@ const moduleRuntime = {
 // Shared PadPilot elements own button semantics; module code should consume them
 // instead of inventing private tooltip/accessibility conventions.
 export const PadPilot = {
+  ModuleWorkspace,
   Knob,
   Slider,
   StreamingTextBox,

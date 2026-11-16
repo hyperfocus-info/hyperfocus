@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { externalModuleUiBuildFlag, parseBuildUiArguments, uiBuildOutputMode } from "./build-ui";
+import { uiMarketplaceBuildEnv, externalModuleUiBuildFlag, parseBuildUiArguments, uiBuildOutputMode } from "./build-ui";
 import { REQUIRED_UI_ENTRY_ASSETS } from "./ui-build-contract";
 
 it("keeps the UI HTML, script, and stylesheet entry contract together", () => {
@@ -45,4 +45,12 @@ describe("parseBuildUiArguments", () => {
     expect(() => parseBuildUiArguments(["--output-directory"])).toThrow("requires a path");
     expect(() => parseBuildUiArguments(["--wat"])).toThrow("Unknown build-ui argument");
   });
+});
+
+
+it("binds development API and websocket origins to the managed server without changing production", () => {
+  expect(uiMarketplaceBuildEnv({ minify: false, environment: { PADPILOT_PUBLIC_ORIGIN: 'http://127.0.0.1:43217' } }).MARKETPLACE_URL).toBe('http://127.0.0.1:43217');
+  expect(uiMarketplaceBuildEnv({ minify: false, environment: {} }).MARKETPLACE_URL).toBe('http://localhost:3000');
+  expect(uiMarketplaceBuildEnv({ minify: true, environment: { PADPILOT_PUBLIC_ORIGIN: 'http://127.0.0.1:43217' } }).MARKETPLACE_URL).toBe('https://padpilot.hyperfocus.info');
+  expect(() => uiMarketplaceBuildEnv({ minify: false, environment: { PADPILOT_PUBLIC_ORIGIN: 'http://user:password@localhost/' } })).toThrow('origin');
 });

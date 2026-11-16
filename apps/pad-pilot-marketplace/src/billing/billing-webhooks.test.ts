@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -198,7 +199,7 @@ describe("processStripeWebhook", () => {
     expect(snapshot.firstClass?.provider_subscription_id).toBe("sub_fc_123");
     expect(snapshot.tokenBalance).toBe(100);
     expect(snapshot.subscriptionStatus).toBe("first_class_active");
-    expect((db.query("SELECT COUNT(*) AS count FROM pilot_token_ledger").get() as { count: number }).count).toBe(1);
+    expect((z.object({ count: z.number() }).passthrough().parse(db.query("SELECT COUNT(*) AS count FROM pilot_token_ledger").get())).count).toBe(1);
     db.close(false);
   });
 
@@ -260,12 +261,12 @@ describe("processStripeWebhook", () => {
       userId,
     });
     expect(() => processStripeWebhook(db, badEvent, JSON.stringify(badEvent), runtimeEnv)).toThrow("does not match");
-    expect((db.query("SELECT COUNT(*) AS count FROM webhook_events").get() as { count: number }).count).toBe(0);
-    expect((db.query("SELECT status FROM billing_checkouts WHERE stripe_checkout_session_id = ?").get("cs_test_rollback") as { status: string }).status).toBe("pending");
+    expect((z.object({ count: z.number() }).passthrough().parse(db.query("SELECT COUNT(*) AS count FROM webhook_events").get())).count).toBe(0);
+    expect((z.object({ status: z.string() }).passthrough().parse(db.query("SELECT status FROM billing_checkouts WHERE stripe_checkout_session_id = ?").get("cs_test_rollback"))).status).toBe("pending");
 
     badEvent.data.object.amount_total = 1000;
     processStripeWebhook(db, badEvent, JSON.stringify(badEvent), runtimeEnv);
-    expect((db.query("SELECT COUNT(*) AS count FROM webhook_events").get() as { count: number }).count).toBe(1);
+    expect((z.object({ count: z.number() }).passthrough().parse(db.query("SELECT COUNT(*) AS count FROM webhook_events").get())).count).toBe(1);
     db.close(false);
   });
 
@@ -346,7 +347,7 @@ describe("processStripeWebhook", () => {
     processStripeWebhook(db, replay, JSON.stringify(replay), runtimeEnv);
 
     expect(getPadPilotAccessByUserId(db, userId)?.amount_paid_cents).toBe(1000);
-    expect((db.query("SELECT COUNT(*) AS count FROM billing_payments").get() as { count: number }).count).toBe(1);
+    expect((z.object({ count: z.number() }).passthrough().parse(db.query("SELECT COUNT(*) AS count FROM billing_payments").get())).count).toBe(1);
     db.close(false);
   });
 
@@ -610,7 +611,7 @@ describe("processStripeWebhook", () => {
     processStripeWebhook(db, completed, JSON.stringify(completed), runtimeEnv);
     expect(hasActiveModuleEntitlement(db, moduleId, buyerId)).toBe(true);
     expect(getOrderById(db, order.id)?.status).toBe("paid");
-    expect((db.query("SELECT status FROM billing_checkouts WHERE id = ?").get(checkout.id) as { status: string }).status).toBe("completed");
+    expect((z.object({ status: z.string() }).passthrough().parse(db.query("SELECT status FROM billing_checkouts WHERE id = ?").get(checkout.id))).status).toBe("completed");
 
     updateBillingCheckoutSession(
       db,
@@ -627,7 +628,7 @@ describe("processStripeWebhook", () => {
     });
 
     expect(getOrderById(db, order.id)?.status).toBe("paid");
-    expect((db.query("SELECT status FROM billing_checkouts WHERE id = ?").get(checkout.id) as { status: string }).status).toBe("completed");
+    expect((z.object({ status: z.string() }).passthrough().parse(db.query("SELECT status FROM billing_checkouts WHERE id = ?").get(checkout.id))).status).toBe("completed");
     db.close(false);
   });
 
@@ -737,7 +738,7 @@ describe("processStripeWebhook", () => {
     const snapshot = getAccountSnapshot(db, getUser(db, userId));
     expect(snapshot.padpilotAccess?.amount_paid_cents).toBe(0);
     expect(snapshot.tokenBalance).toBe(0);
-    expect((db.query("SELECT refunded_cents FROM billing_payments WHERE provider_payment_intent_id = ?").get("pi_charge_before_refund") as { refunded_cents: number }).refunded_cents).toBe(6000);
+    expect((z.object({ refunded_cents: z.number() }).passthrough().parse(db.query("SELECT refunded_cents FROM billing_payments WHERE provider_payment_intent_id = ?").get("pi_charge_before_refund"))).refunded_cents).toBe(6000);
     db.close(false);
   });
 

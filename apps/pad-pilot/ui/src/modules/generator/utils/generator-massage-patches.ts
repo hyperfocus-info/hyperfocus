@@ -1,6 +1,6 @@
 import { GENERATOR_MIDI_BEATS_PER_BAR, GENERATOR_MIDI_DRUM_CHANNEL, GENERATOR_MIDI_TICKS_PER_QUARTER, type GeneratorMidiComposition, type GeneratorMidiTrack } from "./midi-encoder";
-import { type GeneratorLengthBars } from "./generator-options";
-import { type AbsoluteGeneratorNote, type GeneratorMusicianPlan, type StyleDnaFilterStats } from "./generator-contracts";
+import { type GeneratorLengthBars } from "./generator-option-catalog";
+import {  type GeneratorMusicianPlan, type StyleDnaFilterStats } from "./generator-contracts";
 import { fitNoteToRange } from "./generator-music";
 import { hashString } from "./generator-selection";
 import { absoluteTrackNotes, clampInteger, deltaTrackNotes, isSupportingTrack, loopTicks, maxNoteClusterSize, motifScore } from "./generator-tracker";
@@ -43,12 +43,12 @@ export function patchUpperColorSingleVoice(composition: GeneratorMidiComposition
     const sourceDuration = group.reduce((duration, note) => Math.max(duration, note.durationTicks), 0);
     const tick = group[0]?.tick ?? 0;
     return {
-      deltaTicks: 0,
+      deltaTicks: 0 as const,
       durationTicks: Math.min(Math.max(180, sourceDuration), Math.max(1, endTick - tick)),
       note: fitNoteToRange(root.note + 17 + (index % 2 === 0 ? 0 : 12), 72, 96),
       tick,
       velocity: clampInteger(Math.max(...group.map((note) => note.velocity)) - 18, 42, 76),
-    } satisfies AbsoluteGeneratorNote;
+    };
   });
   stats.upperColorNotes += notes.length;
   return {
@@ -57,12 +57,12 @@ export function patchUpperColorSingleVoice(composition: GeneratorMidiComposition
       ...composition.tracks,
       {
         channel: unusedChannel(composition.tracks, 11),
-        name: "Upper Color Single Voice",
+        name: "Upper Color Single Voice" as const,
         notes: deltaTrackNotes(notes),
         program: carrier.program,
       },
     ],
-  } satisfies GeneratorMidiComposition;
+  };
 }
 
 export function oneShotCandidateEvents(lengthBars: GeneratorLengthBars) {
@@ -75,12 +75,12 @@ export function oneShotCandidateEvents(lengthBars: GeneratorLengthBars) {
   return Array.from(new Set([...phraseStarts, ...phraseEnds])).map((tick, index) => {
     const isEnd = phraseEnds.includes(tick);
     return {
-      deltaTicks: 0,
-      durationTicks: 120,
+      deltaTicks: 0 as const,
+      durationTicks: 120 as const,
       note: isEnd ? 49 : 57,
       tick,
       velocity: clampInteger(isEnd ? 102 + index * 2 : 86 + index * 2, 1, 127),
-    } satisfies AbsoluteGeneratorNote;
+    };
   });
 }
 
@@ -101,13 +101,13 @@ export function patchOneShotEmphasis(composition: GeneratorMidiComposition, leng
         ...composition.tracks,
         {
           channel: GENERATOR_MIDI_DRUM_CHANNEL,
-          drums: true,
-          name: "One-Shot Emphasis",
+          drums: true as const,
+          name: "One-Shot Emphasis" as const,
           notes: deltaTrackNotes(candidates),
-          program: 0,
+          program: 0 as const,
         },
       ],
-    } satisfies GeneratorMidiComposition;
+    };
   }
   const drumTrack = composition.tracks[drumIndex];
   const existing = absoluteTrackNotes(drumTrack!);
@@ -124,11 +124,11 @@ export function patchOneShotEmphasis(composition: GeneratorMidiComposition, leng
       ? {
           ...track,
           channel: GENERATOR_MIDI_DRUM_CHANNEL,
-          drums: true,
+          drums: true as const,
           notes: deltaTrackNotes([...existing, ...additions]),
         }
       : track),
-  } satisfies GeneratorMidiComposition;
+  };
 }
 
 export function patchChordDependentTurnaroundFill(composition: GeneratorMidiComposition, lengthBars: GeneratorLengthBars, stats: StyleDnaFilterStats, decisions: readonly TrackMassageDecision[], budget: StyleMassageBudget) {
@@ -153,12 +153,12 @@ export function patchChordDependentTurnaroundFill(composition: GeneratorMidiComp
   const startTick = Math.max(0, endTick - GENERATOR_MIDI_TICKS_PER_QUARTER);
   const sourceNotes = [...sourceGroup].sort((left, right) => left.note - right.note).slice(0, pressure >= 0.75 ? 4 : 3);
   const fillNotes = sourceNotes.map((note, index) => ({
-    deltaTicks: 0,
-    durationTicks: 120,
+    deltaTicks: 0 as const,
+    durationTicks: 120 as const,
     note: fitNoteToRange(note.note + (index > 1 ? 12 : 0), 60, 96),
     tick: startTick + index * 120,
     velocity: clampInteger(64 + index * 3, 1, 127),
-  } satisfies AbsoluteGeneratorNote));
+  }));
   stats.chordDependentFillNotes += fillNotes.length;
   return {
     ...composition,
@@ -166,12 +166,12 @@ export function patchChordDependentTurnaroundFill(composition: GeneratorMidiComp
       ...composition.tracks,
       {
         channel: unusedChannel(composition.tracks, 12),
-        name: "Chord Dependent Turnaround Fill",
+        name: "Chord Dependent Turnaround Fill" as const,
         notes: deltaTrackNotes(fillNotes),
         program: carrier.program,
       },
     ],
-  } satisfies GeneratorMidiComposition;
+  };
 }
 
 export function patchEarwormLead(composition: GeneratorMidiComposition, fallback: GeneratorMidiComposition, stats: StyleDnaFilterStats, decisions: readonly TrackMassageDecision[], budget: StyleMassageBudget) {
@@ -200,7 +200,7 @@ export function patchEarwormLead(composition: GeneratorMidiComposition, fallback
         name: hasLead ? "Repaired Earworm Lead Motif" : `Repaired Earworm ${fallbackLead.name}`,
       },
     ],
-  } satisfies GeneratorMidiComposition;
+  };
 }
 
 export function supportingTrackVelocityCap(track: GeneratorMidiTrack) {
@@ -235,9 +235,9 @@ export function balanceSupportingElements(composition: GeneratorMidiComposition,
       return {
         ...track,
         notes: deltaTrackNotes(notes),
-      } satisfies GeneratorMidiTrack;
+      };
     }),
-  } satisfies GeneratorMidiComposition;
+  };
 }
 
 export function applyCreativeEventModulation(composition: GeneratorMidiComposition, plan: GeneratorMusicianPlan, lengthBars: GeneratorLengthBars, seed: string, stats: StyleDnaFilterStats, decisions: readonly TrackMassageDecision[]) {
@@ -265,12 +265,12 @@ export function applyCreativeEventModulation(composition: GeneratorMidiCompositi
           ...note,
           durationTicks,
           velocity,
-        } satisfies AbsoluteGeneratorNote;
+        };
       });
       return {
         ...track,
         notes: deltaTrackNotes(notes),
-      } satisfies GeneratorMidiTrack;
+      };
     }),
-  } satisfies GeneratorMidiComposition;
+  };
 }

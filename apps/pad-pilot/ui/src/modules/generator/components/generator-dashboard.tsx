@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount, type JSX } from "solid-js";
+import { percentValue } from "../utils/generator-selector-options";
+import { For, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount, type JSX } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { Activity, BrainCircuit, CalendarClock, Clock3, Dices, FileText, Gauge, Grid3X3, LockKeyhole, LockKeyholeOpen, Monitor, Moon, Music2, Scale, Send, Settings2, Smile, Sun, Thermometer, Trash2, UserRound, WandSparkles } from "lucide-solid";
 import { FloatingLayer } from "../../../components/elements/floating-layer";
@@ -7,23 +8,9 @@ import { PadPilot } from "../../../padpilot/index";
 import type { SearchableComboboxItem } from "../../../components/elements/searchable-combobox";
 import { resolveSearchableComboboxItemId } from "../../../components/elements/searchable-combobox-utils";
 import { clamp01, clamp01Or } from "../../../utils/math";
-import {
-  buildRandomSuggestion,
-  buildMagicSuggestion,
-  createEmptyGeneratorFields,
-  createUnlockedGeneratorFields,
-  DEFAULT_GENERATOR_ADVANCED_SETTINGS,
-  GENERATOR_FIELD_KEYS,
-  GENERATOR_LENGTH_OPTIONS,
-  GENERATOR_OPTION_GROUPS,
-  GENERATOR_RANGE_KEYS,
-  resetGeneratorDropdowns,
-  type GeneratorDashboardFields,
-  type GeneratorFieldKey,
-  type GeneratorLengthBars,
-  type GeneratorLockKey,
-  type GeneratorRangeKey,
-} from "../utils/generator-options";
+import { buildRandomSuggestion, buildMagicSuggestion, resetGeneratorDropdowns } from "../utils/generator-magic-options";
+import { createEmptyGeneratorFields, createUnlockedGeneratorFields } from "../utils/generator-selector-options";
+import { DEFAULT_GENERATOR_ADVANCED_SETTINGS, GENERATOR_FIELD_KEYS, GENERATOR_LENGTH_OPTIONS, GENERATOR_OPTION_GROUPS, GENERATOR_RANGE_KEYS, type GeneratorDashboardFields, type GeneratorFieldKey, type GeneratorLengthBars, type GeneratorLockKey, type GeneratorRangeKey } from "../utils/generator-option-catalog";
 import styles from "./generator-dashboard.stylex";
 
 export interface GeneratorDashboardProps {
@@ -60,13 +47,13 @@ type SelectorConfig = {
   tooltip: string;
 };
 
-const selectors = [
+const selectors: SelectorConfig[] = [
   { icon: Music2, key: "genre", label: "Genre", placeholder: "Search genre...", tooltip: "Primary musical world for rhythm, instrumentation, tempo bias, and the strongest factor-graph influence. Filled genres are preserved by Magic Suggestion." },
   { icon: Smile, key: "mood", label: "Mood / Vibe", placeholder: "Search mood...", tooltip: "Emotional color that gently bends the graph without overriding a chosen genre. Use it to shade empty fields toward compatible eras, patterns, and modes." },
   { icon: CalendarClock, key: "era", label: "Era", placeholder: "Search era...", tooltip: "Production period and sound-design reference. Era affects instrument/program choices, rhythmic density, and which genres or modes feel native." },
   { icon: BrainCircuit, key: "complexity", label: "Complexity", placeholder: "Search complexity...", tooltip: "Arrangement grammar for the generated pattern, such as sparse motifs, call-and-response, dense harmony, or polyrhythmic movement." },
   { icon: Scale, key: "scaleKey", label: "Scale / Mode", placeholder: "Search mode or type F# Dorian...", tooltip: "Harmonic mode with optional key, for example F# Dorian. Genre still owns rhythm and pattern; mode primarily affects interval choices and melodic/chord color." },
-] satisfies SelectorConfig[];
+];
 
 type AdvancedSliderConfig = {
   icon: typeof Activity;
@@ -75,12 +62,12 @@ type AdvancedSliderConfig = {
   tooltip: string;
 };
 
-const advancedSliders = [
+const advancedSliders: AdvancedSliderConfig[] = [
   { icon: Activity, key: "creativity", label: "Creativity", tooltip: "Controls metric displacement, harmonic tension inside the selected genre ceiling, and texture surprise. Higher values should bend the style without turning every genre into complex chords." },
   { icon: Thermometer, key: "temperature", label: "Temperature", tooltip: "Controls sampling sharpness for local model instructions and fallback pattern intensity. Lower values are stable and literal; higher values make the output more exploratory." },
   { icon: Grid3X3, key: "density", label: "Density", tooltip: "Controls note and rhythm occupancy. Low density leaves more space; high density favors busier drums, thicker accompaniment, and more active melodic fragments." },
   { icon: UserRound, key: "humanize", label: "Humanize", tooltip: "Controls timing looseness and performance feel. Low values are tight and grid-like; high values bias toward swung, pushed, or pulled note placement." },
-] satisfies AdvancedSliderConfig[];
+];
 
 const lengthSliderOptions = GENERATOR_LENGTH_OPTIONS;
 const lengthSliderValues = lengthSliderOptions.map((option) => option.value);
@@ -137,7 +124,7 @@ function loadThemeMode() {
     return "system";
   }
   const value = window.localStorage.getItem(GENERATOR_THEME_STORAGE_KEY);
-  return themeModes.includes(value as (typeof themeModes)[number]) ? value as (typeof themeModes)[number] : "system";
+  return themeModes.find((mode) => mode === value) ?? "system";
 }
 
 function findItem(items: SearchableComboboxItem[], id: string) {
@@ -158,9 +145,7 @@ function lengthTickStyle(value: number) {
   return { left: `${((value - min) / (max - min)) * 100}%` };
 }
 
-function percentValue(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
+
 
 function DashboardRowActions(props: {
   disabled: boolean;
@@ -450,7 +435,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
   const [systemTheme, setSystemTheme] = createSignal<"dark" | "light">("light");
   const themeIcon = createMemo(() => themeIcons[themeMode()]);
   const themeLabel = createMemo(() => themeLabels[themeMode()]);
-  const resolvedTheme = createMemo(() => themeMode() === "system" ? systemTheme() : themeMode() as "dark" | "light");
+  const resolvedTheme = createMemo(() => { const mode = themeMode(); return mode === "system" ? systemTheme() : mode; });
   const settingsPopoverId = createUniqueId();
   let settingsAnchor: HTMLButtonElement | undefined;
   let lastStateSignature = "";
@@ -570,7 +555,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
     applyFieldSnapshot(next, Object.fromEntries(selectors.map((selector) => [
       selector.key,
       !locked[selector.key] && (!suggestionInput[selector.key] || suggestedFields[selector.key]),
-    ])) as Partial<Record<GeneratorFieldKey, boolean>>);
+    ])));
   };
 
   const applyRandom = () => {
@@ -602,11 +587,11 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
       setFields("lengthBars", nearestLengthBars(next.lengthBars));
       return;
     }
-    if (GENERATOR_RANGE_KEYS.includes(key as GeneratorRangeKey)) {
-      setFields(key as GeneratorRangeKey, next[key as GeneratorRangeKey]);
+    if (isRangeKey(key)) {
+      setFields(key, next[key]);
       return;
     }
-    syncField(key as GeneratorFieldKey, next[key as GeneratorFieldKey], suggested);
+    if (isFieldKey(key)) syncField(key, next[key], suggested);
   };
 
   const suggestKey = (key: GeneratorLockKey) => {
@@ -614,11 +599,11 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
     setRerollSeed(reroll);
     const suggestionInput = { ...fields };
     const avoid: Partial<Record<GeneratorFieldKey, string>> = {};
-    if (GENERATOR_FIELD_KEYS.includes(key as GeneratorFieldKey)) {
-      if (fields[key as GeneratorFieldKey]) {
-        avoid[key as GeneratorFieldKey] = fields[key as GeneratorFieldKey];
+    if (isFieldKey(key)) {
+      if (fields[key]) {
+        avoid[key] = fields[key];
       }
-      suggestionInput[key as GeneratorFieldKey] = "";
+      suggestionInput[key] = "";
     }
     applyKeySnapshot(key, buildMagicSuggestion(suggestionInput, locked, { avoid, chaos: chaosRisk(), reroll }), true);
   };
@@ -670,8 +655,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
         themeLabel={themeLabel}
       />
       <div class={styles["control-stack"]}>
-        {selectors.map((selector) => (
-          <div class={styles["control-row"]}>
+        <For each={selectors}>{(selector) => (<div class={styles["control-row"]}>
             <Tooltip content={selector.tooltip} placement="bottom" class={styles["label-tooltip"]}>
               <span class={styles["row-label"]}>
                 {selector.icon ? <selector.icon class={styles["row-label-svg"]} size={15} aria-hidden="true" /> : null}
@@ -710,12 +694,10 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
               onRandomize={() => randomizeKey(selector.key)}
               onSuggest={() => suggestKey(selector.key)}
             />
-          </div>
-        ))}
+          </div>)}</For>
       </div>
       <div class={styles["control-stack"]}>
-        {advancedSliders.slice(0, 2).map((config) => (
-          <DashboardSliderRow
+        <For each={advancedSliders.slice(0, 2)}>{(config) => (<DashboardSliderRow
             actions={<DashboardRowActions
               disabled={props.disabled ?? false}
               label={config.label}
@@ -728,8 +710,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
             disabled={props.disabled ?? false}
             onChange={(value) => setFields(config.key, clamp01(value))}
             value={fields[config.key]}
-          />
-        ))}
+          />)}</For>
         <div class={`${styles["control-row"]} ${styles["slider-row"]}`}>
           <Tooltip content={lengthTooltip} placement="bottom" class={styles["label-tooltip"]}>
             <span class={`${styles["row-label"]} ${styles["length-label"]}`}>
@@ -754,9 +735,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
                 width={520}
               />
               <span class={styles["length-ticks"]} aria-hidden="true">
-                {lengthSliderOptions.map((option) => (
-                  <span class={styles["length-ticks-span"]} style={lengthTickStyle(option.value)}>{option.value}</span>
-                ))}
+                <For each={lengthSliderOptions}>{(option) => (<span class={styles["length-ticks-span"]} style={lengthTickStyle(option.value)}>{option.value}</span>)}</For>
               </span>
             </span>
             <span class={styles["value-readout"]}>{`${fields.lengthBars} BARS`}</span>
@@ -770,8 +749,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
             onSuggest={() => suggestKey("lengthBars")}
           />
         </div>
-        {advancedSliders.slice(2).map((config) => (
-          <DashboardSliderRow
+        <For each={advancedSliders.slice(2)}>{(config) => (<DashboardSliderRow
             actions={<DashboardRowActions
               disabled={props.disabled ?? false}
               label={config.label}
@@ -784,8 +762,7 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
             disabled={props.disabled ?? false}
             onChange={(value) => setFields(config.key, clamp01(value))}
             value={fields[config.key]}
-          />
-        ))}
+          />)}</For>
       </div>
       <div class={styles["notes-row"]}>
         <PadPilot.TextAreaField
@@ -803,3 +780,6 @@ export function GeneratorDashboard(props: GeneratorDashboardProps) {
     </section>
   );
 }
+
+function isRangeKey(key: GeneratorLockKey): key is GeneratorRangeKey { return GENERATOR_RANGE_KEYS.some(value => value === key); }
+function isFieldKey(key: GeneratorLockKey): key is GeneratorFieldKey { return GENERATOR_FIELD_KEYS.some(value => value === key); }

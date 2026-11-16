@@ -1,3 +1,4 @@
+import { getReverbWidthLabel } from "./utils/renderers-tone-values";
 import { Show, createSignal } from "solid-js";
 import { FileUploadDropzone, type FileUploadSelection } from "../../../components/elements/file-upload-dropzone";
 import type { NodeVisualizerFrame } from "../../../proto/generated/fx-chain-pb";
@@ -159,18 +160,7 @@ type ReverbVisualizerShape = {
   shimmer: number;
 };
 
-function getReverbWidthLabel(mode: string) {
-  switch (mode) {
-    case "Room":
-      return "Narrow";
-    case "Plate":
-      return "Wide";
-    case "Shimmer":
-      return "Extra wide";
-    default:
-      return "Balanced";
-  }
-}
+
 
 function getReverbActivity(visualizer: ReverbVisualizerShape | null, nodeFrame: NodeVisualizerFrame | null) {
   const scalarIntensity = ((visualizer?.diffusion ?? 0) + (visualizer?.texture ?? 0)) / 2;

@@ -1,3 +1,10 @@
+import { For } from "solid-js";
+import { createContext, useContext } from "solid-js";
+const InputMapEditorControls = createContext<{
+  project: EditorProject;
+  mappings: () => EditorProject["settings"]["input"];
+  onChange: (mappings: EditorProject["settings"]["input"]) => void;
+}>();
 import { PreferencesSurface, normalizePreferenceValues, type PreferenceDefinition, type PreferenceSectionDefinition, type PreferenceValues } from "@hyperfocus/ui/preferences";
 import { createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
@@ -30,18 +37,21 @@ export function mountEditorPreferencesView(options: EditorPreferencesViewProps &
   return render(() => <EditorPreferencesView {...options} />, options.host);
 }
 
-export function EditorPreferencesView(options: EditorPreferencesViewProps) {
-  const definitions = createDefinitions(options.project);
-  const initial = createValues(options.project, options.uiPreferences);
-  let persistedUi = options.uiPreferences;
+const EditorPreferenceControls = createContext<EditorPreferencesViewProps>();
+export function EditorPreferencesView(options: EditorPreferencesViewProps) { return <EditorPreferenceControls.Provider value={options}><EditorPreferencesContent /></EditorPreferenceControls.Provider>; }
+function EditorPreferencesContent() {
+  const controls = useContext(EditorPreferenceControls); if (!controls) throw new Error("Missing editor preferences");
+  const definitions = createDefinitions(controls.project);
+  const initial = createValues(controls.project, controls.uiPreferences);
+  let persistedUi = controls.uiPreferences;
   const [values, setValues] = createSignal<PreferenceValues>(normalizePreferenceValues(definitions, initial));
-  const [input, setInput] = createSignal(structuredClone(options.project.settings.input));
-  const previewUi = () => applyEditorUiPreferences(createUiPreferences(values(), options.uiPreferences));
+  const [input, setInput] = createSignal(structuredClone(controls.project.settings.input));
+  const previewUi = () => applyEditorUiPreferences(createUiPreferences(values(), controls.uiPreferences));
   onCleanup(() => applyEditorUiPreferences(persistedUi));
 
   return (
     <div class="editor-preferences-composite">
-      <InputMapEditor project={options.project} mappings={input} onChange={setInput} />
+      <InputMapEditor project={controls.project} mappings={input} onChange={setInput} />
       <PreferencesSurface
         title="Settings"
         sections={sections}
@@ -70,14 +80,14 @@ export function EditorPreferencesView(options: EditorPreferencesViewProps) {
             "editor.aiHarnessEndpoint": defaultEditorUiPreferences.app.aiHarnessEndpoint,
             "editor.aiAgent": defaultEditorUiPreferences.app.aiAgent,
           }));
-          setInput(structuredClone(options.project.settings.input));
+          setInput(structuredClone(controls.project.settings.input));
           queueMicrotask(previewUi);
         }}
         onSave={() => {
-          const ui = createUiPreferences(values(), options.uiPreferences);
+          const ui = createUiPreferences(values(), controls.uiPreferences);
           persistedUi = ui;
           applyEditorUiPreferences(ui);
-          options.onSave(createProjectPreferences(values(), options.project, input()), ui);
+          controls.onSave(createProjectPreferences(values(), controls.project, input()), ui);
         }}
         saveLabel="Save settings"
       />
@@ -88,19 +98,21 @@ function InputMapEditor(props: {
   project: EditorProject;
   mappings: () => EditorProject["settings"]["input"];
   onChange: (mappings: EditorProject["settings"]["input"]) => void;
-}) {
+}) { return <InputMapEditorControls.Provider value={props}><InputMapEditorContent /></InputMapEditorControls.Provider>; }
+function InputMapEditorContent() { const controls = useContext(InputMapEditorControls); if (!controls) throw new Error("Missing InputMapEditor controls");
+
   const [newAction, setNewAction] = createSignal("");
   const [capturing, setCapturing] = createSignal<string>();
   const [error, setError] = createSignal("");
   const conflicts = () => {
-    const draft = inputDraft(props.project, props.mappings());
+    const draft = inputDraft(controls.project, controls.mappings());
     return editorInputConflicts(draft);
   };
   const update = (mutate: (draft: EditorProject) => void) => {
     try {
-      const draft = inputDraft(props.project, props.mappings());
+      const draft = inputDraft(controls.project, controls.mappings());
       mutate(draft);
-      props.onChange(structuredClone(draft.settings.input));
+      controls.onChange(structuredClone(draft.settings.input));
       setError("");
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
   };
@@ -120,15 +132,15 @@ function InputMapEditor(props: {
   onCleanup(() => window.removeEventListener("keydown", onCapture, true));
 
   return <section class="input-map-editor" aria-labelledby="input-map-title">
-    <header><div><span>PROJECT INPUT</span><h2 id="input-map-title">Input map</h2><p>Actions and bindings travel with the game. Changes join project undo history only after Save settings.</p></div><small>{props.mappings().length} action{props.mappings().length === 1 ? "" : "s"}</small></header>
-    <div class="input-action-list">{props.mappings().map((mapping) => {
+    <header><div><span>PROJECT INPUT</span><h2 id="input-map-title">Input map</h2><p>Actions and bindings travel with the game. Changes join project undo history only after Save settings.</p></div><small>{controls.mappings().length} action{controls.mappings().length === 1 ? "" : "s"}</small></header>
+    <div class="input-action-list">{<For each={controls.mappings()}>{(mapping) => {
       const actionConflicts = () => conflicts().filter((conflict) => conflict.actions.includes(mapping.action));
       return <article class="input-action-card">
         <header><strong>{mapping.action}</strong><div><button type="button" onClick={() => {
           const name = globalThis.prompt?.("Rename input action", mapping.action)?.trim();
           if (name && name !== mapping.action) update((draft) => { renameEditorInputAction(draft, mapping.action, name); });
         }}>Rename</button><button type="button" class="is-danger" onClick={() => update((draft) => removeEditorInputAction(draft, mapping.action))}>Remove</button></div></header>
-        <div class="input-binding-chips">{mapping.bindings.map((binding) => <span classList={{ "has-conflict": actionConflicts().some((conflict) => conflict.binding === binding) }}><code>{binding}</code><button type="button" aria-label={`Remove ${binding} from ${mapping.action}`} onClick={() => update((draft) => removeEditorInputBinding(draft, mapping.action, binding))}>×</button></span>)}</div>
+        <div class="input-binding-chips">{<For each={mapping.bindings}>{(binding) => <span classList={{ "has-conflict": actionConflicts().some((conflict) => conflict.binding === binding) }}><code>{binding}</code><button type="button" aria-label={`Remove ${binding} from ${mapping.action}`} onClick={() => update((draft) => removeEditorInputBinding(draft, mapping.action, binding))}>×</button></span>}</For>}</div>
         <div class="input-binding-tools">
           <button type="button" aria-pressed={capturing() === mapping.action} onClick={() => setCapturing(capturing() === mapping.action ? undefined : mapping.action)}>{capturing() === mapping.action ? "Press a key · Esc cancels" : "Capture keyboard key"}</button>
           <label><span>Binding name</span><input data-binding-name placeholder="KeyW or Gamepad0.Button0" /></label><button type="button" onClick={(event) => {
@@ -145,10 +157,11 @@ function InputMapEditor(props: {
         </div>
         {actionConflicts().length > 0 && <p class="input-conflict" role="status">Shared binding: {actionConflicts().map((conflict) => `${conflict.binding} → ${conflict.actions.join(", ")}`).join("; ")}</p>}
       </article>;
-    })}</div>
+    }}</For>}</div>
     <form class="input-add-action" onSubmit={(event) => { event.preventDefault(); const action = newAction(); if (!action.trim()) return; update((draft) => addEditorInputAction(draft, action)); setNewAction(""); }}><label><span>New action</span><input value={newAction()} placeholder="dash" onInput={(event) => setNewAction(event.currentTarget.value)} /></label><button type="submit">Add action</button></form>
     <p class="input-map-error" role="alert" aria-live="assertive" hidden={!error()}>{error()}</p>
   </section>;
+
 }
 
 function inputDraft(project: EditorProject, mappings: EditorProject["settings"]["input"]): EditorProject {

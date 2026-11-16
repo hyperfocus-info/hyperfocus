@@ -1,6 +1,6 @@
 import type { FallbackInstrumentPalette } from "./generator-contracts";
 
-export const fallbackInstrumentPalettes = [
+export const fallbackInstrumentPalettes: readonly FallbackInstrumentPalette[] = [
   {
     bass: [
       { name: "Synth Bass 1", program: 38 },
@@ -646,4 +646,4 @@ export const fallbackInstrumentPalettes = [
       { name: "Poly Pad", program: 90 },
     ],
   },
-] as const satisfies readonly FallbackInstrumentPalette[];
+] as const;

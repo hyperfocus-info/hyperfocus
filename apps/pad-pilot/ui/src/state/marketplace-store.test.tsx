@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { resetBridgeStateForTests } from "../bridge";
@@ -101,7 +102,7 @@ describe("MarketplaceStoreProvider", () => {
   it("logs and toasts sign-in failures gracefully", async () => {
     const errorSpy = mock(() => undefined);
     console.error = errorSpy;
-    globalThis.fetch = ((async () =>
+    globalThis.fetch = Object.assign(async () =>
       new Response(JSON.stringify({
         auth: {
           authenticated: false,
@@ -127,8 +128,7 @@ describe("MarketplaceStoreProvider", () => {
         updates: {
           latest: null,
         },
-      }))
-    ) as unknown) as typeof fetch;
+      })), { preconnect: globalThis.fetch.preconnect });
 
     render(() => (
       <MarketplaceStoreProvider>
@@ -147,7 +147,7 @@ describe("MarketplaceStoreProvider", () => {
   it("ignores a deferred sign-in failure after unmount", async () => {
     const errorSpy = mock(() => undefined);
     console.error = errorSpy;
-    globalThis.fetch = ((async (input: RequestInfo | URL) => {
+    globalThis.fetch = Object.assign(async (input: RequestInfo | URL) => {
       const url = new URL(input.toString());
       if (url.pathname.includes("/api/updates/vst3/latest")) {
         return new Response(JSON.stringify(noUpdateResponse()));
@@ -167,7 +167,7 @@ describe("MarketplaceStoreProvider", () => {
         marketplace: { modules: [] },
         updates: { latest: null },
       }));
-    }) as unknown) as typeof fetch;
+    }, { preconnect: globalThis.fetch.preconnect });
 
     const view = render(() => <MarketplaceStoreProvider><TestHarness /></MarketplaceStoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
@@ -180,7 +180,7 @@ describe("MarketplaceStoreProvider", () => {
   it("does not refresh marketplace after a deferred sign-out completes post-unmount", async () => {
     let bootstrapCalls = 0;
     let resolveLogout: ((response: Response) => void) | undefined;
-    globalThis.fetch = ((async (input: RequestInfo | URL) => {
+    globalThis.fetch = Object.assign(async (input: RequestInfo | URL) => {
       const url = new URL(input.toString());
       if (url.pathname === "/api/auth/logout") {
         return new Promise<Response>((resolve) => {
@@ -206,7 +206,7 @@ describe("MarketplaceStoreProvider", () => {
         marketplace: { modules: [] },
         updates: { latest: null },
       }));
-    }) as unknown) as typeof fetch;
+    }, { preconnect: globalThis.fetch.preconnect });
 
     const view = render(() => <MarketplaceStoreProvider><TestHarness /></MarketplaceStoreProvider>);
     await waitFor(() => expect(bootstrapCalls).toBe(1));
@@ -232,7 +232,7 @@ describe("MarketplaceStoreProvider", () => {
         },
         emitEvent: (eventId, payload) => {
           if (eventId === "__juce__invoke") {
-            restartRequest = payload as { resultId: number };
+            restartRequest = z.object({resultId:z.number()}).passthrough().parse(payload);
           }
         },
       },
@@ -240,7 +240,7 @@ describe("MarketplaceStoreProvider", () => {
         __juce__functions: ["padpilotRestartAndApplyPluginUpdate"],
       },
     };
-    globalThis.fetch = ((async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(async () => new Response(JSON.stringify({
       auth: {
         authenticated: false,
         configured: { clerk: false, stripe: false },
@@ -254,7 +254,7 @@ describe("MarketplaceStoreProvider", () => {
       capabilities: { browserDownloadsOnly: true, nativeModuleInstallation: false },
       marketplace: { modules: [] },
       updates: { latest: null },
-    }))) as unknown) as typeof fetch;
+    })), { preconnect: globalThis.fetch.preconnect });
 
     const view = render(() => <MarketplaceStoreProvider><TestHarness /></MarketplaceStoreProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Restart" }));
@@ -267,8 +267,8 @@ describe("MarketplaceStoreProvider", () => {
   });
 
   it("checks for updates during startup and exposes the available release", async () => {
-    process.env.HANDSHAKE_DETAILS = { MARKETPLACE_URL: "http://localhost:3000", version: 1 } as unknown as string;
-    globalThis.fetch = ((async (input: RequestInfo | URL) => {
+    process.env.HANDSHAKE_DETAILS = JSON.stringify({ MARKETPLACE_URL: "http://localhost:3000", version: 1 });
+    globalThis.fetch = Object.assign(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/api/updates/vst3/latest")) {
         return new Response(JSON.stringify({
@@ -318,7 +318,7 @@ describe("MarketplaceStoreProvider", () => {
           latest: null,
         },
       }));
-    }) as unknown) as typeof fetch;
+    }, { preconnect: globalThis.fetch.preconnect });
 
     render(() => (
       <MarketplaceStoreProvider>
@@ -333,7 +333,7 @@ describe("MarketplaceStoreProvider", () => {
   });
 
   it("keeps the newest update-channel response when requests finish out of order", async () => {
-    process.env.HANDSHAKE_DETAILS = { MARKETPLACE_URL: "http://localhost:3000", version: 1 } as unknown as string;
+    process.env.HANDSHAKE_DETAILS = JSON.stringify({ MARKETPLACE_URL: "http://localhost:3000", version: 1 });
     let updateCalls = 0;
     let resolveBeta: ((response: Response) => void) | null = null;
     let resolveStable: ((response: Response) => void) | null = null;
@@ -356,7 +356,7 @@ describe("MarketplaceStoreProvider", () => {
       signature: "sig",
       updateAvailable: true,
     }));
-    globalThis.fetch = ((async (input: RequestInfo | URL) => {
+    globalThis.fetch = Object.assign(async (input: RequestInfo | URL) => {
       const url = new URL(input.toString());
       if (url.pathname.includes("/api/updates/vst3/latest")) {
         updateCalls += 1;
@@ -387,7 +387,7 @@ describe("MarketplaceStoreProvider", () => {
         marketplace: { modules: [] },
         updates: { latest: null },
       }));
-    }) as unknown) as typeof fetch;
+    }, { preconnect: globalThis.fetch.preconnect });
 
     render(() => <MarketplaceStoreProvider><TestHarness /></MarketplaceStoreProvider>);
     await waitFor(() => expect(screen.getByTestId("update-version").textContent).toBe("1.0.0"));
@@ -403,10 +403,10 @@ describe("MarketplaceStoreProvider", () => {
   });
 
   it("removes a newly created draft when its bundle upload fails", async () => {
-    process.env.HANDSHAKE_DETAILS = { MARKETPLACE_URL: "http://localhost:3000", version: 1 } as unknown as string;
+    process.env.HANDSHAKE_DETAILS = JSON.stringify({ MARKETPLACE_URL: "http://localhost:3000", version: 1 });
     console.error = mock(() => undefined);
     const requests: Array<{ method: string; pathname: string }> = [];
-    globalThis.fetch = ((async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(input.toString());
       const method = init?.method ?? "GET";
       requests.push({ method, pathname: url.pathname });
@@ -440,7 +440,7 @@ describe("MarketplaceStoreProvider", () => {
         return new Response(JSON.stringify({ ok: true }));
       }
       return new Response("Not found", { status: 404 });
-    }) as unknown) as typeof fetch;
+    }, { preconnect: globalThis.fetch.preconnect });
 
     render(() => <MarketplaceStoreProvider><TestHarness /></MarketplaceStoreProvider>);
     await waitFor(() => expect(screen.getByTestId("auth-state").textContent).toBe("signed-in"));
@@ -453,7 +453,7 @@ describe("MarketplaceStoreProvider", () => {
   });
 
   it("treats a published rollback conflict as a successful lost publish response", async () => {
-    process.env.HANDSHAKE_DETAILS = { MARKETPLACE_URL: "http://localhost:3000", version: 1 } as unknown as string;
+    process.env.HANDSHAKE_DETAILS = JSON.stringify({ MARKETPLACE_URL: "http://localhost:3000", version: 1 });
     console.error = mock(() => undefined);
     const requests: Array<{ method: string; pathname: string }> = [];
     const bootstrap = {
@@ -471,7 +471,7 @@ describe("MarketplaceStoreProvider", () => {
       marketplace: { modules: [] },
       updates: { latest: null },
     };
-    globalThis.fetch = ((async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(input.toString());
       const method = init?.method ?? "GET";
       requests.push({ method, pathname: url.pathname });
@@ -497,7 +497,7 @@ describe("MarketplaceStoreProvider", () => {
         return new Response(JSON.stringify({ module: moduleDetailResponse("draft-2", "Recovered") }));
       }
       return new Response("Not found", { status: 404 });
-    }) as unknown) as typeof fetch;
+    }, { preconnect: globalThis.fetch.preconnect });
 
     render(() => <MarketplaceStoreProvider><TestHarness /></MarketplaceStoreProvider>);
     await waitFor(() => expect(screen.getByTestId("auth-state").textContent).toBe("signed-in"));

@@ -63,7 +63,7 @@
     "test:repository": "bun test scripts/check-repository-size.test.ts scripts/check-source-structure.test.ts scripts/check-code-style.test.ts scripts/numeric-literals scripts/code-standards scripts/ui-attention scripts/eslint-config.test.ts scripts/check-license-scope.test.ts scripts/app-ui-boundary.test.ts scripts/documentation-policy.test.ts scripts/release-readiness.test.ts scripts/dev-server.test.ts scripts/process-policy scripts/context-audit scripts/project-discovery scripts/testing scripts/ai-runtime scripts/shipping scripts/game-art scripts/albums ./.agents/skills/user-audit/scripts ./.agents/skills/dev-server/scripts",
     "test:packages": "bun scripts/testing/run-package-tests.ts",
     "test:harness": "bun apps/harness/scripts/run-tests.ts",
-    "test:editor": "bun test apps/engine-editor",
+    "test:editor": "bun test --conditions browser apps/engine-editor",
     "test:engine": "bun run --cwd packages/engine test",
     "test:pad-pilot": "bun run --cwd apps/pad-pilot test:fast",
     "test:pad-pilot-native": "bun run --cwd apps/pad-pilot test:native",

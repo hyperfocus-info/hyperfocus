@@ -27,7 +27,7 @@ function resolveWebBuildEnv() {
   let candidate: unknown = raw;
   try {
     if (typeof raw === "string") {
-      candidate = JSON.parse(raw) as unknown;
+      candidate = JSON.parse(raw);
     }
   } catch {
     return fallback;

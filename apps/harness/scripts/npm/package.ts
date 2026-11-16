@@ -50,7 +50,9 @@ export async function packageHarnessNpm() {
     const installedManifest = await Bun.file(join(installed, "package.json")).json();
     if (installedManifest.private || JSON.stringify(installedManifest).includes("workspace:")) throw new Error("Packed manifest is not independently installable.");
     // Same package-name binary lookup as the requested command, with network installation forbidden.
-    const result = await runLauncherUiSmoke({ cmd: [process.execPath, "x", "--no-install", "@hyperfocus/harness", "--no-open"], cwd: consumer,
+    let persistedProjectId: string | undefined;
+    for (let pass = 0; pass < 2; pass++) {
+    const result = await runLauncherUiSmoke({ cmd: [process.execPath, "x", "--no-install", "@hyperfocus/harness", "--no-open"], cwd: consumer, home: join(consumer, ".persistence-home"),
       verify: async ({ serverUrl }) => {
         const response = await fetch(`${serverUrl}/main.js`);
         if (!response.ok || !(await response.text()).length) throw new Error("Packed UI JavaScript is unavailable.");
@@ -70,6 +72,8 @@ export async function packageHarnessNpm() {
                   type: "project.create", requestId: "npm-project", payload: { rootPath: join(consumer, "project") }
                 }));
                 if (value.type === "project.opened" && value.requestId === "npm-project") {
+                  if (pass > 0 && (value.payload.project.id !== persistedProjectId || value.payload.project.threads.length < 2)) throw new Error("Packed project/thread did not survive restart");
+                  persistedProjectId = value.payload.project.id;
                   if (value.payload.project.rootPath !== join(consumer, "project")) throw new Error("Packed project root differs.");
                   socket.send(JSON.stringify({ type: "thread.create", requestId: "npm-thread", payload: { projectId: value.payload.project.id } }));
                 }
@@ -84,10 +88,11 @@ export async function packageHarnessNpm() {
         });
       } });
     if (result.exitCode !== 0 || !result.stdout.includes('id="root"')) throw new Error(`Packed npm launch failed: ${result.stderr}`);
+    }
     const evidence = { artifact, version: manifest.version, platform: process.platform, arch: process.arch,
       sha256: new Bun.CryptoHasher("sha256").update(await Bun.file(artifact).arrayBuffer()).digest("hex"),
       command: "bunx --no-install @hyperfocus/harness --no-open", consumer, requiredFiles, protocolPing: true,
-      projectAndThreadCreated: true, passed: true, registryPublished: false };
+      projectAndThreadCreated: true, projectAndThreadSurvivedRestart: true, passed: true, registryPublished: false };
     await Bun.write(join(output, "smoke.json"), JSON.stringify(evidence, null, 2));
     return evidence;
   } finally {

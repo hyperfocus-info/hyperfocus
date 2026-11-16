@@ -1,5 +1,6 @@
+import { positiveSafeInteger } from "./utils/bounded-stream-values";
 const DEFAULT_MAX_STREAM_CHUNKS = 4_096;
-const INITIAL_STREAM_BUFFER_BYTES = 64 * 1_024;
+const INITIAL_STREAM_BUFFER_BYTES = 65536;
 
 type BoundedStreamOptions = {
   label: string;
@@ -22,12 +23,7 @@ export class BoundedStreamLimitError extends Error {
   }
 }
 
-function positiveSafeInteger(value: number, label: string) {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Error(`${label} must be a positive safe integer.`);
-  }
-  return value;
-}
+
 
 function growBuffer(buffer: Uint8Array<ArrayBuffer>, requiredBytes: number, maxBytes: number) {
   if (requiredBytes <= buffer.byteLength) {

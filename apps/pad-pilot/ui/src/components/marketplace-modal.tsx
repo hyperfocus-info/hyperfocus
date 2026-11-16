@@ -1,3 +1,4 @@
+import { formatPrice, formatDate, formatFileSize } from "./utils/marketplace-modal-values";
 import { For, Show, createMemo } from "solid-js";
 import { Button } from "./elements/button";
 import { CheckboxField } from "./elements/checkbox-field";
@@ -8,14 +9,10 @@ import { TextAreaField } from "./elements/text-area-field";
 import { TextField } from "./elements/text-field";
 import styles from "./marketplace-modal.stylex";
 
-const formatPrice = (priceCents: number, currency: string) =>
-  new Intl.NumberFormat("en-US", {
-    currency: currency.toUpperCase(),
-    style: "currency",
-  }).format(priceCents / 100);
 
-const formatDate = (value: string | null) => (value ? new Date(value).toLocaleString() : "Not published");
-const formatFileSize = (value: number | null) => (value == null ? "Unavailable" : `${(value / 1024).toFixed(1)} KB`);
+
+
+
 
 export function MarketplaceModal() {
   const { state, actions } = useMarketplaceStore();

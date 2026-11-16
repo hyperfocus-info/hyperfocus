@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
 import { createChainAccessor, createNodeAccessor } from "../fx-live-accessors";
-import { type SearchableComboboxItem } from "../../../padpilot/types";
+import { type SearchableComboboxItem } from "../../../components/elements/searchable-combobox";
 import { PadPilot } from "../../../padpilot/index";
 import styles from "../styles/fx-node-registry.stylex";
 

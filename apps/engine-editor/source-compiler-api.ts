@@ -3,9 +3,9 @@ import { build, type Loader, type Plugin } from "esbuild";
 import { isAllowedEditorAgentOrigin } from "./editor-agent-api.ts";
 
 const API_PATH = "/api/source/v1/compile";
-const MAX_REQUEST_BYTES = 5 * 1024 * 1024;
+const MAX_REQUEST_BYTES = 5242880;
 const MAX_FILES = 100;
-const MAX_FILE_BYTES = 1024 * 1024;
+const MAX_FILE_BYTES = 1048576;
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/i;
 
 export type EditorSourceFile = { path: string; source: string };

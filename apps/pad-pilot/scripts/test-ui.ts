@@ -34,7 +34,7 @@ for (const [index, testFile] of testFiles.entries()) {
     {
       cwd: repositoryRoot,
       label: `${testFile} UI test`,
-      maxBuffer: 16 * 1024 * 1024,
+      maxBuffer: 16777216,
       stderr: "pipe",
       stdin: "ignore",
       stdout: "pipe",

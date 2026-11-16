@@ -1,3 +1,5 @@
+import { inspectWorkspaceContrast } from "./utils/workspace-contrast";
+import { assert } from "./utils/verify-system-values";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -220,28 +222,7 @@ async function verifyPreferencesAndContextualTour(page: Page): Promise<Check> {
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
   await page.mouse.move(1590, 990);
   await delay(120);
-  const lightWorkspaceAppearance = await page.evaluate(() => {
-    const contrast = (foreground: string, background: string) => {
-      const values = (color: string) => color.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
-      const luminance = (color: string) => {
-        const [red = 0, green = 0, blue = 0] = values(color).map((channel) => {
-          const value = channel / 255;
-          return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-        });
-        return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-      };
-      const [lighter, darker] = [luminance(foreground), luminance(background)].sort((left, right) => right - left);
-      return (lighter + 0.05) / (darker + 0.05);
-    };
-    const topbar = document.querySelector<HTMLElement>(".topbar")!;
-    const brand = document.querySelector<HTMLElement>(".brand-block h1")!;
-    const mode = document.querySelector<HTMLElement>('[data-editor-mode="play"]')!;
-    const background = getComputedStyle(topbar).backgroundColor;
-    return {
-      brandContrast: contrast(getComputedStyle(brand).color, background),
-      modeContrast: contrast(getComputedStyle(mode).color, background),
-    };
-  });
+  const lightWorkspaceAppearance = await page.evaluate(inspectWorkspaceContrast);
   assert(lightWorkspaceAppearance.brandContrast >= 4.5 && lightWorkspaceAppearance.modeContrast >= 4.5, `Light theme loses contrast on dark workspace chrome: ${JSON.stringify(lightWorkspaceAppearance)}`);
   const lightWorkspaceScreenshot = join(outputRoot, "ux-light-workspace.png");
   await page.screenshot({ path: lightWorkspaceScreenshot, fullPage: false });
@@ -705,9 +686,7 @@ async function stop(child: ChildProcess | undefined) {
   await delay(80);
 }
 
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
+
 
 function delay(milliseconds: number) {
   return new Promise<void>((resolvePromise) => setTimeout(resolvePromise, milliseconds));

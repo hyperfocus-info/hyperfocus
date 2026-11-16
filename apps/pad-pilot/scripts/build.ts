@@ -175,7 +175,7 @@ async function main() {
     if (options.copy) {
       runBunScript(projectRoot, "./scripts/copy-vst3.ts", ["--config", options.config]);
     }
-  }, 30 * 60_000);
+  }, 1800000);
 
   console.log(`[build] SUCCESS (${options.config})`);
   console.log(`[build] Built directory: ${srcBundle}`);

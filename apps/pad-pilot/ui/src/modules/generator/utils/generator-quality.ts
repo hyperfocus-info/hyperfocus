@@ -1,8 +1,9 @@
 import { type GeneratorMidiComposition } from "./midi-encoder";
-import { type GeneratorLengthBars } from "./generator-options";
+import { type GeneratorLengthBars } from "./generator-option-catalog";
 import { type CodexClientOptions, GENERATOR_MODEL_SCHEMA_VERSION, GENERATOR_TRACKER_GRAMMAR_VERSION, type GeneratorArrangementPlanHeader, type GeneratorHarmonicTolerancePolicy, type GeneratorMusicianPlan, type GeneratorPromptInput, type GeneratorRepairPatch, type GeneratorValidationReport, type StyleDnaFilterStats } from "./generator-contracts";
 import { buildFallbackTracker } from "./generator-fallback";
-import { createStyleDnaFilterStats, repairCompositionForPlan } from "./generator-massage";
+import { createStyleDnaFilterStats } from "./generator-massage-scoring";
+import { repairCompositionForPlan } from "./generator-massage-length";
 import { enforceCompositionScale } from "./generator-music";
 import { buildGeneratorIntentPlan, clamp01, resolveGeneratorIntentTags, selectedScaleInfo, selectedScaleMode } from "./generator-prompt";
 import { loopTicks, parseDeltaTickTracker, scoreGeneratorComposition, trackerFromComposition } from "./generator-tracker";
@@ -66,7 +67,7 @@ export function buildGeneratorValidationReport(
   lengthBars: GeneratorLengthBars,
   arrangementPlan?: GeneratorArrangementPlanHeader,
   harmonicTolerancePolicy?: GeneratorHarmonicTolerancePolicy,
-) {
+) : GeneratorValidationReport {
   return {
     ...(arrangementPlan ? { arrangementPlan } : {}),
     grammarVersion: GENERATOR_TRACKER_GRAMMAR_VERSION,
@@ -77,10 +78,10 @@ export function buildGeneratorValidationReport(
     reasons: quality.reasons,
     schemaVersion: GENERATOR_MODEL_SCHEMA_VERSION,
     score: quality.score,
-  } satisfies GeneratorValidationReport;
+  };
 }
 
-export function buildGeneratorRepairPatch(before: ReturnType<typeof scoreGeneratorComposition>, after: ReturnType<typeof scoreGeneratorComposition>, stats: StyleDnaFilterStats, keepMassaged: boolean) {
+export function buildGeneratorRepairPatch(before: ReturnType<typeof scoreGeneratorComposition>, after: ReturnType<typeof scoreGeneratorComposition>, stats: StyleDnaFilterStats, keepMassaged: boolean) : GeneratorRepairPatch {
   const patchLines = [
     ...(stats.pitchCorrectedNotes > 0 ? [`scale-corrected ${stats.pitchCorrectedNotes} notes`] : []),
     ...(stats.quantizedNotes > 0 ? [`quantized ${stats.quantizedNotes} notes`] : []),
@@ -102,7 +103,7 @@ export function buildGeneratorRepairPatch(before: ReturnType<typeof scoreGenerat
     patchLines,
     schemaVersion: GENERATOR_MODEL_SCHEMA_VERSION,
     structuralRepair: hasStructuralStyleRepair(stats),
-  } satisfies GeneratorRepairPatch;
+  };
 }
 
 export function repairPatchLogLine(patch: GeneratorRepairPatch) {

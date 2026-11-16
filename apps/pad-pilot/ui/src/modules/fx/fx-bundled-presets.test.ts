@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { describe, expect, it } from "bun:test";
 import { loadBundledFxPresets, MAX_BUNDLED_FX_PRESETS, mergeFxPresetSummaries } from "./fx-bundled-presets";
 import { decodeFxChainState, FxNodeType } from "./fx-chain-state";
@@ -39,7 +40,7 @@ describe("FX bundled presets", () => {
       return new Response(null, { status: 404 });
     };
 
-    const presets = await loadBundledFxPresets(fetchMock as typeof fetch);
+    const presets = await loadBundledFxPresets(Object.assign(fetchMock, { preconnect() {} }));
 
     expect(presets).toHaveLength(2);
     expect(presets[0]?.id).toBe("pad_pilot_init_default");
@@ -104,7 +105,7 @@ describe("FX bundled presets", () => {
       return new Response(Uint8Array.of(1).buffer);
     };
 
-    expect(await loadBundledFxPresets(fetchMock as typeof fetch)).toEqual([]);
+    expect(await loadBundledFxPresets(Object.assign(fetchMock, { preconnect() {} }))).toEqual([]);
     expect(presetFetchCount).toBe(0);
   });
 
@@ -118,7 +119,7 @@ describe("FX bundled presets", () => {
       });
     };
 
-    const loading = loadBundledFxPresets(fetchMock as typeof fetch, controller.signal);
+    const loading = loadBundledFxPresets(Object.assign(fetchMock, { preconnect() {} }), controller.signal);
     controller.abort(new Error("module unmounted"));
 
     await expect(loading).rejects.toThrow("module unmounted");
@@ -141,9 +142,7 @@ describe("FX bundled presets", () => {
 
   it("ships a complete decodable 63-preset catalog with explicit taxonomy", async () => {
     const presetRoot = new URL("../../../public/fx/chains/presets/", import.meta.url);
-    const manifest = await Bun.file(new URL("index.json", presetRoot)).json() as {
-      presets: Array<{ category?: string; description?: string; era?: string; file: string; id: string; jobs?: string[]; sources?: string[]; tags?: string[] }>;
-    };
+    const manifest = z.object({ presets: z.array(z.object({ category: z.string().optional(), description: z.string().optional(), era: z.string().optional(), file: z.string(), id: z.string(), jobs: z.array(z.string()).optional(), sources: z.array(z.string()).optional(), tags: z.array(z.string()).optional() })) }).parse(await Bun.file(new URL("index.json", presetRoot)).json());
 
     expect(manifest.presets).toHaveLength(63);
     expect(manifest.presets.filter((entry) => entry.category === "system")).toHaveLength(1);

@@ -1,7 +1,7 @@
 import { MagicProfile, matchingMagicProfiles, ScoreTable, MagicBoosts, MagicAdvancedTargets, MagicFactor, profileInfluence, magicInteractionFactors, advancedProfileTargets } from "./generator-magic-profiles";
 import { SearchableComboboxItem } from "../../../components/elements/searchable-combobox";
 import { clamp01Or } from "../../../utils/math";
-import { GeneratorFieldKey, GeneratorRangeKey, GeneratorLengthBars, GeneratorAdvancedKey, GeneratorLockKey, GeneratorDashboardFields, GeneratorFieldLocks, GeneratorMagicOptions, GENERATOR_FIELD_KEYS, GENERATOR_RANGE_KEYS, GENERATOR_ADVANCED_KEYS, GENERATOR_LENGTH_OPTIONS, DEFAULT_GENERATOR_ADVANCED_SETTINGS, GENERATOR_OPTION_GROUPS } from "./generator-option-catalog";
+import { GeneratorFieldKey, GeneratorLengthBars, GeneratorAdvancedKey, GeneratorLockKey, GeneratorDashboardFields, GeneratorFieldLocks, GeneratorMagicOptions, GENERATOR_FIELD_KEYS, GENERATOR_RANGE_KEYS, GENERATOR_ADVANCED_KEYS, GENERATOR_LENGTH_OPTIONS, DEFAULT_GENERATOR_ADVANCED_SETTINGS, GENERATOR_OPTION_GROUPS } from "./generator-option-catalog";
 import { normalizeGeneratorScaleMode, normalizeGeneratorLengthBars } from "./generator-selector-options";
 
 export function randomUnit(rng: () => number) {
@@ -51,7 +51,7 @@ export function createScoreTable() {
     genre: {},
     mood: {},
     scaleKey: {},
-  } satisfies ScoreTable;
+  };
 }
 
 export function normalizedFieldValue(key: GeneratorFieldKey, value: string) {
@@ -194,11 +194,11 @@ export function createAdvancedAccumulator() {
   return {
     lengthScores,
     ranges: {
-      creativity: { sum: DEFAULT_GENERATOR_ADVANCED_SETTINGS.creativity * 2, weight: 2 },
-      density: { sum: DEFAULT_GENERATOR_ADVANCED_SETTINGS.density * 2, weight: 2 },
-      humanize: { sum: DEFAULT_GENERATOR_ADVANCED_SETTINGS.humanize * 2, weight: 2 },
-      temperature: { sum: DEFAULT_GENERATOR_ADVANCED_SETTINGS.temperature * 2, weight: 2 },
-    } satisfies Record<GeneratorRangeKey, { sum: number; weight: number }>,
+      creativity: { sum: DEFAULT_GENERATOR_ADVANCED_SETTINGS.creativity * 2, weight: 2 as const },
+      density: { sum: DEFAULT_GENERATOR_ADVANCED_SETTINGS.density * 2, weight: 2 as const },
+      humanize: { sum: DEFAULT_GENERATOR_ADVANCED_SETTINGS.humanize * 2, weight: 2 as const },
+      temperature: { sum: DEFAULT_GENERATOR_ADVANCED_SETTINGS.temperature * 2, weight: 2 as const },
+    },
   };
 }
 
@@ -268,13 +268,13 @@ export function buildAdvancedSettings(input: GeneratorDashboardFields, options: 
     addAdvancedTarget(accumulator, { creativity: 0.78, density: 0.76, humanize: 0.38, lengthBars: 8, temperature: 0.68 }, 9 + chaos * 6);
   }
 
-  const next = {
+  const next: Pick<GeneratorDashboardFields, GeneratorAdvancedKey> = {
     creativity: DEFAULT_GENERATOR_ADVANCED_SETTINGS.creativity,
     density: DEFAULT_GENERATOR_ADVANCED_SETTINGS.density,
     humanize: DEFAULT_GENERATOR_ADVANCED_SETTINGS.humanize,
     lengthBars: pickLengthBars(accumulator.lengthScores, chaos, rng),
     temperature: DEFAULT_GENERATOR_ADVANCED_SETTINGS.temperature,
-  } satisfies Pick<GeneratorDashboardFields, GeneratorAdvancedKey>;
+  };
 
   for (const key of GENERATOR_RANGE_KEYS) {
     const average = accumulator.ranges[key].sum / Math.max(1, accumulator.ranges[key].weight);
@@ -282,7 +282,7 @@ export function buildAdvancedSettings(input: GeneratorDashboardFields, options: 
     next[key] = clamp01Or(average + jitter, DEFAULT_GENERATOR_ADVANCED_SETTINGS[key]);
   }
 
-  return next satisfies Pick<GeneratorDashboardFields, GeneratorAdvancedKey>;
+  return next;
 }
 
 export function setAdvancedValue(fields: GeneratorDashboardFields, key: GeneratorAdvancedKey, value: number) {

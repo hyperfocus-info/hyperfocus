@@ -1,3 +1,5 @@
+import { toRecord, serializeJsonState } from "./state/json-state";
+import type { PadPilotStateReader } from "@hyperfocus/pad-pilot/module-ui-contract";
 import {
   Accessor,
   ParentProps,
@@ -62,9 +64,9 @@ type PadPilotContextValue = {
   endModuleInteraction: (moduleId: string) => void;
   selectedProfile: Accessor<string>;
   setSelectedProfile: Setter<string>;
-  getModuleState: <T>(moduleId: string, fallback: T) => T;
+  getModuleState: <T>(moduleId: string, fallback: T, read: PadPilotStateReader<T>) => T;
   setModuleState: <T>(moduleId: string, next: Partial<T>) => void;
-  getEditorViewState: <T>(scopeId: string, fallback: T) => T;
+  getEditorViewState: <T>(scopeId: string, fallback: T, read: PadPilotStateReader<T>) => T;
   setEditorViewState: <T>(scopeId: string, next: Partial<T>) => void;
 };
 
@@ -76,21 +78,8 @@ type ModuleScopeValue = {
 const PadPilotContext = createContext<PadPilotContextValue>();
 const ModuleScopeContext = createContext<ModuleScopeValue>();
 
-const toRecord = (value: unknown) => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
 
-  return Object.fromEntries(Object.entries(value));
-};
-const serializeJsonState = (value: unknown) => {
-  try {
-    const serialized = JSON.stringify(value);
-    return typeof serialized === "string" ? serialized : null;
-  } catch {
-    return null;
-  }
-};
+
 type HydrationPhase = "unseen" | "hydrating" | "hydrated" | "local-dirty";
 
 function bumpRevision<T>(previous: T, value: T) {
@@ -110,7 +99,7 @@ function bumpRevision<T>(previous: T, value: T) {
       nextRevision !== null && nextRevision > previousRevision
         ? nextRevision
         : previousRevision + 1n;
-    return { ...value, revision } as T;
+    return { ...value, revision };
   }
 
   return value;
@@ -154,13 +143,13 @@ export function PadPilotProvider(props: ParentProps) {
   let controllerConfigEchoTimeout: number | undefined;
 
   const commitModuleState = <T,>(canonicalId: string, next: Partial<T>) => {
-    const prev = (moduleStateMap[canonicalId] ?? {}) as T;
+    const prev = moduleStateMap[canonicalId] ?? {};
     const prevRecord = toRecord(prev);
     const mergedValue = bumpRevision(prev, {
       ...(prevRecord ?? {}),
       ...(toRecord(next) ?? {}),
-    } as T);
-    const codec = getModuleStateCodec<T>(canonicalId);
+    });
+    const codec = getModuleStateCodec(canonicalId);
     let payload: string | null;
     try {
       payload = codec
@@ -173,7 +162,7 @@ export function PadPilotProvider(props: ParentProps) {
       return;
     }
 
-    setModuleStateMap(canonicalId, mergedValue as unknown);
+    setModuleStateMap(canonicalId, mergedValue);
     setModuleHydration(canonicalId, { phase: "local-dirty" });
     if (codec) {
       const mergedRecord = toRecord(mergedValue);
@@ -261,7 +250,7 @@ export function PadPilotProvider(props: ParentProps) {
 
     for (const [moduleId, payload] of Object.entries(hostState.moduleStates)) {
       const canonicalId = canonicalModuleId(moduleId);
-      if (getModuleStateCodec<unknown>(canonicalId)) {
+      if (getModuleStateCodec(canonicalId)) {
         continue;
       }
       setModuleStateMap(canonicalId, payload);
@@ -280,7 +269,7 @@ export function PadPilotProvider(props: ParentProps) {
   };
 
   const applyActiveModulePayload = (canonicalId: string, payloadBase64: string, authoritative = false) => {
-    const codec = getModuleStateCodec<unknown>(canonicalId);
+    const codec = getModuleStateCodec(canonicalId);
     if (payloadBase64.length === 0) {
       setModuleStateMap(canonicalId, undefined);
       lastAppliedModuleRevisions.delete(canonicalId);
@@ -425,7 +414,7 @@ export function PadPilotProvider(props: ParentProps) {
     },
     selectedProfile,
     setSelectedProfile,
-    getModuleState: <T,>(moduleId: string, fallback: T) => {
+    getModuleState: <T,>(moduleId: string, fallback: T, read: PadPilotStateReader<T>) => {
       const canonicalId = canonicalModuleId(moduleId);
       const aliases = moduleIdAliases(moduleId);
       let current: unknown;
@@ -440,18 +429,18 @@ export function PadPilotProvider(props: ParentProps) {
       }
       if (current === undefined) {
         if ((moduleHydration[canonicalId]?.phase ?? "unseen") !== "hydrated") {
-          return fallback;
+          return read(fallback);
         }
-        return fallback;
+        return read(fallback);
       }
 
       const currentRecord = toRecord(current);
       const fallbackRecord = toRecord(fallback);
       if (currentRecord && fallbackRecord) {
-        const hydrated = { ...fallbackRecord, ...currentRecord } as T;
+        const hydrated = read({ ...fallbackRecord, ...currentRecord });
         return hydrated;
       }
-      return current as T;
+      return read(current);
     },
     setModuleState: <T,>(moduleId: string, next: Partial<T>) => {
       const canonicalId = canonicalModuleId(moduleId);
@@ -469,7 +458,7 @@ export function PadPilotProvider(props: ParentProps) {
           ...(toRecord(moduleStateMap[canonicalId]) ?? {}),
           ...patch,
         };
-        if (!getModuleStateCodec<unknown>(canonicalId) && serializeJsonState(cachedValue) === null) {
+        if (!getModuleStateCodec(canonicalId) && serializeJsonState(cachedValue) === null) {
           return;
         }
         pendingPreHydrationModulePatches.set(canonicalId, queuedPatch);
@@ -479,30 +468,30 @@ export function PadPilotProvider(props: ParentProps) {
       }
       commitModuleState(canonicalId, next);
     },
-    getEditorViewState: <T,>(scopeId: string, fallback: T) => {
+    getEditorViewState: <T,>(scopeId: string, fallback: T, read: PadPilotStateReader<T>) => {
       const current = editorViewStateMap[scopeId];
       if (current === undefined) {
-        return fallback;
+        return read(fallback);
       }
       const currentRecord = toRecord(current);
       const fallbackRecord = toRecord(fallback);
       if (currentRecord && fallbackRecord) {
-        return { ...fallbackRecord, ...currentRecord } as T;
+        return read({ ...fallbackRecord, ...currentRecord });
       }
-      return current as T;
+      return read(current);
     },
     setEditorViewState: <T,>(scopeId: string, next: Partial<T>) => {
-      const prev = (editorViewStateMap[scopeId] ?? {}) as T;
+      const prev = editorViewStateMap[scopeId] ?? {};
       const prevRecord = toRecord(prev);
       const mergedValue = {
         ...(prevRecord ?? {}),
-        ...(next as object),
-      } as T;
+        ...(toRecord(next) ?? {}),
+      };
       const payload = serializeJsonState(mergedValue);
       if (payload === null) {
         return;
       }
-      setEditorViewStateMap(scopeId, mergedValue as unknown);
+      setEditorViewStateMap(scopeId, mergedValue);
       moduleSdk.setEditorViewState(scopeId, payload);
     },
   };
@@ -584,16 +573,25 @@ export function useMidi() {
   };
 }
 
+function createStatePort<T>(fallback: T, read: PadPilotStateReader<T>, get: () => T, set: (next: Partial<T>) => void) {
+  const initial = read(fallback);
+  const value = createMemo<T>((previous) => { try { return get(); } catch { return previous; } }, initial);
+  const update = (next: Partial<T>) => {
+    const previous = toRecord(value()); const patch = toRecord(next);
+    try { read(previous && patch ? { ...previous, ...patch } : next); } catch { return; }
+    set(next);
+  };
+  return [value, update] as const;
+}
+
 export function useModuleState<T>(
   moduleId: string,
-  fallback: T
+  fallback: T,
+  read: PadPilotStateReader<T>
 ) {
   const context = usePadPilotContext();
 
-  const value = createMemo(() => context.getModuleState<T>(moduleId, fallback));
-  const update = (next: Partial<T>) =>
-    context.setModuleState<T>(moduleId, next);
-  return [value, update] as const;
+  return createStatePort(fallback, read, () => context.getModuleState<T>(moduleId, fallback, read), next => context.setModuleState<T>(moduleId, next));
 }
 
 export function useModuleInteraction(moduleId: string) {
@@ -633,15 +631,11 @@ export function useProfile() {
 
 export function useEditorViewState<T>(
   scopeId: string,
-  fallback: T
+  fallback: T,
+  read: PadPilotStateReader<T>
 ) {
   const context = usePadPilotContext();
-  const value = createMemo(() =>
-    context.getEditorViewState<T>(scopeId, fallback)
-  );
-  const update = (next: Partial<T>) =>
-    context.setEditorViewState<T>(scopeId, next);
-  return [value, update] as const;
+  return createStatePort(fallback, read, () => context.getEditorViewState<T>(scopeId, fallback, read), next => context.setEditorViewState<T>(scopeId, next));
 }
 
 export const IO = {

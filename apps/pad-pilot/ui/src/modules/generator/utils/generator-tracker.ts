@@ -1,5 +1,6 @@
 import { GENERATOR_MIDI_BEATS_PER_BAR, GENERATOR_MIDI_DRUM_CHANNEL, GENERATOR_MIDI_TICKS_PER_QUARTER, MAX_GENERATOR_MIDI_NOTES_PER_TRACK, MAX_GENERATOR_MIDI_TOTAL_NOTES, MAX_GENERATOR_MIDI_TRACK_NAME_BYTES, MAX_GENERATOR_MIDI_TRACKS, type GeneratorMidiComposition, type GeneratorMidiTrack } from "./midi-encoder";
-import { normalizeGeneratorIntentTags, type GeneratorLengthBars } from "./generator-options";
+import { normalizeGeneratorIntentTags } from "./generator-selector-options";
+import { type GeneratorLengthBars } from "./generator-option-catalog";
 import { type AbsoluteGeneratorNote, type GeneratorArrangementPlanHeader, type GeneratorIntentPlan, type GeneratorMidiTrackWithMetadata, type GeneratorMusicianPlan, type GeneratorTrackMetadata } from "./generator-contracts";
 import { MAX_DELTA_TRACKER_HEADER_BYTES, MAX_DELTA_TRACKER_METADATA_LINE_BYTES, MAX_DELTA_TRACKER_METADATA_LINES, MAX_DELTA_TRACKER_METADATA_VALUE_BYTES, MAX_DELTA_TRACKER_UTF8_BYTES, MAX_TRACKER_TICK, schemaMetadataLine, tagSetHas, TRACK_LENGTH_TOLERANCE_TICKS } from "./generator-prompt";
 import { clampInteger } from "../../../utils/math";
@@ -102,14 +103,14 @@ export function parseDeltaTickTracker(buffer: string) {
       continue;
     }
     totalNotes += notes.length;
-    const track = {
+    const track: GeneratorMidiTrackWithMetadata = {
       channel: drums ? GENERATOR_MIDI_DRUM_CHANNEL : channel,
       drums,
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       name,
       notes,
       program,
-    } satisfies GeneratorMidiTrackWithMetadata;
+    };
     tracks.push(track);
   }
 
@@ -124,7 +125,7 @@ export function parseDeltaTickTracker(buffer: string) {
   return {
     bpm,
     tracks,
-  } satisfies GeneratorMidiComposition;
+  };
 }
 
 export function normalizeTrackMetadataValue(value: string | undefined) {
@@ -194,8 +195,8 @@ export function parseTrackMetadata(header: string) {
   return metadata;
 }
 
-export function trackMetadata(track: GeneratorMidiTrack) {
-  return (track as GeneratorMidiTrackWithMetadata).metadata;
+export function trackMetadata(track: GeneratorMidiTrackWithMetadata) {
+  return track.metadata;
 }
 
 export function isSupportingTrack(track: GeneratorMidiTrack) {
@@ -250,12 +251,12 @@ export function absoluteTrackNotes(track: GeneratorMidiTrack) {
   return track.notes.map((note) => {
     cursor += clampInteger(note.deltaTicks, 0, MAX_TRACKER_TICK);
     return {
-      deltaTicks: 0,
+      deltaTicks: 0 as const,
       durationTicks: clampInteger(note.durationTicks, 1, MAX_TRACKER_TICK),
       note: clampInteger(note.note, 0, 127),
       tick: cursor,
       velocity: clampInteger(note.velocity, 1, 127),
-    } satisfies AbsoluteGeneratorNote;
+    };
   });
 }
 
@@ -555,16 +556,16 @@ export function styleTrackIdentity(track: GeneratorMidiTrack) {
 
 export function emptyStyleValidation() {
   return {
-    deductions: 0,
+    deductions: 0 as const,
     metrics: {
-      bassTracks: 0,
-      deductions: 0,
-      drumNotesPerBar: 0,
-      drumTracks: 0,
+      bassTracks: 0 as const,
+      deductions: 0 as const,
+      drumNotesPerBar: 0 as const,
+      drumTracks: 0 as const,
       requirements: [],
     },
     reasons: [],
-  } satisfies GeneratorStyleValidationReport;
+  };
 }
 
 export function validateGeneratorStyleFit(composition: GeneratorMidiComposition, intentPlan: GeneratorIntentPlan, lengthBars: GeneratorLengthBars) {
@@ -641,7 +642,7 @@ export function validateGeneratorStyleFit(composition: GeneratorMidiComposition,
       requirements,
     },
     reasons,
-  } satisfies GeneratorStyleValidationReport;
+  };
 }
 
 export function phraseVariationCount(composition: GeneratorMidiComposition, lengthBars: GeneratorLengthBars) {

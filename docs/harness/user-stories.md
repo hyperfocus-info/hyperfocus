@@ -450,7 +450,7 @@ US-UI-022: As a user, I load earlier active-thread messages explicitly while tra
 
 US-UI-018: As a user, I see shared popovers render through portal-backed primitives so that compact overlays (inbox, quick replies, interaction panels) stay well-positioned.
 
-US-UI-019: As a user, I open Codex usage from the header to see account quota remaining and reset times, local session/lifetime tokens, and observed sources by project/thread/role/model/runtime. Tooltips explain cache and scope; confirmed local reset waits for acknowledgement and never changes provider quota. Missing account data and unknown attribution remain explicit.
+US-UI-019: As a user, I open Codex usage from the header to see account quota remaining and reset times, local session/lifetime tokens, and observed sources by project/thread/role/model/runtime. Tooltips explain cache and scope; confirmed local reset waits for acknowledgement and never changes provider quota. Missing account data and unknown attribution remain explicit. Growing source histories retain bounded details plus explicit overflow totals, and reconnect remains available.
 
 US-UI-022: As a user, I open an IDE workbench with real project file navigation, read-only file previews, content search, Git status, editor tabs, command palette, resizable panes, terminal file-link handoff, status context, custom menus, themes, shortcut handling, notifications, and loading placeholders, while project switches cannot leak stale files or asynchronous results into the active project.
 

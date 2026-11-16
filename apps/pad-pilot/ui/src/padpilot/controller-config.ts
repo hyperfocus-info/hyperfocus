@@ -190,9 +190,9 @@ export function createTemplateCustomLayout(name = "Custom Layout", id: string = 
 
 export function createBlankAxisBinding() {
   return ({
-    sourceIndex: 0,
-    inverted: false,
-  } satisfies PadPilotControllerAxisBinding);
+    sourceIndex: 0 as const,
+    inverted: false as const,
+  });
 }
 
 export function createDefaultControllerConfig() {
@@ -267,7 +267,7 @@ export function normalizeControllerConfig(config?: Partial<PadPilotControllerCon
   return {
     rows,
     customLayouts,
-  } satisfies PadPilotControllerConfigState;
+  };
 }
 
 export function controllerLayoutKindFromProto(value: ControllerLayoutKind) {

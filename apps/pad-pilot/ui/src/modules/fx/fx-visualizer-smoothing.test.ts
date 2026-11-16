@@ -1,3 +1,5 @@
+import { create } from "@bufbuild/protobuf";
+import { VisualizerFrameSchema } from "../../proto/generated/fx-chain-pb";
 import { describe, expect, it } from "bun:test";
 import {
   FX_VISUALIZER_DISPLAY_BIN_COUNT,
@@ -5,8 +7,8 @@ import {
   smoothVisualizerFrame,
 } from "./fx-visualizer-smoothing";
 
-function createVisualizerFrame(overrides: Record<string, unknown> = {}) {
-  return {
+function createVisualizerFrame(overrides: Parameters<typeof create<typeof VisualizerFrameSchema>>[1] = {}) {
+  return create(VisualizerFrameSchema, {
     gainReductionDb: 0,
     masterInputPeakDb: -120,
     masterInputPeakDbLeft: -120,
@@ -18,7 +20,7 @@ function createVisualizerFrame(overrides: Record<string, unknown> = {}) {
     sequence: 0n,
     taps: [],
     ...overrides,
-  } as any;
+  });
 }
 
 describe("FX visualizer smoothing helpers", () => {
@@ -127,8 +129,9 @@ describe("FX visualizer smoothing helpers", () => {
     expect(smoothed.gainReductionDb).toBeLessThan(next.gainReductionDb);
     expect(smoothed.taps[0]?.waveform.length).toBe(4);
     expect(smoothed.nodeFrames[0]?.payload.case).toBe("compressor");
-    expect((smoothed.nodeFrames[0]?.payload.value as any).gainCurve[0]).toBeGreaterThan(0);
-    expect((smoothed.nodeFrames[0]?.payload.value as any).gainCurve[2]).toBeGreaterThan(-1);
+    if (smoothed.nodeFrames[0]?.payload.case !== "compressor") throw Error("Expected compressor");
+    expect((smoothed.nodeFrames[0].payload.value).gainCurve[0]).toBeGreaterThan(0);
+    expect((smoothed.nodeFrames[0]!.payload.value).gainCurve[2]).toBeGreaterThan(-1);
   });
 
   it("releases missing node frames smoothly instead of dropping them immediately", () => {
@@ -160,7 +163,8 @@ describe("FX visualizer smoothing helpers", () => {
     expect(smoothed.nodeFrames).toHaveLength(1);
     expect(smoothed.nodeFrames[0]?.nodeId).toBe(7);
     expect(smoothed.nodeFrames[0]?.outputPeakDb).toBeLessThan(-9);
-    expect(((smoothed.nodeFrames[0]?.payload.value as any).combResponse[0] as number)).toBeGreaterThan(0);
-    expect(((smoothed.nodeFrames[0]?.payload.value as any).combResponse[0] as number)).toBeLessThan(1);
+    if (smoothed.nodeFrames[0]?.payload.case !== "phaser") throw Error("Expected phaser");
+    expect(smoothed.nodeFrames[0].payload.value.combResponse[0]).toBeGreaterThan(0);
+    expect((smoothed.nodeFrames[0]!.payload.value.combResponse[0])).toBeLessThan(1);
   });
 });

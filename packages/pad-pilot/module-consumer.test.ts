@@ -1,10 +1,11 @@
+import { spawnBackgroundProcessSync } from '@hyperfocus/desktop-runtime/process';
 import { expect, test } from "bun:test";
 import path from "node:path";
 
 const fixture = path.join(import.meta.dir, "fixtures", "module-consumer", "verify.ts");
 
 test("a consumer can validate and bundle a Module using only public exports", async () => {
-  const executed = Bun.spawnSync({
+  const executed = spawnBackgroundProcessSync({
     cmd: [process.execPath, fixture],
     cwd: import.meta.dir,
     stdout: "pipe",

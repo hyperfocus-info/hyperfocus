@@ -1,3 +1,8 @@
+import { readfxState } from "../modules/fx/fx-chain-state";
+const readNotes = (value: unknown) => z.object({ notes: z.string(), value: z.unknown().optional() }).passthrough().parse(value);
+const readTheme = (value: unknown) => z.object({ notes: z.string(), theme: z.string() }).passthrough().parse(value);
+const readPanel = (value: unknown) => z.object({ panel: z.string(), value: z.unknown().optional() }).passthrough().parse(value);
+import { z } from "zod";
 import { afterEach, expect, it } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createUiTest } from "../../../utils/tests/test-harness";
@@ -23,7 +28,7 @@ createUiTest("PadPilotProvider", () => {
     nextState.master!.wetDry = 0.35;
 
     const Consumer = () => {
-      const [state] = useModuleState("fx", createDefaultFxChainState());
+      const [state] = useModuleState("fx", createDefaultFxChainState(), readfxState);
       return <span data-testid="wet-dry">{state().master?.wetDry}</span>;
     };
 
@@ -47,9 +52,18 @@ createUiTest("PadPilotProvider", () => {
     });
   });
 
+  it("retains the last schema-admitted state after malformed host JSON", async () => {
+    const Consumer = () => { const [state] = useModuleState("editor", { notes: "fallback" }, readNotes); return <span data-testid="admitted-notes">{state().notes}</span>; };
+    render(() => <PadPilotProvider><Consumer /></PadPilotProvider>);
+    const publish = (notes: unknown) => window.padpilotHostReceive?.({ activeModuleId: "editor", selectedModuleId: "editor", type: "hostSyncProto", activeModuleStateBase64: bytesToBase64(new TextEncoder().encode(JSON.stringify({ notes }))) });
+    publish("valid"); await waitFor(() => expect(screen.getByTestId("admitted-notes").textContent).toBe("valid"));
+    publish(42); await Promise.resolve(); expect(screen.getByTestId("admitted-notes").textContent).toBe("valid");
+    publish("recovered"); await waitFor(() => expect(screen.getByTestId("admitted-notes").textContent).toBe("recovered"));
+  });
+
   it("decodes UTF-8 generic module state from the host", async () => {
     const Consumer = () => {
-      const [state] = useModuleState("editor", { notes: "fallback" });
+      const [state] = useModuleState("editor", { notes: "fallback" }, readNotes);
       return <span data-testid="unicode-module-state">{state().notes}</span>;
     };
 
@@ -76,7 +90,7 @@ createUiTest("PadPilotProvider", () => {
 
   it("clears cached module state when the host publishes an empty canonical payload", async () => {
     const Consumer = () => {
-      const [state] = useModuleState("editor", { notes: "fallback" });
+      const [state] = useModuleState("editor", { notes: "fallback" }, readNotes);
       return <span data-testid="empty-module-state">{state().notes}</span>;
     };
     render(() => (
@@ -104,8 +118,8 @@ createUiTest("PadPilotProvider", () => {
 
   it("does not mutate local module or editor state when persistence serialization fails", async () => {
     const Consumer = () => {
-      const [moduleState, setModuleState] = useModuleState<{ notes: string; value?: unknown }>("editor", { notes: "fallback" });
-      const [viewState, setViewState] = useEditorViewState<{ panel: string; value?: unknown }>("editor-panel", { panel: "host" });
+      const [moduleState, setModuleState] = useModuleState<{ notes: string; value?: unknown }>("editor", { notes: "fallback" }, readNotes);
+      const [viewState, setViewState] = useEditorViewState<{ panel: string; value?: unknown }>("editor-panel", { panel: "host" }, readPanel);
       return (
         <>
           <span data-testid="serialization-module-state">{moduleState().notes}</span>
@@ -151,7 +165,7 @@ createUiTest("PadPilotProvider", () => {
       backend: {
         addEventListener: () => 0,
         emitEvent: (eventId, payload) => {
-          nativeInvocations.push({ eventId, payload: payload as Record<string, unknown> });
+          nativeInvocations.push({ eventId, payload: z.record(z.unknown()).parse(payload) });
         },
       },
       initializationData: {
@@ -160,7 +174,7 @@ createUiTest("PadPilotProvider", () => {
     };
 
     const Consumer = () => {
-      const [state] = useModuleState("fx", createDefaultFxChainState());
+      const [state] = useModuleState("fx", createDefaultFxChainState(), readfxState);
       return <span data-testid="default-wet-dry">{state().master?.wetDry}</span>;
     };
 
@@ -176,8 +190,8 @@ createUiTest("PadPilotProvider", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 25));
 
     const intentTypes = nativeInvocations.map((invocation) => {
-      const params = invocation.payload.params as unknown[] | undefined;
-      return JSON.parse(String(params?.[0] ?? "{}")).type as string | undefined;
+      const params = z.union([z.array(z.unknown()),z.undefined()]).parse(invocation.payload.params);
+      return z.union([z.string(),z.undefined()]).parse(JSON.parse(String(params?.[0] ?? "{}")).type);
     });
     expect(intentTypes.includes("setModuleStateProto")).toBe(false);
     expect(intentTypes.includes("setModuleState")).toBe(false);
@@ -189,7 +203,7 @@ createUiTest("PadPilotProvider", () => {
       backend: {
         addEventListener: () => 0,
         emitEvent: (eventId, payload) => {
-          nativeInvocations.push({ eventId, payload: payload as Record<string, unknown> });
+          nativeInvocations.push({ eventId, payload: z.record(z.unknown()).parse(payload) });
         },
       },
       initializationData: {
@@ -198,7 +212,7 @@ createUiTest("PadPilotProvider", () => {
     };
 
     const Consumer = () => {
-      const [state, setState] = useModuleState("editor", { notes: "fallback", theme: "default" });
+      const [state, setState] = useModuleState("editor", { notes: "fallback", theme: "default" }, readTheme);
       return (
         <>
           <span data-testid="queued-module-state">{state().notes}:{state().theme}</span>
@@ -216,8 +230,8 @@ createUiTest("PadPilotProvider", () => {
     expect(screen.getByTestId("queued-module-state").textContent).toBe("local:default");
     await new Promise((resolve) => window.setTimeout(resolve, 25));
     const intentsBeforeHydration = nativeInvocations.map((invocation) => {
-      const params = invocation.payload.params as unknown[] | undefined;
-      return JSON.parse(String(params?.[0] ?? "{}")) as { type?: string };
+      const params = z.union([z.array(z.unknown()),z.undefined()]).parse(invocation.payload.params);
+      return z.object({type:z.string().optional()}).passthrough().parse(JSON.parse(String(params?.[0] ?? "{}")));
     });
     expect(intentsBeforeHydration.some((intent) => intent.type === "setModuleState")).toBe(false);
 
@@ -232,8 +246,8 @@ createUiTest("PadPilotProvider", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 25));
 
     const stateIntents = nativeInvocations.flatMap((invocation) => {
-      const params = invocation.payload.params as unknown[] | undefined;
-      const intent = JSON.parse(String(params?.[0] ?? "{}")) as { moduleId?: string; payload?: string; type?: string };
+      const params = z.union([z.array(z.unknown()),z.undefined()]).parse(invocation.payload.params);
+      const intent = z.object({moduleId:z.string().optional(),payload:z.string().optional(),type:z.string().optional()}).passthrough().parse(JSON.parse(String(params?.[0] ?? "{}")));
       return intent.type === "setModuleState" && intent.moduleId === "editor" ? [intent] : [];
     });
     expect(stateIntents).toHaveLength(1);
@@ -261,7 +275,7 @@ createUiTest("PadPilotProvider", () => {
     staleHostState.revision = 3n;
 
     const Consumer = () => {
-      const [state] = useModuleState("fx", createDefaultFxChainState());
+      const [state] = useModuleState("fx", createDefaultFxChainState(), readfxState);
       const interaction = useModuleInteraction("fx");
       return (
         <>
@@ -398,7 +412,7 @@ createUiTest("PadPilotProvider", () => {
       backend: {
         addEventListener: () => 0,
         emitEvent: (eventId, payload) => {
-          nativeInvocations.push({ eventId, payload: payload as Record<string, unknown> });
+          nativeInvocations.push({ eventId, payload: z.record(z.unknown()).parse(payload) });
         },
       },
       initializationData: {
@@ -442,7 +456,7 @@ createUiTest("PadPilotProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("controller-row-count").textContent).toBe("2");
       expect(nativeInvocations.some((entry) => {
-        const params = entry.payload.params as unknown[] | undefined;
+        const params = z.union([z.array(z.unknown()),z.undefined()]).parse(entry.payload.params);
         return JSON.parse(String(params?.[0] ?? "{}")).type === "setControllerConfig";
       })).toBe(true);
     });
@@ -512,7 +526,7 @@ createUiTest("PadPilotProvider", () => {
       backend: {
         addEventListener: () => 0,
         emitEvent: (eventId, payload) => {
-          nativeInvocations.push({ eventId, payload: payload as Record<string, unknown> });
+          nativeInvocations.push({ eventId, payload: z.record(z.unknown()).parse(payload) });
         },
       },
       initializationData: {
@@ -535,7 +549,7 @@ createUiTest("PadPilotProvider", () => {
 
     const Consumer = () => {
       const controller = useControllerConfig();
-      const [state] = useModuleState("fx", createDefaultFxChainState());
+      const [state] = useModuleState("fx", createDefaultFxChainState(), readfxState);
       const inputDevices = useInputDevices();
       return (
         <>
@@ -564,7 +578,7 @@ createUiTest("PadPilotProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("controller-row-count").textContent).toBe("2");
       expect(nativeInvocations.some((entry) => {
-        const params = entry.payload.params as unknown[] | undefined;
+        const params = z.union([z.array(z.unknown()),z.undefined()]).parse(entry.payload.params);
         return JSON.parse(String(params?.[0] ?? "{}")).type === "setControllerConfig";
       })).toBe(true);
     });
@@ -603,7 +617,7 @@ createUiTest("PadPilotProvider", () => {
       backend: {
         addEventListener: () => 0,
         emitEvent: (eventId, payload) => {
-          nativeInvocations.push({ eventId, payload: payload as Record<string, unknown> });
+          nativeInvocations.push({ eventId, payload: z.record(z.unknown()).parse(payload) });
         },
       },
       initializationData: {
@@ -661,7 +675,7 @@ createUiTest("PadPilotProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("controller-row-count").textContent).toBe("2");
       expect(nativeInvocations.some((entry) => {
-        const params = entry.payload.params as unknown[] | undefined;
+        const params = z.union([z.array(z.unknown()),z.undefined()]).parse(entry.payload.params);
         return JSON.parse(String(params?.[0] ?? "{}")).type === "setControllerConfig";
       })).toBe(true);
     });

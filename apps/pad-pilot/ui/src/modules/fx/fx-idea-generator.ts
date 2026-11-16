@@ -101,7 +101,7 @@ export function generateFxRecipe(state: FxChainState, chainId: number, recipe: F
     node.mix = blueprint.mix ?? 1;
     const config = resolveNodeConfig(node);
     for (const [key, value] of Object.entries(blueprint.values ?? {})) {
-      findNodeControlDefinition(node.type, key)?.setValue(config, value as never);
+      findNodeControlDefinition(node.type, key)?.setValue(config, value);
     }
     return syncNodeLegacyParams(node);
   });

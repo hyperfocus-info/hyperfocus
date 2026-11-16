@@ -368,6 +368,8 @@ export type UsageSource = z.infer<typeof usageSourceSchema>;
 export const tokenUsageStateSchema = z.object({
   codexLimits: codexLimitsSchema.optional(),
   sources: z.array(usageSourceSchema).optional(),
+  // Sources omitted from the bounded detail projection retain attributed totals.
+  sourceOverflow: z.object({ count: z.number().int().nonnegative(), totals: tokenUsageTotalsSchema }).optional(),
   session: tokenUsageTotalsSchema,
   lifetime: tokenUsageTotalsSchema,
   resetAt: z.string().datetime().or(z.string().min(1)).optional()

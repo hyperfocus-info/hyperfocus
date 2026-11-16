@@ -1,3 +1,41 @@
+import { createContext, useContext } from "solid-js";
+const EditorOverlaysControls = createContext<{
+  centerState: () => { centerTab: EditorCenterTab; centerOpen: boolean; centerContent?: EditorCenterContentState };
+  tourState: () => { open: boolean; step: number };
+  centerRef: (element: HTMLElement) => void;
+  onCenterTabChange?: (tab: EditorCenterTab) => void;
+  onTutorialStepChange?: (step: number) => void;
+  onTutorialClose?: (reason: "complete" | "dismiss" | "skip") => void;
+}>();
+const EditorWorkbenchControls = createContext<{
+  resourceNav: HTMLElement;
+  projectBrowser: EditorProjectBrowserState;
+  selectionInspector: () => ShellViewState["selectionInspector"];
+  sidebarRef: (element: HTMLElement) => void;
+  mainSlot: (element: HTMLDivElement) => void;
+  inspectorRef: (element: HTMLElement) => void;
+  consoleRef: (element: HTMLElement) => void;
+  workbenchApiRef: (api: WorkbenchShellApi) => void;
+  layout: () => WorkbenchLayout;
+  narrowPane: () => EditorNarrowPane;
+  onNarrowPaneChange: (pane: EditorNarrowPane) => void;
+  onLayoutChange: (layout: WorkbenchLayout, reason: WorkbenchLayoutChangeReason) => void;
+}>();
+const ContextualInspectorControls = createContext<{ ref: (element: HTMLElement) => void; state: () => ShellViewState["selectionInspector"]; hidden: () => boolean }>();
+const ConsolePanelControls = createContext<{ ref: (element: HTMLElement) => void; hidden: () => boolean }>();
+const ModeNavigationControls = createContext<{ mode: () => EditorMode; onModeChange: (mode: EditorMode) => void }>();
+const ProjectSidebarControls = createContext<{
+  ref: (element: HTMLElement) => void;
+  resourceNav: HTMLElement;
+  state: EditorProjectBrowserState;
+  hidden: () => boolean;
+}>();
+const ProjectSceneTreeControls = createContext<{ scenes: () => EditorProjectBrowserState["scenes"] }>();
+const ProjectEntityTreeControls = createContext<{ entities: () => EditorProjectBrowserState["entities"] }>();
+const ProjectAssetListControls = createContext<{ assets: () => EditorProjectBrowserState["assets"] }>();
+const EditorScriptFileListControls = createContext<{ state: EditorScriptBrowserState }>();
+const SidebarToolIconControls = createContext<{ name: "learn" | "settings" | "build" | "history" }>();
+const SidebarSectionControls = createContext<{ label: string; action: string; actionLabel: string; class?: string; children: JSX.Element }>();
 import * as stylex from "@stylexjs/stylex";
 import { Button, CoachmarkTour, SegmentedControl, Tab, TabList, TabPanel, Tabs, TreeRoot, WorkbenchShell, normalizeWorkbenchLayout, type CoachmarkStep, type WorkbenchLayout, type WorkbenchLayoutChangeReason, type WorkbenchShellApi } from "@hyperfocus/ui";
 import { createSignal, For, Show, type JSX } from "solid-js";
@@ -478,15 +516,17 @@ function EditorOverlays(props: {
   onCenterTabChange?: (tab: EditorCenterTab) => void;
   onTutorialStepChange?: (step: number) => void;
   onTutorialClose?: (reason: "complete" | "dismiss" | "skip") => void;
-}) {
+}) { return <EditorOverlaysControls.Provider value={props}><EditorOverlaysContent /></EditorOverlaysControls.Provider>; }
+function EditorOverlaysContent() { const controls = useContext(EditorOverlaysControls); if (!controls) throw new Error("Missing EditorOverlays controls");
+
   return (
     <>
       <section
-        {...stylex.attrs(styles.center, !props.centerState().centerOpen && styles.hidden)}
+        {...stylex.attrs(styles.center, !controls.centerState().centerOpen && styles.hidden)}
         classList={{ "editor-center": true }}
         id="editor-center"
-        hidden={!props.centerState().centerOpen}
-        ref={props.centerRef}
+        hidden={!controls.centerState().centerOpen}
+        ref={controls.centerRef}
         data-solid-state="center"
       >
         <div {...stylex.attrs(styles.centerDialog)} classList={{ "editor-center-dialog": true }} role="dialog" aria-modal="true" aria-labelledby="editor-center-title">
@@ -497,16 +537,16 @@ function EditorOverlays(props: {
           <Tabs
             class="editor-center-tabs-root"
             id="editor-center-tabs"
-            value={props.centerState().centerTab}
-            onValueChange={(value) => { if (isEditorCenterTab(value)) props.onCenterTabChange?.(value); }}
+            value={controls.centerState().centerTab}
+            onValueChange={(value) => { if (isEditorCenterTab(value)) controls.onCenterTabChange?.(value); }}
           >
             <TabList class={stylex.attrs(styles.centerTabs).class} aria-label="Project center">
               {centerTabs.map((tab) => <Tab value={tab.id} data-editor-center-tab={tab.id} class={stylex.attrs(styles.centerTab).class}>{tab.label}</Tab>)}
             </TabList>
             {centerTabs.map((tab) => (
               <TabPanel value={tab.id}>
-                {props.centerState().centerTab === tab.id
-                  ? <main {...stylex.attrs(styles.centerContent)} id="editor-center-content"><EditorCenterContent state={props.centerState().centerContent} /></main>
+                {controls.centerState().centerTab === tab.id
+                  ? <main {...stylex.attrs(styles.centerContent)} id="editor-center-content"><EditorCenterContent state={controls.centerState().centerContent} /></main>
                   : null}
               </TabPanel>
             ))}
@@ -514,15 +554,16 @@ function EditorOverlays(props: {
         </div>
       </section>
       <CoachmarkTour
-        open={props.tourState().open}
-        initialStep={props.tourState().step}
+        open={controls.tourState().open}
+        initialStep={controls.tourState().step}
         steps={editorTourSteps}
         label="Editor essentials tour"
-        onStepChange={(step) => props.onTutorialStepChange?.(step)}
-        onClose={(reason) => props.onTutorialClose?.(reason)}
+        onStepChange={(step) => controls.onTutorialStepChange?.(step)}
+        onClose={(reason) => controls.onTutorialClose?.(reason)}
       />
     </>
   );
+
 }
 
 function sameWorkbenchLayout(left: WorkbenchLayout, right: WorkbenchLayout) {
@@ -547,37 +588,45 @@ function EditorWorkbench(props: {
   narrowPane: () => EditorNarrowPane;
   onNarrowPaneChange: (pane: EditorNarrowPane) => void;
   onLayoutChange: (layout: WorkbenchLayout, reason: WorkbenchLayoutChangeReason) => void;
-}) {
-  const sidebar = <ProjectSidebar ref={props.sidebarRef} resourceNav={props.resourceNav} state={props.projectBrowser} hidden={() => props.layout().sidebarCollapsed} />;
-  const main = <div {...stylex.attrs(styles.runtimeSlot)} ref={props.mainSlot} data-runtime-owner="engine" />;
-  const inspector = <ContextualInspector ref={props.inspectorRef} state={props.selectionInspector} hidden={() => props.layout().inspectorCollapsed} />;
-  const consolePanel = <ConsolePanel ref={props.consoleRef} hidden={() => props.layout().bottomCollapsed} />;
+}) { return <EditorWorkbenchControls.Provider value={props}><EditorWorkbenchContent /></EditorWorkbenchControls.Provider>; }
+function EditorWorkbenchContent() { const controls = useContext(EditorWorkbenchControls); if (!controls) throw new Error("Missing EditorWorkbench controls");
+
+  const sidebar = <ProjectSidebar ref={controls.sidebarRef} resourceNav={controls.resourceNav} state={controls.projectBrowser} hidden={() => controls.layout().sidebarCollapsed} />;
+  const main = <div {...stylex.attrs(styles.runtimeSlot)} ref={controls.mainSlot} data-runtime-owner="engine" />;
+  const inspector = <ContextualInspector ref={controls.inspectorRef} state={controls.selectionInspector} hidden={() => controls.layout().inspectorCollapsed} />;
+  const consolePanel = <ConsolePanel ref={controls.consoleRef} hidden={() => controls.layout().bottomCollapsed} />;
   return <div {...stylex.attrs(styles.workbenchFrame)}>
-    <WorkbenchShell apiRef={props.workbenchApiRef} layout={props.layout} sidebar={sidebar} main={main} inspector={inspector} bottomPanel={consolePanel} panelLabels={{ sidebar: "project browser", inspector: "contextual inspector", bottom: "console and build output" }} onLayoutChange={(layout, reason) => props.onLayoutChange(layout, reason)} />
+    <WorkbenchShell apiRef={controls.workbenchApiRef} layout={controls.layout} sidebar={sidebar} main={main} inspector={inspector} bottomPanel={consolePanel} panelLabels={{ sidebar: "project browser", inspector: "contextual inspector", bottom: "console and build output" }} onLayoutChange={(layout, reason) => controls.onLayoutChange(layout, reason)} />
     <SegmentedControl
       class="editor-narrow-pane-switcher"
       ariaLabel="Editor panes"
-      value={props.narrowPane()}
+      value={controls.narrowPane()}
       options={[{ value: "project", label: "Project" }, { value: "main", label: "Canvas" }, { value: "inspector", label: "Inspector" }]}
-      onValueChange={props.onNarrowPaneChange}
+      onValueChange={controls.onNarrowPaneChange}
     />
   </div>;
+
 }
 
-function ContextualInspector(props: { ref: (element: HTMLElement) => void; state: () => ShellViewState["selectionInspector"]; hidden: () => boolean }) {
+function ContextualInspector(props: { ref: (element: HTMLElement) => void; state: () => ShellViewState["selectionInspector"]; hidden: () => boolean }) { return <ContextualInspectorControls.Provider value={props}><ContextualInspectorContent /></ContextualInspectorControls.Provider>; }
+function ContextualInspectorContent() { const controls = useContext(ContextualInspectorControls); if (!controls) throw new Error("Missing ContextualInspector controls");
+
   return (
-    <section {...stylex.attrs(styles.contextualInspector)} class="contextual-inspector" aria-label="Contextual inspector" ref={props.ref} hidden={props.hidden()} aria-hidden={props.hidden()}>
+    <section {...stylex.attrs(styles.contextualInspector)} class="contextual-inspector" aria-label="Contextual inspector" ref={controls.ref} hidden={controls.hidden()} aria-hidden={controls.hidden()}>
       <div class="contextual-inspector-title"><div><span>INSPECTOR</span><strong>Selection</strong></div><Button variant="ghost" size="icon" tooltip="Hide inspector" data-editor-action="toggle-inspector" aria-label="Hide inspector">×</Button></div>
       <div id="project-selection-inspector">
-        <Show when={props.state()}>{(state) => <SelectionInspector project={state().project} selection={state().selection} />}</Show>
+        <Show when={controls.state()}>{(state) => <SelectionInspector project={state().project} selection={state().selection} />}</Show>
       </div>
     </section>
   );
+
 }
 
-function ConsolePanel(props: { ref: (element: HTMLElement) => void; hidden: () => boolean }) {
+function ConsolePanel(props: { ref: (element: HTMLElement) => void; hidden: () => boolean }) { return <ConsolePanelControls.Provider value={props}><ConsolePanelContent /></ConsolePanelControls.Provider>; }
+function ConsolePanelContent() { const controls = useContext(ConsolePanelControls); if (!controls) throw new Error("Missing ConsolePanel controls");
+
   return (
-    <section {...stylex.attrs(styles.console)} id="editor-console" ref={props.ref} data-solid-state="console" hidden={props.hidden()} aria-hidden={props.hidden()}>
+    <section {...stylex.attrs(styles.console)} id="editor-console" ref={controls.ref} data-solid-state="console" hidden={controls.hidden()} aria-hidden={controls.hidden()}>
       <header {...stylex.attrs(styles.consoleHeader)}>
         <strong>Console &amp; build output</strong>
         <Button as="button" variant="ghost" size="icon" tooltip="Close console" data-editor-action="close-console" aria-label="Close console">×</Button>
@@ -585,17 +634,20 @@ function ConsolePanel(props: { ref: (element: HTMLElement) => void; hidden: () =
       <div {...stylex.attrs(styles.consoleOutput)} id="editor-console-output" role="log" aria-live="polite" />
     </section>
   );
+
 }
 
-function ModeNavigation(props: { mode: () => EditorMode; onModeChange: (mode: EditorMode) => void }) {
+function ModeNavigation(props: { mode: () => EditorMode; onModeChange: (mode: EditorMode) => void }) { return <ModeNavigationControls.Provider value={props}><ModeNavigationContent /></ModeNavigationControls.Provider>; }
+function ModeNavigationContent() { const controls = useContext(ModeNavigationControls); if (!controls) throw new Error("Missing ModeNavigation controls");
+
   return (
-    <Tabs style={{ display: "contents" }} value={props.mode()} onValueChange={(value) => { if (isEditorMode(value)) props.onModeChange(value); }}>
+    <Tabs style={{ display: "contents" }} value={controls.mode()} onValueChange={(value) => { if (isEditorMode(value)) controls.onModeChange(value); }}>
       <TabList class={stylex.attrs(styles.modeNav).class} aria-label="Editor modes" data-solid-state="modes">
         {modes.map((mode) => (
           <Tab
             value={mode.id}
             data-editor-mode={mode.id}
-            class={`${stylex.attrs(styles.modeButton, props.mode() === mode.id && styles.activeMode).class ?? ""}${props.mode() === mode.id ? " is-active" : ""}`}
+            class={`${stylex.attrs(styles.modeButton, controls.mode() === mode.id && styles.activeMode).class ?? ""}${controls.mode() === mode.id ? " is-active" : ""}`}
           >
             <span>{mode.label}</span><kbd {...stylex.attrs(styles.shortcut)}>{mode.shortcut}</kbd>
           </Tab>
@@ -603,6 +655,7 @@ function ModeNavigation(props: { mode: () => EditorMode; onModeChange: (mode: Ed
       </TabList>
     </Tabs>
   );
+
 }
 
 function ProjectSidebar(props: {
@@ -610,24 +663,26 @@ function ProjectSidebar(props: {
   resourceNav: HTMLElement;
   state: EditorProjectBrowserState;
   hidden: () => boolean;
-}) {
+}) { return <ProjectSidebarControls.Provider value={props}><ProjectSidebarContent /></ProjectSidebarControls.Provider>; }
+function ProjectSidebarContent() { const controls = useContext(ProjectSidebarControls); if (!controls) throw new Error("Missing ProjectSidebar controls");
+
   return (
-    <aside {...stylex.attrs(styles.sidebar)} classList={{ "project-sidebar": true }} aria-label="Project browser" ref={props.ref} data-solid-state="project-browser" hidden={props.hidden()} aria-hidden={props.hidden()}>
+    <aside {...stylex.attrs(styles.sidebar)} classList={{ "project-sidebar": true }} aria-label="Project browser" ref={controls.ref} data-solid-state="project-browser" hidden={controls.hidden()} aria-hidden={controls.hidden()}>
       <header {...stylex.attrs(styles.projectHeader)} classList={{ "project-header": true }}>
-        <div {...stylex.attrs(styles.headerIdentity)}><span {...stylex.attrs(styles.eyebrow)}>PROJECT</span><strong id="editor-project-name">{props.state.projectName}</strong><small {...stylex.attrs(styles.projectState)} classList={{ "is-dirty": props.state.dirty }} id="editor-project-state">{props.state.dirty ? "Unsaved changes" : "Saved"}</small></div>
+        <div {...stylex.attrs(styles.headerIdentity)}><span {...stylex.attrs(styles.eyebrow)}>PROJECT</span><strong id="editor-project-name">{controls.state.projectName}</strong><small {...stylex.attrs(styles.projectState)} classList={{ "is-dirty": controls.state.dirty }} id="editor-project-state">{controls.state.dirty ? "Unsaved changes" : "Saved"}</small></div>
         <Button variant="ghost" size="icon" tooltip="Collapse project browser" data-editor-action="toggle-sidebar" aria-label="Collapse project browser">☰</Button>
       </header>
       <div {...stylex.attrs(styles.quickActions)} classList={{ "project-quick-actions": true }}>
         <Button variant="secondary" size="small" tooltip="Create a new game" data-editor-action="new">New</Button>
         <Button variant="secondary" size="small" tooltip="Open a .hyperfocus project" data-editor-action="open">Open</Button>
         <Button variant="secondary" size="small" tooltip="Save portable project files (Ctrl/Cmd+S)" data-editor-action="save">Save</Button>
-        <Button variant="ghost" size="small" tooltip="Undo (Ctrl/Cmd+Z)" data-editor-action="undo" disabled={!props.state.canUndo}>↶</Button>
-        <Button variant="ghost" size="small" tooltip="Redo (Ctrl/Cmd+Y)" data-editor-action="redo" disabled={!props.state.canRedo}>↷</Button>
+        <Button variant="ghost" size="small" tooltip="Undo (Ctrl/Cmd+Z)" data-editor-action="undo" disabled={!controls.state.canUndo}>↶</Button>
+        <Button variant="ghost" size="small" tooltip="Redo (Ctrl/Cmd+Y)" data-editor-action="redo" disabled={!controls.state.canRedo}>↷</Button>
       </div>
-      <SidebarSection label="Scenes" action="create-scene" actionLabel="Create scene"><ProjectSceneTree scenes={() => props.state.scenes} /></SidebarSection>
-      <SidebarSection label="Entities" action="create-entity" actionLabel="Create entity"><ProjectEntityTree entities={() => props.state.entities} /></SidebarSection>
-      <SidebarSection label="Editors" action="fullscreen" actionLabel="Toggle viewport fullscreen" class="resource-section"><div id="resource-nav-slot" ref={(host) => host.append(props.resourceNav)} /></SidebarSection>
-      <SidebarSection label="Assets" action="import-assets" actionLabel="Import assets" class="assets-section"><ProjectAssetList assets={() => props.state.assets} /><small {...stylex.attrs(styles.hint)} class="drop-hint">Drop files to import · packed into assets.hfp when saved</small></SidebarSection>
+      <SidebarSection label="Scenes" action="create-scene" actionLabel="Create scene"><ProjectSceneTree scenes={() => controls.state.scenes} /></SidebarSection>
+      <SidebarSection label="Entities" action="create-entity" actionLabel="Create entity"><ProjectEntityTree entities={() => controls.state.entities} /></SidebarSection>
+      <SidebarSection label="Editors" action="fullscreen" actionLabel="Toggle viewport fullscreen" class="resource-section"><div id="resource-nav-slot" ref={(host) => host.append(controls.resourceNav)} /></SidebarSection>
+      <SidebarSection label="Assets" action="import-assets" actionLabel="Import assets" class="assets-section"><ProjectAssetList assets={() => controls.state.assets} /><small {...stylex.attrs(styles.hint)} class="drop-hint">Drop files to import · packed into assets.hfp when saved</small></SidebarSection>
       <nav {...stylex.attrs(styles.footerActions)} classList={{ "sidebar-footer-actions": true }} aria-label="Project tools">
         <div class="sidebar-tool-group" role="group" aria-label="Project guidance and settings">
           <Button class="sidebar-tool-button" variant="ghost" size="icon" tooltip="Open learning path" data-editor-action="learn" aria-label="Open learning path"><SidebarToolIcon name="learn" /></Button>
@@ -640,12 +695,15 @@ function ProjectSidebar(props: {
       </nav>
     </aside>
   );
+
 }
 
-function ProjectSceneTree(props: { scenes: () => EditorProjectBrowserState["scenes"] }) {
+function ProjectSceneTree(props: { scenes: () => EditorProjectBrowserState["scenes"] }) { return <ProjectSceneTreeControls.Provider value={props}><ProjectSceneTreeContent /></ProjectSceneTreeControls.Provider>; }
+function ProjectSceneTreeContent() { const controls = useContext(ProjectSceneTreeControls); if (!controls) throw new Error("Missing ProjectSceneTree controls");
+
   return (
     <TreeRoot id="project-scenes" aria-label="Project scenes">
-      <For each={props.scenes()}>{(scene) => (
+      <For each={controls.scenes()}>{(scene) => (
         <div class="project-resource-row" role="none" data-context-resource="scene">
           <button type="button" role="treeitem" aria-selected={scene.active} tabindex={scene.active ? 0 : -1} classList={{ "project-tree-row": true, "is-active": scene.active }} data-project-scene={scene.id}>
             <span aria-hidden="true">◇</span><span>{scene.name}</span><small>{scene.entityCount}</small>
@@ -655,13 +713,16 @@ function ProjectSceneTree(props: { scenes: () => EditorProjectBrowserState["scen
       )}</For>
     </TreeRoot>
   );
+
 }
 
-function ProjectEntityTree(props: { entities: () => EditorProjectBrowserState["entities"] }) {
+function ProjectEntityTree(props: { entities: () => EditorProjectBrowserState["entities"] }) { return <ProjectEntityTreeControls.Provider value={props}><ProjectEntityTreeContent /></ProjectEntityTreeControls.Provider>; }
+function ProjectEntityTreeContent() { const controls = useContext(ProjectEntityTreeControls); if (!controls) throw new Error("Missing ProjectEntityTree controls");
+
   return (
     <TreeRoot id="project-entities" aria-label="Active scene entities">
-      <Show when={props.entities().length} fallback={<p class="empty-copy">No entities yet. Create one to begin authoring.</p>}>
-        <For each={props.entities()}>{(entity, index) => {
+      <Show when={controls.entities().length} fallback={<p class="empty-copy">No entities yet. Create one to begin authoring.</p>}>
+        <For each={controls.entities()}>{(entity, index) => {
           const depthLabel = entity.depth === 1 ? "Child · " : entity.depth > 1 ? `Depth ${entity.depth + 1} · ` : "";
           return (
           <div class="project-resource-row" role="none" data-context-resource="entity">
@@ -673,7 +734,7 @@ function ProjectEntityTree(props: { entities: () => EditorProjectBrowserState["e
               data-tree-depth={entity.depth}
               style={{ "--entity-tree-indent": `${entity.depth * 14}px` }}
               data-parent-id={entity.parentId}
-              tabindex={entity.selected || !props.entities().some((item) => item.selected) && index() === 0 ? 0 : -1}
+              tabindex={entity.selected || !controls.entities().some((item) => item.selected) && index() === 0 ? 0 : -1}
               classList={{ "project-tree-row": true, "is-active": entity.selected }}
               data-project-entity={entity.id}
             >
@@ -688,13 +749,16 @@ function ProjectEntityTree(props: { entities: () => EditorProjectBrowserState["e
       </Show>
     </TreeRoot>
   );
+
 }
 
-function ProjectAssetList(props: { assets: () => EditorProjectBrowserState["assets"] }) {
+function ProjectAssetList(props: { assets: () => EditorProjectBrowserState["assets"] }) { return <ProjectAssetListControls.Provider value={props}><ProjectAssetListContent /></ProjectAssetListControls.Provider>; }
+function ProjectAssetListContent() { const controls = useContext(ProjectAssetListControls); if (!controls) throw new Error("Missing ProjectAssetList controls");
+
   return (
     <div id="project-assets" role="list">
-      <Show when={props.assets().length} fallback={<p class="empty-copy">Drop images, audio, data, fonts, or glTF models here.</p>}>
-        <For each={props.assets()}>{(asset) => (
+      <Show when={controls.assets().length} fallback={<p class="empty-copy">Drop images, audio, data, fonts, or glTF models here.</p>}>
+        <For each={controls.assets()}>{(asset) => (
         <div
           classList={{ "asset-resource-row": true, "is-active": asset.selected }}
           draggable={asset.draggable}
@@ -716,9 +780,12 @@ function ProjectAssetList(props: { assets: () => EditorProjectBrowserState["asse
       </Show>
     </div>
   );
+
 }
 
-export function EditorScriptFileList(props: { state: EditorScriptBrowserState }) {
+export function EditorScriptFileList(props: { state: EditorScriptBrowserState }) { return <EditorScriptFileListControls.Provider value={props}><EditorScriptFileListContent /></EditorScriptFileListControls.Provider>; }
+function EditorScriptFileListContent() { const controls = useContext(EditorScriptFileListControls); if (!controls) throw new Error("Missing EditorScriptFileList controls");
+
   return (
     <>
       <div class="script-authoring-actions">
@@ -726,12 +793,12 @@ export function EditorScriptFileList(props: { state: EditorScriptBrowserState })
         <button
           type="button"
           data-editor-action="attach-script"
-          data-path={props.state.activePath}
-          disabled={!props.state.activePath || !props.state.selectedEntityId}
+          data-path={controls.state.activePath}
+          disabled={!controls.state.activePath || !controls.state.selectedEntityId}
         >Attach to selected</button>
       </div>
-      <Show when={props.state.files.length} fallback={<p class="empty-copy">No scripts yet. Create one when you need custom behavior.</p>}>
-        <For each={props.state.files}>{(file) => (
+      <Show when={controls.state.files.length} fallback={<p class="empty-copy">No scripts yet. Create one when you need custom behavior.</p>}>
+        <For each={controls.state.files}>{(file) => (
           <div class="script-resource-row" data-context-resource="script">
             <button type="button" classList={{ "is-active": file.active }} data-script-path={file.path}>{file.path}</button>
             <EditorActionMenu label={`${file.path} script actions`} items={file.menu} />
@@ -740,25 +807,32 @@ export function EditorScriptFileList(props: { state: EditorScriptBrowserState })
       </Show>
     </>
   );
+
 }
 
-function SidebarToolIcon(props: { name: "learn" | "settings" | "build" | "history" }) {
-  if (props.name === "learn") return <svg class="sidebar-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.9-.8 5.6-.3 8 1.5v12c-2.4-1.8-5.1-2.3-8-1.5zM20 5.5c-2.9-.8-5.6-.3-8 1.5v12c2.4-1.8 5.1-2.3 8-1.5z" /></svg>;
-  if (props.name === "settings") return <svg class="sidebar-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" /><path d="m19 13.7 1.4 1.1-1.8 3.1-1.7-.7a7.7 7.7 0 0 1-2.3 1.4l-.2 1.8h-3.6l-.2-1.8a7.7 7.7 0 0 1-2.3-1.4l-1.7.7-1.8-3.1 1.4-1.1a7.8 7.8 0 0 1 0-2.7L4.8 9.9l1.8-3.1 1.7.7a7.7 7.7 0 0 1 2.3-1.4l.2-1.8h3.6l.2 1.8a7.7 7.7 0 0 1 2.3 1.4l1.7-.7 1.8 3.1-1.4 1.1a7.8 7.8 0 0 1 0 2.7Z" /></svg>;
-  if (props.name === "build") return <svg class="sidebar-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5 4.5 4.5-9.7 9.7-4.5-4.5zM13 6.5l4.5 4.5M5.5 13.8l-2 6.7 6.7-2" /></svg>;
+function SidebarToolIcon(props: { name: "learn" | "settings" | "build" | "history" }) { return <SidebarToolIconControls.Provider value={props}><SidebarToolIconContent /></SidebarToolIconControls.Provider>; }
+function SidebarToolIconContent() { const controls = useContext(SidebarToolIconControls); if (!controls) throw new Error("Missing SidebarToolIcon controls");
+
+  if (controls.name === "learn") return <svg class="sidebar-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.9-.8 5.6-.3 8 1.5v12c-2.4-1.8-5.1-2.3-8-1.5zM20 5.5c-2.9-.8-5.6-.3-8 1.5v12c2.4-1.8 5.1-2.3 8-1.5z" /></svg>;
+  if (controls.name === "settings") return <svg class="sidebar-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" /><path d="m19 13.7 1.4 1.1-1.8 3.1-1.7-.7a7.7 7.7 0 0 1-2.3 1.4l-.2 1.8h-3.6l-.2-1.8a7.7 7.7 0 0 1-2.3-1.4l-1.7.7-1.8-3.1 1.4-1.1a7.8 7.8 0 0 1 0-2.7L4.8 9.9l1.8-3.1 1.7.7a7.7 7.7 0 0 1 2.3-1.4l.2-1.8h3.6l.2 1.8a7.7 7.7 0 0 1 2.3 1.4l1.7-.7 1.8 3.1-1.4 1.1a7.8 7.8 0 0 1 0 2.7Z" /></svg>;
+  if (controls.name === "build") return <svg class="sidebar-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5 4.5 4.5-9.7 9.7-4.5-4.5zM13 6.5l4.5 4.5M5.5 13.8l-2 6.7 6.7-2" /></svg>;
   return <svg class="sidebar-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9" /><path d="M4.5 4.5V9H9M12 8v4l2.8 1.8" /></svg>;
+
 }
 
-function SidebarSection(props: { label: string; action: string; actionLabel: string; class?: string; children: JSX.Element }) {
+function SidebarSection(props: { label: string; action: string; actionLabel: string; class?: string; children: JSX.Element }) { return <SidebarSectionControls.Provider value={props}><SidebarSectionContent /></SidebarSectionControls.Provider>; }
+function SidebarSectionContent() { const controls = useContext(SidebarSectionControls); if (!controls) throw new Error("Missing SidebarSection controls");
+
   return (
-    <section {...stylex.attrs(styles.sidebarSection)} classList={{ "project-section": true, [props.class ?? ""]: Boolean(props.class) }}>
+    <section {...stylex.attrs(styles.sidebarSection)} classList={{ "project-section": true, [controls.class ?? ""]: Boolean(controls.class) }}>
       <header {...stylex.attrs(styles.sectionHeader)}>
-        <span>{props.label}</span>
-        <Button variant="ghost" size="icon" tooltip={props.actionLabel} data-editor-action={props.action} aria-label={props.actionLabel}>＋</Button>
+        <span>{controls.label}</span>
+        <Button variant="ghost" size="icon" tooltip={controls.actionLabel} data-editor-action={controls.action} aria-label={controls.actionLabel}>＋</Button>
       </header>
-      {props.children}
+      {controls.children}
     </section>
   );
+
 }
 
 function isEditorCenterTab(value: string): value is EditorCenterTab {

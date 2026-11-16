@@ -1,11 +1,14 @@
+import { asRecord } from "@hyperfocus/utilities/records";
 import { textToBase64 } from "../../../proto/base64";
 import { encodeMidiFile, encodeMidiTrackFile, type GeneratorMidiComposition } from "./midi-encoder";
 import { isPadPilotDevtoolsEnabled } from "../../../runtime-flags";
-import { type GeneratorLengthBars } from "./generator-options";
+import { type GeneratorLengthBars } from "./generator-option-catalog";
 import { askAgent } from "../../../padpilot/agent";
 import { type CodexClientOptions, type GeneratedMidiTemplate, GENERATOR_MODEL_SCHEMA_VERSION, GENERATOR_TRACKER_GRAMMAR_VERSION, type GeneratorModelEnvelope, type GeneratorPromptInput, type GeneratorValidationReport, type OriginalModelArtifact } from "./generator-contracts";
 import { buildFallbackTracker } from "./generator-fallback";
-import { applyStyleDnaFilter, createStyleDnaFilterStats, logRepairDiagnostics, logStyleDnaFilterDiagnostics, repairCompositionForPlan } from "./generator-massage";
+import { applyStyleDnaFilter, logRepairDiagnostics, logStyleDnaFilterDiagnostics } from "./generator-massage-orchestrator";
+import { createStyleDnaFilterStats } from "./generator-massage-scoring";
+import { repairCompositionForPlan } from "./generator-massage-length";
 import { enforceCompositionScale, logDevCompareMetrics } from "./generator-music";
 import { arrangementPlanWithLaneRoles, buildGeneratorIntentPlan, buildGeneratorPromptEnvelope, buildMusicianPlan, derivedHarmonicTolerancePolicy, extractGeneratorArrangementPlan, normalizeArrangementPlan, normalizeChordPlan, normalizeGroovePlan, normalizeHarmonicTolerancePolicy, normalizeLanePlan, objectHasOnlySchemaFields, resolveGeneratorIntentTags, selectedLengthBars, selectedScaleInfo, stringArray } from "./generator-prompt";
 import { buildGeneratorRepairPatch, buildGeneratorValidationReport, buildQualityFallback, qualityLogLine, repairPatchLogLine, shouldKeepMassagedModel } from "./generator-quality";
@@ -13,7 +16,7 @@ import { hashString } from "./generator-selection";
 import { parseDeltaTickTracker, scaleSlug, scoreGeneratorComposition, slug, trackerFromComposition, trackLengthDiagnostics } from "./generator-tracker";
 
 
-export async function requestLocalTracker(input: GeneratorPromptInput, options: CodexClientOptions, selectedMode: string, selectedScale: string, lengthBars: GeneratorLengthBars) {
+export async function requestLocalTracker(input: GeneratorPromptInput, options: CodexClientOptions, selectedMode: string, selectedScale: string, lengthBars: GeneratorLengthBars) : Promise<{ envelope?: GeneratorModelEnvelope; source: "codex-cli" | "local-model"; text: string }> {
   const startedAt = Date.now();
   const envelope = buildGeneratorPromptEnvelope(input, selectedMode, selectedScale, lengthBars);
   options.onLog?.("connect agent");
@@ -33,7 +36,7 @@ export async function requestLocalTracker(input: GeneratorPromptInput, options: 
     ...(extracted.envelope ? { envelope: extracted.envelope } : {}),
     source: response.source === "dev-agent" ? "codex-cli" : "local-model",
     text: extracted.text,
-  } satisfies { envelope?: GeneratorModelEnvelope; source: "codex-cli" | "local-model"; text: string };
+  };
 }
 
 export function extractTrackerText(text: string) {
@@ -42,7 +45,7 @@ export function extractTrackerText(text: string) {
     return { text };
   }
   try {
-    const parsed = JSON.parse(trimmed) as unknown;
+    const parsed = JSON.parse(trimmed);
     const envelope = parseGeneratorModelEnvelope(parsed);
     return {
       envelope,
@@ -54,11 +57,11 @@ export function extractTrackerText(text: string) {
   }
 }
 
-export function parseGeneratorModelEnvelope(value: unknown) {
+export function parseGeneratorModelEnvelope(value: unknown) : GeneratorModelEnvelope {
   if (!value || typeof value !== "object") {
     throw new Error("Structured generator envelope was not an object.");
   }
-  const envelope = value as Record<string, unknown>;
+  const envelope = asRecord(value);
   const schemaFields = ["arrangementPlan", "chordPlan", "confidence", "grammarVersion", "groovePlan", "harmonicTolerancePolicy", "lanePlan", "repairAvoided", "schemaVersion", "tracker", "validationNotes"];
   if (!objectHasOnlySchemaFields(envelope, schemaFields)) {
     throw new Error("Structured generator envelope had additional fields.");
@@ -112,7 +115,7 @@ export function parseGeneratorModelEnvelope(value: unknown) {
     schemaVersion: GENERATOR_MODEL_SCHEMA_VERSION,
     tracker: envelope.tracker,
     validationNotes,
-  } satisfies GeneratorModelEnvelope;
+  };
 }
 
 export function buildTemplate(
@@ -126,10 +129,10 @@ export function buildTemplate(
   originalModel?: OriginalModelArtifact,
   audit?: GeneratedMidiTemplate["audit"],
 ) {
-  const loopedComposition = {
+  const loopedComposition: GeneratorMidiComposition = {
     ...composition,
     loopBars: lengthBars,
-  } satisfies GeneratorMidiComposition;
+  };
   const combinedMidi = encodeMidiFile(loopedComposition);
   const contentId = hashString(`${selectedScale}\n${rawTracker}`).toString(36).padStart(6, "0").slice(0, 6);
   const baseName = `generator-${composition.bpm}-${scaleSlug(selectedScale)}-${contentId}`;
@@ -138,7 +141,7 @@ export function buildTemplate(
     ? {
         ...devOriginal.composition,
         loopBars: lengthBars,
-      } satisfies GeneratorMidiComposition
+      }
     : undefined;
   const originalModelOutput = devOriginal && originalLoopedComposition
     ? {
@@ -168,7 +171,7 @@ export function buildTemplate(
       track,
     })),
     tracks: composition.tracks,
-  } satisfies GeneratedMidiTemplate;
+  };
 }
 
 export async function generateMidiTemplate(input: GeneratorPromptInput, options: CodexClientOptions = {}) {

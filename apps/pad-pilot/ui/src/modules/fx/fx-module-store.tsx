@@ -1,3 +1,4 @@
+import { readfxState } from "../fx/fx-chain-state";
 import {
   create,
 } from "@bufbuild/protobuf";
@@ -8,15 +9,14 @@ import {
   type ParentProps,
 } from "solid-js";
 import { createStore, type SetStoreFunction } from "solid-js/store";
-import { subscribeHostState } from "../../bridge";
 import { moduleSdk } from "../../module-sdk";
 import {
-  bytesToBase64,
+
   base64ToBytes,
 } from "../../proto/base64";
 import { FxModulationRouteSchema } from "../../proto/generated/fx-chain-pb";
 import { PadPilot } from "../../padpilot/index";
-import { fxGraph, fxVisualizer } from "../../padpilot/fx-capabilities";
+import { fxGraph } from "../../padpilot/fx-capabilities";
 import { moveItem } from "../../utils/array";
 import { clamp } from "../../utils/math";
 import { updateStore } from "../../utils/store";
@@ -25,67 +25,37 @@ import { decodeCompactFxPresetCode } from "./fx-compact-preset";
 import { generateFxIdea } from "./fx-idea-generator";
 import {
   DEFAULT_FX_UI_PREFERENCES,
-  loadFxUiPreferences,
-  persistFxUiPreferences,
   type FxUiPreferences,
 } from "./fx-ui-preferences";
 import {
   FxNodeType,
   MAX_CHAINS,
   MAX_FX_MODULATION_ROUTES,
-  MAX_NODES_PER_CHAIN,
-  NODE_LIBRARY,
   cloneFxChainState,
-  createChainPresetFile,
   createChainState,
   createDefaultFxChainState,
   createEmptyVisualizerFrame,
   createMasterState,
-  createNode,
-  createNodePresetFile,
   decodeChainPresetFile,
   decodeFxChainState,
-  decodeNodePresetFile,
-  encodeChainPresetFile,
-  encodeNodePresetFile,
   normalizeFxChainState,
   type FxChainState,
-  type VisualizerFrame,
 } from "./fx-chain-state";
 import {
-  loadBundledFxPresets,
+
   mergeFxPresetSummaries,
 } from "./fx-bundled-presets";
 import {
-  findNodeControlDefinition,
-  getDefaultAddNodeType,
-  resolveNodeConfig,
-  syncNodeLegacyParams,
-} from "./node-registry/registry";
-import {
   clampTimingSyncDivisionIndex,
-  parseTimingSyncControlKey,
 } from "./timing-sync";
-import { smoothVisualizerFrame } from "./fx-visualizer-smoothing";
 import {
   calculateFxPeakMatchedOutputGain,
   buildFxPresetItems,
 } from "./fx-module-selectors";
 import {
   findChainById,
-  findNodeById,
-  getDraftNodeType,
   resolveSelectedChainPreset,
-  sameSnapshot,
 } from "./fx-module-state-utils";
-import {
-  loadFavoritePresetIds,
-  persistFavoritePresetIds,
-} from "./fx-storage";
-import {
-  type ChainPresetSummary,
-  type PresetSummary,
-} from "./fx-types";
 import { installFxModuleEffects } from "./store/fx-module-effects";
 import { createFxModuleStoreHelpers, type FxModuleStoreHelpers } from "./store/fx-module-store-helpers";
 import type { FxModuleStateShape } from "./store/fx-module-store-contracts";
@@ -496,7 +466,7 @@ function createFxMasterActions(options: FxActionOptions) {
 function createFxModuleStore() {
   const initialState = createDefaultFxChainState();
   const [canonicalState, setCanonicalState] =
-    PadPilot.hooks.useModuleState<FxChainState>("fx", initialState);
+    PadPilot.hooks.useModuleState<FxChainState>("fx", initialState, readfxState);
   const moduleInteraction = PadPilot.hooks.useModuleInteraction("fx");
   const canonicalSnapshot = () =>
     normalizeFxChainState(canonicalState() ?? initialState);
@@ -581,24 +551,7 @@ function createFxModuleStore() {
     setState,
     state,
   });
-  const {
-    beginHostSyncHold,
-    commitWorking,
-    deleteSelectedChainPreset,
-    dismissToast,
-    endHostSyncHold,
-    getWorkingSnapshot,
-    pushToast,
-    replaceWorking,
-    syncPreviewState,
-    toggleFavoritePreset,
-    toggleSelectedChainPresetFavorite,
-    touchAutomationParameter,
-    touchHistory,
-    touchMacroAutomation,
-    updateWorking,
-    upsertChainPreset,
-  } = helpers;
+  const { commitWorking, dismissToast, getWorkingSnapshot, pushToast, replaceWorking, toggleFavoritePreset, touchHistory, updateWorking } = helpers;
 
   installFxModuleEffects({
     canonicalSnapshot,

@@ -11,7 +11,7 @@ createUiTest("DiagnosticsModal", () => {
   });
 
   it("formats diagnostic helpers through public functions", () => {
-    const runtime = { profilingEnabled: true, profiledBlocks: 8, chains: [{ active: true, chainId: 1 }] } as any;
+    const runtime = { profilingEnabled: true, profiledBlocks: 8, chains: [{ active: true, chainId: 1 }] };
     expect(isDiagnosticsTimingEnabled(runtime)).toBe(true);
     expect(getDiagnosticsStatusLabel(runtime)).toBe("Profiling On");
     expect(getActiveDiagnosticChains(runtime)).toHaveLength(1);

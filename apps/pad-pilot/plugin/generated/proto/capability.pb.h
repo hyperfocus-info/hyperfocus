@@ -1022,6 +1022,7 @@ class SampleAnalysisRequest final :
     kIncludeTransientSlicesFieldNumber = 2,
     kIncludeCandidateTransientsFieldNumber = 9,
     kProjectBpmFieldNumber = 6,
+    kRequestIdFieldNumber = 10,
     kMaxSliceCountFieldNumber = 8,
   };
   // repeated .padpilot.capability.SampleSliceMarker manual_markers = 7;
@@ -1105,6 +1106,15 @@ class SampleAnalysisRequest final :
   void _internal_set_project_bpm(float value);
   public:
 
+  // uint64 request_id = 10;
+  void clear_request_id();
+  uint64_t request_id() const;
+  void set_request_id(uint64_t value);
+  private:
+  uint64_t _internal_request_id() const;
+  void _internal_set_request_id(uint64_t value);
+  public:
+
   // uint32 max_slice_count = 8;
   void clear_max_slice_count();
   uint32_t max_slice_count() const;
@@ -1129,6 +1139,7 @@ class SampleAnalysisRequest final :
   bool include_transient_slices_;
   bool include_candidate_transients_;
   float project_bpm_;
+  uint64_t request_id_;
   uint32_t max_slice_count_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_capability_2eproto;
@@ -2409,6 +2420,7 @@ class SampleEditorFrame final :
     kDensityFieldNumber = 18,
     kProjectBpmFieldNumber = 21,
     kAnalysisRevisionFieldNumber = 22,
+    kCompletedAnalysisRequestIdFieldNumber = 23,
   };
   // repeated float waveform_peaks = 4;
   int waveform_peaks_size() const;
@@ -2678,6 +2690,15 @@ class SampleEditorFrame final :
   void _internal_set_analysis_revision(uint64_t value);
   public:
 
+  // uint64 completed_analysis_request_id = 23;
+  void clear_completed_analysis_request_id();
+  uint64_t completed_analysis_request_id() const;
+  void set_completed_analysis_request_id(uint64_t value);
+  private:
+  uint64_t _internal_completed_analysis_request_id() const;
+  void _internal_set_completed_analysis_request_id(uint64_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:padpilot.capability.SampleEditorFrame)
  private:
   class _Internal;
@@ -2710,6 +2731,7 @@ class SampleEditorFrame final :
   float density_;
   float project_bpm_;
   uint64_t analysis_revision_;
+  uint64_t completed_analysis_request_id_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_capability_2eproto;
 };
@@ -3687,6 +3709,26 @@ inline void SampleAnalysisRequest::_internal_set_include_candidate_transients(bo
 inline void SampleAnalysisRequest::set_include_candidate_transients(bool value) {
   _internal_set_include_candidate_transients(value);
   // @@protoc_insertion_point(field_set:padpilot.capability.SampleAnalysisRequest.include_candidate_transients)
+}
+
+// uint64 request_id = 10;
+inline void SampleAnalysisRequest::clear_request_id() {
+  request_id_ = uint64_t{0u};
+}
+inline uint64_t SampleAnalysisRequest::_internal_request_id() const {
+  return request_id_;
+}
+inline uint64_t SampleAnalysisRequest::request_id() const {
+  // @@protoc_insertion_point(field_get:padpilot.capability.SampleAnalysisRequest.request_id)
+  return _internal_request_id();
+}
+inline void SampleAnalysisRequest::_internal_set_request_id(uint64_t value) {
+
+  request_id_ = value;
+}
+inline void SampleAnalysisRequest::set_request_id(uint64_t value) {
+  _internal_set_request_id(value);
+  // @@protoc_insertion_point(field_set:padpilot.capability.SampleAnalysisRequest.request_id)
 }
 
 // -------------------------------------------------------------------
@@ -5525,6 +5567,26 @@ inline void SampleEditorFrame::_internal_set_analysis_revision(uint64_t value) {
 inline void SampleEditorFrame::set_analysis_revision(uint64_t value) {
   _internal_set_analysis_revision(value);
   // @@protoc_insertion_point(field_set:padpilot.capability.SampleEditorFrame.analysis_revision)
+}
+
+// uint64 completed_analysis_request_id = 23;
+inline void SampleEditorFrame::clear_completed_analysis_request_id() {
+  completed_analysis_request_id_ = uint64_t{0u};
+}
+inline uint64_t SampleEditorFrame::_internal_completed_analysis_request_id() const {
+  return completed_analysis_request_id_;
+}
+inline uint64_t SampleEditorFrame::completed_analysis_request_id() const {
+  // @@protoc_insertion_point(field_get:padpilot.capability.SampleEditorFrame.completed_analysis_request_id)
+  return _internal_completed_analysis_request_id();
+}
+inline void SampleEditorFrame::_internal_set_completed_analysis_request_id(uint64_t value) {
+
+  completed_analysis_request_id_ = value;
+}
+inline void SampleEditorFrame::set_completed_analysis_request_id(uint64_t value) {
+  _internal_set_completed_analysis_request_id(value);
+  // @@protoc_insertion_point(field_set:padpilot.capability.SampleEditorFrame.completed_analysis_request_id)
 }
 
 // -------------------------------------------------------------------

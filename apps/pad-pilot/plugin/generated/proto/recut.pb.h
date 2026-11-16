@@ -1284,6 +1284,7 @@ class RecutFrame final :
     kDensityFieldNumber = 18,
     kProjectBpmFieldNumber = 21,
     kAnalysisRevisionFieldNumber = 22,
+    kCompletedAnalysisRequestIdFieldNumber = 23,
   };
   // repeated float waveform_peaks = 4;
   int waveform_peaks_size() const;
@@ -1553,6 +1554,15 @@ class RecutFrame final :
   void _internal_set_analysis_revision(uint64_t value);
   public:
 
+  // uint64 completed_analysis_request_id = 23;
+  void clear_completed_analysis_request_id();
+  uint64_t completed_analysis_request_id() const;
+  void set_completed_analysis_request_id(uint64_t value);
+  private:
+  uint64_t _internal_completed_analysis_request_id() const;
+  void _internal_set_completed_analysis_request_id(uint64_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:padpilot.recut.RecutFrame)
  private:
   class _Internal;
@@ -1585,6 +1595,7 @@ class RecutFrame final :
   float density_;
   float project_bpm_;
   uint64_t analysis_revision_;
+  uint64_t completed_analysis_request_id_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_recut_2eproto;
 };
@@ -3347,6 +3358,26 @@ inline void RecutFrame::_internal_set_analysis_revision(uint64_t value) {
 inline void RecutFrame::set_analysis_revision(uint64_t value) {
   _internal_set_analysis_revision(value);
   // @@protoc_insertion_point(field_set:padpilot.recut.RecutFrame.analysis_revision)
+}
+
+// uint64 completed_analysis_request_id = 23;
+inline void RecutFrame::clear_completed_analysis_request_id() {
+  completed_analysis_request_id_ = uint64_t{0u};
+}
+inline uint64_t RecutFrame::_internal_completed_analysis_request_id() const {
+  return completed_analysis_request_id_;
+}
+inline uint64_t RecutFrame::completed_analysis_request_id() const {
+  // @@protoc_insertion_point(field_get:padpilot.recut.RecutFrame.completed_analysis_request_id)
+  return _internal_completed_analysis_request_id();
+}
+inline void RecutFrame::_internal_set_completed_analysis_request_id(uint64_t value) {
+
+  completed_analysis_request_id_ = value;
+}
+inline void RecutFrame::set_completed_analysis_request_id(uint64_t value) {
+  _internal_set_completed_analysis_request_id(value);
+  // @@protoc_insertion_point(field_set:padpilot.recut.RecutFrame.completed_analysis_request_id)
 }
 
 #ifdef __GNUC__

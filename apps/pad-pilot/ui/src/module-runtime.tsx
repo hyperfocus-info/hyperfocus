@@ -1,6 +1,9 @@
+import { isModuleDefinitionShape } from "./module-definition-shape";
+import { z } from "zod";
+import type { PadPilotRegisterModuleStateCodec } from "@hyperfocus/pad-pilot/module-ui-contract";
 import { Show, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { registerModuleStateCodec, type ModuleStateCodec } from "./proto/registry";
+import { registerModuleStateCodec } from "./proto/registry";
 import { PadPilot } from "./padpilot/index";
 import { createFactoryModuleManifest, getFactoryModule } from "@hyperfocus/pad-pilot/factory-modules";
 import {
@@ -22,7 +25,7 @@ export type PadPilotModuleDefinition = PublicPadPilotModuleDefinition<Component>
 type PadPilotModuleRuntime = {
   createStarterModuleComponent: (manifest: PadPilotModuleManifest) => Component;
   definePadPilotModule: (definition: PadPilotModuleDefinition) => PadPilotModuleDefinition;
-  registerModuleStateCodec: <T>(moduleId: string, codec: ModuleStateCodec<T>) => void;
+  registerModuleStateCodec: PadPilotRegisterModuleStateCodec;
 };
 
 const registeredEntries = new Set<string>();
@@ -123,7 +126,8 @@ function normalizeModuleDefinition(
   summary: InstalledModuleSummary,
   exportedValue: unknown,
 ) {
-  const candidate = exportedValue as Partial<PadPilotModuleDefinition> | undefined;
+  if (!isModuleDefinitionShape(exportedValue)) throw new Error(`Module "${summary.id}" did not export a PadPilot module definition.`);
+  const candidate = exportedValue;
   if (typeof candidate?.Component !== "function") {
     throw new Error(`Module "${summary.id}" did not export a PadPilot module definition.`);
   }
@@ -135,7 +139,7 @@ function normalizeModuleDefinition(
     manifest: normalizeManifest(summary, candidate),
     register: candidate.register,
     Component: candidate.Component,
-  } satisfies PadPilotModuleDefinition;
+  };
 }
 
 async function importExternalModule(summary: InstalledModuleSummary) {
@@ -176,11 +180,11 @@ function registerIfNeeded(summary: InstalledModuleSummary, definition: PadPilotM
 
   definition.register({
     module: summary,
-    registerModuleStateCodec(moduleId, codec) {
+    registerModuleStateCodec(moduleId, codec, read) {
       if (moduleId !== summary.id) {
         throw new Error(`Module "${summary.id}" cannot register state for "${moduleId}".`);
       }
-      registerModuleStateCodec(summary.id, codec);
+      return registerModuleStateCodec(summary.id, codec, read);
     },
   });
   registeredEntries.add(registrationKey);
@@ -209,7 +213,7 @@ export function createStarterModuleComponent(manifest: PadPilotModuleManifest) {
   const StarterModule: Component = () => {
     const [state, setState] = PadPilot.hooks.useModuleState<{ notes: string }>(manifest.id, {
       notes: "",
-    });
+    }, value => z.object({ notes: z.string() }).parse(value));
 
     return (
       <section class="module-runtime-starter">
@@ -289,3 +293,5 @@ declare global {
 if (typeof window !== "undefined") {
   window.__padpilotModuleRuntime = moduleRuntime;
 }
+
+// Foreign modules expose executable hooks. Check callable boundaries before invoking them.

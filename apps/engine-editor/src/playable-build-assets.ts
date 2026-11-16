@@ -6,8 +6,8 @@ import { auditPlayableStoryProject2D } from "@hyperfocus/engine/project/runtime-
 import type { EditorAsset, EditorProject } from "@hyperfocus/engine/project";
 
 const DEFAULT_MAX_ASSETS = 5_000;
-const DEFAULT_MAX_ASSET_BYTES = 256 * 1024 * 1024;
-const DEFAULT_MAX_TOTAL_BYTES = 1024 * 1024 * 1024;
+const DEFAULT_MAX_ASSET_BYTES = 268435456;
+const DEFAULT_MAX_TOTAL_BYTES = 1073741824;
 const DEFAULT_BUILTIN_BEHAVIORS = new Set(["builtin:player", "builtin:patrol", "builtin:navigate", "builtin:platformer", "builtin:pong-paddle", "builtin:pong-ai", "builtin:pong-ball"]);
 const MIME_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/;
 

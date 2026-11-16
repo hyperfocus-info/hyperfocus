@@ -122,13 +122,13 @@ const definitions = stylex.create({
   },
   "labelStyle": {
     "color": "color-mix(in srgb, var(--pp-text-color, #e6eeff), #ffffff 14%)",
-    "fontSize": "10px",
+    "fontSize": "12px",
     "fontWeight": 600,
     "letterSpacing": "0.12em",
   },
   "valueReadoutStyle": {
     "color": "color-mix(in srgb, var(--pp-accent-color), #ffffff 20%)",
-    "fontSize": "11px",
+    "fontSize": "12px",
     "fontWeight": 600,
     "letterSpacing": "0.04em",
   },
@@ -167,7 +167,7 @@ const definitions = stylex.create({
   },
   "valueLabelStyle": {
     "color": "color-mix(in srgb, var(--pp-text-color, #d7e4ff), #ffffff 32%)",
-    "fontSize": "9px",
+    "fontSize": "12px",
     "textAlign": "center",
     "minWidth": "14px",
   },

@@ -1,3 +1,4 @@
+import { formatSignedValue } from "./utils/controller-input-preview-values";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import styles from "./controller-input-preview.stylex";
 import {
@@ -19,9 +20,7 @@ type ControllerInputPreviewProps = {
   inputDevices: PadPilotInputDeviceState[];
 };
 
-function formatSignedValue(value: number) {
-  return (Math.round(value * 100) / 100).toFixed(2);
-}
+
 
 function trackDevicePixelRatio() {
   return typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;

@@ -15,7 +15,7 @@ const styles = stylex.create({
     backgroundColor: "rgba(7, 12, 21, 0.96)",
     boxShadow: "0 12px 26px rgba(0, 0, 0, 0.28)",
     color: "#edf6ff",
-    fontSize: "11px",
+    fontSize: "12px",
     letterSpacing: "0.02em",
     lineHeight: 1.25,
     pointerEvents: "none",

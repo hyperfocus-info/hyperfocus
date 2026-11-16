@@ -731,6 +731,7 @@ std::string RecutRuntime::buildFrameBase64() const {
   frame.set_analysis_progress(analysisProgress_.load(std::memory_order_acquire));
   frame.set_analysis_mode(current ? current->state.analysis_mode() : padpilot::recut::RECUT_ANALYSIS_MODE_AUTO);
   frame.set_analysis_revision(current ? current->state.manual_edit_revision() : 0);
+  frame.set_completed_analysis_request_id(current ? current->completedAnalysisRequestId : 0);
   frame.set_playhead_frame(playheadFrame_.load(std::memory_order_relaxed));
   frame.set_armed_pad_index(armedPadIndex_.load(std::memory_order_relaxed));
   frame.set_active_slice_index(activeSliceIndex_.load(std::memory_order_relaxed));
@@ -775,6 +776,7 @@ std::string RecutRuntime::buildSampleEditorFrameBase64() const {
   frame.set_analysis_progress(analysisProgress_.load(std::memory_order_acquire));
   frame.set_analysis_mode(current ? static_cast<padpilot::capability::SampleAnalysisMode>(current->state.analysis_mode()) : padpilot::capability::SAMPLE_ANALYSIS_MODE_AUTO);
   frame.set_analysis_revision(current ? current->state.manual_edit_revision() : 0);
+  frame.set_completed_analysis_request_id(current ? current->completedAnalysisRequestId : 0);
   frame.set_playhead_frame(playheadFrame_.load(std::memory_order_relaxed));
   frame.set_armed_pad_index(armedPadIndex_.load(std::memory_order_relaxed));
   frame.set_active_slice_index(activeSliceIndex_.load(std::memory_order_relaxed));
@@ -822,6 +824,7 @@ bool RecutRuntime::requestAnalysis(const padpilot::capability::SampleAnalysisReq
   }
 
   updateMutableSnapshot([&](LoadedSource& source) {
+    source.completedAnalysisRequestId = request.request_id();
     source.state.set_analysis_mode(static_cast<padpilot::recut::RecutAnalysisMode>(request.analysis_mode()));
     source.state.set_density(finiteClamped(request.density(), 0.0f, 1.0f, 0.5f));
     if (request.requested_bpm() > 0.0f) {

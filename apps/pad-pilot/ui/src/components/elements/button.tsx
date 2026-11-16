@@ -36,7 +36,7 @@ export type ButtonProps = JSX.ButtonHTMLAttributes<HTMLButtonElement> & {
 export function Button(props: ButtonProps) {
   const callHandler = (handler: unknown, event: Event) => {
     if (typeof handler === "function") {
-      (handler as (value: Event) => void)(event);
+      handler(event);
     }
   };
   const [local, others] = splitProps(props, [

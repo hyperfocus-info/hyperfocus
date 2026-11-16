@@ -44,7 +44,7 @@ export async function createEditorPortableFiles(
   }
   return createHyperfocusProjectFiles(portableProject, inputs, {
     maxAssets: 5_000,
-    maxUnpackedBytes: 1024 * 1024 * 1024,
+    maxUnpackedBytes: 1073741824,
   });
 }
 
@@ -54,9 +54,9 @@ export async function openEditorPortableFiles(
   assetsArchive: Uint8Array,
 ) {
   const opened = await openHyperfocusProjectFiles(projectJson, assetsArchive, {
-    maxArchiveBytes: 1024 * 1024 * 1024,
+    maxArchiveBytes: 1073741824,
     maxAssets: 5_000,
-    maxUnpackedBytes: 1024 * 1024 * 1024,
+    maxUnpackedBytes: 1073741824,
   });
   const project = migrateProject(opened.project);
   const objects = new Map(opened.objects.map((object) => [object.sha256, object.bytes]));

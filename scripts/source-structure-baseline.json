@@ -2,14 +2,14 @@
   "version": 1,
   "exceptions": {
     "apps/engine-editor/src/client.ts": {
-      "maxLines": 3508,
+      "maxLines": 3497,
       "owner": "apps/engine-editor",
       "reason": "Legacy editor source predates the source-structure limit.",
       "boundary": "Separate editor transport, project state, and presentation concerns.",
       "removalTarget": "Remove as the editor workstream decomposes this file below 1000 lines."
     },
     "apps/engine-editor/src/editor-shell.ts": {
-      "maxLines": 2500,
+      "maxLines": 2471,
       "owner": "apps/engine-editor",
       "reason": "Legacy editor source predates the source-structure limit.",
       "boundary": "Separate editor transport, project state, and presentation concerns.",
@@ -116,7 +116,7 @@
       "removalTarget": "Ratchet this count as the UI workstream assigns ownership, then remove it at 25 files."
     },
     "apps/pad-pilot/scripts": {
-      "maxFiles": 49,
+      "maxFiles": 48,
       "owner": "apps/pad-pilot",
       "reason": "Imported native/release tooling predates the repository directory file limit.",
       "boundary": "Group build, validation, preset, update, and generation workflows by owner.",
@@ -144,7 +144,7 @@
       "removalTarget": "Ratchet during FX decomposition and remove at 25 files."
     },
     "apps/pad-pilot/ui/src/modules/generator/utils": {
-      "maxFiles": 31,
+      "maxFiles": 28,
       "owner": "apps/pad-pilot",
       "reason": "Imported Generator intelligence predates the repository directory file limit.",
       "boundary": "Group prompt, fallback, massage, options, and MIDI contract domains.",

@@ -1,8 +1,8 @@
 import type { Accessor } from "solid-js";
 import type { ChainState } from "./fx-chain-state";
 
-function resolveAccessorValue<T>(value: Accessor<T> | T) {
-  return typeof value === "function" ? (value as Accessor<T>)() : value;
+function resolveAccessorValue(value: Accessor<number> | number) {
+  return typeof value === "function" ? value() : value;
 }
 
 export function createChainAccessor(chains: Accessor<readonly ChainState[]>, chainId: Accessor<number> | number) {

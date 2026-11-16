@@ -1,3 +1,5 @@
+import { asObject } from "@hyperfocus/utilities/records";
+import { z } from "zod";
 export type DashboardMetric = {
   id: string;
   dimension: string;
@@ -99,20 +101,20 @@ function numberOrNull(value: unknown) {
 
 function stringList(value: unknown) {
   if (!Array.isArray(value)) return [];
-  return value.map((item) => typeof item === "string" ? item : String((item as { summary?: unknown }).summary ?? "")).filter(Boolean);
+  return value.map((item) => typeof item === "string" ? item : String(asObject(item).summary ?? "")).filter(Boolean);
 }
 
 function actionList(value: unknown) {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((entry, index) => {
+  return value.flatMap<DashboardAction>((entry, index) => {
     if (!entry || typeof entry !== "object") return [];
-    const item = entry as Record<string, unknown>;
+    const item = asObject(entry);
     const severity = item.severity === "critical" || item.severity === "high" || item.severity === "medium"
       ? item.severity
       : "medium";
     const title = typeof item.title === "string" ? item.title.trim() : "";
     if (!title) return [];
-    const focusValue = item.focus && typeof item.focus === "object" ? item.focus as Record<string, unknown> : {};
+    const focusValue = item.focus && typeof item.focus === "object" ? asObject(item.focus) : {};
     const focusStart = numberOrNull(focusValue.startSeconds);
     const focusEnd = numberOrNull(focusValue.endSeconds);
     return [{
@@ -128,7 +130,7 @@ function actionList(value: unknown) {
       focus: focusStart !== null && focusEnd !== null && focusEnd >= focusStart
         ? { endSeconds: focusEnd, label: typeof focusValue.label === "string" ? focusValue.label : "measured passage", startSeconds: focusStart }
         : undefined,
-    } satisfies DashboardAction];
+    }];
   });
 }
 
@@ -136,12 +138,12 @@ function safetyList(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     if (!entry || typeof entry !== "object") return [];
-    const item = entry as Record<string, unknown>;
+    const item = asObject(entry);
     return [{
       cap: numberOrNull(item.cap),
       valid: item.valid !== false,
       reasons: stringList(item.reasons),
-    } satisfies DashboardSafetyCheck];
+    }];
   });
 }
 
@@ -149,10 +151,10 @@ function dimensionList(value: unknown) {
   const entries = Array.isArray(value)
     ? value
     : value && typeof value === "object"
-      ? Object.entries(value).map(([id, result]) => ({ id, ...(result as object) }))
+      ? Object.entries(value).map(([id, result]) => ({ id, ...asObject(result) }))
       : [];
   return entries.map((entry) => {
-    const item = entry as Record<string, unknown>;
+    const item = asObject(entry);
     return {
       id: String(item.id ?? item.dimensionId ?? "unknown"),
       score: numberOrNull(item.score),
@@ -165,7 +167,7 @@ function dimensionList(value: unknown) {
 function metricList(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => {
-    const item = entry as Record<string, unknown>;
+    const item = asObject(entry);
     const score = numberOrNull(item.score);
     return {
       id: String(item.id ?? item.metricId ?? "unknown"),
@@ -182,7 +184,7 @@ function metricList(value: unknown) {
 function seriesList(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
-    const item = entry as Record<string, unknown>;
+    const item = asObject(entry);
     if (!Array.isArray(item.values)) return [];
     return [{
       id: String(item.id ?? item.seriesId ?? "series"),
@@ -195,9 +197,9 @@ function seriesList(value: unknown) {
   });
 }
 
-function reviewValue(value: unknown) {
+function reviewValue(value: unknown): DashboardReview | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const item = value as Record<string, unknown>;
+  const item = asObject(value);
   const overallScore = numberOrNull(item.overallScore);
   const confidence = numberOrNull(item.confidence);
   const split = item.datasetSplit;
@@ -211,10 +213,10 @@ function reviewValue(value: unknown) {
   const actionFeedback = Array.isArray(item.actionFeedback)
     ? item.actionFeedback.flatMap((entry) => {
         if (!entry || typeof entry !== "object") return [];
-        const feedback = entry as Record<string, unknown>;
+        const feedback = asObject(entry);
         const verdict = feedback.verdict;
         return typeof feedback.actionId === "string" && (verdict === "helpful" || verdict === "wrong" || verdict === "intentional" || verdict === "fixed")
-          ? [{ actionId: feedback.actionId, verdict: verdict as DashboardReviewVerdict }]
+          ? [{ actionId: feedback.actionId, verdict: reviewVerdictSchema.parse(verdict) }]
           : [];
       })
     : [];
@@ -232,16 +234,16 @@ function reviewValue(value: unknown) {
     notes: typeof item.notes === "string" ? item.notes : undefined,
     overallScore,
     reviewSchemaVersion: numberOrNull(item.reviewSchemaVersion) ?? undefined,
-  } satisfies DashboardReview;
+  };
 }
 
 export function normalizeRun(value: unknown): DashboardRun {
-  const envelope = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const envelope = value && typeof value === "object" ? asObject(value) : {};
   const item = envelope.report && typeof envelope.report === "object"
-    ? { ...envelope, ...(envelope.report as Record<string, unknown>) }
+    ? { ...envelope, ...(asObject(envelope.report)) }
     : envelope;
-  const media = item.media && typeof item.media === "object" ? item.media as Record<string, unknown> : {};
-  const observations = item.observations && typeof item.observations === "object" ? item.observations as Record<string, unknown> : {};
+  const media = item.media && typeof item.media === "object" ? asObject(item.media) : {};
+  const observations = item.observations && typeof item.observations === "object" ? asObject(item.observations) : {};
   return {
     id: String(item.id ?? item.runId ?? item.evaluationId ?? "unknown"),
     mediaId: typeof item.mediaId === "string" ? item.mediaId : typeof media.id === "string" ? media.id : undefined,
@@ -258,9 +260,9 @@ export function normalizeRun(value: unknown): DashboardRun {
     weaknesses: stringList(item.weaknesses),
     safetyChecks: safetyList(Array.isArray(item.safetyChecks) ? item.safetyChecks : Array.isArray(item.safetyCaps) ? item.safetyCaps : []),
     series: seriesList(item.series ?? item.timeline),
-    sections: Array.isArray(item.sections) ? item.sections as DashboardRun["sections"] : [],
-    selfSimilarity: Array.isArray(observations.selfSimilarity) ? observations.selfSimilarity as number[][] : undefined,
-    erbProfile: Array.isArray(observations.erbProfile) ? observations.erbProfile as number[] : undefined,
+    sections: Array.isArray(item.sections) ? z.array(z.object({ score: z.number(), startSeconds: z.number(), endSeconds: z.number() }).passthrough()).parse(item.sections) : [],
+    selfSimilarity: Array.isArray(observations.selfSimilarity) ? z.array(z.array(z.number())).parse(observations.selfSimilarity) : undefined,
+    erbProfile: Array.isArray(observations.erbProfile) ? z.array(z.number()).parse(observations.erbProfile) : undefined,
     evaluatedAt: typeof item.evaluatedAt === "string" ? item.evaluatedAt : typeof item.finishedAt === "string" ? item.finishedAt : undefined,
     estimatedBitrateKbps: numberOrNull(item.estimatedBitrateKbps ?? media.estimatedBitrateKbps) ?? undefined,
     originalSampleRate: numberOrNull(item.originalSampleRate ?? media.originalSampleRate) ?? undefined,
@@ -274,7 +276,7 @@ export function normalizeRun(value: unknown): DashboardRun {
 
 async function responseError(response: Response, fallback: string) {
   try {
-    const body = await response.json() as { error?: { message?: unknown } };
+    const body = z.object({ error: z.object({ message: z.unknown() }).optional() }).parse(await response.json());
     return typeof body.error?.message === "string" ? body.error.message : fallback;
   } catch {
     return fallback;
@@ -288,7 +290,7 @@ export function audioSourceUrl(runId: string) {
 export async function reanalyzeRun(runId: string) {
   const response = await fetch(`/api/v1/runs/${encodeURIComponent(runId)}/reanalyze`, { method: "POST" });
   if (!response.ok) throw new Error(await responseError(response, `Reanalysis failed (${response.status}).`));
-  const value = await response.json() as { runId?: unknown };
+  const value = asObject(await response.json());
   if (typeof value.runId !== "string" || !value.runId) throw new Error("Reanalysis response did not include a run ID.");
   return { runId: value.runId };
 }
@@ -314,7 +316,7 @@ export async function fetchLibrary() {
   const response = await fetch("/api/v1/library?limit=500");
   if (!response.ok) throw new Error(`Library request failed (${response.status}).`);
   const value = await response.json();
-  const envelope = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const envelope = value && typeof value === "object" ? asObject(value) : {};
   const rows = Array.isArray(value) ? value : Array.isArray(envelope.items) ? envelope.items : Array.isArray(envelope.runs) ? envelope.runs : [];
   return rows.map(normalizeRun);
 }
@@ -328,7 +330,9 @@ export async function fetchRun(runId: string) {
   if (!seriesResponse.ok) return run;
   const seriesEnvelope = await seriesResponse.json();
   const seriesSource = seriesEnvelope && typeof seriesEnvelope === "object"
-    ? (seriesEnvelope as Record<string, unknown>).series
+    ? (asObject(seriesEnvelope)).series
     : seriesEnvelope;
   return { ...run, series: seriesList(seriesSource) };
 }
+
+const reviewVerdictSchema = z.enum(["helpful", "wrong", "intentional", "fixed"]);

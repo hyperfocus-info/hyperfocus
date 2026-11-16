@@ -2,7 +2,7 @@ import { z } from "zod";
 import { isValidCapabilityId, isValidModuleId } from "./module-identity";
 import { parseSemVer } from "./semver";
 
-export const PADPILOT_MANIFEST_MAX_BYTES = 1024 * 1024;
+export const PADPILOT_MANIFEST_MAX_BYTES = 1048576;
 export const PADPILOT_MANIFEST_MAX_CAPABILITIES = 64;
 export const PADPILOT_MANIFEST_MAX_ENTRY_BYTES = 1024;
 export const PADPILOT_MANIFEST_MAX_NAME_BYTES = 256;

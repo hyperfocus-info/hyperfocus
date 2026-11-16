@@ -1,3 +1,4 @@
+import { For } from "solid-js";
 import * as stylex from "@stylexjs/stylex";
 import { createHarnessClient, type HarnessClientSnapshot } from "@hyperfocus/ai-core";
 import { Button, ChatComposer, ChatTranscript, type TranscriptMessage } from "@hyperfocus/ui";
@@ -152,7 +153,7 @@ export function EditorAiPanel() {
           <ChatTranscript messages={messages()} emptyMessage={connected() ? "Ask about the open editor project. Suggested edits require an explicit Apply." : "Connect your local harness to enable project-aware AI chat. The editor remains fully usable offline."} />
           <Show when={proposal()} keyed>
             {(plan) => <section {...stylex.attrs(styles.proposal)} aria-label="Proposed editor changes">
-              <div><strong>{plan.intent}</strong><span>{plan.commands.length} validated project patch{plan.commands.length === 1 ? "" : "es"}</span><ul {...stylex.attrs(styles.proposalDiff)}>{summarizeEditorPatchProposal(plan).map((item) => <li>{item}</li>)}</ul></div>
+              <div><strong>{plan.intent}</strong><span>{plan.commands.length} validated project patch{plan.commands.length === 1 ? "" : "es"}</span><ul {...stylex.attrs(styles.proposalDiff)}>{<For each={summarizeEditorPatchProposal(plan)}>{(item) => <li>{item}</li>}</For>}</ul></div>
               <div {...stylex.attrs(styles.proposalActions)}>
                 <Button variant="primary" size="small" tooltip="Apply this reviewed patch to the project" disabled={Boolean(appliedProposal())} onClick={() => void applyProposal()}>Apply</Button>
                 <Show when={appliedProposal()}><Button variant="secondary" size="small" tooltip="Undo the applied patch while the project revision is unchanged" onClick={() => void revertProposal()}>Revert</Button></Show>

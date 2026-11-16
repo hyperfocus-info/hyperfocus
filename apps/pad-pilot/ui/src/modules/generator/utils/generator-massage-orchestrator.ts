@@ -1,5 +1,5 @@
 import { type GeneratorMidiComposition } from "./midi-encoder";
-import { type GeneratorLengthBars } from "./generator-options";
+import { type GeneratorLengthBars } from "./generator-option-catalog";
 import { type CodexClientOptions, type GeneratorHarmonicTolerancePolicy, type GeneratorMusicianPlan, type GeneratorPromptInput, type StyleDnaFilterStats } from "./generator-contracts";
 import { enforceCompositionScale } from "./generator-music";
 import { intentTagLogLine, resolveGeneratorIntentTags } from "./generator-prompt";
@@ -39,15 +39,15 @@ export function applyStyleDnaFilter(
       return `massage ${decision.name} ${Math.round(decision.massageFactor * 100)}% factor ${Math.round(decision.incorrectness * 100)}% wrong ${Math.round(decision.likelihood * 100)}% likelihood; fix: ${fixText}; tags: ${issueText}`;
     });
   const regenerated = regenerateSeverelyWrongTracks(composition, fallback, decisions, stats, budget);
-  const sanitized = {
+  const sanitized: GeneratorMidiComposition = {
     ...regenerated,
     tracks: regenerated.tracks.map((track) => sanitizeTrackToStyleGrid(track, plan, lengthBars, stats, decisionForTrack(decisions, track))),
-  } satisfies GeneratorMidiComposition;
+  };
   const patched = patchMissingBassRoles(sanitized, fallback, plan, stats);
-  const ceilingChecked = {
+  const ceilingChecked: GeneratorMidiComposition = {
     ...patched,
     tracks: patched.tracks.map((track) => simplifyTrackHarmonicCeiling(track, plan, stats, decisionForTrack(decisions, track))),
-  } satisfies GeneratorMidiComposition;
+  };
   const earworm = patchEarwormLead(ceilingChecked, fallback, stats, decisions, budget);
   const oneShots = patchOneShotEmphasis(earworm, lengthBars, stats, decisions, budget);
   const chordFill = patchChordDependentTurnaroundFill(oneShots, lengthBars, stats, decisions, budget);

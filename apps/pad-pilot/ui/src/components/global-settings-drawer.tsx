@@ -1,12 +1,10 @@
+import { createContext, useContext } from "solid-js";
 import { createEffect, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 import { Bot, Gamepad2 } from "lucide-solid";
 import { PadPilot } from "../padpilot/index";
-import {
-  GENERATOR_AI_MODEL_OPTIONS,
-  GENERATOR_AI_PROVIDER_OPTIONS,
-  normalizeGeneratorAiSettings,
-} from "../modules/generator/utils/generator-options";
+import { GENERATOR_AI_MODEL_OPTIONS, GENERATOR_AI_PROVIDER_OPTIONS } from "../modules/generator/utils/generator-option-catalog";
+import { normalizeGeneratorAiSettings } from "../modules/generator/utils/generator-selector-options";
 import {
   loadGeneratorAiSettings,
   saveGeneratorAiSettings,
@@ -21,7 +19,15 @@ export type GlobalSettingsDrawerProps = {
 };
 
 /** GlobalSettingsDrawer owns PadPilot-wide user preferences that are not module-local state. */
+const ControlsContext = createContext<GlobalSettingsDrawerProps>();
+
 export function GlobalSettingsDrawer(props: GlobalSettingsDrawerProps) {
+  return <ControlsContext.Provider value={props}><GlobalSettingsDrawerContent /></ControlsContext.Provider>;
+}
+
+function GlobalSettingsDrawerContent() {
+  const controls = useContext(ControlsContext);
+  if (!controls) throw new Error("Missing GlobalSettingsDrawer controls");
   const [settings, setSettings] = createStore(loadGeneratorAiSettings());
   const [providerOpen, setProviderOpen] = createSignal(false);
   const [modelOpen, setModelOpen] = createSignal(false);
@@ -36,8 +42,8 @@ export function GlobalSettingsDrawer(props: GlobalSettingsDrawerProps) {
 
   return (
     <PadPilot.Drawer
-      open={props.open}
-      onOpenChange={props.onOpenChange}
+      open={controls.open}
+      onOpenChange={controls.onOpenChange}
       edge="right"
       title="Settings"
       description="Global preferences shared across PadPilot modules."
@@ -100,8 +106,8 @@ export function GlobalSettingsDrawer(props: GlobalSettingsDrawerProps) {
             class={styles["controller-button"]}
             icon={<Gamepad2 size={14} />}
             onClick={() => {
-              props.onOpenChange(false);
-              props.onOpenControllerPreferences();
+              controls.onOpenChange(false);
+              controls.onOpenControllerPreferences();
             }}
             tooltip="Open controller preferences"
             variant="secondary"

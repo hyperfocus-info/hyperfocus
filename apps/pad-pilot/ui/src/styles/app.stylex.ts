@@ -10,7 +10,7 @@ export const styles = stylex.create({
     position: "relative",
     height: "100vh",
   },
-  shellCollapsed: { gridTemplateColumns: "0 minmax(0, 1fr)" },
+  shellCollapsed: { gridTemplateColumns: { default: "0 minmax(0, 1fr)", "@media (max-width: 680px)": "minmax(0, 1fr)" } },
   sidebar: {
     padding: "7px",
     borderColor: "rgba(110, 146, 194, 0.4)",
@@ -49,6 +49,7 @@ export const styles = stylex.create({
     top: "0",
     width: "12px",
   },
+  sidebarTriggerZoneVisible: { width: "28px" },
   sidebarTriggerButton: {
     overflow: "hidden",
     transition: "width 180ms ease, opacity 180ms ease",

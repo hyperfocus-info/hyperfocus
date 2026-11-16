@@ -5,10 +5,12 @@ import { snapshotDirectory } from "./directory-snapshot";
 import { promoteStagedDirectory, withProcessLock } from "./directory-transaction";
 import { REQUIRED_UI_ENTRY_ASSETS } from "./ui-build-contract";
 
-const copyPropertiesFromEnv = (minify: boolean) => ({
-  version: 1,
-  MARKETPLACE_URL: minify ? "https://padpilot.hyperfocus.info" : "http://localhost:3000",
-});
+export function uiMarketplaceBuildEnv({ minify, environment = process.env }: { minify: boolean; environment?: NodeJS.ProcessEnv }) {
+  const origin = minify ? "https://padpilot.hyperfocus.info" : environment.PADPILOT_PUBLIC_ORIGIN || "http://localhost:3000";
+  const url = new URL(origin);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('PadPilot UI marketplace URL must be an HTTP(S) origin.');
+  return { version: 1, MARKETPLACE_URL: url.origin };
+}
 
 export function externalModuleUiBuildFlag(environment = process.env) {
   return environment.PADPILOT_ALLOW_UNSAFE_EXTERNAL_MODULE_UI === "true" ? "true" : "false";
@@ -55,7 +57,7 @@ async function pathExists(target: string) {
   try {
     return (await stat(target)).size > 0;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if ((error && typeof error === "object" && "code" in error ? error.code : undefined) === "ENOENT") {
       return false;
     }
     throw error;
@@ -86,7 +88,7 @@ export async function buildUi({
           "process.env.NODE_ENV": JSON.stringify(minify ? "production" : "development"),
           "process.env.PADPILOT_DEVTOOLS_ENABLED": JSON.stringify(minify ? "false" : "true"),
           "process.env.PADPILOT_ALLOW_UNSAFE_EXTERNAL_MODULE_UI": JSON.stringify(externalModuleUiBuildFlag()),
-          "process.env.HANDSHAKE_DETAILS": JSON.stringify(copyPropertiesFromEnv(minify)),
+          "process.env.HANDSHAKE_DETAILS": JSON.stringify(uiMarketplaceBuildEnv({ minify })),
         },
         minify: outputMode.minify,
         sourcemap: outputMode.sourcemap,
@@ -135,7 +137,7 @@ export async function buildUi({
         await rm(stagingDirectory, { force: true, recursive: true });
       }
     }
-  }, 10 * 60_000);
+  }, 600000);
 }
 
 if (import.meta.main) {

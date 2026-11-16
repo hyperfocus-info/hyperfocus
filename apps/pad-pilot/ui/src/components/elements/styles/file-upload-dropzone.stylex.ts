@@ -60,7 +60,7 @@ const definitions = stylex.create({
   },
   "hintStyle": {
     "color": "color-mix(in srgb, var(--pp-text-color, #dfe9fb), #ffffff 30%)",
-    "fontSize": "11px",
+    "fontSize": "12px",
     "letterSpacing": "0.06em",
   },
 });

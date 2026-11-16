@@ -1,10 +1,10 @@
+import type { DevHostPublishCallbacks } from "./sample-runtime";
 import { create, fromBinary } from "@bufbuild/protobuf";
 import { isValidAutomationParameterId } from "@hyperfocus/pad-pilot/automation-identity";
 import { parseCapabilityHandle } from "@hyperfocus/pad-pilot/module-identity";
 import { z } from "zod";
 import type { HostIntent } from "../bridge";
 import { createDefaultAnalyzerModuleState, createEmptyAnalyzerFrame, summarizeAnalyzerTake } from "../modules/analyzer/analyzer-state";
-import { createDefaultFxChainState } from "../modules/fx/fx-chain-state";
 import { base64ToBytes, bytesToBase64 } from "../proto/base64";
 import { PresetSaveRequestSchema } from "../proto/generated/bridge-pb";
 import { SampleAnalysisMode, SampleBpmSource, SampleAnalysisRequestSchema, SampleSourceLoadRequestSchema, SlicePlaybackStateSchema, SlicePlaybackTriggerSchema } from "../proto/generated/capability-pb";
@@ -12,9 +12,8 @@ import { FxChainStateSchema } from "../proto/generated/fx-chain-pb";
 import { ChokeGroupSchema, PadAssignmentSchema, RecutAnalysisMode, RecutBpmSource, SliceMarkerSchema } from "../proto/generated/recut-pb";
 import { fileNameFromPath } from "../utils/file-path";
 import { clamp } from "../utils/math";
-import { type DevSignalSettings } from "./types";
-import { DEFAULT_MODULES, type PresetRecord, cloneFxState, createSeedAnalyzerNoteEvents, ensureMasterState, filterAnalyzerNoteEventsForSensitivity } from "./runtime-helpers";
-import { DevHostStateRuntime } from "./state-runtime";
+import { DEFAULT_MODULES, cloneFxState, createSeedAnalyzerNoteEvents, ensureMasterState } from "./runtime-helpers";
+import { createDevHostStateRuntime } from "./state-runtime";
 
 const midiOutputPayloadSchema = z.object({
   channel: z.number().int().min(1).max(16),
@@ -39,45 +38,42 @@ function parseJsonPayload<T>(payload: string, schema: z.ZodType<T>) {
   }
 }
 
-export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
-  protected readonly producerActionLog: Array<{ action: string; capability: string; moduleId: string; payload: unknown }> = [];
-  protected readonly heldMidiNotes = new Map<string, Set<string>>();
-  protected readonly activeAutomationTouches = new Map<string, Set<string>>();
-  protected analyzerStreamModuleId = "";
-  protected capabilityStreamHandle = "";
-  protected modules = [...DEFAULT_MODULES];
-  protected lastPublishedCapabilityFramePayload = "";
-
-  protected isAuthorizedCapabilityHandle(capability: string, handle: string) {
+export function createDevHostCapabilityRuntime(callbacks: DevHostPublishCallbacks) {
+  const base = createDevHostStateRuntime(callbacks);
+  const producerActionLog = ((): Array<{ action: string; capability: string; moduleId: string; payload: unknown }> => ([]))();
+  const heldMidiNotes = new Map<string, Set<string>>();
+  const activeAutomationTouches = new Map<string, Set<string>>();
+  const analyzerStreamModuleId = "";
+  const capabilityStreamHandle = "";
+  const modules = [...DEFAULT_MODULES];
+  const lastPublishedCapabilityFramePayload = "";
+  const runtimeState = Object.assign(base, { producerActionLog, heldMidiNotes, activeAutomationTouches, analyzerStreamModuleId, capabilityStreamHandle, modules, lastPublishedCapabilityFramePayload });
+  function isAuthorizedCapabilityHandle(capability: string, handle: string) {
     const parsed = parseCapabilityHandle(handle);
-    if (!parsed.valid || parsed.capability !== capability || parsed.moduleInstanceId !== this.selectedModuleId) {
+    if (!parsed.valid || parsed.capability !== capability || parsed.moduleInstanceId !== runtimeState.selectedModuleId) {
       return false;
     }
-    const moduleItem = this.modules.find((candidate) => candidate.id === parsed.moduleInstanceId);
+    const moduleItem = runtimeState.modules.find((candidate) => candidate.id === parsed.moduleInstanceId);
     return moduleItem?.loadStatus === "ready" && moduleItem.capabilities?.includes(capability) === true;
   }
-
-  protected releaseProducerActions(moduleId: string) {
-    for (const key of this.heldMidiNotes.get(moduleId) ?? []) {
+  function releaseProducerActions(moduleId: string) {
+    for (const key of runtimeState.heldMidiNotes.get(moduleId) ?? []) {
       const [channel, note] = key.split(":").map(Number);
-      this.producerActionLog.push({
+      runtimeState.producerActionLog.push({
         action: "note-off",
         capability: "midi-output",
         moduleId,
         payload: { channel, note, velocity: 0 },
       });
     }
-    this.heldMidiNotes.delete(moduleId);
-    for (const parameterId of this.activeAutomationTouches.get(moduleId) ?? []) {
-      this.producerActionLog.push({ action: "end-touch", capability: "automation", moduleId, payload: parameterId });
+    runtimeState.heldMidiNotes.delete(moduleId);
+    for (const parameterId of runtimeState.activeAutomationTouches.get(moduleId) ?? []) {
+      runtimeState.producerActionLog.push({ action: "end-touch", capability: "automation", moduleId, payload: parameterId });
     }
-    this.activeAutomationTouches.delete(moduleId);
+    runtimeState.activeAutomationTouches.delete(moduleId);
   }
-
-
-
-  protected applyCapabilityIntent(intent: Extract<HostIntent, { type: "sendCapabilityIntent" }>) {
-    if (!this.isAuthorizedCapabilityHandle(intent.capability, intent.handle)) {
+  function applyCapabilityIntent(intent: Extract<HostIntent, { type: "sendCapabilityIntent" }>) {
+    if (!isAuthorizedCapabilityHandle(intent.capability, intent.handle)) {
       return;
     }
     const { moduleInstanceId } = parseCapabilityHandle(intent.handle);
@@ -88,51 +84,51 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
     if (intent.capability === "analyzer-session") {
       const textPayload = readTextPayload();
       if (intent.action === "start-capture") {
-        if (textPayload === "append" && this.analyzerState.noteEvents.length === 0) {
-          this.analyzerState.recordEnabled = true;
+        if (textPayload === "append" && runtimeState.analyzerState.noteEvents.length === 0) {
+          runtimeState.analyzerState.recordEnabled = true;
         }
         if (textPayload !== "append") {
-          this.analyzerState = createDefaultAnalyzerModuleState();
-          this.analyzerSourceNoteEvents = [];
+          runtimeState.analyzerState = createDefaultAnalyzerModuleState();
+          runtimeState.analyzerSourceNoteEvents = [];
         }
-        this.analyzerState.recordEnabled = true;
-        this.analyzerFrame = createEmptyAnalyzerFrame();
-        this.analyzerFrame.recording = true;
-        this.analyzerFrame.tuningHz = this.analyzerState.tuningHz;
-        this.analyzerFrame.detectionSensitivity = this.analyzerState.detectionSensitivity;
-        this.analyzerState.revision += 1n;
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
+        runtimeState.analyzerState.recordEnabled = true;
+        runtimeState.analyzerFrame = createEmptyAnalyzerFrame();
+        runtimeState.analyzerFrame.recording = true;
+        runtimeState.analyzerFrame.tuningHz = runtimeState.analyzerState.tuningHz;
+        runtimeState.analyzerFrame.detectionSensitivity = runtimeState.analyzerState.detectionSensitivity;
+        runtimeState.analyzerState.revision += 1n;
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
         return;
       }
       if (intent.action === "stop-capture") {
-        this.analyzerState.recordEnabled = false;
-        if (this.analyzerSourceNoteEvents.length === 0) {
-          this.analyzerSourceNoteEvents = createSeedAnalyzerNoteEvents();
+        runtimeState.analyzerState.recordEnabled = false;
+        if (runtimeState.analyzerSourceNoteEvents.length === 0) {
+          runtimeState.analyzerSourceNoteEvents = createSeedAnalyzerNoteEvents();
         }
-        this.refreshAnalyzerTakeFromSource();
-        this.analyzerState.revision += 1n;
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
+        base.refreshAnalyzerTakeFromSource();
+        runtimeState.analyzerState.revision += 1n;
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
         return;
       }
       if (intent.action === "set-tuning-hz") {
-        this.analyzerState.tuningHz = Number(textPayload);
-        this.analyzerState.revision += 1n;
-        this.analyzerFrame.tuningHz = this.analyzerState.tuningHz;
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
+        runtimeState.analyzerState.tuningHz = Number(textPayload);
+        runtimeState.analyzerState.revision += 1n;
+        runtimeState.analyzerFrame.tuningHz = runtimeState.analyzerState.tuningHz;
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
         return;
       }
       if (intent.action === "set-detection-sensitivity") {
-        this.analyzerState.detectionSensitivity = Number(textPayload);
-        this.analyzerFrame.detectionSensitivity = this.analyzerState.detectionSensitivity;
-        if (this.analyzerSourceNoteEvents.length > 0) {
-          this.refreshAnalyzerTakeFromSource();
+        runtimeState.analyzerState.detectionSensitivity = Number(textPayload);
+        runtimeState.analyzerFrame.detectionSensitivity = runtimeState.analyzerState.detectionSensitivity;
+        if (runtimeState.analyzerSourceNoteEvents.length > 0) {
+          base.refreshAnalyzerTakeFromSource();
         }
-        this.analyzerState.revision += 1n;
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
+        runtimeState.analyzerState.revision += 1n;
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
         return;
       }
       if (intent.action === "correct-note") {
@@ -142,25 +138,25 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
         if (eventId === 0n || !Number.isInteger(midiNote) || midiNote < 0 || midiNote > 127) {
           return;
         }
-        const sourceEvent = this.analyzerSourceNoteEvents.find((event) => event.eventId === eventId);
-        const stateEvent = this.analyzerState.noteEvents.find((event) => event.eventId === eventId);
+        const sourceEvent = runtimeState.analyzerSourceNoteEvents.find((event) => event.eventId === eventId);
+        const stateEvent = runtimeState.analyzerState.noteEvents.find((event) => event.eventId === eventId);
         if (!sourceEvent && !stateEvent) {
           return;
         }
         if (sourceEvent) {
           sourceEvent.midiNote = midiNote;
-          this.refreshAnalyzerTakeFromSource();
+          base.refreshAnalyzerTakeFromSource();
         } else if (stateEvent) {
           stateEvent.midiNote = midiNote;
-          this.analyzerState.takeSummary = summarizeAnalyzerTake(
-            this.analyzerState.noteEvents,
-            this.analyzerState.takeSummary?.frameCount ?? 0,
-            this.settings.tempo,
+          runtimeState.analyzerState.takeSummary = summarizeAnalyzerTake(
+            runtimeState.analyzerState.noteEvents,
+            runtimeState.analyzerState.takeSummary?.frameCount ?? 0,
+            runtimeState.settings.tempo,
           );
         }
-        this.analyzerState.revision += 1n;
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
+        runtimeState.analyzerState.revision += 1n;
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
         return;
       }
       if (intent.action === "reset-note-correction") {
@@ -168,25 +164,25 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
         if (eventId === 0n) {
           return;
         }
-        const sourceEvent = this.analyzerSourceNoteEvents.find((event) => event.eventId === eventId);
-        const stateEvent = this.analyzerState.noteEvents.find((event) => event.eventId === eventId);
+        const sourceEvent = runtimeState.analyzerSourceNoteEvents.find((event) => event.eventId === eventId);
+        const stateEvent = runtimeState.analyzerState.noteEvents.find((event) => event.eventId === eventId);
         if (!sourceEvent && !stateEvent) {
           return;
         }
         if (sourceEvent) {
           sourceEvent.midiNote = sourceEvent.detectedMidiNote;
-          this.refreshAnalyzerTakeFromSource();
+          base.refreshAnalyzerTakeFromSource();
         } else if (stateEvent) {
           stateEvent.midiNote = stateEvent.detectedMidiNote;
-          this.analyzerState.takeSummary = summarizeAnalyzerTake(
-            this.analyzerState.noteEvents,
-            this.analyzerState.takeSummary?.frameCount ?? 0,
-            this.settings.tempo,
+          runtimeState.analyzerState.takeSummary = summarizeAnalyzerTake(
+            runtimeState.analyzerState.noteEvents,
+            runtimeState.analyzerState.takeSummary?.frameCount ?? 0,
+            runtimeState.settings.tempo,
           );
         }
-        this.analyzerState.revision += 1n;
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
+        runtimeState.analyzerState.revision += 1n;
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
         return;
       }
     }
@@ -198,7 +194,7 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
     if (intent.capability === "host-tempo" && intent.action === "set") {
       const bpm = Number(readTextPayload());
       if (Number.isFinite(bpm)) {
-        this.updateSettings({ tempo: clamp(bpm, 20, 320) });
+        callbacks.updateSettings({ tempo: clamp(bpm, 20, 320) });
       }
       return;
     }
@@ -208,15 +204,15 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
       if (!payload || ((intent.action === "note-on" || intent.action === "note-off") && payload.note === undefined)) {
         return;
       }
-      this.producerActionLog.push({ action: intent.action, capability: intent.capability, moduleId: moduleInstanceId, payload });
+      runtimeState.producerActionLog.push({ action: intent.action, capability: intent.capability, moduleId: moduleInstanceId, payload });
       const noteKey = `${payload.channel}:${payload.note}`;
-      const heldNotes = this.heldMidiNotes.get(moduleInstanceId) ?? new Set<string>();
+      const heldNotes = runtimeState.heldMidiNotes.get(moduleInstanceId) ?? new Set<string>();
       if (intent.action === "note-on") {
         heldNotes.add(noteKey);
-        this.heldMidiNotes.set(moduleInstanceId, heldNotes);
+        runtimeState.heldMidiNotes.set(moduleInstanceId, heldNotes);
       } else if (intent.action === "note-off") {
         heldNotes.delete(noteKey);
-        if (heldNotes.size === 0) this.heldMidiNotes.delete(moduleInstanceId);
+        if (heldNotes.size === 0) runtimeState.heldMidiNotes.delete(moduleInstanceId);
       }
       return;
     }
@@ -226,7 +222,7 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
       if (!payload) {
         return;
       }
-      this.producerActionLog.push({ action: intent.action, capability: intent.capability, moduleId: moduleInstanceId, payload });
+      runtimeState.producerActionLog.push({ action: intent.action, capability: intent.capability, moduleId: moduleInstanceId, payload });
       return;
     }
 
@@ -239,16 +235,16 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
         if (!Number.isFinite(wetDry)) {
           return;
         }
-        ensureMasterState(this.liveFxState).wetDry = clamp(wetDry, 0, 1);
-        this.publishActiveModuleState();
+        ensureMasterState(runtimeState.liveFxState).wetDry = clamp(wetDry, 0, 1);
+        callbacks.publishActiveModuleState();
         return;
       }
       if (intent.action === "apply-state") {
-        this.canonicalFxState = fromBinary(FxChainStateSchema, base64ToBytes(intent.payloadBase64));
-        this.liveFxState = cloneFxState(this.canonicalFxState);
-        this.acceptedRevision = this.canonicalFxState.revision;
-        this.publishActiveModuleState();
-        this.publishDebugState();
+        runtimeState.canonicalFxState = fromBinary(FxChainStateSchema, base64ToBytes(intent.payloadBase64));
+        runtimeState.liveFxState = cloneFxState(runtimeState.canonicalFxState);
+        runtimeState.acceptedRevision = runtimeState.canonicalFxState.revision;
+        callbacks.publishActiveModuleState();
+        callbacks.publishDebugState();
         return;
       }
       if (intent.action === "create-preset" || intent.action === "save-preset") {
@@ -258,14 +254,14 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
           return;
         }
         const stateBase64 = bytesToBase64(preset.state);
-        const record = this.seedPreset(request.name || preset.name || "Preset", stateBase64, preset.id || undefined);
-        this.selectedPresetId = record.id;
-        this.canonicalFxState = fromBinary(FxChainStateSchema, preset.state);
-        this.liveFxState = cloneFxState(this.canonicalFxState);
-        this.acceptedRevision = this.canonicalFxState.revision;
-        this.publishNavigationState();
-        this.publishActiveModuleState();
-        this.publishDebugState();
+        const record = base.seedPreset(request.name || preset.name || "Preset", stateBase64, preset.id || undefined);
+        runtimeState.selectedPresetId = record.id;
+        runtimeState.canonicalFxState = fromBinary(FxChainStateSchema, preset.state);
+        runtimeState.liveFxState = cloneFxState(runtimeState.canonicalFxState);
+        runtimeState.acceptedRevision = runtimeState.canonicalFxState.revision;
+        callbacks.publishNavigationState();
+        callbacks.publishActiveModuleState();
+        callbacks.publishDebugState();
         return;
       }
     }
@@ -277,14 +273,14 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
       if (!isValidAutomationParameterId(parameterId)) {
         return;
       }
-      this.producerActionLog.push({ action: intent.action, capability: intent.capability, moduleId: moduleInstanceId, payload: parameterId });
-      const touches = this.activeAutomationTouches.get(moduleInstanceId) ?? new Set<string>();
+      runtimeState.producerActionLog.push({ action: intent.action, capability: intent.capability, moduleId: moduleInstanceId, payload: parameterId });
+      const touches = runtimeState.activeAutomationTouches.get(moduleInstanceId) ?? new Set<string>();
       if (intent.action === "begin-touch" && parameterId) {
         touches.add(parameterId);
-        this.activeAutomationTouches.set(moduleInstanceId, touches);
+        runtimeState.activeAutomationTouches.set(moduleInstanceId, touches);
       } else if (intent.action === "end-touch") {
         touches.delete(parameterId);
-        if (touches.size === 0) this.activeAutomationTouches.delete(moduleInstanceId);
+        if (touches.size === 0) runtimeState.activeAutomationTouches.delete(moduleInstanceId);
       }
       return;
     }
@@ -295,41 +291,41 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
 
     if (intent.capability === "sample-source" && intent.action === "load-file") {
       const payload = fromBinary(SampleSourceLoadRequestSchema, base64ToBytes(intent.payloadBase64));
-      const loadGeneration = ++this.recutAudioLoadGeneration;
-      for (const padIndex of [...this.recutVoices.keys()]) {
-        this.stopRecutVoice(padIndex);
+      const loadGeneration = ++runtimeState.recutAudioLoadGeneration;
+      for (const padIndex of [...runtimeState.recutVoices.keys()]) {
+        base.stopRecutVoice(padIndex);
       }
-      this.recutHeldPads.clear();
-      this.recutAudioBuffer = null;
-      this.recutMonoSamples = new Float32Array();
-      this.recutState.sourceContentId = payload.sourceContentId;
-      this.recutState.sourceName = payload.sourceName || fileNameFromPath(payload.sourcePath);
-      this.recutState.sourcePath = payload.sourcePath;
-      this.recutState.loaded = false;
-      this.recutState.sampleRate = 0;
-      this.recutState.channelCount = 0;
-      this.recutState.lengthFrames = 0n;
-      this.prepareRecutAudioBuffer(payload.sourceContentId, this.recutState.sourceName, loadGeneration).then((loaded) => {
-        if (!loaded || loadGeneration !== this.recutAudioLoadGeneration) {
+      runtimeState.recutHeldPads.clear();
+      runtimeState.recutAudioBuffer = null;
+      runtimeState.recutMonoSamples = new Float32Array();
+      runtimeState.recutState.sourceContentId = payload.sourceContentId;
+      runtimeState.recutState.sourceName = payload.sourceName || fileNameFromPath(payload.sourcePath);
+      runtimeState.recutState.sourcePath = payload.sourcePath;
+      runtimeState.recutState.loaded = false;
+      runtimeState.recutState.sampleRate = 0;
+      runtimeState.recutState.channelCount = 0;
+      runtimeState.recutState.lengthFrames = 0n;
+      base.prepareRecutAudioBuffer(payload.sourceContentId, runtimeState.recutState.sourceName, loadGeneration).then((loaded) => {
+        if (!loaded || loadGeneration !== runtimeState.recutAudioLoadGeneration) {
           return;
         }
-        this.recutState.loaded = true;
-        this.bumpRecutRevision();
-        this.refreshRecutAnalysis();
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
+        runtimeState.recutState.loaded = true;
+        base.bumpRecutRevision();
+        base.refreshRecutAnalysis();
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
       }).catch((error) => {
-        if (loadGeneration !== this.recutAudioLoadGeneration) {
+        if (loadGeneration !== runtimeState.recutAudioLoadGeneration) {
           return;
         }
-        console.error(`Dev host could not decode Recut sample "${this.recutState.sourceName}".`, error);
-        this.recutState.loaded = false;
-        this.recutAudioBuffer = null;
-        this.recutMonoSamples = new Float32Array();
-        this.bumpRecutRevision();
-        this.refreshRecutAnalysis();
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
+        console.error(`Dev host could not decode Recut sample "${runtimeState.recutState.sourceName}".`, error);
+        runtimeState.recutState.loaded = false;
+        runtimeState.recutAudioBuffer = null;
+        runtimeState.recutMonoSamples = new Float32Array();
+        base.bumpRecutRevision();
+        base.refreshRecutAnalysis();
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
       });
       return;
     }
@@ -338,34 +334,35 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
       const payload = intent.payloadBase64.length > 0
         ? fromBinary(SampleAnalysisRequestSchema, base64ToBytes(intent.payloadBase64))
         : null;
-      this.refreshRecutAnalysis(payload ? {
+      base.refreshRecutAnalysis(payload ? {
         analysisMode: payload.analysisMode,
         density: payload.density,
         projectBpm: payload.projectBpm,
         requestedBpm: payload.requestedBpm,
       } : undefined);
-      this.bumpRecutRevision();
-      this.publishActiveModuleState();
-      this.publishCapabilityFrame(true);
+      runtimeState.completedAnalysisRequestId = payload?.requestId ?? 0n;
+      base.bumpRecutRevision();
+      callbacks.publishActiveModuleState();
+      callbacks.publishCapabilityFrame(true);
       return;
     }
 
     if (intent.capability === "slice-playback" && intent.action === "apply-state") {
       const payload = fromBinary(SlicePlaybackStateSchema, base64ToBytes(intent.payloadBase64));
-      this.recutState.pitchSemitones = payload.pitchSemitones;
-      this.recutState.gainDb = payload.gainDb;
-      this.recutState.stretchEnabled = payload.stretchEnabled;
-      this.recutState.granularEnabled = payload.granularEnabled;
-      this.recutState.grainSizeMs = payload.grainSizeMs;
-      this.recutState.grainDensity = payload.grainDensity;
-      this.recutState.analysisMode = payload.analysisMode === SampleAnalysisMode.BPM
+      runtimeState.recutState.pitchSemitones = payload.pitchSemitones;
+      runtimeState.recutState.gainDb = payload.gainDb;
+      runtimeState.recutState.stretchEnabled = payload.stretchEnabled;
+      runtimeState.recutState.granularEnabled = payload.granularEnabled;
+      runtimeState.recutState.grainSizeMs = payload.grainSizeMs;
+      runtimeState.recutState.grainDensity = payload.grainDensity;
+      runtimeState.recutState.analysisMode = payload.analysisMode === SampleAnalysisMode.BPM
         ? RecutAnalysisMode.BPM
         : payload.analysisMode === SampleAnalysisMode.CUSTOM
           ? RecutAnalysisMode.CUSTOM
           : RecutAnalysisMode.AUTO;
-      this.recutState.density = payload.density;
-      this.recutState.bpmValue = payload.bpmValue;
-      this.recutState.bpmSource = payload.bpmSource === SampleBpmSource.METADATA
+      runtimeState.recutState.density = payload.density;
+      runtimeState.recutState.bpmValue = payload.bpmValue;
+      runtimeState.recutState.bpmSource = payload.bpmSource === SampleBpmSource.METADATA
         ? RecutBpmSource.METADATA
         : payload.bpmSource === SampleBpmSource.ANALYZED
           ? RecutBpmSource.ANALYZED
@@ -374,12 +371,12 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
             : payload.bpmSource === SampleBpmSource.USER
               ? RecutBpmSource.USER
               : RecutBpmSource.NONE;
-      this.recutState.bpmConfidence = payload.bpmConfidence;
-      this.recutState.bpmSuggestedValue = payload.bpmSuggestedValue;
-      this.recutState.bpmSuggestedConfidence = payload.bpmSuggestedConfidence;
-      this.recutState.manualEditRevision = payload.manualEditRevision;
-      this.recutState.projectBpmSnapshot = payload.projectBpm;
-      this.recutState.sliceMarkers = payload.sliceMarkers.map((marker) =>
+      runtimeState.recutState.bpmConfidence = payload.bpmConfidence;
+      runtimeState.recutState.bpmSuggestedValue = payload.bpmSuggestedValue;
+      runtimeState.recutState.bpmSuggestedConfidence = payload.bpmSuggestedConfidence;
+      runtimeState.recutState.manualEditRevision = payload.manualEditRevision;
+      runtimeState.recutState.projectBpmSnapshot = payload.projectBpm;
+      runtimeState.recutState.sliceMarkers = payload.sliceMarkers.map((marker) =>
         create(SliceMarkerSchema, {
           chokeGroupId: marker.chokeGroupId,
           confidence: marker.confidence,
@@ -391,7 +388,7 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
           transientFrame: marker.transientFrame,
         }),
       );
-      this.recutState.padAssignments = payload.padAssignments.map((assignment) =>
+      runtimeState.recutState.padAssignments = payload.padAssignments.map((assignment) =>
         create(PadAssignmentSchema, {
           bank: assignment.bank,
           chokeGroupId: assignment.chokeGroupId,
@@ -401,39 +398,32 @@ export abstract class DevHostCapabilityRuntime extends DevHostStateRuntime {
           sliceIndex: assignment.sliceIndex,
         }),
       );
-      this.recutState.chokeGroups = payload.chokeGroups.map((group) =>
+      runtimeState.recutState.chokeGroups = payload.chokeGroups.map((group) =>
         create(ChokeGroupSchema, {
           accentHue: group.accentHue,
           id: group.id,
           name: group.name,
         }),
       );
-      this.bumpRecutRevision();
-      this.sampleEditorFrame = this.buildSampleEditorFrame();
-      this.publishActiveModuleState();
-      this.publishCapabilityFrame(true);
+      base.bumpRecutRevision();
+      runtimeState.sampleEditorFrame = base.buildSampleEditorFrame();
+      callbacks.publishActiveModuleState();
+      callbacks.publishCapabilityFrame(true);
       return;
     }
 
     if (intent.capability === "slice-playback" && intent.action === "trigger-pad") {
       const payload = fromBinary(SlicePlaybackTriggerSchema, base64ToBytes(intent.payloadBase64));
-      this.triggerRecutPad(payload.padIndex, payload.pressed);
-      this.publishCapabilityFrame(true);
+      base.triggerRecutPad(payload.padIndex, payload.pressed);
+      callbacks.publishCapabilityFrame(true);
       return;
     }
 
     if (intent.capability === "slice-playback" && intent.action === "edit-slice") {
-      this.sampleEditorFrame = this.buildSampleEditorFrame();
-      this.publishCapabilityFrame(true);
+      runtimeState.sampleEditorFrame = base.buildSampleEditorFrame();
+      callbacks.publishCapabilityFrame(true);
       return;
     }
   }
-
-
-
-  protected abstract publishActiveModuleState(): void;
-  protected abstract publishCapabilityFrame(force?: boolean): void;
-  protected abstract publishDebugState(): void;
-  protected abstract publishNavigationState(): void;
-  abstract updateSettings(next: Partial<DevSignalSettings>): void;
+  return Object.assign(runtimeState, { isAuthorizedCapabilityHandle, releaseProducerActions, applyCapabilityIntent });
 }

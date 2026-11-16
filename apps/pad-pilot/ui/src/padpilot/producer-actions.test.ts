@@ -1,20 +1,21 @@
+import { z } from "zod";
 import { expect, it } from "bun:test";
 import { createProducerActions } from "./producer-actions";
 import { moduleSdk } from "../module-sdk";
 import { base64ToBytes } from "../proto/base64";
 
 function readPayload(payloadBase64: string) {
-  return JSON.parse(new TextDecoder().decode(base64ToBytes(payloadBase64))) as Record<string, unknown>;
+  return z.record(z.unknown()).parse(JSON.parse(new TextDecoder().decode(base64ToBytes(payloadBase64))));
 }
 
 it("releases every held MIDI note when its owner is disposed", () => {
   const original = moduleSdk.sendCapabilityIntent;
   const actions: Array<{ action: string; payload: Record<string, unknown> }> = [];
-  moduleSdk.sendCapabilityIntent = ((capability, _handle, action, payloadBase64) => {
+  moduleSdk.sendCapabilityIntent = (capability, _handle, action, payloadBase64) => {
     if (capability === "midi-output") {
       actions.push({ action, payload: readPayload(payloadBase64) });
     }
-  }) as typeof moduleSdk.sendCapabilityIntent;
+  };
 
   try {
     const producer = createProducerActions("performance");
@@ -33,9 +34,9 @@ it("releases every held MIDI note when its owner is disposed", () => {
 it("rejects transport shortcuts after owner disposal", () => {
   const original = moduleSdk.sendCapabilityIntent;
   let intentCount = 0;
-  moduleSdk.sendCapabilityIntent = (() => {
+  moduleSdk.sendCapabilityIntent = () => {
     intentCount += 1;
-  }) as typeof moduleSdk.sendCapabilityIntent;
+  };
 
   try {
     const producer = createProducerActions("performance");
@@ -50,9 +51,9 @@ it("rejects transport shortcuts after owner disposal", () => {
 it("forwards bounded sample offsets for sample-accurate MIDI scheduling", () => {
   const original = moduleSdk.sendCapabilityIntent;
   const payloads: Record<string, unknown>[] = [];
-  moduleSdk.sendCapabilityIntent = ((capability, _handle, _action, payloadBase64) => {
+  moduleSdk.sendCapabilityIntent = (capability, _handle, _action, payloadBase64) => {
     if (capability === "midi-output") payloads.push(readPayload(payloadBase64));
-  }) as typeof moduleSdk.sendCapabilityIntent;
+  };
 
   try {
     const producer = createProducerActions("performance");
@@ -72,9 +73,9 @@ it("forwards bounded sample offsets for sample-accurate MIDI scheduling", () => 
 it("ends every active automation gesture during owner teardown", () => {
   const original = moduleSdk.sendCapabilityIntent;
   const actions: string[] = [];
-  moduleSdk.sendCapabilityIntent = ((capability, _handle, action) => {
+  moduleSdk.sendCapabilityIntent = (capability, _handle, action) => {
     if (capability === "automation") actions.push(action);
-  }) as typeof moduleSdk.sendCapabilityIntent;
+  };
 
   try {
     const producer = createProducerActions("fx");
@@ -89,9 +90,9 @@ it("ends every active automation gesture during owner teardown", () => {
 it("rejects automation parameter ids that native cannot represent", () => {
   const original = moduleSdk.sendCapabilityIntent;
   let intentCount = 0;
-  moduleSdk.sendCapabilityIntent = (() => {
+  moduleSdk.sendCapabilityIntent = () => {
     intentCount += 1;
-  }) as typeof moduleSdk.sendCapabilityIntent;
+  };
 
   try {
     const producer = createProducerActions("fx");
@@ -107,9 +108,9 @@ it("rejects automation parameter ids that native cannot represent", () => {
 it("exposes native module-state A/B comparison through public producer actions", () => {
   const original = moduleSdk.sendCapabilityIntent;
   const actions: string[] = [];
-  moduleSdk.sendCapabilityIntent = ((capability, _handle, action) => {
+  moduleSdk.sendCapabilityIntent = (capability, _handle, action) => {
     if (capability === "module-state") actions.push(action);
-  }) as typeof moduleSdk.sendCapabilityIntent;
+  };
 
   try {
     const producer = createProducerActions("fx");
@@ -126,7 +127,7 @@ it("exposes native module-state A/B comparison through public producer actions",
 it("releases held MIDI and automation before switching local profiles", () => {
   const original = moduleSdk.sendCapabilityIntent;
   const actions: string[] = [];
-  moduleSdk.sendCapabilityIntent = ((_capability, _handle, action) => actions.push(action)) as typeof moduleSdk.sendCapabilityIntent;
+  moduleSdk.sendCapabilityIntent = (_capability, _handle, action) => actions.push(action);
 
   try {
     let selectedProfile = "Default";

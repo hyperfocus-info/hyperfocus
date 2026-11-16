@@ -14,11 +14,11 @@ createUiTest("FloatingLayer", () => {
 
   it("does not schedule deferred layout after unmount", async () => {
     let requestedFrames = 0;
-    window.requestAnimationFrame = (() => {
+    window.requestAnimationFrame = () => {
       requestedFrames += 1;
       return requestedFrames;
-    }) as typeof window.requestAnimationFrame;
-    window.cancelAnimationFrame = (() => undefined) as typeof window.cancelAnimationFrame;
+    };
+    window.cancelAnimationFrame = () => undefined;
     const anchor = document.createElement("button");
     document.body.append(anchor);
     const result = render(() => (
@@ -35,13 +35,13 @@ createUiTest("FloatingLayer", () => {
   });
 
   it("positions from a virtual anchor without adding layout geometry", async () => {
-    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    window.requestAnimationFrame = (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
-    }) as typeof window.requestAnimationFrame;
-    window.cancelAnimationFrame = (() => undefined) as typeof window.cancelAnimationFrame;
+    };
+    window.cancelAnimationFrame = () => undefined;
 
-    const result = render(() => (
+    render(() => (
       <FloatingLayer
         open
         anchorRect={() => new DOMRect(120, 80, 2, 2)}

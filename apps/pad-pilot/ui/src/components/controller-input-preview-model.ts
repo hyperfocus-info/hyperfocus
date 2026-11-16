@@ -1,4 +1,3 @@
-import type { DropdownOption } from "./elements/dropdown";
 import type { PadPilotInputDeviceState } from "../padpilot/io/input-device";
 
 export const ALL_CONTROLLER_PREVIEW_SCOPE = "__all__";
@@ -154,12 +153,12 @@ function selectedDevice(devices: readonly PadPilotInputDeviceState[], scope: Con
 
 export function buildControllerPreviewScopeOptions(devices: readonly PadPilotInputDeviceState[]) {
   return [
-    { value: ALL_CONTROLLER_PREVIEW_SCOPE, label: "All Connected Devices" },
+    { value: ALL_CONTROLLER_PREVIEW_SCOPE, label: "All Connected Devices" as const },
     ...getConnectedGamepads(devices).map((device) => ({
       value: device.runtimeDeviceId,
       label: `${truncateLabel(device.displayName)} (${device.runtimeDeviceId})`,
     })),
-  ] satisfies DropdownOption[];
+  ];
 }
 
 export function resolveControllerPreviewScope(devices: readonly PadPilotInputDeviceState[], scope: ControllerPreviewScope) {
@@ -242,7 +241,7 @@ export function createPreviewDevice(overrides: Partial<PadPilotInputDeviceState>
     rawAxes: overrides.rawAxes ?? overrides.axes ?? [],
     rawButtons: overrides.rawButtons ?? overrides.buttons ?? [],
     runtimeDeviceId: overrides.runtimeDeviceId ?? overrides.deviceId ?? "device-a",
-  } satisfies PadPilotInputDeviceState;
+  };
 }
 
 import { clamp01 } from "../utils/math";

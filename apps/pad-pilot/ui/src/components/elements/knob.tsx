@@ -84,7 +84,7 @@ export function knobAngleFromValue(value: number, min: number, max: number) {
 export function Knob(props: KnobProps) {
   const callHandler = (handler: unknown, event: Event) => {
     if (typeof handler === "function") {
-      (handler as (value: Event) => void)(event);
+      handler(event);
     }
   };
   const [local, others] = splitProps(props, [
@@ -326,12 +326,12 @@ export function Knob(props: KnobProps) {
             disabled={local.disabled}
             class={`${styles.shell} ${dragging() ? styles["shell-dragging"] : ""} ${local.showValueBar ? styles["shell-with-track"] : ""} ${local.class ?? ""}`.trim()}
             role="slider"
-            aria-label={(others["aria-label"] as string | undefined) ?? local.label ?? local.tooltip}
+            aria-label={(others["aria-label"]) ?? local.label ?? local.tooltip}
             aria-valuemin={local.min}
             aria-valuemax={local.max}
             aria-valuenow={effectiveValue()}
             data-angle={angle().toFixed(2)}
-            style={{ ...style(), ...(others.style as JSX.CSSProperties | undefined) }}
+            style={{ ...style(), ...(typeof others.style === "object" ? others.style : undefined) }}
             onBlur={(event) => {
               setHovered(false);
               setDragging(false);

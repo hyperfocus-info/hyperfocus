@@ -1,3 +1,4 @@
+import { requireElement } from "../../utils/require-element";
 import { expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -97,7 +98,7 @@ createUiTest("SearchableCombobox", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(selectedId).toBe("first");
-    expect((input as HTMLInputElement).value).toBe("First");
+    expect((requireElement(input, HTMLInputElement)).value).toBe("First");
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
@@ -131,11 +132,11 @@ createUiTest("SearchableCombobox", () => {
     const input = screen.getByRole("combobox", { name: "Search options" });
     fireEvent.wheel(input, { deltaY: 100 });
     expect(selectedId).toBe("second");
-    expect((input as HTMLInputElement).value).toBe("Second");
+    expect((requireElement(input, HTMLInputElement)).value).toBe("Second");
 
     fireEvent.wheel(input, { deltaY: -100 });
     expect(selectedId).toBe("first");
-    expect((input as HTMLInputElement).value).toBe("First");
+    expect((requireElement(input, HTMLInputElement)).value).toBe("First");
   });
 
   it("closes on outside pointerdown and Escape", () => {

@@ -1,14 +1,15 @@
+import { tempSkillSource, vlq } from "./test-support/midi-fixtures";
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
 
-import { BiologicalTension } from "./skills/biological-tension";
-import { CymaticStability } from "./skills/cymatic-stability";
-import { BehaviorSynthesizer } from "./behavior-synthesizer";
-import { evaluateMediaFile, evaluateMidiFile } from "./orchestrator";
-import { SkillManager } from "./skill-manager";
+import { createBiologicalTension } from "./skills/biological-tension";
+import { createCymaticStability } from "./skills/cymatic-stability";
+import { createBehaviorSynthesizer } from "./behavior-synthesizer";
+import { createSynaestheticEvaluator, evaluateMediaFile, evaluateMidiFile } from "./orchestrator";
+import { createSkillManager } from "./skill-manager";
 import type { AudioSummary } from "./audio-utils";
-import { AudioAnalyzer, AudioSkillManager } from "./audio-skill-manager";
+import { createAudioSkillManager } from "./audio-skill-manager";
 import {
   MAX_MIDI_ACTIVE_NOTES,
   MAX_MIDI_EVENTS,
@@ -17,7 +18,7 @@ import {
   summarizeMidi,
 } from "./midi-utils";
 
-const TEST_ROOT = join(process.cwd(), "build", "synaesthetic-evaluator-tests", String(Date.now()));
+const TEST_ROOT = join(process.cwd(), ".local", "se-tests", String(Date.now()));
 
 setDefaultTimeout(15_000);
 
@@ -26,6 +27,46 @@ afterAll(async () => {
 });
 
 describe("SynaestheticEvaluator", () => {
+  test("evaluator factories isolate rolling buffers and keep detached lifecycle commands", async () => {
+    const calls: number[][] = [];
+    let starts = 0;
+    let stops = 0;
+    const baseManager = createSkillManager();
+    const manager = {
+      ...baseManager,
+      loadAll: async () => undefined,
+      startWatching: () => { starts += 1; },
+      stopWatching: () => { stops += 1; },
+      evaluate: async (midi: Uint8Array) => {
+        calls.push([...midi]);
+        return baseManager.evaluate(midi);
+      },
+    };
+    const first = createSynaestheticEvaluator({ manager, bufferCapacity: 3 });
+    const second = createSynaestheticEvaluator({ manager, bufferCapacity: 3 });
+    const { start, stop, pushMidiBytes } = first;
+    await start();
+    try {
+      await pushMidiBytes(new Uint8Array([1, 2]));
+      await second.pushMidiBytes(new Uint8Array([9]));
+      await pushMidiBytes(new Uint8Array([3, 4]));
+      expect(calls).toEqual([[1, 2], [9], [2, 3, 4]]);
+    } finally { stop(); }
+    expect(starts).toBe(1);
+    expect(stops).toBe(1);
+  });
+  test("factory managers isolate loaded skills and retain detached lifecycle operations", async () => {
+    const skillsDir = join(TEST_ROOT, "factory-isolation", "skills");
+    await Bun.write(join(skillsDir, "fixture.ts"), tempSkillSource(0.4, "factory"));
+    const first = createSkillManager({ skillsDir, cacheDir: join(TEST_ROOT, "factory-isolation", "cache-a") });
+    const second = createSkillManager({ skillsDir, cacheDir: join(TEST_ROOT, "factory-isolation", "cache-b") });
+    const { loadAll, startWatching, stopWatching } = first;
+    await loadAll();
+    expect(first.skills).toHaveLength(1);
+    expect(second.skills).toHaveLength(0);
+    try { startWatching(); startWatching(); } finally { stopWatching(); stopWatching(); }
+    expect(first.skills).toHaveLength(1);
+  });
   test("parses raw MIDI note events into reusable summaries", () => {
     const summary = summarizeMidi(rawPhrase([60, 64, 67, 72], [96, 90, 88, 94]));
 
@@ -63,7 +104,7 @@ describe("SynaestheticEvaluator", () => {
   });
 
   test("BiologicalTension rates consonant fifths above tritone stress", async () => {
-    const analyzer = new BiologicalTension();
+    const analyzer = createBiologicalTension();
     const consonant = await analyzer.evaluate(rawPhrase([60, 67, 72], [92, 88, 90]), {});
     const tense = await analyzer.evaluate(rawPhrase([60, 66, 72], [122, 120, 118]), {});
 
@@ -72,7 +113,7 @@ describe("SynaestheticEvaluator", () => {
   });
 
   test("CymaticStability prefers symmetric harmonic pitch mass", async () => {
-    const analyzer = new CymaticStability();
+    const analyzer = createCymaticStability();
     const stable = await analyzer.evaluate(rawPhrase([60, 67, 72, 55, 64], [88, 86, 84, 82, 80]), { tonicPitchClass: 0 });
     const noisy = await analyzer.evaluate(rawPhrase([61, 63, 66, 70, 73], [88, 86, 84, 82, 80]), { tonicPitchClass: 0 });
 
@@ -85,7 +126,7 @@ describe("SynaestheticEvaluator", () => {
     const skillPath = join(skillsDir, "temp-skill.ts");
     await Bun.write(skillPath, tempSkillSource(0.25, "v1"));
 
-    const manager = new SkillManager({ skillsDir, cacheDir });
+    const manager = createSkillManager({ skillsDir, cacheDir });
     await manager.loadAll();
     const first = await manager.evaluate(rawPhrase([60, 64, 67], [80, 90, 100]));
 
@@ -106,7 +147,7 @@ describe("SynaestheticEvaluator", () => {
     await Bun.write(join(skillsDir, "nan-weight.ts"), nonFiniteWeightSkillSource());
     await Bun.write(join(skillsDir, "stalled.ts"), stalledSkillSource());
 
-    const manager = new SkillManager({ skillsDir, cacheDir, skillTimeoutMs: 25 });
+    const manager = createSkillManager({ skillsDir, cacheDir, skillTimeoutMs: 25 });
     await manager.loadAll();
     const startedAt = performance.now();
     const report = await manager.evaluate(rawPhrase([60], [90]));
@@ -121,23 +162,23 @@ describe("SynaestheticEvaluator", () => {
   });
 
   test("AudioSkillManager times out stalled analyzers and keeps finite weights", async () => {
-    class FiniteMetric extends AudioAnalyzer {
-      name = "FiniteMetric";
-      weight = Number.POSITIVE_INFINITY;
+    function createFiniteMetric() { return {
+      name: "FiniteMetric",
+      weight: Number.POSITIVE_INFINITY,
       async evaluate() {
         return { score: 0.8, biologicalImpact: "valence" as const, justification: "bounded" };
       }
-    }
-    class StalledMetric extends AudioAnalyzer {
-      name = "StalledMetric";
-      weight = 1;
+    }; }
+    function createStalledMetric() { return {
+      name: "StalledMetric",
+      weight: 1,
       async evaluate() {
         return await new Promise<never>(() => {});
       }
-    }
+    }; }
 
-    const manager = new AudioSkillManager({
-      analyzers: [new FiniteMetric(), new StalledMetric()],
+    const manager = createAudioSkillManager({
+      analyzers: [createFiniteMetric(), createStalledMetric()],
       skillTimeoutMs: 25,
     });
     const startedAt = performance.now();
@@ -157,9 +198,9 @@ describe("SynaestheticEvaluator", () => {
     const skillPath = join(skillsDir, "temp-skill.ts");
     await Bun.write(skillPath, tempSkillSource(0.8, "good"));
 
-    const manager = new SkillManager({ skillsDir, cacheDir });
+    const manager = createSkillManager({ skillsDir, cacheDir });
     await manager.loadAll();
-    const synthesizer = new BehaviorSynthesizer({
+    const synthesizer = createBehaviorSynthesizer({
       manager,
       allowUnsafeGeneratedCode: true,
       candidateDir,
@@ -175,7 +216,7 @@ describe("SynaestheticEvaluator", () => {
     const update = await synthesizer.observe(low);
     const updated = await manager.evaluate(rawPhrase([60, 64, 67], [80, 90, 100]));
 
-    expect(update.status).toBe("updated");
+    expect(update.status, update.detail).toBe("updated");
     expect(updated.successScore).toBeCloseTo(0.9);
   });
 
@@ -186,9 +227,9 @@ describe("SynaestheticEvaluator", () => {
     const skillPath = join(skillsDir, "temp-skill.ts");
     await Bun.write(skillPath, tempSkillSource(0.8, "good"));
 
-    const manager = new SkillManager({ skillsDir, cacheDir });
+    const manager = createSkillManager({ skillsDir, cacheDir });
     await manager.loadAll();
-    const synthesizer = new BehaviorSynthesizer({
+    const synthesizer = createBehaviorSynthesizer({
       manager,
       allowUnsafeGeneratedCode: true,
       candidateDir,
@@ -214,9 +255,9 @@ describe("SynaestheticEvaluator", () => {
     const skillPath = join(skillsDir, "temp-skill.ts");
     await Bun.write(skillPath, tempSkillSource(0.8, "good"));
 
-    const manager = new SkillManager({ skillsDir, cacheDir });
+    const manager = createSkillManager({ skillsDir, cacheDir });
     await manager.loadAll();
-    const synthesizer = new BehaviorSynthesizer({
+    const synthesizer = createBehaviorSynthesizer({
       manager,
       allowUnsafeGeneratedCode: true,
       candidateDir,
@@ -240,10 +281,10 @@ describe("SynaestheticEvaluator", () => {
     const skillPath = join(skillsDir, "temp-skill.ts");
     await Bun.write(skillPath, tempSkillSource(0.8, "good"));
 
-    const manager = new SkillManager({ skillsDir, cacheDir });
+    const manager = createSkillManager({ skillsDir, cacheDir });
     await manager.loadAll();
     let rewriteRequested = false;
-    const synthesizer = new BehaviorSynthesizer({
+    const synthesizer = createBehaviorSynthesizer({
       manager,
       rewriteSkill: async () => {
         rewriteRequested = true;
@@ -267,10 +308,10 @@ describe("SynaestheticEvaluator", () => {
     const skillPath = join(skillsDir, "temp-skill.ts");
     await Bun.write(skillPath, tempSkillSource(0.8, "good"));
 
-    const manager = new SkillManager({ skillsDir, cacheDir });
+    const manager = createSkillManager({ skillsDir, cacheDir });
     await manager.loadAll();
     let rewriteRequested = false;
-    const synthesizer = new BehaviorSynthesizer({
+    const synthesizer = createBehaviorSynthesizer({
       manager,
       allowUnsafeGeneratedCode: true,
       rewriteSkill: async () => {
@@ -282,7 +323,7 @@ describe("SynaestheticEvaluator", () => {
     await Bun.write(skillPath, tempSkillSource(0.2, "bad"));
     await manager.loadAll();
     const low = await manager.evaluate(rawPhrase([60, 66, 72], [120, 120, 120]));
-    await truncate(skillPath, 512 * 1024 + 1);
+    await truncate(skillPath, 524289);
 
     await expect(synthesizer.observe(low)).rejects.toThrow("Skill source exceeded 524288 bytes");
     expect(rewriteRequested).toBe(false);
@@ -310,7 +351,7 @@ describe("SynaestheticEvaluator", () => {
   test("MIDI file evaluation rejects oversized inputs before parsing", async () => {
     const midiPath = join(TEST_ROOT, "midi", "oversized.mid");
     await Bun.write(midiPath, new Uint8Array());
-    await truncate(midiPath, 4 * 1024 * 1024 + 1);
+    await truncate(midiPath, 4194305);
 
     await expect(evaluateMidiFile(midiPath)).rejects.toThrow("MIDI input exceeded");
   });
@@ -386,93 +427,64 @@ function denseChordSmf(noteCount: number) {
   ]);
 }
 
-function vlq(value: number) {
-  const bytes = [value & 0x7f];
-  let remaining = value >> 7;
-  while (remaining > 0) {
-    bytes.unshift((remaining & 0x7f) | 0x80);
-    remaining >>= 7;
-  }
-  return bytes;
-}
 
-function tempSkillSource(score: number, label: string) {
-  return `
-import { MIDIAnalyzer, metric } from "../base-analyzer";
 
-export default new class TempSkill extends MIDIAnalyzer {
-  name = "TempSkill";
-  weight = 1;
 
-  async evaluate() {
-    return metric({
-      score: ${score},
-      biologicalImpact: "valence",
-      justification: "${label}",
-    });
-  }
-}();
-`;
-}
 
 function nonFiniteWeightSkillSource() {
   return `
-import { MIDIAnalyzer, metric } from "../base-analyzer";
+import { metric } from "../base-analyzer";
 
-export default new class NonFiniteWeightSkill extends MIDIAnalyzer {
-  name = "NonFiniteWeightSkill";
-  weight = Number.NaN;
+export default {
+  name: "NonFiniteWeightSkill",
+  weight: Number.NaN,
 
   async evaluate() {
     return metric({ score: 1, biologicalImpact: "valence", justification: "finite" });
   }
-}();
+};
 `;
 }
 
 function stalledSkillSource() {
   return `
-import { MIDIAnalyzer } from "../base-analyzer";
-
-export default new class StalledSkill extends MIDIAnalyzer {
-  name = "StalledSkill";
-  weight = 1;
+export default {
+  name: "StalledSkill",
+  weight: 1,
 
   async evaluate() {
     return await new Promise(() => {});
   }
-}();
+};
 `;
 }
 
 function throwingSkillSource() {
   return `
-import { MIDIAnalyzer } from "../base-analyzer";
-
-export default new class ThrowingSkill extends MIDIAnalyzer {
-  name = "ThrowingSkill";
-  weight = 1;
+export default {
+  name: "ThrowingSkill",
+  weight: 1,
 
   async evaluate() {
     throw new Error("semantic failure");
   }
-}();
+};
 `;
 }
 
 function hangingSkillSource() {
   return `
-import { MIDIAnalyzer, metric } from "../base-analyzer";
+import { metric } from "../base-analyzer";
 
-export default new class HangingSkill extends MIDIAnalyzer {
-  name = "HangingSkill";
-  weight = 1;
+export default {
+  name: "HangingSkill",
+  weight: 1,
 
   async evaluate() {
     while (true) {}
     return metric({ score: 1, biologicalImpact: "none", justification: "unreachable" });
   }
-}();
+};
 `;
 }
 
@@ -513,59 +525,59 @@ function sustainedToneWav() {
 
 function audioSummaryFixture(overrides: Partial<AudioSummary>) {
   return {
-    durationSeconds: 180,
-    sourceSampleRate: 44_100,
-    sourceChannelCount: 2,
-    sampleRate: 44_100,
-    rmsMean: 0.12,
-    rmsStdDev: 0.04,
-    crestFactor: 4,
-    clippingRate: 0,
-    flatTopRate: 0,
+    durationSeconds: 180 as const,
+    sourceSampleRate: 44_100 as const,
+    sourceChannelCount: 2 as const,
+    sampleRate: 44_100 as const,
+    rmsMean: 0.12 as const,
+    rmsStdDev: 0.04 as const,
+    crestFactor: 4 as const,
+    clippingRate: 0 as const,
+    flatTopRate: 0 as const,
     samplePeakDbfs: -1,
     truePeakDbtp: -1,
     integratedLufs: -14,
-    loudnessRange: 6,
-    dcOffset: 0,
-    silenceRatio: 0,
-    invalidSampleCount: 0,
-    spectralCentroid: 760,
-    spectralCentroidStdDev: 420,
-    spectralFlatness: 0.05,
-    spectralFlux: 0.8,
-    spectralEntropy: 0.45,
-    rolloffHz: 2_200,
-    zcr: 0.08,
-    lowEnergy: 0.32,
-    bassEnergy: 0.28,
-    lowMidEnergy: 0.16,
-    midEnergy: 0.16,
-    highEnergy: 0.08,
-    stereoWidth: 0.25,
-    onsetRate: 1.2,
-    onsetRegularity: 0.5,
-    pulseClarity: 0.55,
-    transientSpikeRate: 0.05,
+    loudnessRange: 6 as const,
+    dcOffset: 0 as const,
+    silenceRatio: 0 as const,
+    invalidSampleCount: 0 as const,
+    spectralCentroid: 760 as const,
+    spectralCentroidStdDev: 420 as const,
+    spectralFlatness: 0.05 as const,
+    spectralFlux: 0.8 as const,
+    spectralEntropy: 0.45 as const,
+    rolloffHz: 2_200 as const,
+    zcr: 0.08 as const,
+    lowEnergy: 0.32 as const,
+    bassEnergy: 0.28 as const,
+    lowMidEnergy: 0.16 as const,
+    midEnergy: 0.16 as const,
+    highEnergy: 0.08 as const,
+    stereoWidth: 0.25 as const,
+    onsetRate: 1.2 as const,
+    onsetRegularity: 0.5 as const,
+    pulseClarity: 0.55 as const,
+    transientSpikeRate: 0.05 as const,
     chroma: [0.2, 0.01, 0.16, 0.02, 0.14, 0.11, 0.01, 0.18, 0.02, 0.11, 0.01, 0.03],
-    chromaFlux: 0.07,
-    chromaEntropy: 0.65,
-    sectionContrast: 0.45,
+    chromaFlux: 0.07 as const,
+    chromaEntropy: 0.65 as const,
+    sectionContrast: 0.45 as const,
     selfSimilarity: [],
     sections: [],
-    scaleCompliance: 0.74,
-    fifthsStability: 0.72,
-    cymaticSymmetry: 0.7,
-    harmonicity: 0.72,
+    scaleCompliance: 0.74 as const,
+    fifthsStability: 0.72 as const,
+    cymaticSymmetry: 0.7 as const,
+    harmonicity: 0.72 as const,
     perceptualBands: [
-      { lowHz: 20, highHz: 80, energyDb: -8, share: 0.32 },
-      { lowHz: 80, highHz: 250, energyDb: -9, share: 0.28 },
-      { lowHz: 250, highHz: 700, energyDb: -12, share: 0.16 },
-      { lowHz: 700, highHz: 3_500, energyDb: -12, share: 0.16 },
-      { lowHz: 3_500, highHz: 16_000, energyDb: -15, share: 0.08 },
+      { lowHz: 20 as const, highHz: 80 as const, energyDb: -8, share: 0.32 as const },
+      { lowHz: 80 as const, highHz: 250 as const, energyDb: -9, share: 0.28 as const },
+      { lowHz: 250 as const, highHz: 700 as const, energyDb: -12, share: 0.16 as const },
+      { lowHz: 700 as const, highHz: 3_500 as const, energyDb: -12, share: 0.16 as const },
+      { lowHz: 3_500 as const, highHz: 16_000 as const, energyDb: -15, share: 0.08 as const },
     ],
     timeline: { loudness: [], centroid: [], flux: [], tension: [], dynamics: [], groovePulse: [], sectionScore: [] },
     ...overrides,
-  } satisfies AudioSummary;
+  };
 }
 
 function metricScore(metrics: readonly { readonly name: string; readonly metric: { readonly score: number } }[], name: string) {

@@ -6,7 +6,7 @@ import { FxNodeType } from "../../../proto/generated/fx-chain-pb";
  * Keep this aligned with ConvolverModuleGraph's typed-state, realtime-parameter,
  * and custom-node processors. Registry tests fail if UI controls drift from it.
  */
-export const FX_NATIVE_SUPPORTED_CONTROL_KEYS = {
+export const FX_NATIVE_SUPPORTED_CONTROL_KEYS: Record<FxNodeType, readonly string[]> = {
   [FxNodeType.UNSPECIFIED]: [],
   [FxNodeType.CONVOLVER]: ["blend", "irId", "irSourcePath", "irSourceName"],
   [FxNodeType.DELAY]: ["time", "feedback", "focusMix", "lowCutHz", "highCutHz", "width", "saturation", "character"],
@@ -27,7 +27,7 @@ export const FX_NATIVE_SUPPORTED_CONTROL_KEYS = {
   [FxNodeType.REVERSE]: ["windowMs", "pitchSemitones", "forwardMix", "crossfadeMs"],
   [FxNodeType.TREMOLO]: ["rateHz", "depth", "stereoPhaseOffset", "lfoShape", "smoothing"],
   [FxNodeType.SATURATION]: ["drive", "tone", "outputGainDb", "character", "bias"],
-} as const satisfies Record<FxNodeType, readonly string[]>;
+} as const;
 
 /** Serialized fields retained so existing presets remain wire-compatible, but not exposed as controls. */
 export const FX_PROTO_COMPATIBILITY_ONLY_FIELDS: Partial<Record<FxNodeType, readonly string[]>> = {

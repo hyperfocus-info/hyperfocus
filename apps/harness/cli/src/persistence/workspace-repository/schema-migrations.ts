@@ -1,3 +1,4 @@
+import { migrateUsageLedger } from "../../usage/usage-ledger";
 import type { Database } from "bun:sqlite";
 import { runPersistenceMigrationOnce } from "../persistence-migrations";
 
@@ -260,6 +261,7 @@ function finishMigration(db: Database, instrumentation: MigrationInstrumentation
 }
 
 export function runWorkspaceSchemaMigrations(db: Database, instrumentation?: MigrationInstrumentation) {
+  migrateUsageLedger(db);
   runPersistenceMigrationOnce(db, BACKGROUND_RUN_HISTORY_MIGRATION_ID, () => {
     const runSql = readTableCreateSql(db, "background_job_runs");
     const eventSql = readTableCreateSql(db, "background_job_run_events");

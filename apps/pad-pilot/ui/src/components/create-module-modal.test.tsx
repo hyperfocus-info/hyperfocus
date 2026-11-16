@@ -1,3 +1,4 @@
+import { requireElement } from "../utils/require-element";
 import { expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createUiTest } from "../../../utils/tests/test-harness";
@@ -9,7 +10,7 @@ createUiTest("CreateModuleModal", () => {
 
     expect(screen.getByRole("dialog", { name: "Create New Module" })).not.toBeNull();
     expect(screen.getByRole("textbox", { name: "Module name" })).not.toBeNull();
-    expect((screen.getByRole("button", { name: "Create module" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((requireElement(screen.getByRole("button", { name: "Create module" }), HTMLButtonElement)).disabled).toBe(true);
   });
 
   it("submits a trimmed module name through the public callback", () => {

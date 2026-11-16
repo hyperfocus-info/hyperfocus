@@ -50,7 +50,7 @@ function createRegistry(target: Window) {
     event.preventDefault();
     entry.close();
   };
-  return { stack, capture, onKeyDown, release };
+  return { stack, capture, onKeyDown, release, ownsEscape: (event: KeyboardEvent) => pending.has(event) };
 }
 
 /** Register for the open lifetime only. Cleanup is idempotent and never removes a replacement. */
@@ -119,4 +119,9 @@ export function isTopFocusOverlay(id: string, target: Window | undefined = typeo
     if (entry.focusOwner !== false) return entry.id === id;
   }
   return false;
+}
+
+/** Delegated hosts defer Escape until the overlay present at dispatch has handled it. */
+export function overlayOwnsEscape(event: KeyboardEvent, target: Window | undefined = typeof window === "undefined" ? undefined : window) {
+ return target ? registries.get(target)?.ownsEscape(event) ?? false : false;
 }

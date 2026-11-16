@@ -1,5 +1,5 @@
 import { bytesToBase64 } from "../../proto/base64";
-import { type FxPresetCategory, type PresetSummary } from "./fx-types";
+import {  type PresetSummary } from "./fx-types";
 import { readBoundedStreamBytes } from "@hyperfocus/pad-pilot/bounded-stream";
 
 export type BundledFxPresetManifestEntry = PresetSummary & {
@@ -17,8 +17,8 @@ export type BundledFxPreset = BundledFxPresetManifestEntry & {
 export const BUNDLED_FX_PRESET_MANIFEST_URL = "/fx/chains/presets/index.json";
 export const BUNDLED_FX_PRESET_FILE_ROOT = "/fx/chains/presets";
 export const MAX_BUNDLED_FX_PRESETS = 64;
-const MAX_BUNDLED_FX_MANIFEST_BYTES = 128 * 1024;
-const MAX_BUNDLED_FX_PRESET_BYTES = 512 * 1024;
+const MAX_BUNDLED_FX_MANIFEST_BYTES = 131072;
+const MAX_BUNDLED_FX_PRESET_BYTES = 524288;
 const MAX_BUNDLED_FX_PRESET_ID_LENGTH = 128;
 const MAX_BUNDLED_FX_PRESET_NAME_LENGTH = 256;
 const MAX_BUNDLED_FX_PRESET_DESCRIPTION_LENGTH = 512;
@@ -77,7 +77,7 @@ function categoryProperty(value: unknown) {
     case "era":
     case "system":
     case "utility":
-      return category satisfies FxPresetCategory;
+      return category;
     default:
       return undefined;
   }

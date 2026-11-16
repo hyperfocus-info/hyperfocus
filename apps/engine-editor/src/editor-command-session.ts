@@ -187,7 +187,7 @@ export function createEditorCommandSession(project: EditorProject, host?: Editor
         if (!primary) throw new Error(`Choreography primary entity does not exist in the active scene: ${command.primaryEntityId}`);
         if (command.secondaryEntityId && !secondary) throw new Error(`Choreography secondary entity does not exist in the active scene: ${command.secondaryEntityId}`);
         const result = applyChoreographyRecipe2D({ timeline: nextProject.timeline, recipe: command.recipe, frame: command.frame, primary, secondary, id: command.id });
-        nextProject.timeline = result.timeline as EditorProject["timeline"];
+        nextProject.timeline = { ...nextProject.timeline, ...result.timeline };
         detail = `Applied ${command.recipe} choreography at frame ${command.frame}: ${result.changedTrackIds.length} editable tracks, ${result.effectIds.length} effects, contact frame ${result.contactFrame}.`;
       } });
       return detail;
@@ -221,7 +221,7 @@ export function createEditorCommandSession(project: EditorProject, host?: Editor
     if (command.type === "asset.import") {
       if (!host) throw new Error("This command session has no binary asset host.");
       const bytes = decodeBase64(command.base64);
-      if (bytes.byteLength > 256 * 1024 * 1024) throw new Error("Imported asset exceeds the 256 MiB per-file limit.");
+      if (bytes.byteLength > 268435456) throw new Error("Imported asset exceeds the 256 MiB per-file limit.");
       const name = validateAssetName(command.name);
       const mimeType = normalizeImportedMimeType(validateMimeType(command.mimeType), name);
       const asset: EditorAsset = {
@@ -243,7 +243,7 @@ export function createEditorCommandSession(project: EditorProject, host?: Editor
       const asset = history.project.assets.find((candidate) => candidate.id === command.assetId);
       if (!asset) throw new Error(`Asset does not exist in the current project: ${command.assetId}`);
       const bytes = decodeBase64(command.base64);
-      if (bytes.byteLength > 256 * 1024 * 1024) throw new Error("Hydrated asset exceeds the 256 MiB per-file limit.");
+      if (bytes.byteLength > 268435456) throw new Error("Hydrated asset exceeds the 256 MiB per-file limit.");
       if (bytes.byteLength !== asset.size) throw new Error(`Hydrated asset size does not match the project catalog: ${asset.id}`);
       const sha256 = await hashHyperfocusAsset(bytes);
       if (asset.sha256 && asset.sha256 !== sha256) throw new Error(`Hydrated asset SHA-256 does not match the project catalog: ${asset.id}`);
@@ -499,7 +499,7 @@ function isEditorJsonValue(value: unknown, depth: number): value is EditorJsonVa
 }
 
 function isEditorStarterId(value: unknown): value is EditorStarterId {
-  return typeof value === "string" && EDITOR_STARTER_IDS.includes(value as EditorStarterId);
+  return typeof value === "string" && EDITOR_STARTER_IDS.some(id => id === value);
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

@@ -1,8 +1,9 @@
+import { vlq } from "./test-support/midi-fixtures";
 import { describe, expect, test } from "bun:test";
 
 import { evaluateMidiV2 } from "./midi-evaluator-v2";
 import { summarizeMidi } from "./midi-utils";
-import { SkillManager } from "./skill-manager";
+import { createSkillManager } from "./skill-manager";
 
 describe("MIDI evaluator v2", () => {
   test("returns source-specific evidence-bearing metrics through dimension scores", () => {
@@ -99,7 +100,7 @@ describe("MIDI evaluator v2", () => {
   });
 
   test("exposes v2 MIDI scoring while retaining the legacy skill score adapter", async () => {
-    const manager = new SkillManager();
+    const manager = createSkillManager();
     await manager.loadAll();
     const report = await manager.evaluate(simplePhraseSmf());
 
@@ -201,14 +202,4 @@ function smf(events: readonly number[], ticksPerBeat: number) {
     track.length & 0xff,
     ...track,
   ]);
-}
-
-function vlq(value: number) {
-  const bytes = [value & 0x7f];
-  let remaining = value >> 7;
-  while (remaining > 0) {
-    bytes.unshift((remaining & 0x7f) | 0x80);
-    remaining >>= 7;
-  }
-  return bytes;
 }

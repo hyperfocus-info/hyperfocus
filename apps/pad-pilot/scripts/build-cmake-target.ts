@@ -42,7 +42,7 @@ async function main() {
       "--config", "Debug",
       "--target", target,
     ], projectRoot, processDeadlines.cmakeBuild, `${target} build`);
-  }, 30 * 60_000);
+  }, 1800000);
 }
 
 if (import.meta.main) {

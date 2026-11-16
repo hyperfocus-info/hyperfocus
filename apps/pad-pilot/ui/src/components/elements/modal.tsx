@@ -213,7 +213,7 @@ export function Modal(props: ModalProps) {
             ).class} ${local.class ?? ""}`.trim()}
             role="dialog"
             aria-modal="true"
-            aria-label={local.title ?? (others["aria-label"] as string | undefined)}
+            aria-label={local.title ?? (others["aria-label"])}
             tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >

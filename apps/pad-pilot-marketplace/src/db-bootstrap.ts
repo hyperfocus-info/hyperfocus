@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { Database } from "bun:sqlite";
 import { existsSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
@@ -5,7 +6,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { nowIso, sha256 } from "./db-core";
 import { marketplaceEnv as env, type MarketplaceEnv } from "./env";
 import { readBoundedUtf8FileSync } from "@hyperfocus/pad-pilot/bounded-file";
-const maxMigrationBytes = 2 * 1024 * 1024;
+const maxMigrationBytes = 2097152;
 const MIGRATIONS_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS _migrations (
   id TEXT PRIMARY KEY,
@@ -17,7 +18,7 @@ CREATE TABLE IF NOT EXISTS _migrations (
 const hasColumn = (db: Database, tableName: string, columnName: string) => {
   const statement = db.prepare("SELECT name FROM pragma_table_info(?)");
   try {
-    const rows = statement.all(tableName) as Array<{ name: string }>;
+    const rows = z.array(z.object({ name: z.string() })).parse(statement.all(tableName));
     return rows.some((row) => row.name === columnName);
   } finally {
     statement.finalize();
@@ -53,7 +54,7 @@ function applySqlMigrations(db: Database, migrationsDir: string) {
   const appliedStatement = db.prepare("SELECT id FROM _migrations ORDER BY id");
   let appliedIds: string[];
   try {
-    appliedIds = (appliedStatement.all() as Array<{ id: string }>).map((row) => row.id);
+    appliedIds = (z.array(z.object({ id: z.string() })).parse(appliedStatement.all())).map((row) => row.id);
   } finally {
     appliedStatement.finalize();
   }
@@ -75,9 +76,7 @@ function applySqlMigrations(db: Database, migrationsDir: string) {
     );
     const checksum = sha256(sql);
     db.transaction(() => {
-      const applied = db.query("SELECT checksum_sha256 FROM _migrations WHERE id = ?").get(fileName) as {
-        checksum_sha256: string | null;
-      } | null;
+      const applied = z.union([z.object({ checksum_sha256: z.union([z.string(), z.null()]) }), z.null()]).parse(db.query("SELECT checksum_sha256 FROM _migrations WHERE id = ?").get(fileName));
       if (applied) {
         if (!applied.checksum_sha256) {
           db.query("UPDATE _migrations SET checksum_sha256 = ? WHERE id = ?").run(checksum, fileName);
@@ -169,7 +168,7 @@ function validateRequiredSchema(db: Database) {
   try {
     for (const [tableName, columns] of Object.entries(requiredSchema)) {
       const actualColumns = new Set(
-        (columnStatement.all(tableName) as Array<{ name: string }>).map((column) => column.name),
+        (z.array(z.object({ name: z.string() })).parse(columnStatement.all(tableName))).map((column) => column.name),
       );
       if (actualColumns.size === 0) {
         problems.push(tableName);
@@ -188,7 +187,7 @@ function validateRequiredSchema(db: Database) {
     const indexList = db.prepare("SELECT name, \"unique\" AS is_unique, partial FROM pragma_index_list(?)");
     let index: { is_unique: number; name: string; partial: number } | undefined;
     try {
-      index = (indexList.all(contract.table) as Array<{ is_unique: number; name: string; partial: number }>)
+      index = (z.array(z.object({ is_unique: z.number(), name: z.string(), partial: z.number() })).parse(indexList.all(contract.table)))
         .find((candidate) => candidate.name === indexName);
     } finally {
       indexList.finalize();
@@ -200,7 +199,7 @@ function validateRequiredSchema(db: Database) {
     const indexColumns = db.prepare("SELECT name FROM pragma_index_info(?) ORDER BY seqno");
     let columns: string[];
     try {
-      columns = (indexColumns.all(indexName) as Array<{ name: string }>).map((column) => column.name);
+      columns = (z.array(z.object({ name: z.string() })).parse(indexColumns.all(indexName))).map((column) => column.name);
     } finally {
       indexColumns.finalize();
     }
@@ -211,7 +210,7 @@ function validateRequiredSchema(db: Database) {
     const indexSqlStatement = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?");
     let indexSql = "";
     try {
-      indexSql = (indexSqlStatement.get(indexName) as { sql: string } | null)?.sql ?? "";
+      indexSql = (z.union([z.object({ sql: z.string() }), z.null()]).parse(indexSqlStatement.get(indexName)))?.sql ?? "";
     } finally {
       indexSqlStatement.finalize();
     }

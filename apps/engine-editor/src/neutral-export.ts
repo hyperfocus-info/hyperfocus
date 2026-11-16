@@ -34,7 +34,7 @@ export async function createEditorNeutralExport(
 
 /** A deterministic, uncompressed standard ZIP for browsers without directory access. */
 export async function createNeutralExportArchive(bundle: NeutralExportBundle): Promise<Uint8Array> {
-  return packHyperfocusExchangeFiles(bundle.files, { compression: "none", maxFiles: 5_514, maxBytes: 1056 * 1024 * 1024 });
+  return packHyperfocusExchangeFiles(bundle.files, { compression: "none", maxFiles: 5_514, maxBytes: 1107296256 });
 }
 
 export function neutralExportBaseName(projectName: string): string {

@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from '@hyperfocus/desktop-runtime/process';
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -19,10 +20,10 @@ import { writeFlStudioValidationPresets } from "./generate-fl-studio-validation-
 import { waitForProcessWithDeadline } from "@hyperfocus/pad-pilot/subprocess";
 import { readBoundedFileBytes } from "@hyperfocus/pad-pilot/bounded-file";
 
-const executableMaximumBytes = 500 * 1024 * 1024;
-const fixtureMaximumBytes = 256 * 1024 * 1024;
-const renderMaximumBytes = 512 * 1024 * 1024;
-const renderDeadlineMs = 15 * 60_000;
+const executableMaximumBytes = 524288000;
+const fixtureMaximumBytes = 268435456;
+const renderMaximumBytes = 536870912;
+const renderDeadlineMs = 900000;
 
 type ResolvedTarget = {
   executable: string;
@@ -77,7 +78,7 @@ async function resolveTarget(id: FlStudioTargetId, executableOverride: string) {
   if (!version.startsWith(expectedMajor)) {
     throw new Error(`${id} executable reports unexpected version ${version}: ${executable}`);
   }
-  return Object.freeze({ executable, id, version }) satisfies ResolvedTarget;
+  return Object.freeze({ executable, id, version });
 }
 
 function ensureNoRunningFlStudio() {
@@ -105,7 +106,7 @@ async function prepareReferenceWave(projectRoot: string, fixtureDirectory: strin
   const expectedBytes = createFlStudioReferenceWaveBytes();
   const expectedHash = sha256Bytes(expectedBytes);
   if (await Bun.file(referencePath).exists()) {
-    const existingBytes = await readBoundedFileBytes(referencePath, 2 * 1024 * 1024, "FL Studio reference WAV");
+    const existingBytes = await readBoundedFileBytes(referencePath, 2097152, "FL Studio reference WAV");
     const existingHash = sha256Bytes(existingBytes);
     if (existingHash !== expectedHash) {
       throw new Error(`FL Studio reference WAV differs from deterministic contract: ${referencePath}`);
@@ -141,13 +142,13 @@ async function renderFixture(target: ResolvedTarget, fixture: string, outputWave
   }
   const command = buildFlStudioRenderCommand(target.executable, fixture, outputWave);
   console.log(`${target.id} render: ${path.basename(fixture)}`);
-  const subprocess = Bun.spawn(command, {
+  const subprocess = spawnBackgroundProcess({ cmd: command, ...({
     cwd: path.dirname(fixture),
     env: { ...process.env },
     stderr: "inherit",
     stdin: "ignore",
     stdout: "inherit",
-  });
+  }) });
   const exitCode = await waitForProcessWithDeadline(
     subprocess,
     renderDeadlineMs,
@@ -222,9 +223,9 @@ async function main() {
   }
 
   const referencePath = fixturePaths(fixtureDirectory, "fl26").reference;
-  await requireRegularFile(referencePath, 2 * 1024 * 1024, "FL Studio reference WAV");
+  await requireRegularFile(referencePath, 2097152, "FL Studio reference WAV");
   const expectedReferenceHash = sha256Bytes(createFlStudioReferenceWaveBytes());
-  const referenceBytes = await readBoundedFileBytes(referencePath, 2 * 1024 * 1024, "FL Studio reference WAV");
+  const referenceBytes = await readBoundedFileBytes(referencePath, 2097152, "FL Studio reference WAV");
   if (sha256Bytes(referenceBytes) !== expectedReferenceHash) {
     throw new Error(`FL Studio reference WAV checksum mismatch: ${referencePath}`);
   }

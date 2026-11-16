@@ -501,7 +501,8 @@
     "rbush": "^4.0.1",
     "three": "^0.163.0",
     "typescript": "7.0.2",
-    "@hyperfocus/branding": "workspace:*"
+    "@hyperfocus/branding": "workspace:*",
+    "terser": "5.51.2"
   },
   "peerDependencies": {
     "@types/three": "^0.163.0",

@@ -13,7 +13,7 @@ const originalGetGamepads = navigator.getGamepads?.bind(navigator);
 const originalRequestAnimationFrame = window.requestAnimationFrame.bind(window);
 const originalCancelAnimationFrame = window.cancelAnimationFrame.bind(window);
 
-function mockBrowserGamepads(getGamepads: () => Array<Gamepad | null>) {
+function mockBrowserGamepads(getGamepads: NonNullable<import("./browser-gamepad-source").NavigatorWithGamepads>["getGamepads"]) {
   Object.defineProperty(window.navigator, "getGamepads", {
     configurable: true,
     value: getGamepads,
@@ -24,16 +24,16 @@ function installAnimationFrameHarness() {
   let nextHandle = 1;
   const callbacks = new Map<number, FrameRequestCallback>();
 
-  window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+  window.requestAnimationFrame = (callback: FrameRequestCallback) => {
     const handle = nextHandle;
     nextHandle += 1;
     callbacks.set(handle, callback);
     return handle;
-  }) as typeof window.requestAnimationFrame;
+  };
 
-  window.cancelAnimationFrame = ((handle: number) => {
+  window.cancelAnimationFrame = (handle: number) => {
     callbacks.delete(handle);
-  }) as typeof window.cancelAnimationFrame;
+  };
 
   return {
     flushFrame(timestamp = performance.now()) {
@@ -51,10 +51,7 @@ function installAnimationFrameHarness() {
 
 function isolateRuntimeSubscribers() {
   const runtime = getDevHostRuntime();
-  const internals = runtime as unknown as {
-    debugListeners: Set<unknown>;
-    hostListeners: Set<unknown>;
-  };
+  const internals = runtime;
   internals.hostListeners.clear();
   internals.debugListeners.clear();
   runtime.reset();
@@ -70,7 +67,7 @@ function createBrowserGamepad(
     id?: string;
   } = {},
 ) {
-  return {
+  return ({
     axes: overrides.axes ?? [],
     buttons: (overrides.buttons ?? []).map((value) => ({
       pressed: value >= 0.5,
@@ -83,7 +80,7 @@ function createBrowserGamepad(
     mapping: overrides.mapping ?? "standard",
     timestamp: overrides.timestamp ?? 0,
     vibrationActuator: overrides.vibrationActuator ?? null,
-  } as unknown as Gamepad;
+  });
 }
 
 describe("dev host controller and producer input", () => {

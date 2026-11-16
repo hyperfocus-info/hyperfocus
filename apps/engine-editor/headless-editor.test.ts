@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from '@hyperfocus/desktop-runtime/process';
 import { describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -42,7 +43,7 @@ describe("headless editor command host", () => {
     await withProject(async (root) => {
       const planPath = join(root, "agent-plan.json");
       await writeFile(planPath, JSON.stringify({ requestId: "cli-direct-1", intent: "Rename through direct CLI", commands: [{ type: "project.patch", label: "CLI rename", operations: [{ op: "replace", path: "/name", value: "Direct CLI Result" }] }] }));
-      const child = Bun.spawn([process.execPath, join(import.meta.dir, "cli.ts"), "agent", "--project", root, "--plan", planPath], { cwd: import.meta.dir, stdout: "pipe", stderr: "pipe" });
+      const child = spawnBackgroundProcess({ cmd: [process.execPath, join(import.meta.dir, "cli.ts"), "agent", "--project", root, "--plan", planPath], ...({ cwd: import.meta.dir, stdout: "pipe", stderr: "pipe" }) });
       const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
       expect(stderr).toBe("");
       expect(exitCode).toBe(0);
@@ -65,7 +66,7 @@ describe("headless editor command host", () => {
           operations: [{ op: "replace", path: "/missing-name", value: "Rejected" }]
         }]
       }));
-      const child = Bun.spawn([
+      const child = spawnBackgroundProcess({ cmd: [
         process.execPath,
         join(import.meta.dir, "cli.ts"),
         "agent",
@@ -73,7 +74,7 @@ describe("headless editor command host", () => {
         root,
         "--plan",
         planPath
-      ], { cwd: import.meta.dir, stdout: "pipe", stderr: "pipe" });
+      ], ...({ cwd: import.meta.dir, stdout: "pipe", stderr: "pipe" }) });
       const [exitCode, stdout, stderr] = await Promise.all([
         child.exited,
         new Response(child.stdout).text(),
@@ -165,7 +166,8 @@ describe("headless editor command host", () => {
       if (!response) throw new Error("Hydration snapshot API did not return a response.");
       const snapshot = requireRecord(await response.json(), "hydration snapshot");
       expect(Array.isArray(snapshot.assetTransfers)).toBe(true);
-      const transfer = requireRecord((snapshot.assetTransfers as unknown[])[0], "asset transfer");
+      if (!Array.isArray(snapshot.assetTransfers)) throw new Error("Missing asset transfers");
+      const transfer = requireRecord(snapshot.assetTransfers[0], "asset transfer");
       expect(transfer.assetId).toBe("fixture-data");
       expect(Uint8Array.from(atob(String(transfer.base64)), (character) => character.charCodeAt(0))).toEqual(bytes);
     });

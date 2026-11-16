@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   ParentProps,
   createContext,
@@ -25,20 +26,20 @@ const ANALYZER_SENSITIVITY_DEBOUNCE_MS = 180;
 
 function createEmptyFeedFrame() {
   return {
-    status: "idle",
-    currentLevel: 0,
-    tuningHz: 440,
+    status: "idle" as const,
+    currentLevel: 0 as const,
+    tuningHz: 440 as const,
     detectionSensitivity: ANALYZER_DEFAULT_DETECTION_SENSITIVITY,
     laneEnergies: [],
     minMidiNote: null,
     maxMidiNote: null,
     primaryKeyMatch: null,
     alternateKeyMatches: [],
-    hasTake: false,
+    hasTake: false as const,
     takeDurationSeconds: null,
-    frameCount: 0,
+    frameCount: 0 as const,
     noteEvents: [],
-  } satisfies AnalyzerFeedFrame;
+  };
 }
 
 function resolveLaneRange(frame: AnalyzerFeedFrame) {
@@ -51,7 +52,7 @@ function createAnalyzerModuleStore() {
   let detectionSensitivityTimeout: number | null = null;
   const [viewState, setViewState] = PadPilot.hooks.useEditorViewState<{ appendEnabled: boolean }>("analyzer-controls", {
     appendEnabled: false,
-  });
+  }, value => z.object({ appendEnabled: z.boolean() }).parse(value));
   const [state, setState] = createStore({
     host: {
       frame: PadPilot.analyzer.getCachedFrame() ?? createEmptyFeedFrame(),
@@ -59,7 +60,7 @@ function createAnalyzerModuleStore() {
     ui: {
       autoCaptureIssued: false,
       hostReady: false,
-      pendingDetectionSensitivity: null as number | null,
+      pendingDetectionSensitivity: ((): number | null => null)(),
     },
   });
 

@@ -28,19 +28,19 @@ export const TIMING_SYNC_LABELS = [
 
 export const TIMING_SYNC_BEATS = [
   0.125,
-  1 / 12,
+  0.08333333333333333,
   0.1875,
   0.25,
-  1 / 6,
+  0.16666666666666666,
   0.375,
   0.5,
-  1 / 3,
+  0.3333333333333333,
   0.75,
   1,
-  2 / 3,
+  0.6666666666666666,
   1.5,
   2,
-  4 / 3,
+  1.3333333333333333,
   3,
   4,
   8,
@@ -66,7 +66,7 @@ export function getTimingSyncBeats(index: number) {
 }
 
 export function beatsToTimingValue(beats: number, mode: TimingSyncValueMode, bpm = DEFAULT_SYNC_BPM) {
-  const safeBeats = Math.max(1 / 32, Number.isFinite(beats) ? beats : 0.25);
+  const safeBeats = Math.max(0.03125, Number.isFinite(beats) ? beats : 0.25);
   const safeBpm = Math.max(20, Number.isFinite(bpm) ? bpm : DEFAULT_SYNC_BPM);
   const seconds = (60 / safeBpm) * safeBeats;
   switch (mode) {

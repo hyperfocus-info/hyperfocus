@@ -1,3 +1,4 @@
+import { formatBpm } from "./utils/host-bpm-button-values";
 import * as stylex from "@stylexjs/stylex";
 import { Clock3 } from "lucide-solid";
 import { Button } from "../../components/elements/button";
@@ -13,9 +14,7 @@ export interface HostBpmButtonProps {
   label?: string;
 }
 
-function formatBpm(bpm: number) {
-  return `${Math.max(20, Math.min(320, Math.round(bpm)))} BPM`;
-}
+
 
 /** HostBpmButton locks PadPilot's host tempo cache to a generated template BPM. */
 export function HostBpmButton(props: HostBpmButtonProps) {

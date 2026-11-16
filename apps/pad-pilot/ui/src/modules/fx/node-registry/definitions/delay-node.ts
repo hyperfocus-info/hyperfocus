@@ -36,7 +36,7 @@ export const DelayNodeDefinition = createNodeDefinition({
     createLegacyParamState(7, "High Cut", config.highCutHz, 1200, 20000, "Hz"),
     createLegacyParamState(8, "Width", config.width, 0, 1),
     createLegacyParamState(9, "Saturation", config.saturation, 0, 1),
-    createLegacyParamState(10, "Character", Math.max(0, DELAY_CHARACTERS.indexOf(config.character as typeof DELAY_CHARACTERS[number])), 0, DELAY_CHARACTERS.length - 1),
+    createLegacyParamState(10, "Character", Math.max(0, DELAY_CHARACTERS.findIndex((value) => value === config.character)), 0, DELAY_CHARACTERS.length - 1),
   ],
   rackControls: [
     createNumberControl("time", "Time", (config) => config.time, (config, value) => (config.time = value), {

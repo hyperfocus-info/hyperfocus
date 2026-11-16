@@ -19,12 +19,16 @@ test("failed persistence rolls back totals and leaves session untouched", () => 
   const { repository, file } = fixture();
   const session = createEmptyTokenUsageTotals();
   const db = new Database(file);
-  db.exec(`CREATE TRIGGER reject_usage BEFORE INSERT ON workspace_meta WHEN NEW.key = 'token_usage_observations_v1' BEGIN SELECT RAISE(ABORT, 'fixture failure'); END`);
+  db.exec(`CREATE TRIGGER reject_usage BEFORE INSERT ON workspace_meta WHEN NEW.key = 'token_usage_lifetime_v1' BEGIN SELECT RAISE(ABORT, 'fixture failure'); END`);
   try {
     expect(() => recordServerTokenUsage(repository, session, usage)).toThrow("fixture failure");
     expect(session.totalProcessedTokens).toBe(0);
     expect(repository.getTokenUsageLifetime().totalProcessedTokens).toBe(0);
     expect(repository.getTokenUsageState(session).sources).toEqual([]);
+    expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM usage_receipts").get()?.count).toBe(0);
+    db.exec("DROP TRIGGER reject_usage");
+    recordServerTokenUsage(repository, session, usage);
+    expect(repository.getTokenUsageLifetime().totalProcessedTokens).toBe(1280);
   } finally { db.close(); repository.close(); }
 });
 

@@ -46,7 +46,7 @@ function cloneInputDevice(device: PadPilotInputDeviceState) {
     buttons: [...device.buttons],
     rawAxes: [...device.rawAxes],
     rawButtons: [...device.rawButtons],
-  } satisfies PadPilotInputDeviceState;
+  };
 }
 
 export function inputDevicesFromHostState(hostState: HostState) {
@@ -57,20 +57,20 @@ export function inputDevicesFromHostState(hostState: HostState) {
     return null;
   }
   return [{
-    activeLayoutKind: "auto",
+    activeLayoutKind: "auto" as const,
     axes: [...hostState.controller.axes],
     buttons: [...hostState.controller.buttons],
     connected: hostState.controller.connected,
-    detectedLayoutKind: "auto",
-    deviceId: "native-controller",
-    deviceKind: "gamepad",
-    displayName: "Primary Controller",
+    detectedLayoutKind: "auto" as const,
+    deviceId: "native-controller" as const,
+    deviceKind: "gamepad" as const,
+    displayName: "Primary Controller" as const,
     frameIndex: hostState.controller.frameIndex,
-    hardwareId: "native-controller",
+    hardwareId: "native-controller" as const,
     rawAxes: [...hostState.controller.axes],
     rawButtons: [...hostState.controller.buttons],
-    runtimeDeviceId: "native-controller",
-  }] satisfies PadPilotInputDeviceState[];
+    runtimeDeviceId: "native-controller" as const,
+  }];
 }
 
 export function bindInputDevices(callback: (devices: PadPilotInputDeviceState[]) => void) {

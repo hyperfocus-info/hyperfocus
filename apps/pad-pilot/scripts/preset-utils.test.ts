@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,7 +36,7 @@ describe("preset utilities", () => {
       updateManifest(manifest, { file: "one.preset", id: "one", name: "One" }),
       updateManifest(manifest, { file: "two.preset", id: "two", name: "Two" }),
     ]);
-    const parsed = JSON.parse(readFileSync(manifest, "utf8")) as { presets: Array<{ id: string }> };
+    const parsed = z.object({ presets: z.array(z.object({ id: z.string() }).passthrough()) }).passthrough().parse(JSON.parse(readFileSync(manifest, "utf8")));
     expect(parsed.presets.map((entry) => entry.id)).toEqual(["one", "two"]);
   });
 
@@ -77,7 +78,7 @@ describe("preset utilities", () => {
       writePresetFile(root, "shared.preset", new Uint8Array([1]), { file: "shared.preset", id: "shared", name: "First" }),
       writePresetFile(root, "shared.preset", new Uint8Array([2]), { file: "shared.preset", id: "shared", name: "Second" }),
     ]);
-    const manifest = JSON.parse(readFileSync(path.join(root, "index.json"), "utf8")) as { presets: Array<{ name: string }> };
+    const manifest = z.object({ presets: z.array(z.object({ name: z.string() }).passthrough()) }).passthrough().parse(JSON.parse(readFileSync(path.join(root, "index.json"), "utf8")));
     const binary = readFileSync(path.join(root, "shared.preset"))[0];
     expect([[1, "First"], [2, "Second"]]).toContainEqual([binary, manifest.presets[0]?.name]);
   });

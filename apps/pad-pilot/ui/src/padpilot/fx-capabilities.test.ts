@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, expect, it } from "bun:test";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { waitFor } from "@solidjs/testing-library";
@@ -20,7 +21,7 @@ function installNativeBridge() {
       addEventListener: () => 0,
       emitEvent: (eventId, payload) => {
         if (eventId === "__juce__invoke") {
-          nativeInvocations.push(payload as NativeInvocation);
+          nativeInvocations.push(z.object({name:z.string().optional(),params:z.array(z.unknown()).optional()}).passthrough().parse(payload));
         }
       },
     },
@@ -33,7 +34,7 @@ function installNativeBridge() {
 function sentIntents() {
   return nativeInvocations
     .filter((invocation) => invocation.name === "padpilotBridge")
-    .map((invocation) => JSON.parse(String(invocation.params?.[0] ?? "{}")) as Record<string, string>);
+    .map((invocation) => z.record(z.string()).parse(JSON.parse(String(invocation.params?.[0] ?? "{}"))));
 }
 
 afterEach(() => {

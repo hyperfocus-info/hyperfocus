@@ -1,41 +1,11 @@
 import { FxNodeType } from "../../../proto/generated/fx-chain-pb";
 import type { FxNodeFocusRenderer, FxNodeRackVisualizerRenderer, FxNodeRendererDefinition } from "./renderer-types";
-import {
-  renderAutoPanNodeEditor,
-  renderAutoPanRackVisualizer,
-  renderBitcrusherNodeEditor,
-  renderBitcrusherRackVisualizer,
-  renderChorusNodeEditor,
-  renderChorusRackVisualizer,
-  renderCompressorNodeEditor,
-  renderCompressorRackVisualizer,
-  renderConvolverNodeEditor,
-  renderConvolverRackVisualizer,
-  renderDelayNodeEditor,
-  renderDelayRackVisualizer,
-  renderEqNodeEditor,
-  renderEqRackVisualizer,
-  renderExciterNodeEditor,
-  renderExciterRackVisualizer,
-  renderNoiseGateNodeEditor,
-  renderNoiseGateRackVisualizer,
-  renderPhaserNodeEditor,
-  renderPhaserRackVisualizer,
-  renderPitchDriftNodeEditor,
-  renderPitchDriftRackVisualizer,
-  renderReverbNodeEditor,
-  renderReverbRackVisualizer,
-  renderRotarySpeakerNodeEditor,
-  renderRotarySpeakerRackVisualizer,
-  renderStandardNodeEditor,
-  renderStandardRackVisualizer,
-  renderStereoImagerNodeEditor,
-  renderStereoImagerRackVisualizer,
-  renderTapeSaturationNodeEditor,
-  renderTapeSaturationRackVisualizer,
-  renderTransientShaperNodeEditor,
-  renderTransientShaperRackVisualizer,
-} from "./renderers";
+import { renderAutoPanNodeEditor, renderAutoPanRackVisualizer, renderPhaserNodeEditor, renderPhaserRackVisualizer, renderPitchDriftNodeEditor, renderPitchDriftRackVisualizer, renderRotarySpeakerNodeEditor, renderRotarySpeakerRackVisualizer } from "./renderers-motion";
+import { renderBitcrusherNodeEditor, renderBitcrusherRackVisualizer, renderChorusNodeEditor, renderChorusRackVisualizer, renderExciterNodeEditor, renderExciterRackVisualizer, renderTapeSaturationNodeEditor, renderTapeSaturationRackVisualizer } from "./renderers-color";
+import { renderCompressorNodeEditor, renderCompressorRackVisualizer, renderNoiseGateNodeEditor, renderNoiseGateRackVisualizer } from "./renderers-dynamics";
+import { renderConvolverNodeEditor, renderConvolverRackVisualizer, renderEqNodeEditor, renderEqRackVisualizer, renderReverbNodeEditor, renderReverbRackVisualizer, renderTransientShaperNodeEditor, renderTransientShaperRackVisualizer } from "./renderers-tone";
+import { renderDelayNodeEditor, renderDelayRackVisualizer, renderStereoImagerNodeEditor, renderStereoImagerRackVisualizer } from "./renderers-spatial";
+import { renderStandardNodeEditor, renderStandardRackVisualizer } from "./renderer-primitives";
 
 function createNodeRenderers(
   renderEditor: FxNodeFocusRenderer<any, any>,
@@ -43,9 +13,9 @@ function createNodeRenderers(
 ) {
   return {
     renderEditor,
-    renderRack: (props) => props.renderStandardRack(),
+    renderRack: (props: Parameters<FxNodeRendererDefinition["renderRack"]>[0]) => props.renderStandardRack(),
     renderVisualizer,
-  } satisfies FxNodeRendererDefinition<any, any>;
+  };
 }
 
 const STANDARD_NODE_RENDERERS = createNodeRenderers(renderStandardNodeEditor, renderStandardRackVisualizer);

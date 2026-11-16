@@ -81,5 +81,8 @@
     "uploadthing": "^7.7.4",
     "uplot": "^1.6.32",
     "zod": "^3.25.76"
+  },
+  "exports": {
+    "./module-ui-rule": "./scripts/module-ui/rule.ts"
   }
 }

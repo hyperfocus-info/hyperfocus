@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { expect, it } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createUiTest } from "../../../../utils/tests/test-harness";
@@ -28,10 +29,10 @@ createUiTest("EditorModule", () => {
     runtime.sendIntent({ type: "selectModule", moduleId: "editor" });
     const original = moduleSdk.sendCapabilityIntent;
     const keyboardActions: string[] = [];
-    moduleSdk.sendCapabilityIntent = ((capability, handle, action, payloadBase64) => {
+    moduleSdk.sendCapabilityIntent = (capability, handle, action, payloadBase64) => {
       if (capability === "keyboard-output") keyboardActions.push(action);
       return original(capability, handle, action, payloadBase64);
-    }) as typeof moduleSdk.sendCapabilityIntent;
+    };
 
     try {
       render(() => (
@@ -76,12 +77,12 @@ createUiTest("EditorModule", () => {
     });
     const original = moduleSdk.sendCapabilityIntent;
     const shortcuts: string[] = [];
-    moduleSdk.sendCapabilityIntent = ((capability, handle, action, payloadBase64) => {
+    moduleSdk.sendCapabilityIntent = (capability, handle, action, payloadBase64) => {
       if (capability === "keyboard-output") {
-        shortcuts.push(...JSON.parse(new TextDecoder().decode(base64ToBytes(payloadBase64))) as string[]);
+        shortcuts.push(...z.array(z.string()).parse(JSON.parse(new TextDecoder().decode(base64ToBytes(payloadBase64)))));
       }
       return original(capability, handle, action, payloadBase64);
-    }) as typeof moduleSdk.sendCapabilityIntent;
+    };
 
     try {
       render(() => (
@@ -92,7 +93,8 @@ createUiTest("EditorModule", () => {
         </PadPilotProvider>
       ));
       await waitFor(() => expect(screen.getByText(/daw: SPACE/)).not.toBeNull());
-      fireEvent.change(screen.getByRole("combobox", { name: "Profile" }), { target: { value: "New" } });
+      fireEvent.click(screen.getByRole("button", { name: "Profile" }));
+      fireEvent.click(await screen.findByRole("option", { name: "New" }));
       await waitFor(() => expect(screen.getByText(/macro: R/)).not.toBeNull());
 
       runtime.setInputDevices([{
@@ -125,10 +127,10 @@ createUiTest("EditorModule", () => {
     });
     const original = moduleSdk.sendCapabilityIntent;
     const automationActions: string[] = [];
-    moduleSdk.sendCapabilityIntent = ((capability, handle, action, payloadBase64) => {
+    moduleSdk.sendCapabilityIntent = (capability, handle, action, payloadBase64) => {
       if (capability === "automation") automationActions.push(action);
       return original(capability, handle, action, payloadBase64);
-    }) as typeof moduleSdk.sendCapabilityIntent;
+    };
 
     try {
       render(() => (

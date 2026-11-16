@@ -72,12 +72,12 @@ export type MidiV2EvaluationContext = {
   readonly scalePitchClasses?: readonly number[];
 };
 
-const DIMENSION_WEIGHTS = {
+const DIMENSION_WEIGHTS: Record<MidiDimensionId, number> = {
   musicality: 0.34,
   groove: 0.26,
   structure: 0.24,
   "emotional-impact": 0.16,
-} satisfies Record<MidiDimensionId, number>;
+};
 
 export function evaluateMidiV2(midi: Uint8Array, context: MidiV2EvaluationContext = {}) {
   const summary = summarizeMidi(midi);
@@ -104,11 +104,11 @@ export function evaluateMidiSummaryV2(summary: MidiSummary, context: MidiV2Evalu
       dimension: dimension.id,
       contribution: DIMENSION_WEIGHTS[dimension.id] * facet.confidence * (facet.score! - 0.5),
       summary: `${facet.id} scored ${facet.score!.toFixed(3)} with ${facet.confidence.toFixed(3)} confidence.`,
-    } satisfies MidiContributor)));
+    })));
 
   return {
-    schemaVersion: 2,
-    mediaKind: "midi",
+    schemaVersion: 2 as const,
+    mediaKind: "midi" as const,
     overall,
     confidence,
     dimensions,
@@ -116,7 +116,7 @@ export function evaluateMidiSummaryV2(summary: MidiSummary, context: MidiV2Evalu
     strengths: contributors.filter((entry) => entry.contribution > 0).sort((left, right) => right.contribution - left.contribution),
     weaknesses: contributors.filter((entry) => entry.contribution < 0).sort((left, right) => left.contribution - right.contribution),
     diagnostics,
-  } satisfies MidiV2Report;
+  };
 }
 
 function buildMetrics(summary: MidiSummary, diagnostics: ReturnType<typeof buildMidiDiagnostics>, context: MidiV2EvaluationContext) {
@@ -212,9 +212,9 @@ function validMetric(value: Omit<MidiMetricResult, "valid" | "status">) {
     ...value,
     score: clamp01(value.score ?? 0),
     confidence: clamp01(value.confidence),
-    valid: true,
-    status: "valid",
-  } satisfies MidiMetricResult;
+    valid: true as const,
+    status: "valid" as const,
+  };
 }
 
 function unavailableMetric(value: Omit<MidiMetricResult, "score" | "valid">) {
@@ -222,12 +222,12 @@ function unavailableMetric(value: Omit<MidiMetricResult, "score" | "valid">) {
     ...value,
     score: null,
     confidence: clamp01(value.confidence),
-    valid: false,
-  } satisfies MidiMetricResult;
+    valid: false as const,
+  };
 }
 
 function aggregateDimensions(metrics: readonly MidiMetricResult[]) {
-  return (Object.keys(DIMENSION_WEIGHTS) as MidiDimensionId[]).map((dimensionId) => {
+  return Object.keys(DIMENSION_WEIGHTS).filter((id): id is MidiDimensionId => id in DIMENSION_WEIGHTS).map((dimensionId) => {
     const dimensionMetrics = metrics.filter((metric) => metric.dimension === dimensionId);
     const facetIds = [...new Set(dimensionMetrics.map((metric) => metric.facet))];
     const facets = facetIds.map((facetId) => aggregateFacet(facetId, dimensionMetrics.filter((metric) => metric.facet === facetId)));
@@ -241,7 +241,7 @@ function aggregateDimensions(metrics: readonly MidiMetricResult[]) {
       confidence: facets.length > 0 ? validFacets.reduce((sum, facet) => sum + facet.confidence, 0) / facets.length : 0,
       coverage: facets.length > 0 ? validFacets.length / facets.length : 0,
       facets,
-    } satisfies MidiDimensionResult;
+    };
   });
 }
 
@@ -260,7 +260,7 @@ function aggregateFacet(id: string, metrics: readonly MidiMetricResult[]) {
     confidence: confidenceWeight > 0 ? clamp01(confidenceWeight / validMetrics.length) * agreement : 0,
     coverage: metrics.length > 0 ? validMetrics.length / metrics.length : 0,
     metricIds: metrics.map((metric) => metric.id),
-  } satisfies MidiFacetResult;
+  };
 }
 
 function buildMidiDiagnostics(summary: MidiSummary, context: MidiV2EvaluationContext) {
@@ -422,7 +422,7 @@ function groupNotesByOnset(summary: MidiSummary) {
 
 function computeStructure(summary: MidiSummary, onsets: ReturnType<typeof groupNotesByOnset>) {
   if (onsets.length < 6) {
-    return { score: null, confidence: clamp01(onsets.length / 6), repetition: 0, contrast: 0, phraseBoundaryStrength: 0, selfSimilarity: [] as readonly number[] };
+    return { score: null, confidence: clamp01(onsets.length / 6), repetition: 0, contrast: 0, phraseBoundaryStrength: 0, selfSimilarity: [] };
   }
   const third = Math.max(1, Math.floor(onsets.length / 3));
   const sections = [onsets.slice(0, third), onsets.slice(third, third * 2), onsets.slice(third * 2)];

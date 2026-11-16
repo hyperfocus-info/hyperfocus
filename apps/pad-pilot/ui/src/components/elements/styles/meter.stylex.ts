@@ -123,7 +123,7 @@ const definitions = stylex.create({
   },
   "channelLabelStyle": {
     "color": "rgba(228, 240, 255, 0.82)",
-    "fontSize": "8px",
+    "fontSize": "12px",
     "letterSpacing": "0.16em",
     "pointerEvents": "none",
     "position": "absolute",
@@ -141,12 +141,12 @@ const definitions = stylex.create({
   },
   "labelStyle": {
     "color": "rgba(220, 235, 255, 0.78)",
-    "fontSize": "10px",
+    "fontSize": "12px",
     "letterSpacing": "0.12em",
   },
   "readoutStyle": {
     "color": "#8ee8ff",
-    "fontSize": "10px",
+    "fontSize": "12px",
   },
 });
 

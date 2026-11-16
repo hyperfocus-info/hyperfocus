@@ -11,6 +11,12 @@ export type DevSurface = {
   environment(port: number): Record<string, string>;
 };
 
+function artifactCommand(variable: string, entry: string): string[] {
+  const directory = process.env[variable];
+  if (!directory) throw new Error(variable + ' is required for this externally supplied surface.');
+  return [process.execPath, '--cwd', path.resolve(directory), path.resolve(directory, entry)];
+}
+
 const surfaces: Record<DevSurfaceName, DevSurface> = {
   synaesthetic: {
     name: "synaesthetic", defaultPort: 3217, healthPath: "/api/v1/library?limit=1",
@@ -24,16 +30,12 @@ const surfaces: Record<DevSurfaceName, DevSurface> = {
   },
   'trade-bot': {
     name: 'trade-bot', defaultPort: 8813, healthPath: '/healthz',
-    command: root => process.env.TRADE_ARTIFACT_DIR
-      ? [process.execPath, '--cwd', path.resolve(process.env.TRADE_ARTIFACT_DIR), path.resolve(process.env.TRADE_ARTIFACT_DIR, 'server.js')]
-      : [process.execPath, path.join(root, 'apps/engine-editor/website/examples/trade-bot/server.ts')],
+    command: () => artifactCommand('TRADE_ARTIFACT_DIR', 'server.js'),
     environment: port => ({ PORT: String(port), HOST: '127.0.0.1', NODE_ENV: 'development', TRADE_PUBLIC_ORIGIN: `http://127.0.0.1:${port}`, TRADE_OIDC_CLIENT_ID: '', TRADE_OIDC_CLIENT_SECRET: '' }),
   },
   books: {
     name: 'books', defaultPort: 8812, healthPath: '/healthz',
-    command: root => process.env.BOOKS_ARTIFACT_DIR
-      ? [process.execPath, '--cwd', path.resolve(process.env.BOOKS_ARTIFACT_DIR), path.resolve(process.env.BOOKS_ARTIFACT_DIR, 'server.js')]
-      : [process.execPath, path.join(root, 'apps/engine-editor/website/examples/books/server.ts')],
+    command: () => artifactCommand('BOOKS_ARTIFACT_DIR', 'server.js'),
     environment: port => ({ PORT: String(port), HOST: '127.0.0.1', NODE_ENV: 'development', BOOKS_PUBLIC_ORIGIN: `http://127.0.0.1:${port}`, DATABASE_URL: '', BOOKS_REQUIRE_POSTGRES: '0', CLERK_PUBLISHABLE_KEY: '', CLERK_SECRET_KEY: '' }),
   },
   'album-library': {
@@ -47,12 +49,12 @@ const surfaces: Record<DevSurfaceName, DevSurface> = {
   },
   'touch-of-death-runs': {
     name: 'touch-of-death-runs', defaultPort: 8808, healthPath: '/healthz',
-    command: root => [process.execPath, path.join(root, 'spikes/persistent-world-worker/lab/serve.ts')],
+    command: () => artifactCommand('PERF_LAB_ARTIFACT_DIR', 'serve.js'),
     environment: port => ({ PORT: String(port), PERF_NATIVE_SHARES_ONLY:'1', ...(process.env.PERF_LAB_ROOT ? { PERF_LAB_ROOT:path.resolve(process.env.PERF_LAB_ROOT) } : {}), ...(process.env.PERF_AUDIO_URL ? { PERF_AUDIO_URL:process.env.PERF_AUDIO_URL } : {}) }),
   },
   'touch-of-death-lab': {
     name: 'touch-of-death-lab', defaultPort: 8807, healthPath: '/healthz',
-    command: root => [process.execPath, path.join(root, 'spikes/persistent-world-worker/lab/serve.ts')],
+    command: () => artifactCommand('PERF_LAB_ARTIFACT_DIR', 'serve.js'),
     environment: port => ({ PORT: String(port), ...(process.env.PERF_LAB_ROOT ? { PERF_LAB_ROOT: path.resolve(process.env.PERF_LAB_ROOT) } : {}), ...(process.env.PERF_AUDIO_URL ? { PERF_AUDIO_URL: process.env.PERF_AUDIO_URL } : {}) }),
   },
   'game-art': {

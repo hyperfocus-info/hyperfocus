@@ -82,9 +82,9 @@ describe("SelectionInspector", () => {
     const mounted = mount({ kind: "entity", entity }, (target) => Object.assign(target, project));
     const card = mounted.host.querySelector('[data-component-card="player-audio"]')!;
 
-    expect(card.querySelector<HTMLSelectElement>('[data-component-key="assetId"]')?.value).toBe("step-audio");
+    expect(card.querySelector<HTMLButtonElement>('[data-component-key="assetId"]')?.dataset.selectValue).toBe("step-audio");
     expect(card.querySelector('[data-component-key="trigger"]')?.textContent).toContain("Action · move-right");
-    expect(card.querySelector<HTMLSelectElement>('[data-component-key="bus"]')?.value).toBe("sfx");
+    expect(card.querySelector<HTMLButtonElement>('[data-component-key="bus"]')?.dataset.selectValue).toBe("sfx");
     expect(card.querySelector('[data-component-key="gain"]')?.getAttribute("max")).toBe("4");
     expect(card.querySelector<HTMLInputElement>('[data-component-key="pan"]')?.value).toBe("-0.25");
     expect(card.querySelector<HTMLInputElement>('[data-component-key="loop"]')?.checked).toBe(true);

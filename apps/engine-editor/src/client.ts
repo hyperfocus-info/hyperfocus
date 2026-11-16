@@ -1,11 +1,15 @@
+import { atlasColor, formatMotionTime } from "./utils/client-values";
+import { editorSelect, initializeEditorSelects, selectEventValue } from "./components/editor-select-controls";
+import { authoredEntityKind, resolvePlayableActions } from './app/client-model';
+import type { WorkspaceId, BrushMode, TileId, EditorEntity, EffectId, EffectConfig, EditorAutomation } from './app/client-model';
+import { requireElement, setText, escapeMarkup, requireRenderableTarget } from './app/client-dom';
 import { AmbientLight, Bone, BoxGeometry, Color as ThreeColor, DirectionalLight, GridHelper, Mesh, MeshStandardMaterial, Object3D, PerspectiveCamera, Scene as ThreeScene, Skeleton, Vector3, WebGLRenderer } from "three";
-import { checkPostProcessBudget, createBrowserApp, createCanvasObjectEvents, createCollisionKernel, createKeyboardActions, createPostProcessStack, createStage, createTileMap, createTileset, crtScanlines, drawSpriteBatch, extractCollisionRects, getPostProcessEffectCost, grayscale, popTransform, postProcessCosts, pushTransform, registerSprite, screenShake, sepia, threshold, type CollisionKernel, type PostProcessEffect, type StageEntity } from "@hyperfocus/engine";
+import { checkPostProcessBudget, createBrowserApp, createCanvasObjectEvents, createCollisionKernel, createKeyboardActions, createPostProcessStack, createStage, createTileMap, createTileset, crtScanlines, drawSpriteBatch, extractCollisionRects, getPostProcessEffectCost, grayscale, popTransform, postProcessCosts, pushTransform, registerSprite, screenShake, sepia, threshold, type CollisionKernel, type PostProcessEffect } from "@hyperfocus/engine";
 import { defineSchema, encodeDelta } from "@hyperfocus/engine/protocol";
 import {
   createRenderFramePool,
   drawRenderable,
   renderArray,
-  type Renderable,
 } from "@hyperfocus/engine/render";
 import { createInterestGrid, type InterestEntity } from "@hyperfocus/engine/server";
 import {
@@ -14,7 +18,7 @@ import {
 } from "@hyperfocus/engine/motion/three";
 import { createEditorShell, type EditorShell } from "./editor-shell.ts";
 import { createEditorAgentBridge } from "./editor-agent-protocol.ts";
-import type { EditorClipTrack, EditorComponent, EditorKeyframe, EditorProject, EditorSpriteBone, EditorTimelineTrack } from "@hyperfocus/engine/project";
+import type {   EditorKeyframe, EditorProject, EditorSpriteBone, EditorTimelineTrack } from "@hyperfocus/engine/project";
 import { encodeCanvasSequenceWebM } from "./webm-export.ts";
 import { encodeCanvasSequenceMp4 } from "./export/mp4-export.ts";
 import { decodeAndMixTimelineAudio } from "./export/timeline-audio-mix.ts";
@@ -22,7 +26,7 @@ import { createPlayableWorld, playableBehaviorDefinition2D, type PlayableBehavio
 import { createNavigationBehaviorRegistry2D } from "@hyperfocus/engine/project/runtime-navigation-2d";
 import { createPlayableEditorPlaySession2D } from "@hyperfocus/engine/project/runtime-save-2d";
 import { createPlayableStoryController2D, readPlayableStoryDeclaration2D, type PlayableStoryController2D } from "@hyperfocus/engine/project/runtime-story-2d";
-import { applyTimelineOverrides2D, auditPlayableTimeline2D, createPlayableTimeline2D, evaluateTimelineTrack2D, type PlayableTimeline2D } from "@hyperfocus/engine/project/runtime-timeline-2d";
+import { applyTimelineOverrides2D, auditPlayableTimeline2D, createPlayableTimeline2D, type PlayableTimeline2D } from "@hyperfocus/engine/project/runtime-timeline-2d";
 import { createLiveSourceCompiler } from "./live-source.ts";
 import { createStandaloneAudioController, type StandaloneAudioAsset } from "./standalone-audio.ts";
 import { duplicateEditorAtlasFrame, duplicateEditorAtlasSequenceEntry, removeEditorAtlasFrame, removeEditorAtlasSequenceEntry, sampleAtlasClipFrame, sliceEditorAtlasGrid, updateEditorAtlasFrame } from "./editor-atlas-model.ts";
@@ -38,110 +42,7 @@ import { renderTimelineAudioClip, renderTimelineGuides, updateTimelinePlayheadVi
 import { createTimelineEditActions } from "./motion/timeline-edit-actions.ts";
 import { bindTimelineEditor } from "./motion/timeline-editor-bindings.ts";
 
-type WorkspaceId = "stage" | "scene3d" | "tilemap" | "atlas" | "script" | "post" | "motion" | "diagnostics";
-type BrushMode = "paint" | "erase" | "inspect" | "fill" | "marquee";
-type TileId = number;
-
-type EditorEntity = StageEntity & {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  scale: number;
-  rotation?: number;
-  opacity?: number;
-  color: string;
-  accent: string;
-  kind: string;
-  parentId?: string;
-  components?: EditorComponent[];
-};
-
-type EffectId = "grayscale" | "sepia" | "crt" | "shake" | "threshold";
-type EffectConfig = {
-  id: EffectId;
-  label: string;
-  tier: string;
-  enabled: boolean;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  unit: string;
-};
-
-type EditorAutomation = {
-  ready: boolean;
-  activeWorkspace: WorkspaceId;
-  selectedEntityId: string | null;
-  postBudgetOk: boolean;
-  footSlipMeters: number;
-  wasmLatencyMs: number;
-  typescriptLatencyMs: number;
-  loopPaused: boolean;
-  tileTool: BrushMode;
-  extractedCollisionCount: number;
-  atlasFrameCount: number;
-  injectedLatencyMs: number;
-  commandPaletteOpen: boolean;
-  manualSteps: number;
-  frameCount: number;
-  keyboardActions: Record<string, boolean>;
-  wasmFallbackActive: boolean;
-  wasmFallbackReason: string;
-  canvasResizeCommits: number;
-  selectedEntityIds: string[];
-  showWorkspace(id: WorkspaceId): void;
-  injectHeavyPostStack(): void;
-  appendHeavyPostPasses(count: number): void;
-  simulateWasmFallback(): Promise<void>;
-  calibrateWorldZero(x: number, y: number): void;
-  keyboardHeld(action: string): boolean;
-  assetPreviewReady(id: string): boolean;
-  entityPosition(id: string): { x: number; y: number } | undefined;
-  scene3dObjectPosition(id: string): { x: number; y: number; z: number } | undefined;
-  selectEntity(id: string): void;
-  setProceduralWalk(active: boolean): void;
-  stepMotion(frames?: number): void;
-  runBenchmark(): Promise<{ wasmMs: number; typescriptMs: number }>;
-  openProductionLab(tab?: "export" | "reactive" | "logic" | "rig" | "review"): void;
-  simulateMidi(value?: number): void;
-  setSequenceFrame(frame: number): void;
-  exportSequencePreview(): Promise<{ bytes: number; type: string }>;
-};
-
-declare global {
-  /** @deprecated Compatibility alias for pre-rename automation consumers. */
-  var __engineStudio: EditorAutomation | undefined;
-  var __engineEditor: EditorAutomation | undefined;
-}
-
-const requireElement = <T extends Element>(selector: string): T => {
-  const element = document.querySelector<T>(selector);
-  if (!element) throw new Error(`Engine Editor markup is missing ${selector}`);
-  return element;
-};
-
-const setText = (selector: string, value: string) => {
-  requireElement<HTMLElement>(selector).textContent = value;
-};
-
-const markupEscapes: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-const escapeMarkup = (value: unknown) => String(value).replace(/[&<>"']/g, (character) => markupEscapes[character] ?? character);
-
-function requireRenderableTarget(value: unknown): Renderable[] {
-  if (!Array.isArray(value)) throw new TypeError("Stage render target must be an array.");
-  return value;
-}
-
+initializeEditorSelects();
 const stageCanvas = requireElement<HTMLCanvasElement>("#stage-canvas");
 const stageContext = require2dContext(stageCanvas, true);
 const scene3dCanvas = requireElement<HTMLCanvasElement>("#scene3d-canvas");
@@ -525,7 +426,7 @@ const tileFrames = [0, 1, 2, 3].map((index) => ({
   width: 32,
   height: 32,
 }));
-const tileEntries = Array.from({ length: 15 * 9 }, (_, index) => ({
+const tileEntries = Array.from({ length: 135 }, (_, index) => ({
   x: 140 + (index % 15) * 32,
   y: 92 + Math.floor(index / 15) * 32,
   frame: ((index + Math.floor(index / 15) * 2) % 11 === 0 ? 1 : index > 119 ? 3 : 0),
@@ -553,7 +454,7 @@ const app = createBrowserApp({
   scaleMode: "fit",
   input: false,
   metrics: { capacity: 180 },
-  step: 1 / 60,
+  step: 0.016666666666666666,
   maxFrame: 0.05,
   resizeDebounceMs: 100,
   autoStart: true,
@@ -656,7 +557,7 @@ function drawGameCameraSource(frame?: number) {
           order,
         });
       }
-      if (frame !== undefined) drawTimelineEffects2D(ctx, sequenceData, entities, frame);
+      if (frame !== undefined) drawTimelineEffects2D({ context: ctx, timeline: sequenceData, entities, frame });
     });
   } finally {
     renderingGameOutput = false;
@@ -986,7 +887,7 @@ function applyScene3DProject(project: EditorProject) {
       scene3dScene.add(mesh);
       scene3dMeshes.set(entity.id, mesh);
     }
-    scene3dCamera = new PerspectiveCamera(scene.camera.fovYRadians * 180 / Math.PI, 960 / 600, 0.1, 100);
+    scene3dCamera = new PerspectiveCamera(scene.camera.fovYRadians * 180 / Math.PI, 1.6, 0.1, 100);
     scene3dCamera.position.set(...scene.camera.position);
     scene3dCamera.lookAt(...scene.camera.target);
     setText("#scene3d-status", `WEBGL2 READY · ${scene.entities.length} AUTHORING PROXIES · PLAY RUNS REAL SCENE`);
@@ -1156,9 +1057,9 @@ function renderTilemapMetadata(project: EditorProject | undefined = editorShell?
   setText("#tilemap-tile-size-readout", `${mapTileSize} PX`);
   setText("#tilemap-grid-size", `GRID ${mapTileSize} PX`);
   document.querySelectorAll<HTMLInputElement>("[data-solid-tile]").forEach((input) => { input.checked = tileSolidValues.includes(Number(input.dataset.solidTile)); });
-  const select = requireElement<HTMLSelectElement>("#tilemap-tileset-select");
+  const select = editorSelect("#tilemap-tileset-select");
   const imageAssets = project?.assets.filter((asset) => asset.kind === "image") ?? [];
-  select.innerHTML = ['<option value="">Procedural four-color palette</option>', ...imageAssets.map((asset) => `<option value="${escapeMarkup(asset.id)}">${escapeMarkup(asset.name)}</option>`)].join("");
+  select.setOptions([{ value: "", label: "Procedural four-color palette" }, ...imageAssets.map(asset => ({ value: asset.id, label: asset.name }))]);
   select.value = tilemapSourceAssetId ?? "";
   const source = imageAssets.find((asset) => asset.id === tilemapSourceAssetId);
   setText("#tilemap-source-status", source ? `${source.name} SELECTED · PALETTE PREVIEW PROCEDURAL`.toUpperCase() : "PROCEDURAL PALETTE · NO IMAGE TILESET");
@@ -1320,9 +1221,7 @@ function addManualAtlasFrame(rect: { x: number; y: number; width: number; height
   if (globalThis.__engineEditor) globalThis.__engineEditor.atlasFrameCount = atlasFrames.length;
 }
 
-function atlasColor(index: number) {
-  return ["#36c8c2", "#4e86d8", "#8f70db", "#d35f86", "#e7974c", "#84bd61"][index % 6];
-}
+
 
 function renderAtlas() {
   const ctx = atlasContext;
@@ -1375,8 +1274,9 @@ function renderAtlasPanels() {
     : `<p class="empty-copy">${atlasFrames.length ? `${atlasFrames.length} saved frame definition${atlasFrames.length === 1 ? "" : "s"} cannot be previewed.` : "No frames."} Choose or reimport an available source image to recover.</p>`;
   setText("#atlas-frame-count", sourceAvailable ? `${atlasFrames.length} frame${atlasFrames.length === 1 ? "" : "s"}` : `${atlasFrames.length} saved · source unavailable`);
   syncActiveAnimationClip();
-  const clipSelect = requireElement<HTMLSelectElement>("#atlas-clip-select");
-  clipSelect.innerHTML = animationClips.map((clip) => `<option value="${escapeMarkup(clip.id)}"${clip.id === activeAnimationClipId ? " selected" : ""}>${escapeMarkup(clip.name)}</option>`).join("");
+  const clipSelect = editorSelect("#atlas-clip-select");
+  clipSelect.setOptions(animationClips.map(clip => ({ value: clip.id, label: clip.name })));
+  clipSelect.value = activeAnimationClipId ?? "";
   const activeClip = animationClips.find((clip) => clip.id === activeAnimationClipId);
   requireElement<HTMLInputElement>("#atlas-clip-fps").value = String(activeClip?.fps ?? 8);
   requireElement<HTMLInputElement>("#atlas-clip-loop").checked = activeClip?.loop ?? true;
@@ -1473,15 +1373,9 @@ function openAtlasSequenceMenu(event: MouseEvent, index: number) {
 function applyAtlasSourceProject(project: EditorProject) {
   currentProjectAssets = structuredClone(project.assets);
   atlasSourceAssetId = project.atlas.sourceAssetId;
-  const select = requireElement<HTMLSelectElement>("#atlas-source-select");
+  const select = editorSelect("#atlas-source-select");
   const images = project.assets.filter((asset) => asset.kind === "image");
-  select.innerHTML = [
-    '<option value="">Choose an image…</option>',
-    ...images.map((asset) => `<option value="${escapeMarkup(asset.id)}">${escapeMarkup(asset.name)}${asset.objectUrl || assetPreviewImages.has(asset.id) ? "" : " · preview unavailable"}</option>`),
-  ].join("");
-  if (atlasSourceAssetId && !images.some((asset) => asset.id === atlasSourceAssetId)) {
-    select.insertAdjacentHTML("beforeend", `<option value="${escapeMarkup(atlasSourceAssetId)}">Missing asset · ${escapeMarkup(atlasSourceAssetId)}</option>`);
-  }
+  select.setOptions([{ value: "", label: "Choose an image" }, ...images.map(asset => ({ value: asset.id, label: asset.name + (asset.objectUrl || assetPreviewImages.has(asset.id) ? "" : " · preview unavailable") })), ...(atlasSourceAssetId && !images.some(asset => asset.id === atlasSourceAssetId) ? [{ value: atlasSourceAssetId, label: "Missing asset · " + atlasSourceAssetId }] : [])]);
   select.value = atlasSourceAssetId ?? "";
   select.disabled = images.length === 0;
   const dimensions = atlasSourceDimensions();
@@ -1703,7 +1597,7 @@ let sequencePreviewEnabled = false;
 let sequenceSnap = true;
 let sequenceBeatGrid = true;
 let sequenceZoom = 1;
-let sequenceView: "dope" | "graph" = "dope";
+
 const selectedSequenceKeys = new Map<string, SelectedSequenceKey>();
 let sequenceClipboard: Array<{ trackId: string; frameOffset: number; value: number; easing: EditorKeyframe["easing"] }> = [];
 let lastSequenceRenderedFrame = -1;
@@ -1809,7 +1703,7 @@ function recreateMotionController() {
 }
 
 function updateMotion(delta: number) {
-  const safeDelta = Math.min(1 / 30, Math.max(1 / 240, delta));
+  const safeDelta = Math.min(0.03333333333333333, Math.max(0.004166666666666667, delta));
   motionController.move([0, 0, walking ? locomotionSpeed : 0]);
   motionController.update(safeDelta);
   motionElapsed += safeDelta;
@@ -1969,7 +1863,7 @@ function setProceduralWalk(active: boolean) {
 }
 
 function stepMotion(frames = 1) {
-  for (let index = 0; index < frames; index += 1) updateMotion(1 / 60);
+  for (let index = 0; index < frames; index += 1) updateMotion(0.016666666666666666);
   renderRig();
 }
 
@@ -2369,16 +2263,16 @@ function currentEditorCommands(): EditorCommand[] {
 }
 
 function openCommandPalette(){editorShell?.openCommandPalette();}
-function closeCommandPalette(){editorShell?.closeCommandPalette();}
+
 function togglePlayback(){if(app.isRunning()){app.stop();loopPaused=true;}else{app.start();loopPaused=false;}requireElement(".runtime-status").classList.toggle("is-paused",loopPaused);setText("#playback-status",loopPaused?"PAUSED":"RUNNING");setText("#global-playback",loopPaused?"▶":"Ⅱ");if(globalThis.__engineEditor)globalThis.__engineEditor.loopPaused=loopPaused;}
-function advanceSingleFrame(){if(app.isRunning())togglePlayback();stage.update(1/60);updateMotion(1/60);atlasElapsed+=1/60*atlasPlaybackSpeed;renderStage();renderTilemap();renderAtlas();renderRig();manualSteps+=1;setText("#playback-status","STEP_BY_FRAME");if(globalThis.__engineEditor)globalThis.__engineEditor.manualSteps=manualSteps;logEvent("loop → advanced exactly one frame");}
+function advanceSingleFrame(){if(app.isRunning())togglePlayback();stage.update(0.016666666666666666);updateMotion(0.016666666666666666);atlasElapsed+=0.016666666666666666*atlasPlaybackSpeed;renderStage();renderTilemap();renderAtlas();renderRig();manualSteps+=1;setText("#playback-status","STEP_BY_FRAME");if(globalThis.__engineEditor)globalThis.__engineEditor.manualSteps=manualSteps;logEvent("loop → advanced exactly one frame");}
 
 requireElement("#global-playback").addEventListener("click",togglePlayback);
 window.addEventListener("keydown",(event)=>{
   const paletteOpen=editorShell?.commandPaletteOpen() ?? false;
   if((event.ctrlKey&&event.key.toLowerCase()==="p")||(event.metaKey&&event.key.toLowerCase()==="k")){event.preventDefault();openCommandPalette();return;}
   if(paletteOpen)return;
-  const target=event.target;const typing=target instanceof HTMLInputElement||target instanceof HTMLTextAreaElement||(target instanceof HTMLElement&&target.isContentEditable);
+  const target=event.target;if(target instanceof HTMLElement && target.closest('[aria-haspopup="listbox"], [role="listbox"]')) return;const typing=target instanceof HTMLInputElement||target instanceof HTMLTextAreaElement||(target instanceof HTMLElement&&target.isContentEditable);
   if(!typing&&(event.ctrlKey||event.metaKey)&&/^Digit[1-8]$/.test(event.code)){event.preventDefault();const ids:WorkspaceId[]=["stage","scene3d","tilemap","atlas","script","post","motion","diagnostics"];showWorkspace(requireArrayItem(ids,Number(event.code.slice(-1))-1,"workspace shortcut"));return;}
   if(!typing&&event.code==="Space"){event.preventDefault();if(activeWorkspace==="motion")toggleSequencePlayback();else togglePlayback();return;}
   if(!typing&&(event.metaKey||event.ctrlKey)&&event.code==="ArrowRight"){event.preventDefault();advanceSingleFrame();return;}
@@ -2635,9 +2529,9 @@ requireElement<HTMLInputElement>("#tilemap-tile-size").addEventListener("change"
   renderTilemap();
   commitEditorChange("Change tile size");
 });
-requireElement<HTMLSelectElement>("#tilemap-tileset-select").addEventListener("change", (event) => {
+editorSelect("#tilemap-tileset-select").element.addEventListener("change", (event) => {
   if (!editorShell) return;
-  const assetId = requireEventCurrentTarget(event, HTMLSelectElement).value;
+  const assetId = selectEventValue(event);
   const draft = captureRuntimeProject(editorShell.project);
   try {
     if (assetId) assignEditorTileset(draft, assetId);
@@ -2661,8 +2555,8 @@ document.querySelectorAll<HTMLInputElement>("[data-solid-tile]").forEach((input)
 
 requireElement("#slice-grid").addEventListener("click",()=>{if(commitGridSlice())commitEditorChange("Slice atlas grid");});
 for (const selector of ["#slice-width", "#slice-height"]) requireElement<HTMLInputElement>(selector).addEventListener("keydown",(event)=>{if(event.key==="Enter"&&commitGridSlice())commitEditorChange("Slice atlas grid");});
-requireElement<HTMLSelectElement>("#atlas-source-select").addEventListener("change", (event) => {
-  atlasSourceAssetId = requireEventCurrentTarget(event, HTMLSelectElement).value || undefined;
+editorSelect("#atlas-source-select").element.addEventListener("change", (event) => {
+  atlasSourceAssetId = selectEventValue(event) || undefined;
   atlasFrames = [];
   animationSequence = [];
   animationClips = [{ id: "default", name: "Default", sequence: [], fps: 8, loop: true }];
@@ -2673,9 +2567,9 @@ requireElement<HTMLSelectElement>("#atlas-source-select").addEventListener("chan
   renderAtlas();
   commitEditorChange("Choose atlas source asset");
 });
-requireElement<HTMLSelectElement>("#atlas-clip-select").addEventListener("change", (event) => {
+editorSelect("#atlas-clip-select").element.addEventListener("change", (event) => {
   syncActiveAnimationClip();
-  activeAnimationClipId = requireEventCurrentTarget(event, HTMLSelectElement).value;
+  activeAnimationClipId = selectEventValue(event);
   loadActiveAnimationClip(); renderAtlasPanels(); renderAtlas(); commitEditorChange("Switch animation clip");
 });
 requireElement<HTMLInputElement>("#atlas-clip-fps").addEventListener("change", (event) => {
@@ -2761,11 +2655,11 @@ rigCanvas.addEventListener("pointerdown",(event)=>{
   const leftDistance=left?Math.hypot(point.x-left.x,point.y-left.y):Infinity;const rightDistance=right?Math.hypot(point.x-right.x,point.y-right.y):Infinity;
   if(Math.min(leftDistance,rightDistance)>120)return;activeIkHandle=leftDistance<=rightDistance?"left":"right";rigCanvas.setPointerCapture(event.pointerId);requireElement(".rig-canvas-wrap").classList.add("is-ik-dragging");
 });
-rigCanvas.addEventListener("pointermove",(event)=>{if(!activeIkHandle)return;const point=canvasPoint(rigCanvas,event.clientX,event.clientY);const target:[number,number,number]=[(point.x-rigCanvas.width/2)/185,(rigCanvas.height*.78-point.y)/210+terrainHeight,motionController.state.motor.position.z+.25];if(activeIkHandle==="left")leftHandTarget=target;else rightHandTarget=target;motionController.setHandTargets(leftHandTarget,rightHandTarget,1);motionController.update(1/60);rigCanvas.dataset.ikSolved="true";renderRig();});
+rigCanvas.addEventListener("pointermove",(event)=>{if(!activeIkHandle)return;const point=canvasPoint(rigCanvas,event.clientX,event.clientY);const target:[number,number,number]=[(point.x-rigCanvas.width/2)/185,(rigCanvas.height*.78-point.y)/210+terrainHeight,motionController.state.motor.position.z+.25];if(activeIkHandle==="left")leftHandTarget=target;else rightHandTarget=target;motionController.setHandTargets(leftHandTarget,rightHandTarget,1);motionController.update(0.016666666666666666);rigCanvas.dataset.ikSolved="true";renderRig();});
 rigCanvas.addEventListener("pointerup",(event)=>{activeIkHandle=null;if(rigCanvas.hasPointerCapture(event.pointerId))rigCanvas.releasePointerCapture(event.pointerId);requireElement(".rig-canvas-wrap").classList.remove("is-ik-dragging");});
 const rigCanvasWrap=requireElement<HTMLElement>(".rig-canvas-wrap");
 rigCanvasWrap.addEventListener("pointerdown",(event)=>{if(motionTool!=="ik"||activeIkHandle)return;const point=canvasPoint(rigCanvas,event.clientX,event.clientY);const left=rigScreenPoints.get("LeftHand");const right=rigScreenPoints.get("RightHand");const leftDistance=left?Math.hypot(point.x-left.x,point.y-left.y):Infinity;const rightDistance=right?Math.hypot(point.x-right.x,point.y-right.y):Infinity;if(Math.min(leftDistance,rightDistance)>120)return;activeIkHandle=leftDistance<=rightDistance?"left":"right";rigCanvasWrap.setPointerCapture(event.pointerId);rigCanvasWrap.classList.add("is-ik-dragging");},{capture:true});
-rigCanvasWrap.addEventListener("pointermove",(event)=>{if(!activeIkHandle)return;const point=canvasPoint(rigCanvas,event.clientX,event.clientY);const target:[number,number,number]=[(point.x-rigCanvas.width/2)/185,(rigCanvas.height*.78-point.y)/210+terrainHeight,motionController.state.motor.position.z+.25];if(activeIkHandle==="left")leftHandTarget=target;else rightHandTarget=target;motionController.setHandTargets(leftHandTarget,rightHandTarget,1);motionController.update(1/60);rigCanvas.dataset.ikSolved="true";renderRig();},{capture:true});
+rigCanvasWrap.addEventListener("pointermove",(event)=>{if(!activeIkHandle)return;const point=canvasPoint(rigCanvas,event.clientX,event.clientY);const target:[number,number,number]=[(point.x-rigCanvas.width/2)/185,(rigCanvas.height*.78-point.y)/210+terrainHeight,motionController.state.motor.position.z+.25];if(activeIkHandle==="left")leftHandTarget=target;else rightHandTarget=target;motionController.setHandTargets(leftHandTarget,rightHandTarget,1);motionController.update(0.016666666666666666);rigCanvas.dataset.ikSolved="true";renderRig();},{capture:true});
 rigCanvasWrap.addEventListener("pointerup",(event)=>{if(!activeIkHandle)return;activeIkHandle=null;if(rigCanvasWrap.hasPointerCapture(event.pointerId))rigCanvasWrap.releasePointerCapture(event.pointerId);rigCanvasWrap.classList.remove("is-ik-dragging");},{capture:true});
 requireElement("#run-benchmark").addEventListener("click", () => { void runBenchmark(); });
 requireElement("#clear-log").addEventListener("click", () => {packetRecords.length=0;selectedPacketIndex=0;renderPacketLog();});
@@ -2839,7 +2733,7 @@ function bindSequenceTimelineRows() {
   document.querySelectorAll<HTMLButtonElement>("[data-track-mute]").forEach((button) => button.addEventListener("click", () => { const track = sequenceTrack(button.dataset.trackMute); if (!track) return; track.muted = !track.muted; renderSequenceTimeline(); commitEditorChange("Toggle animation track mute"); }));
   document.querySelectorAll<HTMLButtonElement>("[data-event-id]").forEach((button) => button.addEventListener("click", () => { const marker = sequenceData.events.find((event) => event.id === button.dataset.eventId); if (marker) setSequenceFrame(marker.frame); }));
   document.querySelectorAll<HTMLButtonElement>("[data-effect-id]").forEach((button) => button.addEventListener("click", () => { const effect = sequenceData.effects?.find((candidate) => candidate.id === button.dataset.effectId); if (effect) setSequenceFrame(effect.frame + Math.min(2, effect.durationFrames / 3)); }));
-  document.querySelectorAll<HTMLButtonElement>("[data-clip-key-id]").forEach((button) => button.addEventListener("click", () => { const key = timelineAuthoringPanels.clipTrack(button.dataset.clipTrackId)?.keyframes.find((candidate) => candidate.id === button.dataset.clipKeyId); if (key) { setSequenceFrame(key.frame); requireElement<HTMLSelectElement>("#clip-cue-select").value = key.clipId; timelineAuthoringPanels.renderClipCuePanel(); } }));
+  document.querySelectorAll<HTMLButtonElement>("[data-clip-key-id]").forEach((button) => button.addEventListener("click", () => { const key = timelineAuthoringPanels.clipTrack(button.dataset.clipTrackId)?.keyframes.find((candidate) => candidate.id === button.dataset.clipKeyId); if (key) { setSequenceFrame(key.frame); editorSelect("#clip-cue-select").value = key.clipId; timelineAuthoringPanels.renderClipCuePanel(); } }));
   document.querySelectorAll<HTMLButtonElement>("[data-clip-track-lock]").forEach((button) => button.addEventListener("click", () => { const track = timelineAuthoringPanels.clipTrack(button.dataset.clipTrackLock); if (!track) return; track.locked = !track.locked; renderSequenceTimeline(); commitEditorChange("Toggle sprite clip track lock"); }));
   document.querySelectorAll<HTMLButtonElement>("[data-clip-track-mute]").forEach((button) => button.addEventListener("click", () => { const track = timelineAuthoringPanels.clipTrack(button.dataset.clipTrackMute); if (!track) return; track.muted = !track.muted; renderSequenceTimeline(); renderSequenceDrivenPreviews(); commitEditorChange("Toggle sprite clip track mute"); }));
   document.querySelectorAll<HTMLButtonElement>("[data-delete-clip-track]").forEach((button) => button.addEventListener("click", () => { const track = timelineAuthoringPanels.clipTrack(button.dataset.deleteClipTrack); if (!track || globalThis.confirm?.(`Delete ${track.label} and its ${track.keyframes.length} cues?`) !== true) return; sequenceData.clipTracks = sequenceData.clipTracks?.filter((candidate) => candidate.id !== track.id); renderSequenceTimeline(); commitEditorChange("Delete sprite clip track"); }));
@@ -2883,7 +2777,7 @@ function updateSequenceInspector() {
   if (!count) return;
   requireElement<HTMLInputElement>("#key-frame-input").value = count === 1 ? String(Math.round(selected[0].key.frame)) : "";
   requireElement<HTMLInputElement>("#key-value-input").value = count === 1 ? String(selected[0].key.value) : "";
-  requireElement<HTMLSelectElement>("#key-easing").value = selected[0].key.easing;
+  editorSelect("#key-easing").value = selected[0].key.easing;
   document.querySelectorAll<HTMLElement>("[data-easing]").forEach((button) => button.classList.toggle("is-active", button.dataset.easing === selected[0].key.easing));
 }
 
@@ -2894,7 +2788,7 @@ function updateSequencePlayhead() {
 }
 
 function bindSequenceEditor() {
-  bindTimelineEditor({ durationFrames: () => sequenceData.durationFrames, loopStart: () => sequenceData.loopStart, loopEnd: () => sequenceData.loopEnd, frame: () => sequenceFrame, zoom: () => sequenceZoom, setFrame: setSequenceFrame, setSnap: (active) => { sequenceSnap = active; }, setBeatGrid: (active) => { sequenceBeatGrid = active; }, setZoom: (value) => { sequenceZoom = value; }, setView: (value) => { sequenceView = value; }, render: renderSequenceTimeline, togglePlayback: toggleSequencePlayback, logOnion: (active) => logEvent(`onion skin → ${active ? "previous + next frames" : "off"}`), setBpm: (value) => { sequenceData.bpm = value; }, setFps: (value) => { sequenceData.fps = value; }, setSpeed: (value) => { sequenceData.playbackSpeed = value; }, tapTempo: tapSequenceTempo, addEvent: addSequenceEvent, findTransients: detectSequenceTransients, addTrack: addSequenceTrack, applyRecipe: timelineAuthoringPanels.applySelectedChoreographyRecipe, setClipCue: timelineAuthoringPanels.setClipCueAtPlayhead, previewExport: previewSequenceExport, previewStage: () => { sequencePreviewEnabled = true; updateSequencePreviewStatus(); showWorkspace("stage"); }, updateMixer, toggleMixer: toggleMixerState, editKeys: editSelectedSequenceKeys, copyKeys: copySequenceKeys, pasteKeys: pasteSequenceKeys, deleteKeys: deleteSequenceKeys, selectedKeyCount: () => selectedSequenceKeys.size, keyboardActive: () => activeWorkspace === "motion", setEasing: setSelectedEasing, beginBoxSelect: beginSequenceBoxSelect, commit: commitEditorChange });
+  bindTimelineEditor({ durationFrames: () => sequenceData.durationFrames, loopStart: () => sequenceData.loopStart, loopEnd: () => sequenceData.loopEnd, frame: () => sequenceFrame, zoom: () => sequenceZoom, setFrame: setSequenceFrame, setSnap: (active) => { sequenceSnap = active; }, setBeatGrid: (active) => { sequenceBeatGrid = active; }, setZoom: (value) => { sequenceZoom = value; }, setView: () => undefined, render: renderSequenceTimeline, togglePlayback: toggleSequencePlayback, logOnion: (active) => logEvent(`onion skin → ${active ? "previous + next frames" : "off"}`), setBpm: (value) => { sequenceData.bpm = value; }, setFps: (value) => { sequenceData.fps = value; }, setSpeed: (value) => { sequenceData.playbackSpeed = value; }, tapTempo: tapSequenceTempo, addEvent: addSequenceEvent, findTransients: detectSequenceTransients, addTrack: addSequenceTrack, applyRecipe: timelineAuthoringPanels.applySelectedChoreographyRecipe, setClipCue: timelineAuthoringPanels.setClipCueAtPlayhead, previewExport: previewSequenceExport, previewStage: () => { sequencePreviewEnabled = true; updateSequencePreviewStatus(); showWorkspace("stage"); }, updateMixer, toggleMixer: toggleMixerState, editKeys: editSelectedSequenceKeys, copyKeys: copySequenceKeys, pasteKeys: pasteSequenceKeys, deleteKeys: deleteSequenceKeys, selectedKeyCount: () => selectedSequenceKeys.size, keyboardActive: () => activeWorkspace === "motion", setEasing: setSelectedEasing, beginBoxSelect: beginSequenceBoxSelect, commit: commitEditorChange });
 }
 
 function beginSequenceBoxSelect(event: PointerEvent) {
@@ -2987,7 +2881,7 @@ function bindProductionLab() {
 
 function renderProductionLab() {
   const settings = productionData.export;
-  requireElement<HTMLInputElement>("#export-width").value = String(settings.width); requireElement<HTMLInputElement>("#export-height").value = String(settings.height); requireElement<HTMLSelectElement>("#export-fps").value = String(settings.fps); requireElement<HTMLSelectElement>("#export-codec").value = settings.codec;
+  requireElement<HTMLInputElement>("#export-width").value = String(settings.width); requireElement<HTMLInputElement>("#export-height").value = String(settings.height); editorSelect("#export-fps").value = String(settings.fps); editorSelect("#export-codec").value = settings.codec;
   setText("#export-preview-label", `${settings.preset} · ${settings.width} × ${settings.height}`); setText("#webcodecs-support", typeof VideoEncoder === "undefined" ? "WebCodecs unavailable · use a Chromium-class browser" : "Hardware-accelerated VideoEncoder available");
   setText("#production-health", productionTab === "export" ? `${settings.codec === "avc" ? "MP4" : "WEBM"} EXPORT READY` : productionTab === "review" ? "LOCAL REVIEW READY" : "AUTHORED PROJECT DATA");
   renderExportPreview(); renderFftSpectrum(); renderReactiveBindings(); renderMidiMappings(); renderLogicGraph(); renderSpriteRigPanels(); renderAnnotations(); renderReviewFrame();
@@ -3005,7 +2899,7 @@ function drawProductionFrame(ctx: CanvasRenderingContext2D, width: number, heigh
 }
 
 function updateExportSettings() {
-  productionData.export.width = Math.max(16, Number(requireElement<HTMLInputElement>("#export-width").value)); productionData.export.height = Math.max(16, Number(requireElement<HTMLInputElement>("#export-height").value)); productionData.export.fps = Number(requireElement<HTMLSelectElement>("#export-fps").value); productionData.export.codec = requireOneOf(requireElement<HTMLSelectElement>("#export-codec").value, ["avc", "vp8", "vp9"], "export codec"); productionData.export.preset = "Custom"; renderProductionLab(); commitEditorChange("Change video export settings");
+  productionData.export.width = Math.max(16, Number(requireElement<HTMLInputElement>("#export-width").value)); productionData.export.height = Math.max(16, Number(requireElement<HTMLInputElement>("#export-height").value)); productionData.export.fps = Number(editorSelect("#export-fps").value); productionData.export.codec = requireOneOf(editorSelect("#export-codec").value, ["avc", "vp8", "vp9"], "export codec"); productionData.export.preset = "Custom"; renderProductionLab(); commitEditorChange("Change video export settings");
 }
 function setExportPreset(preset: string) {
   const value = preset === "720" ? { width: 1280, height: 720, preset: "720p" } : preset === "2160" ? { width: 3840, height: 2160, preset: "4K" } : { width: 1920, height: 1080, preset: "1080p" };
@@ -3161,12 +3055,7 @@ function poseChecksum(values: Float32Array) {
   return (hash >>> 0).toString(16).padStart(8, "0").toUpperCase();
 }
 
-function formatMotionTime(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  const frames = Math.floor((seconds % 1) * 60);
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}:${String(frames).padStart(2, "0")}`;
-}
+
 
 function nextFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -3184,9 +3073,6 @@ function commitEditorChange(label: string) {
   editorShell?.commitRuntime(label);
 }
 
-function authoredEntityKind(kind: string): "prop" | "actor" | "hostile" {
-  return kind === "actor" || kind === "hostile" ? kind : "prop";
-}
 
 function captureRuntimeProject(base: EditorProject): EditorProject {
   const project = structuredClone(base);
@@ -3274,9 +3160,9 @@ function applyProjectToRuntime(project: EditorProject, options: { preservePlayab
   productionData = structuredClone(project.production);
   applyScene3DProject(project);
   sequenceFrame = Math.max(0, Math.min(sequenceData.durationFrames, sequenceFrame));
-  requireElement<HTMLSelectElement>("#sequence-fps").value = String(sequenceData.fps);
+  editorSelect("#sequence-fps").value = String(sequenceData.fps);
   requireElement<HTMLInputElement>("#sequence-bpm").value = String(sequenceData.bpm);
-  requireElement<HTMLSelectElement>("#sequence-speed").value = String(sequenceData.playbackSpeed);
+  editorSelect("#sequence-speed").value = String(sequenceData.playbackSpeed);
   const audio = sequenceData.audioTracks[0];
   if (audio) {
     requireElement<HTMLInputElement>("#mixer-volume").value = String(audio.volume);
@@ -3584,11 +3470,6 @@ globalThis.__hyperfocusEditorAgent = createEditorAgentBridge({
   isReady: () => editorAutomation.ready,
 });
 globalThis.__hyperfocusEditorCommands = editorShell.commands;
-function resolvePlayableActions(project: EditorProject, bindings: ReadonlySet<string>) {
-  const actions = new Set<string>();
-  for (const mapping of project.settings.input) if (mapping.bindings.some((binding) => bindings.has(binding))) actions.add(mapping.action);
-  return actions;
-}
 applyProjectToRuntime(editorShell.project);
 if (location.hash === "#motion" || location.hash === "#sequence") showWorkspace("motion");
 if (new URLSearchParams(location.search).has("review")) { document.body.classList.add("review-mode"); openProductionLab("review"); setText("#production-health", "LOCAL REVIEW PREVIEW · NO ACCESS CONTROL"); }

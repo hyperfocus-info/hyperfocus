@@ -18,7 +18,7 @@ function AnalyzerModuleView() {
   const store = useAnalyzerModuleStore();
 
   return (
-    <section class={styles["module-root"]}>
+    <PadPilot.ModuleWorkspace class={styles["module-root"]}>
       <header class={styles.brand}>
         <h2 class={styles["brand-h2"]}>ANALYZER</h2>
       </header>
@@ -204,6 +204,6 @@ function AnalyzerModuleView() {
           </Show>
         </aside>
       </div>
-    </section>
+    </PadPilot.ModuleWorkspace>
   );
 }

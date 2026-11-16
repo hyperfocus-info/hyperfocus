@@ -48,4 +48,38 @@ describe("typed grid navigation", () => {
     expect(() => navigator.setBlocked(2, true)).toThrow("outside");
     expect(() => createGridNavigator({ columns: 2, rows: 2, costs: new Float32Array([1, 0, 1, 1]) })).toThrow("greater than or equal to 1");
   });
+
+  test("interleaved workspaces retain caller-owned masks and costs independently", () => {
+    const blocked = new Uint8Array(6);
+    const costs = new Float32Array(6).fill(1);
+    const first = createGridNavigator({ columns: 3, rows: 2, blocked, costs });
+    const second = createGridNavigator({ columns: 3, rows: 2 });
+    const output = new Int32Array(6);
+    expect(first.blocked).toBe(blocked);
+    expect(first.costs).toBe(costs);
+    for (let iteration = 0; iteration < 3; iteration++) {
+      costs[1] = 20;
+      expect(first.findPath(0, 2, output).cost).toBe(4);
+      expect(second.findPath(0, 2, output).cost).toBe(2);
+      first.setBlocked(1, true);
+      expect(blocked[1]).toBe(1);
+      expect(second.blocked[1]).toBe(0);
+      first.setBlocked(1, false);
+      costs[1] = 1;
+      expect(first.findPath(0, 2, output).cost).toBe(2);
+    }
+  });
+});
+
+// Expected route/visited/cost frozen from the independent pre-redesign A*.
+test("weighted diagonal heap relocation preserves tie order across repeated queries", () => {
+  const blocked = new Uint8Array(35); blocked[9] = blocked[16] = blocked[23] = 1;
+  const costs = Float32Array.from({ length: 35 }, (_, i) => 1 + (i * 13) % 4 / 4);
+  const nav = createGridNavigator({ columns: 7, rows: 5, blocked, costs, diagonal: true });
+  const output = new Int32Array(35);
+  for (let i = 0; i < 4; i++) {
+    expect(nav.findPath(0, 34, output)).toEqual({"status":"found","length":9,"visited":26,"cost":11.57842712474619});
+    expect(Array.from(output.slice(0, 9))).toEqual([0,1,2,3,4,12,20,27,34]);
+    expect(nav.findPath(34, 0, new Int32Array(0)).status).toBe("output-too-small");
+  }
 });

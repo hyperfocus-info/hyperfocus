@@ -1,3 +1,4 @@
+import { SelectControl } from "@hyperfocus/ui";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 import type { EditorUiPreferences } from "../app/editor-preferences.ts";
 import { EditorPreferencesView, type EditorProjectPreferenceDraft } from "../app/editor-preferences-view.tsx";
@@ -52,7 +53,7 @@ function ProjectHome(props: { state: Extract<EditorCenterContentState, { kind: "
   return <div class="starter-home">
     <div class="starter-hero"><div><span class="center-eyebrow">START WITH A WORKING GAME</span><h2>What do you want to make?</h2><p>Every starter opens playable, editable, and buildable. Start simple, then move into code, animation, audio, FX, profiling, and production tools only when you need them.</p></div><div class="starter-name"><label>Project name<input id="new-project-name" value="My Game" autocomplete="off" /></label></div></div>
     <div class="starter-picker">
-      <label class="starter-select">Starter template<select aria-label="Starter template" value={selectedTemplate()} onChange={(event) => setSelectedTemplate(event.currentTarget.value as StarterTemplate)}><For each={starters}>{(starter) => <option value={starter.template}>{starter.title}</option>}</For></select><small>Choose a working baseline. You can replace every part after creation.</small></label>
+      <label class="starter-select">Starter template<SelectControl ariaLabel="Starter template" value={selectedTemplate()} options={starters.map(starter => ({ value: starter.template, label: starter.title }))} onChange={setSelectedTemplate} /><small>Choose a working baseline. You can replace every part after creation.</small></label>
       <article class="starter-preview" style={{ "--starter-color": selectedStarter().color }}><span class="starter-icon">{selectedStarter().icon}</span><div><h3>{selectedStarter().title}</h3><p>{selectedStarter().description}</p><ul><For each={selectedStarter().points}>{(point) => <li>{point}</li>}</For></ul></div><button type="button" data-editor-action="create-template" data-template={selectedStarter().template}>{selectedStarter().action}</button></article>
     </div>
     <div class="starter-footer"><p><strong>{props.state.project.name}</strong> is currently open · {entityCount()} entities · {props.state.project.assets.length} assets{props.state.hasRecovery ? " · local recovery available" : ""}</p><div class="button-row"><button type="button" data-editor-action="open">Open existing project</button><button type="button" data-editor-action="download-project">Save portable files</button><button type="button" data-editor-action="export-neutral">Export ordinary files</button><button type="button" data-editor-action="close-center">Continue editing</button></div></div>

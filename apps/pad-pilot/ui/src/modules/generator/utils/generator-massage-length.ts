@@ -1,5 +1,5 @@
 import { GENERATOR_MIDI_BEATS_PER_BAR, GENERATOR_MIDI_DRUM_CHANNEL, GENERATOR_MIDI_TICKS_PER_QUARTER, type GeneratorMidiComposition, type GeneratorMidiTrack } from "./midi-encoder";
-import { type GeneratorLengthBars } from "./generator-options";
+import { type GeneratorLengthBars } from "./generator-option-catalog";
 import { type AbsoluteGeneratorNote, type GeneratorMusicianPlan } from "./generator-contracts";
 import { TRACK_LENGTH_TOLERANCE_TICKS } from "./generator-prompt";
 import { hashString } from "./generator-selection";
@@ -77,10 +77,10 @@ export function repairCompositionLength(composition: GeneratorMidiComposition, l
   if (!before.some((diagnostic) => diagnostic.short)) {
     return { composition, diagnostics: before, repairedCount: 0 };
   }
-  const repairedComposition = {
+  const repairedComposition: GeneratorMidiComposition = {
     ...composition,
     tracks: composition.tracks.map((track, index) => repairTrackLength(track, lengthBars, seed, index, plan)),
-  } satisfies GeneratorMidiComposition;
+  };
   const after = trackLengthDiagnostics(repairedComposition, lengthBars);
   return {
     composition: repairedComposition,
@@ -91,11 +91,11 @@ export function repairCompositionLength(composition: GeneratorMidiComposition, l
 
 export function phraseFillRepairEvents(windows: readonly { end: number; start: number }[]) {
   return windows.flatMap((window) => [
-    { deltaTicks: 0, durationTicks: 120, note: 38, tick: window.start, velocity: 112 },
-    { deltaTicks: 0, durationTicks: 120, note: 45, tick: window.start + 120, velocity: 106 },
-    { deltaTicks: 0, durationTicks: 120, note: 47, tick: window.start + 240, velocity: 102 },
-    { deltaTicks: 0, durationTicks: 120, note: 49, tick: Math.min(window.start + 360, window.end - 120), velocity: 110 },
-  ] satisfies AbsoluteGeneratorNote[]);
+    { deltaTicks: 0 as const, durationTicks: 120 as const, note: 38 as const, tick: window.start, velocity: 112 as const },
+    { deltaTicks: 0 as const, durationTicks: 120 as const, note: 45 as const, tick: window.start + 120, velocity: 106 as const },
+    { deltaTicks: 0 as const, durationTicks: 120 as const, note: 47 as const, tick: window.start + 240, velocity: 102 as const },
+    { deltaTicks: 0 as const, durationTicks: 120 as const, note: 49 as const, tick: Math.min(window.start + 360, window.end - 120), velocity: 110 as const },
+  ]);
 }
 
 export function repairPhraseFill(composition: GeneratorMidiComposition, lengthBars: GeneratorLengthBars) {
@@ -113,13 +113,13 @@ export function repairPhraseFill(composition: GeneratorMidiComposition, lengthBa
           ...composition.tracks,
           {
             channel: GENERATOR_MIDI_DRUM_CHANNEL,
-            drums: true,
-            name: "Repaired Drum Fill",
+            drums: true as const,
+            name: "Repaired Drum Fill" as const,
             notes: deltaTrackNotes(fillEvents),
-            program: 0,
+            program: 0 as const,
           },
         ],
-      } satisfies GeneratorMidiComposition,
+      },
       repaired: true,
     };
   }
@@ -130,11 +130,11 @@ export function repairPhraseFill(composition: GeneratorMidiComposition, lengthBa
         ? {
             ...track,
             channel: GENERATOR_MIDI_DRUM_CHANNEL,
-            drums: true,
+            drums: true as const,
             notes: deltaTrackNotes([...absoluteTrackNotes(track), ...fillEvents]),
           }
         : track),
-    } satisfies GeneratorMidiComposition,
+    },
     repaired: true,
   };
 }

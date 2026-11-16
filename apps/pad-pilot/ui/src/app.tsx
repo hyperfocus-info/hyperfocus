@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
 import { onCleanup, onMount } from "solid-js";
 import { Dynamic } from "solid-js/web";
@@ -157,12 +158,13 @@ function AppShell() {
   const [sidebarPeek, setSidebarPeek] = createSignal(false);
   const [globalSettingsOpen, setGlobalSettingsOpen] = createSignal(false);
   const [controllerPreferencesOpen, setControllerPreferencesOpen] = createSignal(false);
+  const initialFavoriteIds: Record<string, true> = {};
   const [chromeViewState, setChromeViewState] = useEditorViewState(
     "app-shell",
     {
-      favoriteIds: {} as Record<string, true>,
+      favoriteIds: initialFavoriteIds,
       sidebarCollapsed: false,
-    }
+    }, value => z.object({ favoriteIds: z.record(z.string(), z.literal(true)), sidebarCollapsed: z.boolean() }).parse(value)
   );
   const [moduleFilter, setModuleFilter] = createSignal("");
   const [favoritesOnly, setFavoritesOnly] = createSignal(false);
@@ -316,7 +318,7 @@ function AppShell() {
       </aside>
       <Show when={sidebarCollapsed()}>
         <div
-          {...stylex.attrs(styles.sidebarTriggerZone)}
+          {...stylex.attrs(styles.sidebarTriggerZone, sidebarPeek() && styles.sidebarTriggerZoneVisible)}
           onMouseEnter={() => setSidebarPeek(true)}
           onMouseLeave={() => setSidebarPeek(false)}
         >

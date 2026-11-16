@@ -73,6 +73,6 @@ test("collision diagnostics benchmark separates resident WASM from copied host-b
   expect(result.residentWasmMs).toBeGreaterThan(0);
   expect(result.residentWasmHits).toBe(result.typescriptHits);
   expect(result.residentWasmHostBytesPerSample).toBe(0);
-  expect(result.copiedWasmHostBytesPerSample).toBe(16 * 29 * 3);
-  expect(result.residentArenaBytes).toBe(16 * 29);
+  expect(result.copiedWasmHostBytesPerSample).toBe(1392);
+  expect(result.residentArenaBytes).toBe(464);
 });

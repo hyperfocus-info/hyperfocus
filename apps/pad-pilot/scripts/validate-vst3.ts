@@ -5,7 +5,7 @@ import { validatorToolPaths } from "./bootstrap-vst-validators";
 
 type ValidatorKind = "all" | "pluginval" | "steinberg";
 
-const validationDeadlineMs = 20 * 60_000;
+const validationDeadlineMs = 1200000;
 
 export function defaultVst3Path(projectRoot: string) {
   return path.join(

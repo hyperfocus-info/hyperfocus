@@ -1,88 +1,58 @@
+import type { DevHostPublishCallbacks } from "./sample-runtime";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { base64ToBytes, bytesToBase64 } from "../proto/base64";
-import { PresetSaveRequestSchema, SetControllerConfigRequestSchema } from "../proto/generated/bridge-pb";
-import { SampleAnalysisMode, SampleBpmSource, CapabilityFrameEnvelopeSchema, SampleEditorFrameSchema, SamplePadAssignmentSchema, SampleAnalysisRequestSchema, SampleSourceLoadRequestSchema, SampleSliceMarkerSchema, SlicePlaybackStateSchema, SlicePlaybackTriggerSchema } from "../proto/generated/capability-pb";
-import { FxChainStateSchema } from "../proto/generated/fx-chain-pb";
-import { ChokeGroupSchema, PadAssignmentSchema, RecutAnalysisMode, RecutBpmSource, SliceMarkerSchema } from "../proto/generated/recut-pb";
+import { base64ToBytes } from "../proto/base64";
+import {  SetControllerConfigRequestSchema } from "../proto/generated/bridge-pb";
+import {   CapabilityFrameEnvelopeSchema, SampleEditorFrameSchema } from "../proto/generated/capability-pb";
 import { createDefaultFxChainState, decodeFxChainStateBase64, encodeFxChainStateBase64 } from "../modules/fx/fx-chain-state";
-import { createDefaultAnalyzerModuleState, createEmptyAnalyzerFrame, encodeAnalyzerFrameBase64, encodeAnalyzerModuleStateBase64, summarizeAnalyzerTake } from "../modules/analyzer/analyzer-state";
+import { createDefaultAnalyzerModuleState, createEmptyAnalyzerFrame, encodeAnalyzerFrameBase64, encodeAnalyzerModuleStateBase64 } from "../modules/analyzer/analyzer-state";
 import { createDefaultRecutModuleState, decodeRecutModuleStateBase64, encodeRecutModuleStateBase64 } from "../modules/recut/recut-state";
-import { buildRecutAutoSlice, detectRecutTransientCandidates } from "../modules/recut/auto-slice";
 import { PadPilotInputDeviceState } from "../padpilot/io/input-device";
 import { controllerBindingKindFromProto, controllerLayoutKindFromProto, createDefaultControllerConfig, normalizeControllerConfig } from "../padpilot/controller-config";
 import { getPrimaryConfiguredInputDevice, remapInputDevices } from "../padpilot/controller-runtime";
 import { createEmptySampleEditorFrame } from "../padpilot/sample-capabilities";
-import { clamp } from "../utils/math";
-import { fileNameFromPath } from "../utils/file-path";
 import { parseCapabilityHandle } from "@hyperfocus/pad-pilot/module-identity";
 import { HostIntent, HostState } from "../bridge";
 import { browserGamepadsSupported, readBrowserGamepadDevices } from "./browser-gamepad-source";
 import { createProceduralSignalFrame } from "./fx-simulator";
 import { DevSignalSettings } from "./types";
-import { buildBpmMarkers, buildPadAssignments, createRecutWaveformPeaks, inferBpm } from "./recut-simulator";
 import { buildSyntheticVisualizerFrameBase64 } from "./visualizer-builders";
-import { TICK_MS, ModuleSummary, PresetRecord, HostStateListener, DebugStateListener, RecutPlaybackVoice, DEFAULT_MODULES, loadSettings, saveSettings, cloneFxState, getDevImportedFile, createInstalledModuleResult, encodeCapabilityFrameEnvelopeBase64, ensureMasterState, createSeedAnalyzerNoteEvents, cloneInputDevice, createEmptyControllerState, filterAnalyzerNoteEventsForSensitivity, normalizeDevSignalSettings } from "./runtime-helpers";
-import { z } from "zod";
-import { isValidAutomationParameterId } from "@hyperfocus/pad-pilot/automation-identity";
-import { DevHostCapabilityRuntime } from "./capability-runtime";
+import { TICK_MS, ModuleSummary, HostStateListener, DebugStateListener, DEFAULT_MODULES, saveSettings, cloneFxState, createInstalledModuleResult, encodeCapabilityFrameEnvelopeBase64, cloneInputDevice, createEmptyControllerState, normalizeDevSignalSettings } from "./runtime-helpers";
+import { createDevHostCapabilityRuntime } from "./capability-runtime";
 
-const midiOutputPayloadSchema = z.object({
-  channel: z.number().int().min(1).max(16),
-  controller: z.number().int().min(0).max(127).optional(),
-  note: z.number().int().min(0).max(127).optional(),
-  sampleOffset: z.number().int().min(0).max(1_048_575).optional(),
-  value: z.number().int().min(0).max(127).optional(),
-  velocity: z.number().int().min(0).max(127).optional(),
-});
-const keyboardOutputPayloadSchema = z.array(z.string().trim().min(1).max(128)).min(1).max(64);
-const automationUpdatePayloadSchema = z.object({
-  normalizedValue: z.number().finite().min(0).max(1),
-  parameterId: z.string(),
-});
-
-function parseJsonPayload<T>(payload: string, schema: z.ZodType<T>) {
-  try {
-    const parsed = schema.safeParse(JSON.parse(payload));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
+export function createDevHostPublishedRuntime(callbacks: DevHostPublishCallbacks) {
+  const base = createDevHostCapabilityRuntime(callbacks);
+  const editorViewStateJson = new Map<string, string>();
+  const debugListeners = new Set<DebugStateListener>();
+  const hostListeners = new Set<HostStateListener>();
+  const moduleStateJson = new Map<string, string>();
+  const controllerConfig = createDefaultControllerConfig();
+  const inputDevices = ((): PadPilotInputDeviceState[] => ([]))();
+  const sequence = 0n;
+  const tickHandle = ((): number | null => (null))();
+  const controllerFrameHandle = ((): number | null => (null))();
+  const browserInputFrameIndex = 0;
+  const manualInputDevicesOverride = ((): PadPilotInputDeviceState[] | null => (null))();
+  const lastBrowserGamepadSupported = browserGamepadsSupported();
+  const lastPublishedInputSignature = "";
+  const runtimeState = Object.assign(base, { editorViewStateJson, debugListeners, hostListeners, moduleStateJson, controllerConfig, inputDevices, sequence, tickHandle, controllerFrameHandle, browserInputFrameIndex, manualInputDevicesOverride, lastBrowserGamepadSupported, lastPublishedInputSignature });
+  function resetPublishedRealtimeState() {
+    runtimeState.lastPublishedInputSignature = "";
+    runtimeState.lastPublishedCapabilityFramePayload = "__unset__";
   }
-}
-
-abstract class DevHostPublishedRuntime extends DevHostCapabilityRuntime {
-  protected readonly editorViewStateJson = new Map<string, string>();
-  protected readonly debugListeners = new Set<DebugStateListener>();
-  protected readonly hostListeners = new Set<HostStateListener>();
-  protected readonly moduleStateJson = new Map<string, string>();
-  protected controllerConfig = createDefaultControllerConfig();
-  protected inputDevices: PadPilotInputDeviceState[] = [];
-  protected sequence = 0n;
-  protected tickHandle: number | null = null;
-  protected controllerFrameHandle: number | null = null;
-  protected browserInputFrameIndex = 0;
-  protected manualInputDevicesOverride: PadPilotInputDeviceState[] | null = null;
-  protected lastBrowserGamepadSupported = browserGamepadsSupported();
-  protected lastPublishedInputSignature = "";
-
-  protected resetPublishedRealtimeState() {
-    this.lastPublishedInputSignature = "";
-    this.lastPublishedCapabilityFramePayload = "__unset__";
-  }
-
-  protected buildHostState(visualizerFrameBase64?: string) {
-    const presetRecords = Array.from(this.presetsById.values()).filter((preset) => preset.moduleId === this.selectedModuleId);
-    const activeFxState = this.getActiveFxState();
-    const activeModuleStateBase64 = this.selectedModuleId === "fx"
+  function buildHostState(visualizerFrameBase64?: string) {
+    const presetRecords = Array.from(runtimeState.presetsById.values()).filter((preset) => preset.moduleId === runtimeState.selectedModuleId);
+    const activeFxState = base.getActiveFxState();
+    const activeModuleStateBase64 = runtimeState.selectedModuleId === "fx"
       ? encodeFxChainStateBase64(activeFxState)
-      : this.selectedModuleId === "recut"
-        ? encodeRecutModuleStateBase64(this.recutState)
-        : this.selectedModuleId === "analyzer"
-          ? encodeAnalyzerModuleStateBase64(this.analyzerState)
-        : this.moduleStateJson.get(this.selectedModuleId) ?? "";
-    const primaryController = getPrimaryConfiguredInputDevice(this.inputDevices, this.controllerConfig) ?? createEmptyControllerState();
+      : runtimeState.selectedModuleId === "recut"
+        ? encodeRecutModuleStateBase64(runtimeState.recutState)
+        : runtimeState.selectedModuleId === "analyzer"
+          ? encodeAnalyzerModuleStateBase64(runtimeState.analyzerState)
+        : runtimeState.moduleStateJson.get(runtimeState.selectedModuleId) ?? "";
+    const primaryController = getPrimaryConfiguredInputDevice(runtimeState.inputDevices, runtimeState.controllerConfig) ?? createEmptyControllerState();
 
     const moduleStates = Object.fromEntries(
-      Array.from(this.moduleStateJson.entries()).map(([moduleId, payload]) => {
+      Array.from(runtimeState.moduleStateJson.entries()).map(([moduleId, payload]) => {
         try {
           return [moduleId, JSON.parse(payload)];
         } catch {
@@ -91,7 +61,7 @@ abstract class DevHostPublishedRuntime extends DevHostCapabilityRuntime {
       }),
     );
     const editorViewStates = Object.fromEntries(
-      Array.from(this.editorViewStateJson.entries()).map(([scopeId, payload]) => {
+      Array.from(runtimeState.editorViewStateJson.entries()).map(([scopeId, payload]) => {
         try {
           return [scopeId, JSON.parse(payload)];
         } catch {
@@ -101,14 +71,14 @@ abstract class DevHostPublishedRuntime extends DevHostCapabilityRuntime {
     );
 
     return {
-      acceptedRevision: this.selectedModuleId === "fx"
-        ? this.acceptedRevision
-        : this.selectedModuleId === "recut"
-          ? this.recutState.revision
-          : this.selectedModuleId === "analyzer"
-            ? this.analyzerState.revision
+      acceptedRevision: runtimeState.selectedModuleId === "fx"
+        ? runtimeState.acceptedRevision
+        : runtimeState.selectedModuleId === "recut"
+          ? runtimeState.recutState.revision
+          : runtimeState.selectedModuleId === "analyzer"
+            ? runtimeState.analyzerState.revision
           : 0n,
-      activeModuleId: this.selectedModuleId,
+      activeModuleId: runtimeState.selectedModuleId,
       activeModuleStateBase64,
       controller: {
         axes: [...primaryController.axes],
@@ -116,8 +86,8 @@ abstract class DevHostPublishedRuntime extends DevHostCapabilityRuntime {
         connected: primaryController.connected,
         frameIndex: primaryController.frameIndex,
       },
-      controllerConfig: normalizeControllerConfig(this.controllerConfig),
-      inputDevices: this.inputDevices.map((device) => ({
+      controllerConfig: normalizeControllerConfig(runtimeState.controllerConfig),
+      inputDevices: runtimeState.inputDevices.map((device) => ({
         axes: [...device.axes],
         buttons: [...device.buttons],
         connected: device.connected,
@@ -134,53 +104,50 @@ abstract class DevHostPublishedRuntime extends DevHostCapabilityRuntime {
       })),
       editorViewStates,
       moduleStates,
-      modules: this.modules.map((moduleItem) => ({ ...moduleItem })),
+      modules: runtimeState.modules.map((moduleItem) => ({ ...moduleItem })),
       presets: presetRecords.map((preset) => ({ id: preset.id, name: preset.name })),
-      projectBpm: this.settings.tempo,
-      selectedModuleId: this.selectedModuleId,
-      selectedPresetId: this.selectedPresetId,
+      projectBpm: runtimeState.settings.tempo,
+      selectedModuleId: runtimeState.selectedModuleId,
+      selectedPresetId: runtimeState.selectedPresetId,
       type: "hostSyncProto",
       visualizerFrameBase64,
     };
   }
-
-  protected buildNavigationState(): HostState {
-    const presetRecords = Array.from(this.presetsById.values()).filter((preset) => preset.moduleId === this.selectedModuleId);
+  function buildNavigationState(): HostState {
+    const presetRecords = Array.from(runtimeState.presetsById.values()).filter((preset) => preset.moduleId === runtimeState.selectedModuleId);
     return {
-      modules: this.modules.map((moduleItem) => ({ ...moduleItem })),
+      modules: runtimeState.modules.map((moduleItem) => ({ ...moduleItem })),
       presets: presetRecords.map((preset) => ({ id: preset.id, name: preset.name })),
-      projectBpm: this.settings.tempo,
-      selectedModuleId: this.selectedModuleId,
-      selectedPresetId: this.selectedPresetId,
+      projectBpm: runtimeState.settings.tempo,
+      selectedModuleId: runtimeState.selectedModuleId,
+      selectedPresetId: runtimeState.selectedPresetId,
       type: "navigationFrameProto",
     };
   }
-
-  protected buildActiveModuleState(): HostState {
-    const activeFxState = this.getActiveFxState();
+  function buildActiveModuleState(): HostState {
+    const activeFxState = base.getActiveFxState();
     return {
-      acceptedRevision: this.selectedModuleId === "fx"
-        ? this.acceptedRevision
-        : this.selectedModuleId === "recut"
-          ? this.recutState.revision
-          : this.selectedModuleId === "analyzer"
-            ? this.analyzerState.revision
+      acceptedRevision: runtimeState.selectedModuleId === "fx"
+        ? runtimeState.acceptedRevision
+        : runtimeState.selectedModuleId === "recut"
+          ? runtimeState.recutState.revision
+          : runtimeState.selectedModuleId === "analyzer"
+            ? runtimeState.analyzerState.revision
           : 0n,
-      activeModuleId: this.selectedModuleId,
-      activeModuleStateBase64: this.selectedModuleId === "fx"
+      activeModuleId: runtimeState.selectedModuleId,
+      activeModuleStateBase64: runtimeState.selectedModuleId === "fx"
         ? encodeFxChainStateBase64(activeFxState)
-        : this.selectedModuleId === "recut"
-          ? encodeRecutModuleStateBase64(this.recutState)
-          : this.selectedModuleId === "analyzer"
-            ? encodeAnalyzerModuleStateBase64(this.analyzerState)
-          : this.moduleStateJson.get(this.selectedModuleId) ?? "",
-      projectBpm: this.settings.tempo,
+        : runtimeState.selectedModuleId === "recut"
+          ? encodeRecutModuleStateBase64(runtimeState.recutState)
+          : runtimeState.selectedModuleId === "analyzer"
+            ? encodeAnalyzerModuleStateBase64(runtimeState.analyzerState)
+          : runtimeState.moduleStateJson.get(runtimeState.selectedModuleId) ?? "",
+      projectBpm: runtimeState.settings.tempo,
       type: "activeModuleStateFrameProto",
     };
   }
-
-  protected buildInputState(): HostState {
-    const primaryController = getPrimaryConfiguredInputDevice(this.inputDevices, this.controllerConfig) ?? createEmptyControllerState();
+  function buildInputState(): HostState {
+    const primaryController = getPrimaryConfiguredInputDevice(runtimeState.inputDevices, runtimeState.controllerConfig) ?? createEmptyControllerState();
     return {
       controller: {
         axes: [...primaryController.axes],
@@ -188,8 +155,8 @@ abstract class DevHostPublishedRuntime extends DevHostCapabilityRuntime {
         connected: primaryController.connected,
         frameIndex: primaryController.frameIndex,
       },
-      controllerConfig: normalizeControllerConfig(this.controllerConfig),
-      inputDevices: this.inputDevices.map((device) => ({
+      controllerConfig: normalizeControllerConfig(runtimeState.controllerConfig),
+      inputDevices: runtimeState.inputDevices.map((device) => ({
         axes: [...device.axes],
         buttons: [...device.buttons],
         connected: device.connected,
@@ -207,27 +174,25 @@ abstract class DevHostPublishedRuntime extends DevHostCapabilityRuntime {
       type: "inputStateFrameProto",
     };
   }
-
-  protected buildDebugState() {
+  function buildDebugState() {
     return {
-      acceptedRevision: this.acceptedRevision,
-      browserGamepadSupported: this.lastBrowserGamepadSupported,
-      connectedControllerCount: this.inputDevices.filter((device) => device.connected && device.deviceKind === "gamepad").length,
-      continuousHostSync: this.settings.continuousHostSync,
-      intensity: this.settings.intensity,
-      profile: this.settings.profile,
-      running: this.settings.running,
-      selectedModuleId: this.selectedModuleId,
-      selectedPresetId: this.selectedPresetId,
-      sequence: this.sequence,
-      stereoWidth: this.settings.stereoWidth,
-      tempo: this.settings.tempo,
+      acceptedRevision: runtimeState.acceptedRevision,
+      browserGamepadSupported: runtimeState.lastBrowserGamepadSupported,
+      connectedControllerCount: runtimeState.inputDevices.filter((device) => device.connected && device.deviceKind === "gamepad").length,
+      continuousHostSync: runtimeState.settings.continuousHostSync,
+      intensity: runtimeState.settings.intensity,
+      profile: runtimeState.settings.profile,
+      running: runtimeState.settings.running,
+      selectedModuleId: runtimeState.selectedModuleId,
+      selectedPresetId: runtimeState.selectedPresetId,
+      sequence: runtimeState.sequence,
+      stereoWidth: runtimeState.settings.stereoWidth,
+      tempo: runtimeState.settings.tempo,
     };
   }
-
-  protected publishDebugState() {
-    const state = this.buildDebugState();
-    for (const listener of this.debugListeners) {
+  function publishDebugState() {
+    const state = buildDebugState();
+    for (const listener of runtimeState.debugListeners) {
       try {
         listener(state);
       } catch {
@@ -235,9 +200,8 @@ abstract class DevHostPublishedRuntime extends DevHostCapabilityRuntime {
       }
     }
   }
-
-  protected publishHostState(state: HostState) {
-    for (const listener of this.hostListeners) {
+  function publishHostState(state: HostState) {
+    for (const listener of runtimeState.hostListeners) {
       try {
         listener(state);
       } catch {
@@ -245,203 +209,186 @@ abstract class DevHostPublishedRuntime extends DevHostCapabilityRuntime {
       }
     }
   }
-
-  protected publishBootstrapState(includeVisualizer: boolean) {
+  function publishBootstrapState(includeVisualizer: boolean) {
     const visualizerFrameBase64 = includeVisualizer
-      ? buildSyntheticVisualizerFrameBase64(this.liveFxState, createProceduralSignalFrame(performance.now(), this.settings), this.sequence)
+      ? buildSyntheticVisualizerFrameBase64(runtimeState.liveFxState, createProceduralSignalFrame(performance.now(), runtimeState.settings), runtimeState.sequence)
       : undefined;
-    const state = this.buildHostState(visualizerFrameBase64);
-    this.lastPublishedInputSignature = JSON.stringify({
+    const state = buildHostState(visualizerFrameBase64);
+    runtimeState.lastPublishedInputSignature = JSON.stringify({
       controller: state.controller,
       inputDevices: state.inputDevices,
     });
-    this.lastPublishedCapabilityFramePayload = "__unset__";
-    this.publishHostState(state);
+    runtimeState.lastPublishedCapabilityFramePayload = "__unset__";
+    publishHostState(state);
   }
-
-  protected publishNavigationState() {
-    this.publishHostState(this.buildNavigationState());
+  function publishNavigationState() {
+    publishHostState(buildNavigationState());
   }
-
-  protected publishActiveModuleState() {
-    this.publishHostState(this.buildActiveModuleState());
+  function publishActiveModuleState() {
+    publishHostState(buildActiveModuleState());
   }
-
-  protected publishInputState(force = false) {
-    const state = this.buildInputState();
+  function publishInputState(force = false) {
+    const state = buildInputState();
     const signature = JSON.stringify({
       controller: state.controller,
       inputDevices: state.inputDevices,
     });
-    if (!force && signature === this.lastPublishedInputSignature) {
+    if (!force && signature === runtimeState.lastPublishedInputSignature) {
       return;
     }
-    this.lastPublishedInputSignature = signature;
-    this.publishHostState(state);
+    runtimeState.lastPublishedInputSignature = signature;
+    publishHostState(state);
   }
-
-  protected publishCapabilityFrame(force = false) {
-    const { capability, moduleInstanceId } = parseCapabilityHandle(this.capabilityStreamHandle);
-    const visible = this.capabilityStreamHandle.length > 0 && moduleInstanceId === this.selectedModuleId;
+  function publishCapabilityFrame(force = false) {
+    const { capability, moduleInstanceId } = parseCapabilityHandle(runtimeState.capabilityStreamHandle);
+    const visible = runtimeState.capabilityStreamHandle.length > 0 && moduleInstanceId === runtimeState.selectedModuleId;
     if (visible && capability === "sample-analysis") {
-      this.sampleEditorFrame = this.buildSampleEditorFrame();
+      runtimeState.sampleEditorFrame = base.buildSampleEditorFrame();
     }
     const payloadBase64 = visible && capability === "sample-analysis"
       ? encodeCapabilityFrameEnvelopeBase64(create(CapabilityFrameEnvelopeSchema, {
           capability: "sample-analysis",
-          handle: this.capabilityStreamHandle,
-          payload: toBinary(SampleEditorFrameSchema, this.sampleEditorFrame),
+          handle: runtimeState.capabilityStreamHandle,
+          payload: toBinary(SampleEditorFrameSchema, runtimeState.sampleEditorFrame),
           payloadType: "SampleEditorFrame",
-          sequence: this.recutState.revision,
+          sequence: runtimeState.recutState.revision,
         }))
       : visible && capability === "analyzer-feed"
         ? encodeCapabilityFrameEnvelopeBase64(create(CapabilityFrameEnvelopeSchema, {
             capability: "analyzer-feed",
-            handle: this.capabilityStreamHandle,
-            payload: base64ToBytes(encodeAnalyzerFrameBase64(this.analyzerFrame)),
+            handle: runtimeState.capabilityStreamHandle,
+            payload: base64ToBytes(encodeAnalyzerFrameBase64(runtimeState.analyzerFrame)),
             payloadType: "AnalyzerFrame",
-            sequence: this.analyzerState.revision,
+            sequence: runtimeState.analyzerState.revision,
           }))
         : visible && capability === "fx-visualizer"
           ? encodeCapabilityFrameEnvelopeBase64(create(CapabilityFrameEnvelopeSchema, {
               capability: "fx-visualizer",
-              handle: this.capabilityStreamHandle,
+              handle: runtimeState.capabilityStreamHandle,
               payload: base64ToBytes(buildSyntheticVisualizerFrameBase64(
-                this.liveFxState,
-                createProceduralSignalFrame(performance.now(), this.settings),
-                this.sequence,
+                runtimeState.liveFxState,
+                createProceduralSignalFrame(performance.now(), runtimeState.settings),
+                runtimeState.sequence,
               )),
               payloadType: "VisualizerFrame",
-              sequence: this.sequence,
+              sequence: runtimeState.sequence,
             }))
       : "";
-    if (!force && payloadBase64 === this.lastPublishedCapabilityFramePayload) {
+    if (!force && payloadBase64 === runtimeState.lastPublishedCapabilityFramePayload) {
       return;
     }
-    this.lastPublishedCapabilityFramePayload = payloadBase64;
-    this.publishHostState({
+    runtimeState.lastPublishedCapabilityFramePayload = payloadBase64;
+    publishHostState({
       capabilityFrameEnvelopeBase64: payloadBase64,
       type: "capabilityFrameEnvelopeProto",
     });
   }
-
-  protected publishVisualizerFrame() {
-    this.publishHostState({
+  function publishVisualizerFrame() {
+    publishHostState({
       type: "visualizerFrameProto",
       visualizerFrameBase64: buildSyntheticVisualizerFrameBase64(
-        this.liveFxState,
-        createProceduralSignalFrame(performance.now(), this.settings),
-        this.sequence,
+        runtimeState.liveFxState,
+        createProceduralSignalFrame(performance.now(), runtimeState.settings),
+        runtimeState.sequence,
       ),
     });
   }
-
-  protected hasSubscribers() {
-    return this.hostListeners.size > 0 || this.debugListeners.size > 0;
+  function hasSubscribers() {
+    return runtimeState.hostListeners.size > 0 || runtimeState.debugListeners.size > 0;
   }
-
-  protected startSignalLoop() {
-    if (this.tickHandle !== null || typeof window === "undefined" || !this.settings.running || !this.hasSubscribers()) {
+  function startSignalLoop() {
+    if (runtimeState.tickHandle !== null || typeof window === "undefined" || !runtimeState.settings.running || !hasSubscribers()) {
       return;
     }
-    this.tickHandle = window.setInterval(this.tick, TICK_MS);
+    runtimeState.tickHandle = window.setInterval(tick, TICK_MS);
   }
-
-  protected stopSignalLoop() {
-    if (this.tickHandle === null || typeof window === "undefined") {
+  function stopSignalLoop() {
+    if (runtimeState.tickHandle === null || typeof window === "undefined") {
       return;
     }
-    window.clearInterval(this.tickHandle);
-    this.tickHandle = null;
+    window.clearInterval(runtimeState.tickHandle);
+    runtimeState.tickHandle = null;
   }
-
-  protected startControllerLoop() {
-    if (this.controllerFrameHandle !== null || typeof window === "undefined" || !this.hasSubscribers()) {
+  function startControllerLoop() {
+    if (runtimeState.controllerFrameHandle !== null || typeof window === "undefined" || !hasSubscribers()) {
       return;
     }
-    this.controllerFrameHandle = window.requestAnimationFrame(this.controllerTick);
+    runtimeState.controllerFrameHandle = window.requestAnimationFrame(controllerTick);
   }
-
-  protected stopControllerLoop() {
-    if (this.controllerFrameHandle === null || typeof window === "undefined") {
+  function stopControllerLoop() {
+    if (runtimeState.controllerFrameHandle === null || typeof window === "undefined") {
       return;
     }
-    window.cancelAnimationFrame(this.controllerFrameHandle);
-    this.controllerFrameHandle = null;
+    window.cancelAnimationFrame(runtimeState.controllerFrameHandle);
+    runtimeState.controllerFrameHandle = null;
   }
-
-  protected refreshLoopState() {
-    if (this.hasSubscribers()) {
-      this.startControllerLoop();
-      this.startSignalLoop();
+  function refreshLoopState() {
+    if (hasSubscribers()) {
+      startControllerLoop();
+      startSignalLoop();
       return;
     }
 
-    this.stopControllerLoop();
-    this.stopSignalLoop();
+    stopControllerLoop();
+    stopSignalLoop();
   }
-
-  protected syncBrowserInputState(force = false) {
-    if (this.manualInputDevicesOverride) {
+  function syncBrowserInputState(force = false) {
+    if (runtimeState.manualInputDevicesOverride) {
       if (force) {
-        this.publishInputState(true);
-        this.publishDebugState();
+        publishInputState(true);
+        callbacks.publishDebugState();
       }
       return;
     }
 
-    const previousConnectedControllerCount = this.inputDevices.filter((device) => device.connected && device.deviceKind === "gamepad").length;
-    const previousSupport = this.lastBrowserGamepadSupported;
-    const snapshot = readBrowserGamepadDevices(this.browserInputFrameIndex + 1);
-    this.browserInputFrameIndex += 1;
-    this.lastBrowserGamepadSupported = snapshot.browserGamepadSupported;
-    this.inputDevices = remapInputDevices(snapshot.devices, this.controllerConfig);
-    const nextConnectedControllerCount = this.inputDevices.filter((device) => device.connected && device.deviceKind === "gamepad").length;
-    this.publishInputState(force);
+    const previousConnectedControllerCount = runtimeState.inputDevices.filter((device) => device.connected && device.deviceKind === "gamepad").length;
+    const previousSupport = runtimeState.lastBrowserGamepadSupported;
+    const snapshot = readBrowserGamepadDevices(runtimeState.browserInputFrameIndex + 1);
+    runtimeState.browserInputFrameIndex += 1;
+    runtimeState.lastBrowserGamepadSupported = snapshot.browserGamepadSupported;
+    runtimeState.inputDevices = remapInputDevices(snapshot.devices, runtimeState.controllerConfig);
+    const nextConnectedControllerCount = runtimeState.inputDevices.filter((device) => device.connected && device.deviceKind === "gamepad").length;
+    publishInputState(force);
     if (
       force ||
-      previousSupport !== this.lastBrowserGamepadSupported ||
+      previousSupport !== runtimeState.lastBrowserGamepadSupported ||
       previousConnectedControllerCount !== nextConnectedControllerCount
     ) {
-      this.publishDebugState();
+      callbacks.publishDebugState();
     }
   }
-
-  protected tick = () => {
-    if (!this.settings.running) {
+  const tick = () => {
+    if (!runtimeState.settings.running) {
       return;
     }
-    this.sequence += 1n;
-    this.publishVisualizerFrame();
-    this.publishInputState();
-    this.publishCapabilityFrame();
-    this.publishDebugState();
+    runtimeState.sequence += 1n;
+    publishVisualizerFrame();
+    publishInputState();
+    callbacks.publishCapabilityFrame();
+    callbacks.publishDebugState();
   };
-
-  protected controllerTick = () => {
-    this.controllerFrameHandle = null;
-    this.syncBrowserInputState();
-    if (this.hasSubscribers()) {
-      this.startControllerLoop();
+  const controllerTick = () => {
+    runtimeState.controllerFrameHandle = null;
+    syncBrowserInputState();
+    if (hasSubscribers()) {
+      startControllerLoop();
     }
   };
+  Object.assign(callbacks, { publishActiveModuleState, publishCapabilityFrame, publishDebugState, publishNavigationState });
+  return Object.assign(runtimeState, { resetPublishedRealtimeState, buildHostState, buildNavigationState, buildActiveModuleState, buildInputState, buildDebugState, publishDebugState, publishHostState, publishBootstrapState, publishNavigationState, publishActiveModuleState, publishInputState, publishCapabilityFrame, publishVisualizerFrame, hasSubscribers, startSignalLoop, stopSignalLoop, startControllerLoop, stopControllerLoop, refreshLoopState, syncBrowserInputState, tick, controllerTick });
 }
 
 
-class DevHostRuntimeImpl extends DevHostPublishedRuntime {
-
-  constructor() {
-    super();
-    const defaultPreset = this.seedPreset("PadPilot Init", encodeFxChainStateBase64(this.canonicalFxState), "pad_pilot_init_default");
-    this.selectedPresetId = defaultPreset.id;
-  }
-
-  subscribe(listener: HostStateListener) {
-    this.hostListeners.add(listener);
-    this.refreshLoopState();
-    this.syncBrowserInputState();
-    const state = this.buildHostState();
-    this.lastPublishedInputSignature = JSON.stringify({
+export function createDevHostRuntime() {
+  const callbacks: DevHostPublishCallbacks = { publishActiveModuleState() {}, publishCapabilityFrame() {}, publishDebugState() {}, publishNavigationState() {}, updateSettings() {} };
+  const base = createDevHostPublishedRuntime(callbacks);
+  const runtimeState = Object.assign(base, {  });
+  function subscribe(listener: HostStateListener) {
+    runtimeState.hostListeners.add(listener);
+    base.refreshLoopState();
+    base.syncBrowserInputState();
+    const state = base.buildHostState();
+    runtimeState.lastPublishedInputSignature = JSON.stringify({
       controller: state.controller,
       inputDevices: state.inputDevices,
     });
@@ -451,31 +398,28 @@ class DevHostRuntimeImpl extends DevHostPublishedRuntime {
       // One host consumer cannot block runtime setup or other subscribers.
     }
     return () => {
-      this.hostListeners.delete(listener);
-      this.refreshLoopState();
+      runtimeState.hostListeners.delete(listener);
+      base.refreshLoopState();
     };
   }
-
-  subscribeDebug(listener: DebugStateListener) {
-    this.debugListeners.add(listener);
-    this.refreshLoopState();
-    this.syncBrowserInputState();
+  function subscribeDebug(listener: DebugStateListener) {
+    runtimeState.debugListeners.add(listener);
+    base.refreshLoopState();
+    base.syncBrowserInputState();
     try {
-      listener(this.buildDebugState());
+      listener(base.buildDebugState());
     } catch {
       // One diagnostics consumer cannot block runtime setup or other subscribers.
     }
     return () => {
-      this.debugListeners.delete(listener);
-      this.refreshLoopState();
+      runtimeState.debugListeners.delete(listener);
+      base.refreshLoopState();
     };
   }
-
-  getDebugState() {
-    return this.buildDebugState();
+  function getDebugState() {
+    return base.buildDebugState();
   }
-
-  installModuleBundle(bundlePath: string) {
+  function installModuleBundle(bundlePath: string) {
     const normalizedPath = bundlePath.trim().toLowerCase();
     const timestamp = Date.now();
     if (!normalizedPath) {
@@ -517,78 +461,75 @@ class DevHostRuntimeImpl extends DevHostPublishedRuntime {
         : `builtin://starter/${moduleId}-${timestamp}`,
     };
 
-    const existingIndex = this.modules.findIndex((moduleItem) => moduleItem.id === module.id);
+    const existingIndex = runtimeState.modules.findIndex((moduleItem) => moduleItem.id === module.id);
     if (existingIndex >= 0) {
-      this.modules = this.modules.map((moduleItem, index) => index === existingIndex ? module : moduleItem);
+      runtimeState.modules = runtimeState.modules.map((moduleItem, index) => index === existingIndex ? module : moduleItem);
     } else {
-      this.modules = [...this.modules, module];
+      runtimeState.modules = [...runtimeState.modules, module];
     }
-    this.selectedModuleId = module.id;
-    this.publishNavigationState();
-    this.publishActiveModuleState();
-    this.publishCapabilityFrame(true);
-    this.publishDebugState();
+    runtimeState.selectedModuleId = module.id;
+    callbacks.publishNavigationState();
+    callbacks.publishActiveModuleState();
+    callbacks.publishCapabilityFrame(true);
+    callbacks.publishDebugState();
     return createInstalledModuleResult(module);
   }
-
-  updateSettings(next: Partial<DevSignalSettings>) {
-    this.settings = normalizeDevSignalSettings(next, this.settings);
-    saveSettings(this.settings);
-    this.refreshLoopState();
-    this.publishDebugState();
-    this.publishBootstrapState(true);
+  function updateSettings(next: Partial<DevSignalSettings>) {
+    runtimeState.settings = normalizeDevSignalSettings(next, runtimeState.settings);
+    saveSettings(runtimeState.settings);
+    base.refreshLoopState();
+    callbacks.publishDebugState();
+    base.publishBootstrapState(true);
   }
-
-  reset() {
-    this.recutAudioLoadGeneration += 1;
-    for (const padIndex of [...this.recutVoices.keys()]) {
-      this.stopRecutVoice(padIndex);
+  function reset() {
+    runtimeState.recutAudioLoadGeneration += 1;
+    for (const padIndex of [...runtimeState.recutVoices.keys()]) {
+      base.stopRecutVoice(padIndex);
     }
-    this.recutHeldPads.clear();
-    const recutAudioContext = this.recutAudioContext;
-    this.recutAudioContext = null;
+    runtimeState.recutHeldPads.clear();
+    const recutAudioContext = runtimeState.recutAudioContext;
+    runtimeState.recutAudioContext = null;
     recutAudioContext?.close().catch(() => {
       // Ignore teardown races in tests.
     });
-    this.acceptedRevision = 1n;
-    this.canonicalFxState = createDefaultFxChainState();
-    this.liveFxState = cloneFxState(this.canonicalFxState);
-    this.analyzerState = createDefaultAnalyzerModuleState();
-    this.analyzerFrame = createEmptyAnalyzerFrame();
-    this.recutState = createDefaultRecutModuleState();
-    this.sampleEditorFrame = createEmptySampleEditorFrame();
-    this.analyzerSourceNoteEvents = [];
-    this.analyzerStreamModuleId = "";
-    this.capabilityStreamHandle = "";
-    this.editorViewStateJson.clear();
-    this.moduleStateJson.clear();
-    this.producerActionLog.length = 0;
-    this.heldMidiNotes.clear();
-    this.activeAutomationTouches.clear();
-    this.modules = [...DEFAULT_MODULES];
-    this.controllerConfig = createDefaultControllerConfig();
-    this.inputDevices = [];
-    this.manualInputDevicesOverride = null;
-    this.browserInputFrameIndex = 0;
-    this.lastBrowserGamepadSupported = browserGamepadsSupported();
-    this.selectedModuleId = "fx";
-    this.sequence = 0n;
-    this.recutAudioBuffer = null;
-    this.recutMonoSamples = new Float32Array();
-    this.presetsById.clear();
-    this.stopControllerLoop();
-    this.stopSignalLoop();
-    const preset = this.seedPreset("PadPilot Init", encodeFxChainStateBase64(this.canonicalFxState), "pad_pilot_init_default");
-    this.selectedPresetId = preset.id;
-    this.resetPublishedRealtimeState();
-    this.refreshLoopState();
-    this.syncBrowserInputState(true);
-    this.publishBootstrapState(true);
-    this.publishDebugState();
+    runtimeState.acceptedRevision = 1n;
+    runtimeState.canonicalFxState = createDefaultFxChainState();
+    runtimeState.liveFxState = cloneFxState(runtimeState.canonicalFxState);
+    runtimeState.analyzerState = createDefaultAnalyzerModuleState();
+    runtimeState.analyzerFrame = createEmptyAnalyzerFrame();
+    runtimeState.recutState = createDefaultRecutModuleState();
+    runtimeState.sampleEditorFrame = createEmptySampleEditorFrame();
+    runtimeState.analyzerSourceNoteEvents = [];
+    runtimeState.analyzerStreamModuleId = "";
+    runtimeState.capabilityStreamHandle = "";
+    runtimeState.editorViewStateJson.clear();
+    runtimeState.moduleStateJson.clear();
+    runtimeState.producerActionLog.length = 0;
+    runtimeState.heldMidiNotes.clear();
+    runtimeState.activeAutomationTouches.clear();
+    runtimeState.modules = [...DEFAULT_MODULES];
+    runtimeState.controllerConfig = createDefaultControllerConfig();
+    runtimeState.inputDevices = [];
+    runtimeState.manualInputDevicesOverride = null;
+    runtimeState.browserInputFrameIndex = 0;
+    runtimeState.lastBrowserGamepadSupported = browserGamepadsSupported();
+    runtimeState.selectedModuleId = "fx";
+    runtimeState.sequence = 0n;
+    runtimeState.recutAudioBuffer = null;
+    runtimeState.recutMonoSamples = new Float32Array();
+    runtimeState.presetsById.clear();
+    base.stopControllerLoop();
+    base.stopSignalLoop();
+    const preset = base.seedPreset("PadPilot Init", encodeFxChainStateBase64(runtimeState.canonicalFxState), "pad_pilot_init_default");
+    runtimeState.selectedPresetId = preset.id;
+    base.resetPublishedRealtimeState();
+    base.refreshLoopState();
+    base.syncBrowserInputState(true);
+    base.publishBootstrapState(true);
+    callbacks.publishDebugState();
   }
-
-  setInputDevices(inputDevices: Array<Partial<PadPilotInputDeviceState> & Pick<PadPilotInputDeviceState, "connected" | "deviceId" | "deviceKind" | "displayName" | "frameIndex" | "axes" | "buttons">>) {
-    this.manualInputDevicesOverride = inputDevices.map((device) => ({
+  function setInputDevices(inputDevices: Array<Partial<PadPilotInputDeviceState> & Pick<PadPilotInputDeviceState, "connected" | "deviceId" | "deviceKind" | "displayName" | "frameIndex" | "axes" | "buttons">>) {
+    runtimeState.manualInputDevicesOverride = inputDevices.map((device) => ({
       axes: [...device.axes],
       buttons: [...device.buttons],
       connected: device.connected,
@@ -603,56 +544,54 @@ class DevHostRuntimeImpl extends DevHostPublishedRuntime {
       detectedLayoutKind: device.detectedLayoutKind ?? "auto",
       activeLayoutKind: device.activeLayoutKind ?? "auto",
     }));
-    this.inputDevices = this.manualInputDevicesOverride.map(cloneInputDevice);
-    this.publishInputState(true);
-    this.publishDebugState();
+    runtimeState.inputDevices = runtimeState.manualInputDevicesOverride.map(cloneInputDevice);
+    base.publishInputState(true);
+    callbacks.publishDebugState();
   }
-
-  getProducerActionLog() {
-    return this.producerActionLog.map((entry) => ({ ...entry }));
+  function getProducerActionLog() {
+    return runtimeState.producerActionLog.map((entry) => ({ ...entry }));
   }
-
-  sendIntent(intent: HostIntent) {
+  function sendIntent(intent: HostIntent) {
     switch (intent.type) {
       case "ready":
-        this.resetPublishedRealtimeState();
-        this.publishBootstrapState(true);
+        base.resetPublishedRealtimeState();
+        base.publishBootstrapState(true);
         return;
       case "selectModule":
         {
           const nextModuleId = intent.moduleId === "reverb" ? "fx" : intent.moduleId;
-          if (nextModuleId !== this.selectedModuleId) this.releaseProducerActions(this.selectedModuleId);
-          this.selectedModuleId = nextModuleId;
+          if (nextModuleId !== runtimeState.selectedModuleId) base.releaseProducerActions(runtimeState.selectedModuleId);
+          runtimeState.selectedModuleId = nextModuleId;
         }
         if (
-          this.capabilityStreamHandle &&
-          parseCapabilityHandle(this.capabilityStreamHandle).moduleInstanceId !== this.selectedModuleId
+          runtimeState.capabilityStreamHandle &&
+          parseCapabilityHandle(runtimeState.capabilityStreamHandle).moduleInstanceId !== runtimeState.selectedModuleId
         ) {
-          this.capabilityStreamHandle = "";
+          runtimeState.capabilityStreamHandle = "";
         }
-        if (this.analyzerStreamModuleId && this.analyzerStreamModuleId !== this.selectedModuleId) {
-          this.analyzerStreamModuleId = "";
-          if (this.analyzerState.recordEnabled) {
-            this.analyzerState.recordEnabled = false;
-            this.analyzerState.revision += 1n;
-            this.analyzerFrame.recording = false;
-            this.analyzerFrame.currentLevel = 0;
+        if (runtimeState.analyzerStreamModuleId && runtimeState.analyzerStreamModuleId !== runtimeState.selectedModuleId) {
+          runtimeState.analyzerStreamModuleId = "";
+          if (runtimeState.analyzerState.recordEnabled) {
+            runtimeState.analyzerState.recordEnabled = false;
+            runtimeState.analyzerState.revision += 1n;
+            runtimeState.analyzerFrame.recording = false;
+            runtimeState.analyzerFrame.currentLevel = 0;
           }
         }
-        this.publishNavigationState();
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
-        this.publishDebugState();
+        callbacks.publishNavigationState();
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
+        callbacks.publishDebugState();
         return;
       case "createModule": {
         const baseId = intent.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "module";
         let candidate = baseId;
         let suffix = 2;
-        while (this.modules.some((moduleItem) => moduleItem.id === candidate)) {
+        while (runtimeState.modules.some((moduleItem) => moduleItem.id === candidate)) {
           candidate = `${baseId}-${suffix}`;
           suffix += 1;
         }
-        this.modules = [...this.modules, {
+        runtimeState.modules = [...runtimeState.modules, {
           id: candidate,
           name: intent.name.trim() || "Module",
           version: "0.1.0",
@@ -660,22 +599,22 @@ class DevHostRuntimeImpl extends DevHostPublishedRuntime {
           loadStatus: "ready",
           uiEntryPath: `builtin://starter/${candidate}`,
         }];
-        this.selectedModuleId = candidate;
-        this.publishNavigationState();
-        this.publishActiveModuleState();
-        this.publishCapabilityFrame(true);
-        this.publishDebugState();
+        runtimeState.selectedModuleId = candidate;
+        callbacks.publishNavigationState();
+        callbacks.publishActiveModuleState();
+        callbacks.publishCapabilityFrame(true);
+        callbacks.publishDebugState();
         return;
       }
       case "setModuleState":
-        this.moduleStateJson.set(intent.moduleId, intent.payload);
-        if ((intent.moduleId === "reverb" ? "fx" : intent.moduleId) === this.selectedModuleId) {
-          this.publishActiveModuleState();
+        runtimeState.moduleStateJson.set(intent.moduleId, intent.payload);
+        if ((intent.moduleId === "reverb" ? "fx" : intent.moduleId) === runtimeState.selectedModuleId) {
+          callbacks.publishActiveModuleState();
         }
         return;
       case "setControllerConfig": {
         const request = fromBinary(SetControllerConfigRequestSchema, base64ToBytes(intent.payloadBase64));
-        this.controllerConfig = normalizeControllerConfig({
+        runtimeState.controllerConfig = normalizeControllerConfig({
           rows: request.controllerConfig?.rows.map((row) => ({
             stableId: row.stableId,
             hardwareId: row.hardwareId,
@@ -697,94 +636,94 @@ class DevHostRuntimeImpl extends DevHostPublishedRuntime {
             })),
           })) ?? [],
         });
-        if (this.manualInputDevicesOverride) {
-          this.inputDevices = remapInputDevices(this.manualInputDevicesOverride, this.controllerConfig);
+        if (runtimeState.manualInputDevicesOverride) {
+          runtimeState.inputDevices = remapInputDevices(runtimeState.manualInputDevicesOverride, runtimeState.controllerConfig);
         } else {
-          this.syncBrowserInputState(true);
+          base.syncBrowserInputState(true);
         }
-        this.publishBootstrapState(true);
-        this.publishInputState(true);
-        this.publishDebugState();
+        base.publishBootstrapState(true);
+        base.publishInputState(true);
+        callbacks.publishDebugState();
         return;
       }
       case "setEditorViewState":
-        this.editorViewStateJson.set(intent.scopeId, intent.payload);
+        runtimeState.editorViewStateJson.set(intent.scopeId, intent.payload);
         return;
       case "setModuleStateProto": {
         if (intent.moduleId === "fx" || intent.moduleId === "reverb") {
-          this.canonicalFxState = decodeFxChainStateBase64(intent.payloadBase64);
-          this.liveFxState = cloneFxState(this.canonicalFxState);
-          this.acceptedRevision = BigInt(intent.revision);
+          runtimeState.canonicalFxState = decodeFxChainStateBase64(intent.payloadBase64);
+          runtimeState.liveFxState = cloneFxState(runtimeState.canonicalFxState);
+          runtimeState.acceptedRevision = BigInt(intent.revision);
         }
         if (intent.moduleId === "recut") {
-          this.recutState = decodeRecutModuleStateBase64(intent.payloadBase64);
-          this.sampleEditorFrame = this.buildSampleEditorFrame();
+          runtimeState.recutState = decodeRecutModuleStateBase64(intent.payloadBase64);
+          runtimeState.sampleEditorFrame = base.buildSampleEditorFrame();
         }
-        if ((intent.moduleId === "reverb" ? "fx" : intent.moduleId) === this.selectedModuleId) {
-          this.publishActiveModuleState();
+        if ((intent.moduleId === "reverb" ? "fx" : intent.moduleId) === runtimeState.selectedModuleId) {
+          callbacks.publishActiveModuleState();
         }
         if (intent.moduleId === "recut") {
-          this.publishCapabilityFrame(true);
+          callbacks.publishCapabilityFrame(true);
         }
-        this.publishDebugState();
+        callbacks.publishDebugState();
         return;
       }
       case "selectPreset": {
-        const preset = this.presetsById.get(intent.presetId);
+        const preset = runtimeState.presetsById.get(intent.presetId);
         if (!preset) {
           return;
         }
-        this.selectedPresetId = preset.id;
+        runtimeState.selectedPresetId = preset.id;
         if (preset.moduleId === "fx") {
-          this.canonicalFxState = decodeFxChainStateBase64(preset.stateBase64);
-          this.liveFxState = cloneFxState(this.canonicalFxState);
-          this.acceptedRevision = this.canonicalFxState.revision;
+          runtimeState.canonicalFxState = decodeFxChainStateBase64(preset.stateBase64);
+          runtimeState.liveFxState = cloneFxState(runtimeState.canonicalFxState);
+          runtimeState.acceptedRevision = runtimeState.canonicalFxState.revision;
         }
-        this.publishNavigationState();
-        this.publishActiveModuleState();
-        this.publishDebugState();
+        callbacks.publishNavigationState();
+        callbacks.publishActiveModuleState();
+        callbacks.publishDebugState();
         return;
       }
       case "openCapabilityStream":
-        if (!this.isAuthorizedCapabilityHandle(intent.capability, intent.handle)) {
+        if (!base.isAuthorizedCapabilityHandle(intent.capability, intent.handle)) {
           return;
         }
         if (intent.capability === "sample-analysis") {
-          this.capabilityStreamHandle = intent.handle;
-          this.publishCapabilityFrame(true);
+          runtimeState.capabilityStreamHandle = intent.handle;
+          callbacks.publishCapabilityFrame(true);
           return;
         }
         if (intent.capability === "analyzer-feed") {
-          this.capabilityStreamHandle = intent.handle;
-          this.analyzerStreamModuleId = parseCapabilityHandle(intent.handle).moduleInstanceId;
-          this.publishCapabilityFrame(true);
+          runtimeState.capabilityStreamHandle = intent.handle;
+          runtimeState.analyzerStreamModuleId = parseCapabilityHandle(intent.handle).moduleInstanceId;
+          callbacks.publishCapabilityFrame(true);
           return;
         }
         if (intent.capability === "fx-visualizer") {
-          this.capabilityStreamHandle = intent.handle;
-          this.publishCapabilityFrame(true);
+          runtimeState.capabilityStreamHandle = intent.handle;
+          callbacks.publishCapabilityFrame(true);
         }
         return;
       case "closeCapabilityStream":
-        if (!this.isAuthorizedCapabilityHandle(intent.capability, intent.handle)) {
+        if (!base.isAuthorizedCapabilityHandle(intent.capability, intent.handle)) {
           return;
         }
         if (
           (intent.capability === "sample-analysis"
             || intent.capability === "analyzer-feed"
             || intent.capability === "fx-visualizer")
-          && this.capabilityStreamHandle === intent.handle
+          && runtimeState.capabilityStreamHandle === intent.handle
         ) {
-          this.capabilityStreamHandle = "";
+          runtimeState.capabilityStreamHandle = "";
           if (intent.capability === "analyzer-feed") {
-            this.analyzerStreamModuleId = "";
+            runtimeState.analyzerStreamModuleId = "";
           }
-          this.publishCapabilityFrame(true);
+          callbacks.publishCapabilityFrame(true);
         }
         return;
       case "sendCapabilityIntent":
         try {
-          this.applyCapabilityIntent(intent);
+          base.applyCapabilityIntent(intent);
         } catch {
           // Dev-host capability ingress mirrors native fail-closed behavior.
         }
@@ -793,18 +732,32 @@ class DevHostRuntimeImpl extends DevHostPublishedRuntime {
         return;
     }
   }
+  Object.assign(callbacks, { updateSettings });
+
+
+    const defaultPreset = base.seedPreset("PadPilot Init", encodeFxChainStateBase64(runtimeState.canonicalFxState), "pad_pilot_init_default");
+    runtimeState.selectedPresetId = defaultPreset.id;
+
+  function dispose() {
+    runtimeState.hostListeners.clear();
+    runtimeState.debugListeners.clear();
+    base.stopSignalLoop();
+    base.stopControllerLoop();
+    runtimeState.recutAudioLoadGeneration += 1;
+    for (const pad of runtimeState.recutVoices.keys()) base.stopRecutVoice(pad);
+    runtimeState.recutHeldPads.clear();
+    const context = runtimeState.recutAudioContext;
+    runtimeState.recutAudioContext = null;
+    if (context) void context.close().catch(() => undefined);
+  }
+  return Object.assign(runtimeState, { dispose, subscribe, subscribeDebug, getDebugState, installModuleBundle, updateSettings, reset, setInputDevices, getProducerActionLog, sendIntent });
 }
 
-let runtimeInstance: DevHostRuntimeImpl | null = null;
+let runtimeInstance: ReturnType<typeof createDevHostRuntime> | null = null;
 
 export function getDevHostRuntime() {
   if (runtimeInstance === null) {
-    runtimeInstance = new DevHostRuntimeImpl();
+    runtimeInstance = createDevHostRuntime();
   }
   return runtimeInstance;
 }
-
-
-
-
-

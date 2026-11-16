@@ -1,3 +1,4 @@
+import { fileExtension, base64DecodedByteSize } from "./utils/file-import-values";
 import { fromBinary } from "@bufbuild/protobuf";
 import { base64ToBytes, bytesToBase64 } from "./proto/base64";
 import { CapabilityFrameEnvelopeSchema } from "./proto/generated/capability-pb";
@@ -17,7 +18,7 @@ import { hasValidHostStateShape, isBoundedHostProtoPayload, isBoundedHostStateOb
 import { createCapabilityStreamRegistry, getCoalescedCapabilityIntent, getQueuedCapabilityIntentKey } from "./bridge-capability-streams";
 export { isBoundedHostProtoPayload, MAX_HOST_JSON_INGRESS_CHARS, MAX_HOST_PROTO_INGRESS_BYTES } from "./bridge-ingress";
 
-import { type HostIntent, type CapabilityKind, type CoalescedCapabilityIntent, type NativePromiseListener, type HostState, type StagePluginUpdateInput, type HostFilePickOptions, type HostFilePickResult, type HostFileImportOptions, type HostImportedFile, type HostTransport, type CapabilityStreamFrame } from "./bridge-contracts";
+import { isCapabilityKind, type HostIntent, type CapabilityKind, type CoalescedCapabilityIntent, type NativePromiseListener, type HostState, type StagePluginUpdateInput, type HostFilePickOptions, type HostFileImportOptions, type HostTransport, type CapabilityStreamFrame } from "./bridge-contracts";
 export { type HostIntent, type CapabilityKind, type HostState, type RuntimeHostMode, type PadPilotRuntimeInfo, type StagePluginUpdateInput, type StagedPluginUpdate, type HostFilePickOptions, type HostFilePickResult, type HostFileImportOptions, type HostImportedFile, type InstalledModuleResult, type HostTransport, type CapabilityStreamFrame } from "./bridge-contracts";
 
 type HostStateListener = (state: HostState) => void;
@@ -61,12 +62,12 @@ let nextPromiseId = 1;
 let devHostRuntimeModulePromise: Promise<typeof import("./dev-host/runtime")> | null = null;
 let fxChainStateModulePromise: Promise<typeof import("./modules/fx/fx-chain-state")> | null = null;
 let pendingIntentFlushHandlersInstalled = false;
-const FILE_IMPORT_CHUNK_BYTES = 256 * 1024;
+const FILE_IMPORT_CHUNK_BYTES = 262144;
 const MAX_DEV_IMPORTED_FILES = 4;
 const NATIVE_FUNCTION_TIMEOUT_MS = 15_000;
 
 function controllerLayoutFromProtoValue(value: number) {
-  return controllerLayoutKindFromProto(value as ControllerLayoutKind);
+  return controllerLayoutKindFromProto(Object.values(ControllerLayoutKind).find((entry): entry is ControllerLayoutKind => typeof entry === "number" && entry === value) ?? ControllerLayoutKind.AUTO);
 }
 
 function mapInputDeviceFromProto(device: {
@@ -83,7 +84,7 @@ function mapInputDeviceFromProto(device: {
   rawButtons?: number[];
   detectedLayoutKind?: number;
   activeLayoutKind?: number;
-}) {
+}): PadPilotInputDeviceState {
   return {
     connected: device.connected,
     deviceId: device.deviceId,
@@ -98,7 +99,7 @@ function mapInputDeviceFromProto(device: {
     rawButtons: [...(device.rawButtons ?? [])],
     detectedLayoutKind: controllerLayoutFromProtoValue(device.detectedLayoutKind ?? 0),
     activeLayoutKind: controllerLayoutFromProtoValue(device.activeLayoutKind ?? 0),
-  } satisfies PadPilotInputDeviceState;
+  };
 }
 
 function loadDevHostRuntimeModule() {
@@ -136,7 +137,8 @@ function ensureNativeBridge() {
   }
 
   window.__JUCE__.backend.addEventListener("__juce__complete", (payload: unknown) => {
-    const data = payload as { promiseId?: number; result?: unknown };
+    if (typeof payload !== "object" || payload === null) return;
+    const data = { promiseId: "promiseId" in payload && typeof payload.promiseId === "number" ? payload.promiseId : undefined, result: "result" in payload ? payload.result : undefined };
     const promiseId = data.promiseId ?? 0;
     const listener = nativeListeners.get(promiseId);
     if (!listener) {
@@ -214,19 +216,13 @@ function normalizeFileImportOptions(options: HostFileImportOptions = {}) {
   };
 }
 
-function fileExtension(name: string) {
-  const match = /\.[^./\\]+$/.exec(name);
-  return match?.[0]?.toLowerCase() ?? "";
-}
+
 
 function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-function base64DecodedByteSize(value: string) {
-  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
-  return Math.max(0, Math.floor(value.length * 3 / 4) - padding);
-}
+
 
 async function buildSyntheticContentId(bytes: Uint8Array) {
   if (globalThis.crypto?.subtle) {
@@ -248,12 +244,12 @@ async function buildDevImportedFile(input: File | string, options: HostFileImpor
     const name = fileNameFromPath(input, "imported-file");
     const contentId = await buildSyntheticContentId(new TextEncoder().encode(input));
     return {
-      byteSize: 0,
+      byteSize: 0 as const,
       contentId,
-      mimeType: "application/octet-stream",
+      mimeType: "application/octet-stream" as const,
       name,
       path: `virtual://padpilot/media/${normalized.category}s/${contentId}${fileExtension(name)}`,
-    } satisfies HostImportedFile;
+    };
   }
 
   if (input.size <= 0) {
@@ -298,7 +294,7 @@ async function buildDevImportedFile(input: File | string, options: HostFileImpor
     mimeType: input.type || "application/octet-stream",
     name: input.name,
     path: `virtual://padpilot/media/${normalized.category}s/${contentId}${fileExtension(input.name)}`,
-  } satisfies HostImportedFile;
+  };
 }
 
 function getSelectedModuleId() {
@@ -358,8 +354,9 @@ function publishHostState(state: HostState) {
   if (state.capabilityFrameEnvelopeBase64) {
     try {
       const envelope = fromBinary(CapabilityFrameEnvelopeSchema, base64ToBytes(state.capabilityFrameEnvelopeBase64));
+      if (!isCapabilityKind(envelope.capability)) return;
       capabilityStreams.publish({
-        capability: envelope.capability as CapabilityKind,
+        capability: envelope.capability,
         handle: envelope.handle,
         payloadBase64: bytesToBase64(envelope.payload),
         payloadType: envelope.payloadType,
@@ -417,7 +414,7 @@ window.padpilotHostReceive = (payload) => {
   if (!isBoundedHostStateObject(parsed) || !hasValidHostStateShape(parsed)) {
     return;
   }
-  publishNativeHostState(parsed as HostState);
+  publishNativeHostState(parsed);
 };
 
 window.padpilotHostReceiveProto = (messageType, payloadBase64) => {
@@ -435,7 +432,8 @@ window.padpilotHostReceiveProto = (messageType, payloadBase64) => {
   if (messageType === "CapabilityFrameEnvelope") {
     try {
       const envelope = fromBinary(CapabilityFrameEnvelopeSchema, base64ToBytes(payloadBase64));
-      const capability = envelope.capability as CapabilityKind;
+      const capability = envelope.capability;
+      if (!isCapabilityKind(capability)) return;
       const payload = bytesToBase64(envelope.payload);
       capabilityStreams.publish({
         capability,
@@ -597,19 +595,17 @@ window.padpilotHostReceiveProto = (messageType, payloadBase64) => {
   }
 };
 
-class NativeHostTransport implements HostTransport {
-  isAvailable() {
+function createNativeHostTransport() { return {
+isAvailable() {
     return Boolean(window.__JUCE__?.backend?.emitEvent || window.__JUCE__?.backend?.addEventListener);
-  }
-
-  subscribe(listener: (state: HostState) => void) {
+  },
+subscribe(listener: (state: HostState) => void) {
     nativeSubscribers.add(listener);
     return () => {
       nativeSubscribers.delete(listener);
     };
-  }
-
-  sendIntent(intent: HostIntent) {
+  },
+sendIntent(intent: HostIntent) {
     const nativeBridge = getNativeFunction("padpilotBridge");
     if (nativeBridge) {
       nativeBridge(JSON.stringify(intent)).catch(() => undefined);
@@ -619,14 +615,13 @@ class NativeHostTransport implements HostTransport {
     const encoded = encodeURIComponent(JSON.stringify(intent));
     window.location.href = `padpilot://bridge/${encoded}`;
   }
-}
+}; }
 
-class DevHostTransport implements HostTransport {
-  isAvailable() {
+function createDevHostTransport() { return {
+isAvailable() {
     return !hasNativeHostTransport();
-  }
-
-  subscribe(listener: (state: HostState) => void) {
+  },
+subscribe(listener: (state: HostState) => void) {
     let unsubscribe: (() => void) | null = null;
     let cancelled = false;
     loadDevHostRuntimeModule().then(({ getDevHostRuntime }) => {
@@ -643,9 +638,8 @@ class DevHostTransport implements HostTransport {
       cancelled = true;
       unsubscribe?.();
     };
-  }
-
-  sendIntent(intent: HostIntent) {
+  },
+sendIntent(intent: HostIntent) {
     loadDevHostRuntimeModule().then(({ getDevHostRuntime }) => {
       getDevHostRuntime().sendIntent(intent);
     }).catch(() => {
@@ -653,10 +647,10 @@ class DevHostTransport implements HostTransport {
       // Dev-host chunk failures stay contained and a later intent may retry.
     });
   }
-}
+}; }
 
-const nativeHostTransport = new NativeHostTransport();
-const devHostTransport = new DevHostTransport();
+const nativeHostTransport = createNativeHostTransport();
+const devHostTransport = createDevHostTransport();
 
 export function hasNativeHostTransport() {
   return nativeHostTransport.isAvailable();
@@ -813,9 +807,9 @@ export async function pickHostFile(options: HostFilePickOptions = {}) {
   const nativePicker = getNativeFunction("padpilotPickFile");
   if (!nativePicker) {
     return {
-      cancelled: true,
-      path: "",
-    } satisfies HostFilePickResult;
+      cancelled: true as const,
+      path: "" as const,
+    };
   }
 
   const payload = String(await nativePicker(JSON.stringify(options)));

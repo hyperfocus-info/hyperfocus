@@ -1,3 +1,7 @@
+import { isMessage } from "@bufbuild/protobuf";
+import { nodeConfigValue } from "./node-registry/types";
+import { requireNodeMessage } from "./node-registry/types";
+import { ReverbNodeConfigSchema, CompressorNodeConfigSchema, EqNodeConfigSchema, TremoloNodeConfigSchema, PitchDriftNodeConfigSchema, AutoPanNodeConfigSchema, PhaserNodeConfigSchema, ChorusNodeConfigSchema, DelayNodeConfigSchema, ConvolverNodeConfigSchema } from "../../proto/generated/fx-chain-pb";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { bytesToBase64, base64ToBytes } from "../../proto/base64";
 import { registerModuleStateCodec } from "../../proto/registry";
@@ -146,7 +150,7 @@ function migrateLegacyNodeConfig(node: NodeState) {
 
   switch (node.type) {
     case FxNodeType.COMPRESSOR: {
-      const next = config as CompressorNodeConfig;
+      const next = requireNodeMessage(config, CompressorNodeConfigSchema);
       next.thresholdDb = getLegacyParamValue(node, 1, next.thresholdDb);
       next.ratio = getLegacyParamValue(node, 2, next.ratio);
       next.makeupDb = getLegacyParamValue(node, 3, next.makeupDb);
@@ -155,13 +159,13 @@ function migrateLegacyNodeConfig(node: NodeState) {
       break;
     }
     case FxNodeType.CONVOLVER: {
-      const next = config as ConvolverNodeConfig;
+      const next = requireNodeMessage(config, ConvolverNodeConfigSchema);
       next.irStretch = getLegacyParamValue(node, 1, next.irStretch);
       next.blend = getLegacyParamValue(node, 2, next.blend);
       break;
     }
     case FxNodeType.DELAY: {
-      const next = config as DelayNodeConfig;
+      const next = requireNodeMessage(config, DelayNodeConfigSchema);
       next.time = getLegacyParamValue(node, 1, next.time);
       next.feedback = getLegacyParamValue(node, 2, next.feedback);
       next.focusMix = getLegacyParamValue(node, 3, next.focusMix);
@@ -173,7 +177,7 @@ function migrateLegacyNodeConfig(node: NodeState) {
         next.time,
         "period-seconds",
         10,
-      ) as DelayNodeConfig["timeSync"];
+      );
       next.lowCutHz = getLegacyParamValue(node, 6, next.lowCutHz);
       next.highCutHz = getLegacyParamValue(node, 7, next.highCutHz);
       next.width = getLegacyParamValue(node, 8, next.width);
@@ -181,7 +185,7 @@ function migrateLegacyNodeConfig(node: NodeState) {
       break;
     }
     case FxNodeType.REVERB: {
-      const next = config as ReverbNodeConfig;
+      const next = requireNodeMessage(config, ReverbNodeConfigSchema);
       next.decay = getLegacyParamValue(node, 1, next.decay);
       next.size = getLegacyParamValue(node, 2, next.size);
       next.focusMix = getLegacyParamValue(node, 3, next.focusMix);
@@ -194,7 +198,7 @@ function migrateLegacyNodeConfig(node: NodeState) {
         next.preDelayMs,
         "period-ms",
         10,
-      ) as ReverbNodeConfig["preDelaySync"];
+      );
       next.modulationSpeedHz = getLegacyParamValue(node, 7, next.modulationSpeedHz);
       next.modulationSpeedSync = normalizeTempoSyncState(
         {
@@ -203,11 +207,11 @@ function migrateLegacyNodeConfig(node: NodeState) {
         },
         next.modulationSpeedHz,
         "period-hz",
-      ) as ReverbNodeConfig["modulationSpeedSync"];
+      );
       break;
     }
     case FxNodeType.CHORUS: {
-      const next = config as ChorusNodeConfig;
+      const next = requireNodeMessage(config, ChorusNodeConfigSchema);
       next.rateHz = getLegacyParamValue(node, 1, next.rateHz);
       next.depth = getLegacyParamValue(node, 2, next.depth);
       next.feedback = getLegacyParamValue(node, 3, next.feedback);
@@ -218,7 +222,7 @@ function migrateLegacyNodeConfig(node: NodeState) {
         },
         next.rateHz,
         "period-hz",
-      ) as ChorusNodeConfig["rateSync"];
+      );
       next.voiceDelayMs = getLegacyParamValue(node, 6, next.voiceDelayMs);
       next.voiceDelaySync = normalizeTempoSyncState(
         {
@@ -228,11 +232,11 @@ function migrateLegacyNodeConfig(node: NodeState) {
         next.voiceDelayMs,
         "period-ms",
         10,
-      ) as ChorusNodeConfig["voiceDelaySync"];
+      );
       break;
     }
     case FxNodeType.PHASER: {
-      const next = config as PhaserNodeConfig;
+      const next = requireNodeMessage(config, PhaserNodeConfigSchema);
       next.speedHz = getLegacyParamValue(node, 1, next.speedHz);
       next.centerFrequencyHz = getLegacyParamValue(node, 2, next.centerFrequencyHz);
       next.resonance = getLegacyParamValue(node, 3, next.resonance);
@@ -243,11 +247,11 @@ function migrateLegacyNodeConfig(node: NodeState) {
         },
         next.speedHz,
         "period-hz",
-      ) as PhaserNodeConfig["speedSync"];
+      );
       break;
     }
     case FxNodeType.AUTO_PAN: {
-      const next = config as AutoPanNodeConfig;
+      const next = requireNodeMessage(config, AutoPanNodeConfigSchema);
       next.rateHz = getLegacyParamValue(node, 1, next.rateHz);
       next.amount = getLegacyParamValue(node, 2, next.amount);
       next.phaseOffset = getLegacyParamValue(node, 3, next.phaseOffset);
@@ -258,11 +262,11 @@ function migrateLegacyNodeConfig(node: NodeState) {
         },
         next.rateHz,
         "period-hz",
-      ) as AutoPanNodeConfig["rateSync"];
+      );
       break;
     }
     case FxNodeType.PITCH_DRIFT: {
-      const next = config as PitchDriftNodeConfig;
+      const next = requireNodeMessage(config, PitchDriftNodeConfigSchema);
       next.depth = getLegacyParamValue(node, 1, next.depth);
       next.rateHz = getLegacyParamValue(node, 2, next.rateHz);
       next.rangeCents = getLegacyParamValue(node, 3, next.rangeCents);
@@ -273,11 +277,11 @@ function migrateLegacyNodeConfig(node: NodeState) {
         },
         next.rateHz,
         "period-hz",
-      ) as PitchDriftNodeConfig["rateSync"];
+      );
       break;
     }
     case FxNodeType.TREMOLO: {
-      const next = config as TremoloNodeConfig;
+      const next = requireNodeMessage(config, TremoloNodeConfigSchema);
       next.rateHz = getLegacyParamValue(node, 1, next.rateHz);
       next.depth = getLegacyParamValue(node, 2, next.depth);
       next.stereoPhaseOffset = getLegacyParamValue(node, 3, next.stereoPhaseOffset);
@@ -288,12 +292,12 @@ function migrateLegacyNodeConfig(node: NodeState) {
         },
         next.rateHz,
         "period-hz",
-      ) as TremoloNodeConfig["rateSync"];
+      );
       next.smoothing = getLegacyParamValue(node, 6, next.smoothing);
       break;
     }
     case FxNodeType.EQ: {
-      const next = config as EqNodeConfig;
+      const next = requireNodeMessage(config, EqNodeConfigSchema);
       const band = next.bands[0];
       if (band) {
         band.frequencyHz = getLegacyParamValue(node, 1, band.frequencyHz);
@@ -306,10 +310,7 @@ function migrateLegacyNodeConfig(node: NodeState) {
       break;
   }
 
-  node.config = {
-    case: definition.configCase,
-    value: config,
-  } as any;
+  node.config = nodeConfigValue(definition.configCase, config);
   return syncNodeLegacyParams(node);
 }
 
@@ -326,10 +327,7 @@ function normalizeNodeState(input: NodeState, order: number) {
 
   const hasTypedConfig = input.config.case === definition.configCase;
   if (hasTypedConfig) {
-    base.config = {
-      case: input.config.case,
-      value: Object.assign(base.config.value as object, (input.config.value ?? {}) as object) as any,
-    } as any;
+    if (base.config.value && input.config.value) Object.assign(base.config.value, input.config.value);
   } else if (input.legacyParams.length > 0) {
     base.legacyParams = input.legacyParams.map((param) => create(NodeParamStateSchema, param));
   }
@@ -337,39 +335,39 @@ function normalizeNodeState(input: NodeState, order: number) {
   const migrated = hasTypedConfig ? base : migrateLegacyNodeConfig(base);
   const config = resolveNodeConfig(migrated);
   if (migrated.type === FxNodeType.DELAY) {
-    const typed = config as DelayNodeConfig;
-    typed.timeSync = normalizeTempoSyncState(typed.timeSync, typed.time, "period-seconds", 10) as DelayNodeConfig["timeSync"];
+    const typed = requireNodeMessage(config, DelayNodeConfigSchema);
+    typed.timeSync = normalizeTempoSyncState(typed.timeSync, typed.time, "period-seconds", 10);
   } else if (migrated.type === FxNodeType.REVERB) {
-    const typed = config as ReverbNodeConfig;
-    typed.preDelaySync = normalizeTempoSyncState(typed.preDelaySync, typed.preDelayMs, "period-ms", 10) as ReverbNodeConfig["preDelaySync"];
-    typed.modulationSpeedSync = normalizeTempoSyncState(typed.modulationSpeedSync, typed.modulationSpeedHz, "period-hz") as ReverbNodeConfig["modulationSpeedSync"];
+    const typed = requireNodeMessage(config, ReverbNodeConfigSchema);
+    typed.preDelaySync = normalizeTempoSyncState(typed.preDelaySync, typed.preDelayMs, "period-ms", 10);
+    typed.modulationSpeedSync = normalizeTempoSyncState(typed.modulationSpeedSync, typed.modulationSpeedHz, "period-hz");
   } else if (migrated.type === FxNodeType.CHORUS) {
-    const typed = config as ChorusNodeConfig;
-    typed.rateSync = normalizeTempoSyncState(typed.rateSync, typed.rateHz, "period-hz") as ChorusNodeConfig["rateSync"];
-    typed.voiceDelaySync = normalizeTempoSyncState(typed.voiceDelaySync, typed.voiceDelayMs, "period-ms", 10) as ChorusNodeConfig["voiceDelaySync"];
+    const typed = requireNodeMessage(config, ChorusNodeConfigSchema);
+    typed.rateSync = normalizeTempoSyncState(typed.rateSync, typed.rateHz, "period-hz");
+    typed.voiceDelaySync = normalizeTempoSyncState(typed.voiceDelaySync, typed.voiceDelayMs, "period-ms", 10);
   } else if (migrated.type === FxNodeType.PHASER) {
-    const typed = config as PhaserNodeConfig;
-    typed.speedSync = normalizeTempoSyncState(typed.speedSync, typed.speedHz, "period-hz") as PhaserNodeConfig["speedSync"];
+    const typed = requireNodeMessage(config, PhaserNodeConfigSchema);
+    typed.speedSync = normalizeTempoSyncState(typed.speedSync, typed.speedHz, "period-hz");
   } else if (migrated.type === FxNodeType.AUTO_PAN) {
-    const typed = config as AutoPanNodeConfig;
-    typed.rateSync = normalizeTempoSyncState(typed.rateSync, typed.rateHz, "period-hz") as AutoPanNodeConfig["rateSync"];
+    const typed = requireNodeMessage(config, AutoPanNodeConfigSchema);
+    typed.rateSync = normalizeTempoSyncState(typed.rateSync, typed.rateHz, "period-hz");
   } else if (migrated.type === FxNodeType.PITCH_DRIFT) {
-    const typed = config as PitchDriftNodeConfig;
-    typed.rateSync = normalizeTempoSyncState(typed.rateSync, typed.rateHz, "period-hz") as PitchDriftNodeConfig["rateSync"];
+    const typed = requireNodeMessage(config, PitchDriftNodeConfigSchema);
+    typed.rateSync = normalizeTempoSyncState(typed.rateSync, typed.rateHz, "period-hz");
   } else if (migrated.type === FxNodeType.TREMOLO) {
-    const typed = config as TremoloNodeConfig;
-    typed.rateSync = normalizeTempoSyncState(typed.rateSync, typed.rateHz, "period-hz") as TremoloNodeConfig["rateSync"];
+    const typed = requireNodeMessage(config, TremoloNodeConfigSchema);
+    typed.rateSync = normalizeTempoSyncState(typed.rateSync, typed.rateHz, "period-hz");
   }
   for (const control of definition.controls) {
     if (control.kind === "toggle" || control.kind === "select") {
       continue;
     }
 
-    const value = Number(control.getValue(config as any));
+    const value = Number(control.getValue(config));
     if (Number.isFinite(value)) {
       const min = control.min ?? value;
       const max = control.max ?? value;
-      control.setValue(config as any, clamp(value, min, max));
+      control.setValue(config, clamp(value, min, max));
     }
   }
 
@@ -427,7 +425,7 @@ export function createDefaultFxChainState() {
   const eqNode = createNode(NODE_LIBRARY.find((entry) => entry.type === FxNodeType.EQ) ?? NODE_LIBRARY[0]!, 1, 0);
   eqNode.name = "Clean Tone";
   eqNode.mix = 1;
-  const eqConfig = resolveNodeConfig(eqNode) as EqNodeConfig;
+  const eqConfig = requireNodeMessage(resolveNodeConfig(eqNode), EqNodeConfigSchema);
   eqConfig.lowShelfGainDb = -1.5;
   eqConfig.highShelfGainDb = 2;
   eqConfig.bands = [
@@ -451,7 +449,7 @@ export function createDefaultFxChainState() {
   const compressorNode = createNode(NODE_LIBRARY.find((entry) => entry.type === FxNodeType.COMPRESSOR) ?? NODE_LIBRARY[0]!, 2, 1);
   compressorNode.name = "Glue Comp";
   compressorNode.mix = 1;
-  const compressorConfig = resolveNodeConfig(compressorNode) as CompressorNodeConfig;
+  const compressorConfig = requireNodeMessage(resolveNodeConfig(compressorNode), CompressorNodeConfigSchema);
   compressorConfig.thresholdDb = -12;
   compressorConfig.ratio = 2;
   compressorConfig.makeupDb = 1.5;
@@ -464,7 +462,7 @@ export function createDefaultFxChainState() {
   const reverbNode = createNode(NODE_LIBRARY.find((entry) => entry.type === FxNodeType.REVERB) ?? NODE_LIBRARY[0]!, 3, 2);
   reverbNode.name = "Cinematic Hall";
   reverbNode.mix = 0.25;
-  const reverbConfig = resolveNodeConfig(reverbNode) as ReverbNodeConfig;
+  const reverbConfig = requireNodeMessage(resolveNodeConfig(reverbNode), ReverbNodeConfigSchema);
   reverbConfig.mode = "Hall";
   reverbConfig.decay = 3.2;
   reverbConfig.size = 85;
@@ -699,5 +697,7 @@ export function createEmptyVisualizerFrame() {
   });
 }
 
-registerModuleStateCodec("fx", { encode: encodeFxChainState, decode: decodeFxChainState });
-registerModuleStateCodec("reverb", { encode: encodeFxChainState, decode: decodeFxChainState });
+registerModuleStateCodec("fx", { encode: encodeFxChainState, decode: decodeFxChainState }, readfxState);
+registerModuleStateCodec("reverb", { encode: encodeFxChainState, decode: decodeFxChainState }, readfxState);
+
+export function readfxState(value: unknown) { if (!isMessage(value, FxChainStateSchema)) throw new TypeError("Invalid fx state"); return fromBinary(FxChainStateSchema, toBinary(FxChainStateSchema, value)); }

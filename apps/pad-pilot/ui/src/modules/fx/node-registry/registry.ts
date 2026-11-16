@@ -1,3 +1,4 @@
+import { nodeConfigValue } from "./types";
 import { create } from "@bufbuild/protobuf";
 import { FxNodeType, NodeStateSchema, type NodeState } from "../../../proto/generated/fx-chain-pb";
 import { AutoPanNodeDefinition } from "./definitions/auto-pan-node";
@@ -19,7 +20,7 @@ import { SaturationNodeDefinition } from "./definitions/saturation-node";
 import { TapeSaturationNodeDefinition } from "./definitions/tape-saturation-node";
 import { TransientShaperNodeDefinition } from "./definitions/transient-shaper-node";
 import { TremoloNodeDefinition } from "./definitions/tremolo-node";
-import { type AnyNodeConfig, type FxNodeDefinition } from "./types";
+import {  type FxNodeDefinition } from "./types";
 
 export const FX_NODE_REGISTRY = [
   CompressorNodeDefinition,
@@ -70,7 +71,7 @@ export function getDefaultAddNodeType() {
 
 export function createDefaultNodeState(type: FxNodeType, id: number, order: number, name?: string) {
   const definition = getNodeDefinition(type);
-  const config = definition.createDefaultConfig() as AnyNodeConfig;
+  const config = definition.createDefaultConfig();
   return create(NodeStateSchema, {
     id,
     type: definition.type,
@@ -82,10 +83,7 @@ export function createDefaultNodeState(type: FxNodeType, id: number, order: numb
     solo: false,
     mix: 1,
     selectedPresetId: "",
-    config: {
-      case: definition.configCase,
-      value: config,
-    } as any,
+    config: nodeConfigValue(definition.configCase, config),
   });
 }
 
@@ -99,14 +97,11 @@ export function syncNodeLegacyParams(node: NodeState) {
 export function resolveNodeConfig(node: NodeState) {
   const definition = getNodeDefinition(node.type);
   if (node.config.case === definition.configCase) {
-    return node.config.value as AnyNodeConfig;
+    return node.config.value;
   }
 
   const nextConfig = definition.createDefaultConfig();
-  node.config = {
-    case: definition.configCase,
-    value: nextConfig,
-  } as any;
+  node.config = nodeConfigValue(definition.configCase, nextConfig);
   return nextConfig;
 }
 

@@ -1,3 +1,4 @@
+import { asRecord } from "@hyperfocus/utilities/records";
 export type FxUiPreferences = {
   displayStereoMeters: boolean;
   displayNodeMeters: boolean;
@@ -19,7 +20,7 @@ export function normalizeFxUiPreferences(value: unknown) {
     return { ...DEFAULT_FX_UI_PREFERENCES };
   }
 
-  const candidate = value as Partial<Record<keyof FxUiPreferences, unknown>>;
+  const candidate = asRecord(value);
   const fontScale = fontScaleOptions.find(
     (option) => option === candidate.fontScale
   );

@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from '@hyperfocus/desktop-runtime/process';
 import { closeSync, fstatSync, mkdtempSync, openSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,12 +11,12 @@ import {
   waitForProcessWithDeadline,
 } from "@hyperfocus/pad-pilot/subprocess";
 
-const DEFAULT_CODEX_TIMEOUT_MS = 5 * 60_000;
+const DEFAULT_CODEX_TIMEOUT_MS = 300000;
 const MIN_CODEX_TIMEOUT_MS = 10_000;
-const MAX_CODEX_TIMEOUT_MS = 30 * 60_000;
-const MAX_CODEX_STDOUT_BYTES = 1024 * 1024;
-const MAX_CODEX_STDERR_BYTES = 256 * 1024;
-const MAX_CODEX_SCHEMA_BYTES = 256 * 1024;
+const MAX_CODEX_TIMEOUT_MS = 1800000;
+const MAX_CODEX_STDOUT_BYTES = 1048576;
+const MAX_CODEX_STDERR_BYTES = 262144;
+const MAX_CODEX_SCHEMA_BYTES = 262144;
 const CODEX_TREE_KILL_GRACE_MS = 1_000;
 const TREE_KILL_HELPER_TIMEOUT_MS = 5_000;
 
@@ -34,12 +35,26 @@ type CodexGeneratorCommand = {
   prompt: string;
 };
 
-export class CodexGeneratorTimeoutError extends Error {
-  code = "codex_generator_timeout" as const;
+const CodexGeneratorTimeoutErrorInstances = new WeakSet<object>();
+export type CodexGeneratorTimeoutError = ReturnType<typeof createCodexGeneratorTimeoutError>;
+export function createCodexGeneratorTimeoutError(message?: string) {
+  const error = Object.assign(new Error(message), { code: "codex_generator_timeout" as const });
+  CodexGeneratorTimeoutErrorInstances.add(error);
+  return error;
+}
+export function isCodexGeneratorTimeoutError(error: unknown): error is CodexGeneratorTimeoutError {
+  return error instanceof Error && CodexGeneratorTimeoutErrorInstances.has(error);
 }
 
-export class CodexGeneratorOutputLimitError extends Error {
-  code = "codex_generator_output_too_large" as const;
+const CodexGeneratorOutputLimitErrorInstances = new WeakSet<object>();
+export type CodexGeneratorOutputLimitError = ReturnType<typeof createCodexGeneratorOutputLimitError>;
+export function createCodexGeneratorOutputLimitError(message?: string) {
+  const error = Object.assign(new Error(message), { code: "codex_generator_output_too_large" as const });
+  CodexGeneratorOutputLimitErrorInstances.add(error);
+  return error;
+}
+export function isCodexGeneratorOutputLimitError(error: unknown): error is CodexGeneratorOutputLimitError {
+  return error instanceof Error && CodexGeneratorOutputLimitErrorInstances.has(error);
 }
 
 export function resolveCodexGeneratorTimeoutMs() {
@@ -111,7 +126,7 @@ export async function readBoundedTextStream(
       throw error;
     }
     onOverflow();
-    throw new CodexGeneratorOutputLimitError(error.message);
+    throw createCodexGeneratorOutputLimitError(error.message);
   }
 }
 
@@ -184,17 +199,17 @@ export function buildCodexGeneratorCommand(input: CodexGeneratorInput, outputPat
 
   const prompt = buildPrompt(input);
   args.push(prompt);
-  return { args, executable, prompt } satisfies CodexGeneratorCommand;
+  return { args, executable, prompt };
 }
 
 function spawnCodexCommand(command: CodexGeneratorCommand) {
   try {
-    return Bun.spawn([command.executable, ...command.args], {
+    return spawnBackgroundProcess({ cmd: [command.executable, ...command.args], ...({
       cwd: process.env.PADPILOT_CODEX_CWD?.trim() || tmpdir(),
       stderr: "pipe",
       stdin: "ignore",
       stdout: "pipe",
-    } as const);
+    } as const) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown spawn failure.";
     throw new Error([
@@ -212,7 +227,7 @@ function readCodexFinalMessage(outputPath: string, stdout: string) {
     descriptor = openSync(outputPath, "r");
     const size = fstatSync(descriptor).size;
     if (size > MAX_CODEX_STDOUT_BYTES) {
-      throw new CodexGeneratorOutputLimitError(
+      throw createCodexGeneratorOutputLimitError(
         `Codex CLI final message exceeded ${MAX_CODEX_STDOUT_BYTES} bytes.`,
       );
     }
@@ -227,7 +242,7 @@ function readCodexFinalMessage(outputPath: string, stdout: string) {
     }
     return bytes.subarray(0, offset).toString("utf8").trim() || stdout;
   } catch (error) {
-    if (error instanceof CodexGeneratorOutputLimitError) {
+    if (isCodexGeneratorOutputLimitError(error)) {
       throw error;
     }
     return stdout;
@@ -241,11 +256,11 @@ function readCodexFinalMessage(outputPath: string, stdout: string) {
 function stopCodexProcessTree(proc: ReturnType<typeof spawnCodexCommand>) {
   if (process.platform === "win32" && Number.isInteger(proc.pid) && proc.pid > 0) {
     try {
-      const kill = Bun.spawn(["taskkill", "/PID", String(proc.pid), "/T", "/F"], {
+      const kill = spawnBackgroundProcess({ cmd: ["taskkill", "/PID", String(proc.pid), "/T", "/F"], ...({
         stderr: "ignore",
         stdin: "ignore",
         stdout: "ignore",
-      } as const);
+      } as const) });
       const fallback = setTimeout(() => {
         try {
           proc.kill();
@@ -290,7 +305,7 @@ export async function runCodexGenerator(input: CodexGeneratorInput) {
     try {
       const serializedSchema = JSON.stringify(input.responseSchema);
       if (Buffer.byteLength(serializedSchema) > MAX_CODEX_SCHEMA_BYTES) {
-        throw new CodexGeneratorOutputLimitError(
+        throw createCodexGeneratorOutputLimitError(
           `Codex output schema exceeded ${MAX_CODEX_SCHEMA_BYTES} bytes.`,
         );
       }
@@ -337,7 +352,7 @@ export async function runCodexGenerator(input: CodexGeneratorInput) {
         throw new AggregateError([error, cleanupError], "Codex CLI failed and could not be reaped.");
       }
       if (timedOut) {
-        throw new CodexGeneratorTimeoutError(codexFailureMessage(command, null, "", timeoutMs));
+        throw createCodexGeneratorTimeoutError(codexFailureMessage(command, null, "", timeoutMs));
       }
       throw error;
     }

@@ -1,14 +1,10 @@
-import { create, fromJson, toBinary } from "@bufbuild/protobuf";
+import { z } from "zod";
+import { create, toBinary } from "@bufbuild/protobuf";
 import path from "node:path";
 import { FxNodeType, NodePresetFileSchema, NodeStateSchema } from "../ui/src/proto/generated/fx-chain-pb";
-import { requireArg, parseJsonArg, slugify, validatePresetId, validatePresetName, writePresetFile } from "./preset-utils";
+import { requireArg, parseJsonArg, parseProtoJson, slugify, validatePresetId, validatePresetName, writePresetFile } from "./preset-utils";
 
-type NodePresetJson = {
-  id?: string;
-  name?: string;
-  order?: number;
-  mix?: number;
-};
+
 
 const FX_CHAIN_SCHEMA_VERSION = 4;
 
@@ -27,17 +23,17 @@ function normalizeNodeType(value: string) {
 async function main() {
   const nodeTypeArg = requireArg(Bun.argv[2], "Usage: bun run create-fx-preset <nodeType> '<payload-json>'");
   const payloadArg = requireArg(Bun.argv.slice(3).join(" "), "Usage: bun run create-fx-preset <nodeType> '<payload-json>'");
-  const payload = parseJsonArg<NodePresetJson>(payloadArg);
+  const payload = z.object({ id: z.string().optional(), name: z.string().optional(), order: z.number().optional(), mix: z.number().optional() }).passthrough().parse(parseJsonArg(payloadArg));
   const { enumName, folderName } = normalizeNodeType(nodeTypeArg);
   const presetName = validatePresetName(payload.name ?? folderName);
   const presetId = validatePresetId(payload.id ?? slugify(presetName));
-  const node = fromJson(NodeStateSchema, {
+  const node = parseProtoJson(NodeStateSchema, {
     id: 1,
     order: 0,
     mix: 1,
     ...payload,
     type: enumName,
-  } as never);
+  });
   const preset = create(NodePresetFileSchema, {
     id: presetId,
     name: presetName,

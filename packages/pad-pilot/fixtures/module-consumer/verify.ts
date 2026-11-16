@@ -1,3 +1,5 @@
+import { z } from "zod";
+const readNotes = (value: unknown) => z.object({ notes: z.string() }).parse(value);
 import {
   definePadPilotModuleManifest,
   type PadPilotModuleManifest,
@@ -23,7 +25,7 @@ declare const PadPilot: PadPilotServiceHostSurface<string, never, Record<string,
 
 const ControllerNotes = () => {
   const gamepad = PadPilot.hooks.useGamepad();
-  const [state, setState] = PadPilot.hooks.useModuleState(manifest.id, { notes: "" });
+  const [state, setState] = PadPilot.hooks.useModuleState(manifest.id, { notes: "" }, readNotes);
   const interaction = PadPilot.hooks.useModuleInteraction(manifest.id);
   const actions = PadPilot.createProducerActions(manifest.id);
   if (gamepad().buttons[0]) {
@@ -42,7 +44,7 @@ const uiDefinition = definePadPilotModule({
     context.registerModuleStateCodec(manifest.id, {
       decode: (bytes) => ({ notes: new TextDecoder().decode(bytes) }),
       encode: (state) => new TextEncoder().encode(state.notes),
-    });
+    }, readNotes);
   },
 });
 const scriptTarget = {};

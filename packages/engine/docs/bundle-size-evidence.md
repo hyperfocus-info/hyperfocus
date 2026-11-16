@@ -165,3 +165,33 @@ Previous and temporary limits in bytes (raw / gzip / Brotli):
 | `runtimeDistributionBudget` | 2,602,000 / 824,000 / 704,000 | 3,565,011 / 1,132,576 / 956,405 |
 | `toolingDistributionBudget` | 1,484,000 / 457,000 / 374,000 | 6,024,172 / 1,892,198 / 1,526,244 |
 | `totalDistributionBudget` | 4,086,000 / 1,281,000 / 1,078,000 | 13,154,194 / 4,157,350 / 3,439,054 |
+
+## Owner-approved measured budget integration (2026-11-16)
+
+The repository owner answered **"Approve the measured budget patch"** to the
+question naming `.local/harness-push/budget-approval-policy.patch`. The exact
+approved patch SHA-256 is
+`44b11d08485908661973a198212aa8014fa9813b2c1278177769179dfb3bed76`.
+The original measured source tree was
+`421ae7cea97092f52a6252198753972de51347ef`; integration starts from independently
+reviewed tree `c9042925583f326fec6cbdc66557b8da11ade442`.
+
+This decision accepts 44 exceeded dimensions across 19 groups: retained core,
+scene/WebGL, physics/ragdoll/physical-performance, motion, project/delivery/runtime,
+navigation, combat, audio/effects and the runtime aggregate. The original exact
+fixed ceilings are applied without extra margin. All other dimensions and consumer
+limits stay fixed. This accepts measured size debt, not optimization or release.
+
+Comparison against final v5 measurements found 181 equal policy dimensions and
+two higher requested dimensions: runtime gzip 1,168,117 versus approved 1,168,114,
+and runtime Brotli 981,760 versus approved 981,755. Those extra 3 and 5 bytes are
+**not approved** and are not applied. Complete native/rebundled graph accounting
+and every gate remain enforced; remaining failures prevent size acceptance.
+
+Engine maintainers own this exception; Editor owners join authoring changes.
+Review before the next Engine release and whenever affected boundaries change.
+Retire each increase when compatible measured reductions restore its previous
+limit; retaining an increase at review requires another explicit owner decision.
+Preserve public APIs, synchronous behavior and save/project wire formats. Source,
+build, measurement or toolchain drift requires fresh measurement; this decision
+does not authorize automatic ceiling refresh, push or publication.

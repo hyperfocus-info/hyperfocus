@@ -1,5 +1,6 @@
+import { requireElement } from "../utils/require-element";
 import { afterEach, expect, it } from "bun:test";
-import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createUiTest } from "../../../utils/tests/test-harness";
 import { ControllerPreferencesModal } from "./controller-preferences-modal";
 import { PadPilotProvider } from "../padpilot/provider";
@@ -18,7 +19,14 @@ createUiTest("ControllerPreferencesModal", () => {
       .getAllByRole("button")
       .filter((button) => button.textContent?.includes("Delete"));
 
-  const getPreviewScope = () => screen.getByRole("combobox", { name: "Preview Scope" }) as HTMLSelectElement;
+  const getPreviewScope = () => requireElement(screen.getByRole("button", { name: "Preview Scope" }), HTMLButtonElement);
+
+  const selectPreviewScope = async (name: string) => {
+    if (getPreviewScope().getAttribute("aria-expanded") !== "true") fireEvent.click(getPreviewScope());
+    await screen.findByRole("option", { name });
+
+    fireEvent.click(screen.getByRole("option", { name }));
+  };
 
   afterEach(() => {
     getDevHostRuntime().reset();
@@ -40,7 +48,7 @@ createUiTest("ControllerPreferencesModal", () => {
     let secondDeleteButton: HTMLButtonElement | undefined;
     await waitFor(() => {
       expect(screen.getByText("Device 3")).toBeTruthy();
-      const deleteButtons = getDeleteButtons() as HTMLButtonElement[];
+      const deleteButtons = getDeleteButtons().map(button => requireElement(button, HTMLButtonElement));
       expect(deleteButtons).toHaveLength(3);
       secondDeleteButton = deleteButtons[1];
     });
@@ -109,8 +117,9 @@ createUiTest("ControllerPreferencesModal", () => {
       },
     ]);
 
+    fireEvent.click(getPreviewScope());
     await waitFor(() => {
-      const options = within(getPreviewScope()).getAllByRole("option").map((option) => option.textContent);
+      const options = screen.getAllByRole("option").map((option) => option.textContent);
       expect(options).toEqual([
         "All Connected Devices",
         "Deck A (runtime-a)",
@@ -147,6 +156,7 @@ createUiTest("ControllerPreferencesModal", () => {
 
   it("updates the status summary when stick and trigger input changes", async () => {
     renderModal();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
     getDevHostRuntime().setInputDevices([{
       axes: [0.25, -0.5, 0.81, 0],
@@ -159,7 +169,7 @@ createUiTest("ControllerPreferencesModal", () => {
       runtimeDeviceId: "runtime-a",
     }]);
 
-    fireEvent.input(getPreviewScope(), { currentTarget: { value: "runtime-a" }, target: { value: "runtime-a" } });
+    await selectPreviewScope("Deck A (runtime-a)");
 
     await waitFor(() => {
       expect(screen.getByText("Active: LT 62%, Left Stick (0.25, -0.50), Right Stick (0.81, 0.00)")).toBeTruthy();
@@ -217,11 +227,12 @@ createUiTest("ControllerPreferencesModal", () => {
       },
     ]);
 
+    fireEvent.click(getPreviewScope());
     await waitFor(() => {
-      expect(within(getPreviewScope()).getByRole("option", { name: "Deck A (runtime-a)" })).toBeTruthy();
+      expect(screen.getByRole("option", { name: "Deck A (runtime-a)" })).toBeTruthy();
     });
 
-    fireEvent.input(getPreviewScope(), { currentTarget: { value: "runtime-a" }, target: { value: "runtime-a" } });
+    await selectPreviewScope("Deck A (runtime-a)");
 
     await waitFor(() => {
       expect(screen.getAllByText("Deck A (runtime-a)").length).toBeGreaterThan(0);
@@ -239,7 +250,7 @@ createUiTest("ControllerPreferencesModal", () => {
     }]);
 
     await waitFor(() => {
-      expect(getPreviewScope().value).toBe("__all__");
+      expect(getPreviewScope().textContent).toContain("All Connected Devices");
       expect(screen.getAllByText("All Connected Devices").length).toBeGreaterThan(0);
     });
   });

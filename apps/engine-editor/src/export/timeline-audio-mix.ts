@@ -1,4 +1,5 @@
 import type { EditorAudioTrack } from "@hyperfocus/engine/project";
+import { clampLowerFirst as clamp } from '@hyperfocus/utilities/math';
 
 export type DecodedTimelineAudio = Pick<AudioBuffer, "duration" | "length" | "numberOfChannels" | "sampleRate" | "getChannelData">;
 
@@ -97,7 +98,8 @@ export async function decodeAndMixTimelineAudio(options: {
   resolveBlob(track: EditorAudioTrack): Blob | undefined;
 }) {
   const selected = selectTimelineAudioTracks(options.tracks);
-  if (!selected.length) return { audio: undefined, missingTrackIds: [] as string[], mixedTrackIds: [] as string[] };
+  const missingTrackIds: string[] = [], mixedTrackIds: string[] = [];
+  if (!selected.length) return { audio: undefined, missingTrackIds, mixedTrackIds };
   const context = new AudioContext();
   try {
     const decoded = await Promise.all(selected.map(async (track) => {
@@ -106,7 +108,7 @@ export async function decodeAndMixTimelineAudio(options: {
       return { track, buffer: await context.decodeAudioData(await blob.arrayBuffer()) };
     }));
     const sources = decoded.filter((source): source is { track: EditorAudioTrack; buffer: AudioBuffer } => source !== undefined);
-    if (!sources.length) return { audio: undefined, missingTrackIds: selected.map((track) => track.id), mixedTrackIds: [] as string[] };
+    if (!sources.length) return { audio: undefined, missingTrackIds: selected.map((track) => track.id), mixedTrackIds };
     const plan = createTimelineAudioMixPlan({ sources, timelineFps: options.timelineFps, exportFps: options.exportFps, exportFrameCount: options.exportFrameCount });
     const buffers = new Map(sources.map((source) => [source.track.id, source.buffer]));
     const { audio, peakBeforeNormalization } = renderTimelineAudioMix({ plan, buffers });
@@ -157,5 +159,5 @@ function sampleChannel(buffer: DecodedTimelineAudio, channel: number, seconds: n
 }
 
 function assertPositive(value: number, label: string) { if (!Number.isFinite(value) || value <= 0) throw new RangeError(`${label} must be positive.`); }
-function clamp(value: number, minimum: number, maximum: number) { return Math.max(minimum, Math.min(maximum, value)); }
+
 function modulo(value: number, modulus: number) { return ((value % modulus) + modulus) % modulus; }

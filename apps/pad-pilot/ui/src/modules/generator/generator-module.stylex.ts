@@ -29,8 +29,8 @@ const definitions = stylex.create({
     "backgroundImage": "none",
     "color": "var(--generator-ink)",
     "height": "100%",
-    "overflowX": { default: "hidden", "@media (max-width: 1120px)": "auto" },
-    "overflowY": { default: "hidden", "@media (max-width: 1120px)": "auto" },
+    "overflowX": { default: "hidden", "@media (max-width: 1120px)": "hidden" },
+    "overflowY": { default: "hidden", "@media (max-width: 1120px)": "hidden" },
     "paddingBottom": { default: "10px", "@media (max-width: 640px)": "8px" },
     "paddingLeft": { default: "10px", "@media (max-width: 640px)": "8px" },
     "paddingRight": { default: "10px", "@media (max-width: 640px)": "8px" },
@@ -504,7 +504,7 @@ const definitions = stylex.create({
     "rowGap": "6px",
     "maxHeight": "64px",
     "overflowX": "auto",
-    "overflowY": "auto",
+    "overflowY": "hidden",
   },
   "auditItemStyle": {
     "backgroundColor": "var(--generator-terminal-bg)",
@@ -544,7 +544,7 @@ const definitions = stylex.create({
     "scrollbarWidth": "thin",
     "minHeight": "0",
     "overflowX": "auto",
-    "overflowY": "auto",
+    "overflowY": "hidden",
     "paddingRight": "2px",
   },
   "trackItemStyle": {

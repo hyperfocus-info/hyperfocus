@@ -1,3 +1,4 @@
+import "@hyperfocus/ui/stylex-entry.css";
 import { render } from "solid-js/web";
 import "uplot/dist/uPlot.min.css";
 import "./styles.css";

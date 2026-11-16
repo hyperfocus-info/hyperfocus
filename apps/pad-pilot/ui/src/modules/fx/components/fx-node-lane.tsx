@@ -2,10 +2,10 @@ import { DragDropProvider, DragDropSensors, DragOverlay } from "@thisbeyond/soli
 import { For, Show, createMemo, createSignal } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
 import { moveItem } from "../../../utils/array";
-import { parseNodeDragId } from "../fx-drag";
+import { parseNodeDragId } from "../utils/drag-identity";
 import { createChainAccessor, createNodeAccessor } from "../fx-live-accessors";
 import { useFxModuleActions, useFxModuleState } from "../fx-module-store";
-import { FxNodeType, NODE_LIBRARY } from "../fx-chain-state";
+import {  NODE_LIBRARY } from "../fx-chain-state";
 import { FxNodeCard } from "./fx-node-card";
 import { FxDragPreview } from "./fx-drag-preview";
 import styles from "../styles/fx-module.stylex";
@@ -91,7 +91,7 @@ export function FxNodeLane(props: FxNodeLaneProps) {
             onOpenChange={setAddFxOpen}
             onQueryChange={setAddFxQuery}
             onSelect={(next) => {
-              const added = actions.nodes.add(props.chainId, Number.parseInt(next, 10) as FxNodeType);
+              const added = actions.nodes.add(props.chainId, Number.parseInt(next, 10));
               if (added) {
                 setAddFxQuery("");
                 setAddFxOpen(false);

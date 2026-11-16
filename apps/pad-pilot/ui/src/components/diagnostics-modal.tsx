@@ -11,19 +11,19 @@ const formatNumber = (value: number | undefined, suffix = "") => {
   return `${value.toFixed(2)}${suffix}`;
 };
 
-export function isDiagnosticsTimingEnabled(runtime: HostState["runtimeDiagnostics"] | undefined) {
+export function isDiagnosticsTimingEnabled(runtime: Pick<NonNullable<HostState["runtimeDiagnostics"]>, "profilingEnabled" | "profiledBlocks"> | undefined) {
   return Boolean(runtime?.profilingEnabled && (runtime?.profiledBlocks ?? 0) > 0);
 }
 
-export function getDiagnosticsStatusLabel(runtime: HostState["runtimeDiagnostics"] | undefined) {
+export function getDiagnosticsStatusLabel(runtime: Pick<NonNullable<HostState["runtimeDiagnostics"]>, "profilingEnabled"> | undefined) {
   return runtime?.profilingEnabled ? "Profiling On" : "Profiling Off";
 }
 
-export function getActiveDiagnosticChains(runtime: HostState["runtimeDiagnostics"] | undefined) {
+export function getActiveDiagnosticChains<T extends { active: boolean }>(runtime: { chains: T[] } | undefined) {
   return (runtime?.chains ?? []).filter((chain) => chain.active);
 }
 
-export function formatTimingValue(value: number | undefined, runtime: HostState["runtimeDiagnostics"] | undefined) {
+export function formatTimingValue(value: number | undefined, runtime: Parameters<typeof isDiagnosticsTimingEnabled>[0]) {
   return isDiagnosticsTimingEnabled(runtime) ? formatNumber(value, " us") : "Disabled";
 }
 

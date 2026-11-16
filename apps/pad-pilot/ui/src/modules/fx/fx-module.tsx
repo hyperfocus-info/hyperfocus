@@ -49,7 +49,7 @@ function FxModuleContent() {
   });
 
   return (
-    <>
+    <PadPilot.ModuleWorkspace>
       <FxConsoleShell />
       <div class={styles.viewport} aria-live="polite">
         <For each={state.ui.toastQueue}>
@@ -79,6 +79,6 @@ function FxModuleContent() {
         title="Manage Module Presets"
       />
       <FxNodeDeepEditorModal />
-    </>
+    </PadPilot.ModuleWorkspace>
   );
 }

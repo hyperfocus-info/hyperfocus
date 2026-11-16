@@ -1,3 +1,4 @@
+import { requireElement } from "../../utils/require-element";
 import { expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createUiTest } from "../../../../utils/tests/test-harness";
@@ -9,7 +10,7 @@ createUiTest("FileUploadDropzone", () => {
     const { container } = render(() => (
       <FileUploadInput class="hidden-picker" onSelection={(selection) => selections.push(selection)} />
     ));
-    const input = container.querySelector("input.hidden-picker") as HTMLInputElement;
+    const input = requireElement(container.querySelector("input.hidden-picker"), HTMLInputElement);
     const file = new File(["audio"], "marker-loop.wav", { type: "audio/wav" });
 
     fireEvent.change(input, { target: { files: [file] } });

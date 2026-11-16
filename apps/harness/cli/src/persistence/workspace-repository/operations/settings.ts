@@ -1,5 +1,5 @@
-import { codexLimitsSchema, usageSourceSchema, type CodexLimits, type UsageSource } from "@hyperfocus/ai-core/protocol";
-import { z } from "zod";
+import { codexLimitsSchema, type CodexLimits, type UsageSource } from "@hyperfocus/ai-core/protocol";
+import { createUsageLedger } from "../../../usage/usage-ledger";
 import type { BackgroundJobApprovalPolicy, CorrectnessIterationMode, ExecutionControlState, ModeDefinition, PlanExecutionMode, ProjectId, ProviderBrand, RunModelPreference, SubagentWorktreeStrategy, TokenUsageState, TokenUsageTotals, WorkspaceProjectState, WorkspaceState } from "@hyperfocus/ai-core/protocol";
 import type { GeminiCachedContentRow, PersistedTerminalState, WorkspaceRepositoryContext } from "../contracts";
 import type { WorkspaceMigrationSupportOperationsSet } from "./migration-support";
@@ -121,23 +121,11 @@ export type WorkspaceSettingsOperationsSet = ReturnType<typeof createWorkspaceSe
 export function createWorkspaceSettingsOperations2(context: WorkspaceRepositoryContext, operations: WorkspaceMigrationSupportOperationsSet) {
   let codexLimits: CodexLimits = { status: "unavailable", windows: [], reason: "Refresh to read Codex account usage." };
   function setCodexLimits(value: CodexLimits) { codexLimits = codexLimitsSchema.parse(value); }
-  const observedKey = "token_usage_observations_v1";
-  function readObserved(): { sources: UsageSource[]; observations: Record<string, true> } {
-    const raw = operations.getWorkspaceMetaValue(observedKey);
-    if (!raw) return { sources: [], observations: {} };
-    return z.object({ sources: z.array(usageSourceSchema), observations: z.record(z.string(), z.literal(true)) }).parse(JSON.parse(raw));
-  }
+  const ledger = createUsageLedger(context.db);
   function recordTokenUsage(delta: TokenUsageTotals, source: Omit<UsageSource, "totals">, observationId: string): TokenUsageTotals {
     return context.db.transaction(() => {
-      const observed = readObserved();
-      if (Object.hasOwn(observed.observations, observationId)) return createEmptyTokenUsageTotals();
-      const identity = (value: Omit<UsageSource, "totals">) => JSON.stringify([value.projectId, value.threadId, value.sourceKind, value.sourceLabel, value.modelId, value.runtime]);
-      const existing = observed.sources.find(value => identity(value) === identity(source));
-      if (existing) existing.totals = addTokenUsageTotals(existing.totals, delta);
-      else observed.sources.push(usageSourceSchema.parse({ ...source, totals: delta }));
-      observed.observations[observationId] = true;
+      if (!ledger.record(delta, source, observationId)) return createEmptyTokenUsageTotals();
       addTokenUsageLifetime(delta);
-      operations.setWorkspaceMetaValue(observedKey, JSON.stringify(observed));
       return delta;
     })();
   }
@@ -156,7 +144,7 @@ export function createWorkspaceSettingsOperations2(context: WorkspaceRepositoryC
   function getTokenUsageState(session: TokenUsageTotals): TokenUsageState {
       return {
         codexLimits,
-        sources: readObserved().sources,
+        ...ledger.snapshot(),
         session: normalizeTokenUsageTotals(session),
         lifetime: getTokenUsageLifetime(),
         resetAt: operations.getWorkspaceMetaValue(TOKEN_USAGE_RESET_AT_KEY)
@@ -170,9 +158,7 @@ export function createWorkspaceSettingsOperations2(context: WorkspaceRepositoryC
   function resetTokenUsageLifetime(resetAt: string): TokenUsageTotals {
       return context.db.transaction(() => {
       const next = createEmptyTokenUsageTotals();
-      const observed = readObserved();
-      // Retain observation receipts so replay after reset cannot re-add old calls.
-      operations.setWorkspaceMetaValue(observedKey, JSON.stringify({ ...observed, sources: [] }));
+      ledger.reset();
       operations.setWorkspaceMetaValue(TOKEN_USAGE_LIFETIME_KEY, JSON.stringify(next));
       operations.setWorkspaceMetaValue(TOKEN_USAGE_RESET_AT_KEY, resetAt);
       return next;

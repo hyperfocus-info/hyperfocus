@@ -1,3 +1,4 @@
+import { requireElement } from "../../utils/require-element";
 import { afterEach, beforeEach, expect, it, setDefaultTimeout } from "bun:test";
 import { create, fromBinary } from "@bufbuild/protobuf";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
@@ -188,16 +189,12 @@ async function seedSecondSliceState(ratio: number) {
   });
 }
 
-function setAnalysisMode(mode: RecutAnalysisMode) {
-  const select = screen.getByRole("combobox", { name: "Analysis" }) as HTMLSelectElement;
-  const nextValue = String(mode);
-  const optionIndex = Array.from(select.options).findIndex((option) => option.value === nextValue);
-  select.value = nextValue;
-  if (optionIndex >= 0) {
-    select.selectedIndex = optionIndex;
-  }
-  fireEvent.input(select, { target: { value: nextValue } });
-  fireEvent.change(select, { target: { value: nextValue } });
+async function setAnalysisMode(mode: RecutAnalysisMode) {
+  fireEvent.click(screen.getByRole("button", { name: "Analysis" }));
+  const label = mode === RecutAnalysisMode.AUTO ? "Auto" : mode === RecutAnalysisMode.BPM ? "BPM" : "Custom";
+  await screen.findByRole("option", { name: label });
+
+  fireEvent.click(screen.getByRole("option", { name: label }));
 }
 
 function moveDensitySlider(ratio: number) {
@@ -359,9 +356,9 @@ createUiTest("RecutModule", () => {
   it("switches from custom back to auto and unlocks density changes", async () => {
     await renderRecutModuleWithTwoSlices("analysis-auto.wav", 0.72);
 
-    setAnalysisMode(RecutAnalysisMode.AUTO);
+    await setAnalysisMode(RecutAnalysisMode.AUTO);
     await waitFor(() => {
-      expect((screen.getByRole("combobox", { name: "Analysis" }) as HTMLSelectElement).value).toBe(String(RecutAnalysisMode.AUTO));
+      expect(screen.getByRole("button", { name: "Analysis" }).textContent).toContain("Auto");
       expect(getCachedSampleEditorFrame().analysisMode).toBe(SampleAnalysisMode.AUTO);
     });
 
@@ -376,9 +373,9 @@ createUiTest("RecutModule", () => {
   it("switches from custom to BPM, shows BPM controls, and unlocks density changes", async () => {
     await renderRecutModuleWithTwoSlices("analysis-bpm.wav", 0.68);
 
-    setAnalysisMode(RecutAnalysisMode.BPM);
+    await setAnalysisMode(RecutAnalysisMode.BPM);
     await waitFor(() => {
-      expect((screen.getByRole("combobox", { name: "Analysis" }) as HTMLSelectElement).value).toBe(String(RecutAnalysisMode.BPM));
+      expect(screen.getByRole("button", { name: "Analysis" }).textContent).toContain("BPM");
       expect(getCachedSampleEditorFrame().analysisMode).toBe(SampleAnalysisMode.BPM);
       expect(getCachedSampleEditorFrame().bpmValue).toBeGreaterThan(0);
     });
@@ -395,20 +392,20 @@ createUiTest("RecutModule", () => {
     const runtime = getDevHostRuntime();
     const originalSendIntent = runtime.sendIntent.bind(runtime);
     const densityRequests: number[] = [];
-    runtime.sendIntent = ((intent) => {
+    runtime.sendIntent = (intent) => {
       if (intent.type === "sendCapabilityIntent" && intent.capability === "sample-analysis" && intent.action === "request-analysis") {
         const payload = fromBinary(SampleAnalysisRequestSchema, base64ToBytes(intent.payloadBase64));
         densityRequests.push(payload.density);
       }
       return originalSendIntent(intent);
-    }) as typeof runtime.sendIntent;
+    };
 
     try {
       await renderRecutModuleWithTwoSlices("analysis-bpm-drag.wav", 0.68);
 
-      setAnalysisMode(RecutAnalysisMode.BPM);
+      await setAnalysisMode(RecutAnalysisMode.BPM);
       await waitFor(() => {
-        expect((screen.getByRole("combobox", { name: "Analysis" }) as HTMLSelectElement).value).toBe(String(RecutAnalysisMode.BPM));
+        expect(screen.getByRole("button", { name: "Analysis" }).textContent).toContain("BPM");
         expect(getCachedSampleEditorFrame().analysisMode).toBe(SampleAnalysisMode.BPM);
       });
 
@@ -437,19 +434,19 @@ createUiTest("RecutModule", () => {
     const runtime = getDevHostRuntime();
     const originalSendIntent = runtime.sendIntent.bind(runtime);
     const triggerPayloads: { padIndex: number; pressed: boolean }[] = [];
-    runtime.sendIntent = ((intent) => {
+    runtime.sendIntent = (intent) => {
       if (intent.type === "sendCapabilityIntent" && intent.capability === "slice-playback" && intent.action === "trigger-pad") {
         const payload = fromBinary(SlicePlaybackTriggerSchema, base64ToBytes(intent.payloadBase64));
         triggerPayloads.push({ padIndex: payload.padIndex, pressed: payload.pressed });
       }
       return originalSendIntent(intent);
-    }) as typeof runtime.sendIntent;
+    };
 
     try {
       renderRecutModule();
       await dropRecutFile("empty-pad.wav");
       const playablePad = screen.getByRole("button", { name: "X Slice 1" });
-      expect((playablePad as HTMLButtonElement).disabled).toBe(false);
+      expect((requireElement(playablePad, HTMLButtonElement)).disabled).toBe(false);
       fireEvent.pointerDown(playablePad, { button: 0, buttons: 1, pointerId: 1 });
       fireEvent.pointerUp(playablePad, { button: 0, buttons: 0, pointerId: 1 });
       await waitFor(() => {
@@ -460,7 +457,7 @@ createUiTest("RecutModule", () => {
       });
 
       const emptyPad = screen.getByRole("button", { name: "Y Empty" });
-      expect((emptyPad as HTMLButtonElement).disabled).toBe(true);
+      expect((requireElement(emptyPad, HTMLButtonElement)).disabled).toBe(true);
       fireEvent.pointerDown(emptyPad);
       fireEvent.pointerUp(emptyPad);
       await new Promise((resolve) => window.setTimeout(resolve, 20));
@@ -473,17 +470,19 @@ createUiTest("RecutModule", () => {
   it("shows a waveform busy overlay while analysis is pending", async () => {
     const runtime = getDevHostRuntime();
     const originalSendIntent = runtime.sendIntent.bind(runtime);
-    runtime.sendIntent = ((intent) => {
+    let blockedAnalysisRequests = 0;
+    runtime.sendIntent = (intent) => {
       if (intent.type === "sendCapabilityIntent" && intent.capability === "sample-analysis" && intent.action === "request-analysis") {
+        blockedAnalysisRequests += 1;
         return;
       }
       return originalSendIntent(intent);
-    }) as typeof runtime.sendIntent;
+    };
 
     try {
-      renderRecutModule();
-      await dropRecutFile("busy-overlay.wav");
-      setAnalysisMode(RecutAnalysisMode.BPM);
+      await renderRecutModuleWithTwoSlices("busy-overlay.wav", 0.68);
+      await setAnalysisMode(RecutAnalysisMode.BPM);
+      expect(blockedAnalysisRequests).toBeGreaterThan(0);
       expect(screen.getByText(/Rebuilding chops/i)).toBeTruthy();
     } finally {
       runtime.sendIntent = originalSendIntent;
@@ -494,13 +493,13 @@ createUiTest("RecutModule", () => {
     const runtime = getDevHostRuntime();
     const originalSendIntent = runtime.sendIntent.bind(runtime);
     const triggerPayloads: { padIndex: number; pressed: boolean }[] = [];
-    runtime.sendIntent = ((intent) => {
+    runtime.sendIntent = (intent) => {
       if (intent.type === "sendCapabilityIntent" && intent.capability === "slice-playback" && intent.action === "trigger-pad") {
         const payload = fromBinary(SlicePlaybackTriggerSchema, base64ToBytes(intent.payloadBase64));
         triggerPayloads.push({ padIndex: payload.padIndex, pressed: payload.pressed });
       }
       return originalSendIntent(intent);
-    }) as typeof runtime.sendIntent;
+    };
 
     try {
       await renderRecutModuleWithTwoSlices("preview.wav", 0.9);
@@ -523,12 +522,12 @@ createUiTest("RecutModule", () => {
     const runtime = getDevHostRuntime();
     const originalSendIntent = runtime.sendIntent.bind(runtime);
     let triggerIntentCount = 0;
-    runtime.sendIntent = ((intent) => {
+    runtime.sendIntent = (intent) => {
       if (intent.type === "sendCapabilityIntent" && intent.capability === "slice-playback" && intent.action === "trigger-pad") {
         triggerIntentCount += 1;
       }
       return originalSendIntent(intent);
-    }) as typeof runtime.sendIntent;
+    };
 
     try {
       await renderRecutModuleWithTwoSlices("double-click.wav", 0.52);
@@ -556,12 +555,12 @@ createUiTest("RecutModule", () => {
     const runtime = getDevHostRuntime();
     const originalSendIntent = runtime.sendIntent.bind(runtime);
     let markerMutationCount = 0;
-    runtime.sendIntent = ((intent) => {
+    runtime.sendIntent = (intent) => {
       if (intent.type === "sendCapabilityIntent" && intent.capability === "slice-playback" && intent.action === "apply-state") {
         markerMutationCount += 1;
       }
       return originalSendIntent(intent);
-    }) as typeof runtime.sendIntent;
+    };
 
     try {
       fireEvent.pointerDown(screen.getByRole("button", { name: "X start" }), {
@@ -577,5 +576,3 @@ createUiTest("RecutModule", () => {
     }
   });
 });
-
-

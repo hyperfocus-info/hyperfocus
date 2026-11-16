@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, expect, it } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -277,9 +278,9 @@ createUiTest("PadPilotHotkeys", () => {
           if (eventId !== "__juce__invoke") {
             return;
           }
-          const invocation = payload as { name?: string; params?: unknown[] };
+          const invocation = z.object({name:z.string().optional(),params:z.array(z.unknown()).optional()}).passthrough().parse(payload);
           if (invocation.name === "padpilotBridge") {
-            nativeIntents.push(JSON.parse(String(invocation.params?.[0] ?? "{}")) as Record<string, unknown>);
+            nativeIntents.push(z.record(z.unknown()).parse(JSON.parse(String(invocation.params?.[0] ?? "{}"))));
           }
         },
       },

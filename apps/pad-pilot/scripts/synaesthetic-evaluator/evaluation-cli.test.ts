@@ -50,7 +50,7 @@ describe("evaluation CLI", () => {
       log: () => undefined,
       serve: () => {
         calls.push("serve");
-        return {} as never;
+        return undefined;
       },
     });
 

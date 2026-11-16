@@ -1,8 +1,5 @@
-import {
-  DEFAULT_GENERATOR_AI_SETTINGS,
-  normalizeGeneratorAiSettings,
-  type GeneratorAiSettings,
-} from "./generator-options";
+import { DEFAULT_GENERATOR_AI_SETTINGS, type GeneratorAiSettings } from "./generator-option-catalog";
+import { normalizeGeneratorAiSettings } from "./generator-selector-options";
 
 export const GENERATOR_AI_SETTINGS_STORAGE_KEY = "padpilot.generator.ai-settings";
 export const AGENT_AI_SETTINGS_STORAGE_KEY = "padpilot.agent.ai-settings";
@@ -13,7 +10,7 @@ export function loadGeneratorAiSettings() {
     const stored = window.localStorage.getItem(AGENT_AI_SETTINGS_STORAGE_KEY)
       ?? window.localStorage.getItem(GENERATOR_AI_SETTINGS_STORAGE_KEY)
       ?? "{}";
-    return normalizeGeneratorAiSettings(JSON.parse(stored) as Partial<GeneratorAiSettings>);
+    return normalizeGeneratorAiSettings(JSON.parse(stored));
   } catch {
     return normalizeGeneratorAiSettings();
   }

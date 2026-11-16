@@ -2,7 +2,7 @@ import { runHeadlessEditorPlan, snapshotHeadlessEditorProject } from "./headless
 import { validateCommandPlan } from "./src/editor-command-session.ts";
 import { resolve } from "node:path";
 
-const MAX_AGENT_BODY_BYTES = 32 * 1024 * 1024;
+const MAX_AGENT_BODY_BYTES = 33554432;
 const projectQueues = new Map<string, Promise<void>>();
 
 export async function handleEditorAgentApi(request: Request, enabled = true): Promise<Response | undefined> {

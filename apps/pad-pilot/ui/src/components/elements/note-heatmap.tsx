@@ -46,7 +46,7 @@ export type NoteHeatmapProps = Omit<JSX.HTMLAttributes<HTMLDivElement>, "onChang
 export function NoteHeatmap(props: NoteHeatmapProps) {
   const callHandler = (handler: unknown, event: Event) => {
     if (typeof handler === "function") {
-      (handler as (value: Event) => void)(event);
+      handler(event);
     }
   };
   const [local, others] = splitProps(props, [

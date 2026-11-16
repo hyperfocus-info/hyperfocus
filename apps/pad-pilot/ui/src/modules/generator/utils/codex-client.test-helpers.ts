@@ -1,7 +1,5 @@
-import {
-  parseDeltaTickTracker,
-  shouldKeepMassagedModel,
-} from "./codex-client";
+import { parseDeltaTickTracker } from "./generator-tracker";
+import { shouldKeepMassagedModel } from "./generator-quality";
 
 const originalFetch = globalThis.fetch;
 const originalDevtoolsEnv = process.env.PADPILOT_DEVTOOLS_ENABLED;
@@ -140,26 +138,26 @@ export function qualityFixture(score: number, passed = true) {
 
 export function styleStatsFixture(patch: Partial<Parameters<typeof shouldKeepMassagedModel>[2]> = {}) {
   return {
-    chordDependentFillNotes: 0,
-    earwormLeadPatched: false,
-    eventModulatedNotes: 0,
+    chordDependentFillNotes: 0 as const,
+    earwormLeadPatched: false as const,
+    eventModulatedNotes: 0 as const,
     massageDecisionLines: [],
-    massagedTrackCount: 0,
-    normalizedIntentTagLine: "",
-    oneShotEvents: 0,
+    massagedTrackCount: 0 as const,
+    normalizedIntentTagLine: "" as const,
+    oneShotEvents: 0 as const,
     patchedTrackRoles: [],
-    pitchCorrectedNotes: 0,
-    quantizedNotes: 0,
+    pitchCorrectedNotes: 0 as const,
+    quantizedNotes: 0 as const,
     regeneratedTracks: [],
-    simplifiedChordClusters: 0,
+    simplifiedChordClusters: 0 as const,
     skippedAdditiveRepairs: [],
-    strippedChordNotes: 0,
-    supportBalancedNotes: 0,
-    supportThinnedNotes: 0,
-    syncopationClampedNotes: 0,
-    upperColorNotes: 0,
+    strippedChordNotes: 0 as const,
+    supportBalancedNotes: 0 as const,
+    supportThinnedNotes: 0 as const,
+    syncopationClampedNotes: 0 as const,
+    upperColorNotes: 0 as const,
     ...patch,
-  } satisfies Parameters<typeof shouldKeepMassagedModel>[2];
+  };
 }
 
 export function withDenseFirstTrackClusters(rawTracker: string) {
@@ -335,3 +333,5 @@ export function restoreCodexClientTestEnvironment() {
     process.env.PADPILOT_DEVTOOLS_ENABLED = originalDevtoolsEnv;
   }
 }
+
+export const countMassaged = (logs: string[]) => Number(/massage gradient (\d+)\//.exec(logs.join("\n"))?.[1] ?? 0);

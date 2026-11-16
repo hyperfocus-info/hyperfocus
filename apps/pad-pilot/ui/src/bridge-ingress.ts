@@ -1,9 +1,11 @@
+import type { HostState } from "./bridge";
 import { isValidCapabilityId, isValidModuleId } from "@hyperfocus/pad-pilot/module-identity";
+import { isRecord } from '@hyperfocus/utilities/records';
 
-export const MAX_HOST_JSON_INGRESS_CHARS = 8 * 1024 * 1024;
+export const MAX_HOST_JSON_INGRESS_CHARS = 8388608;
 // Mirrors the native host-sync envelope. Individual fields retain their tighter
 // native limits, while one legal aggregate frame can contain several of them.
-export const MAX_HOST_PROTO_INGRESS_BYTES = 16 * 1024 * 1024;
+export const MAX_HOST_PROTO_INGRESS_BYTES = 16777216;
 
 const MAX_HOST_PROTO_INGRESS_BASE64_CHARS = Math.ceil(MAX_HOST_PROTO_INGRESS_BYTES / 3) * 4;
 const MAX_HOST_JSON_INGRESS_NODES = 65_536;
@@ -11,9 +13,7 @@ const MAX_HOST_JSON_COLLECTION_ITEMS = 4096;
 
 type UnknownRecord = Record<string, unknown>;
 
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function hasOptionalString(record: UnknownRecord, key: string) {
   return record[key] === undefined || typeof record[key] === "string";
@@ -27,7 +27,7 @@ function isFiniteNumberArray(value: unknown) {
   return Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
 }
 
-export function hasValidHostStateShape(value: unknown) {
+export function hasValidHostStateShape(value: unknown): value is HostState {
   if (!isRecord(value)) {
     return false;
   }

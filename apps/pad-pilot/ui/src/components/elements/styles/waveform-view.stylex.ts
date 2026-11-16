@@ -45,7 +45,7 @@ const definitions = stylex.create({
     "placeItems": "center",
     "color": "color-mix(in srgb, var(--pp-text-color, #dfe9fb), #ffffff 28%)",
     "display": "grid",
-    "fontSize": "11px",
+    "fontSize": "12px",
     "letterSpacing": "0.08em",
     "position": "absolute",
     "bottom": "0",

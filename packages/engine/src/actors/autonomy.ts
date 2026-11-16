@@ -48,8 +48,18 @@ export function createActorAutonomy(options: {
   const path = new Int32Array(nav.size);
   const xy = (cell: number) => ({ x: cell % nav.columns + 0.5, y: Math.floor(cell / nav.columns) + 0.5 });
   const validCell = (cell: number) => Number.isSafeInteger(cell) && cell >= 0 && cell < nav.size;
-  const distance = (a: number, b: number) => { const p = xy(a), q = xy(b); return Math.hypot(p.x - q.x, p.y - q.y); };
+  const separation = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+  const distance = (a: number, b: number) => separation(xy(a), xy(b));
   const bounded = (n: number) => { if (!Number.isFinite(n) || n < 0 || n > 1) throw new Error("Traits/needs must be in [0,1]"); return n; };
+  function wallOverlap(x: number, y: number) {
+    for (let cy = Math.floor(y - .35); cy <= Math.floor(y + .35); cy++) {
+      for (let cx = Math.floor(x - .35); cx <= Math.floor(x + .35); cx++) {
+        if (nav.blocked[cy * nav.columns + cx] && circleRectOverlap({ x, y, r: .35 }, { x: cx, y: cy, w: 1, h: 1 })) return true;
+      }
+    }
+    return false;
+  }
+  const clear = (x: number, y: number) => !(x < .35 || y < .35 || x > nav.columns - .35 || y > nav.rows - .35 || wallOverlap(x, y));
   const actors = [...options.actors].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).map<ActorState>(a => {
     if (!a.id || !validCell(a.cell) || nav.blocked[a.cell]) throw new Error("Invalid actor spawn");
     const speed = a.speed ?? 2;
@@ -58,11 +68,7 @@ export function createActorAutonomy(options: {
     if (!Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(a.facing ?? 0)
       || position.x < .35 || position.y < .35 || position.x > nav.columns - .35 || position.y > nav.rows - .35
       || Math.floor(position.y) * nav.columns + Math.floor(position.x) !== a.cell) throw new Error("Invalid actor spawn position");
-    for (let y = Math.floor(position.y - .35); y <= Math.floor(position.y + .35); y++) {
-      for (let x = Math.floor(position.x - .35); x <= Math.floor(position.x + .35); x++) {
-        if (nav.blocked[y * nav.columns + x] && circleRectOverlap({ ...position, r: .35 }, { x, y, w: 1, h: 1 })) throw new Error("Actor spawn intersects a wall");
-      }
-    }
+    if (wallOverlap(position.x, position.y)) throw new Error("Actor spawn intersects a wall");
     return {
       id: a.id, cell: a.cell, ...position, facing: a.facing ?? 0, exitId: a.exitId,
       thirst: bounded(a.thirst ?? 0), helping: bounded(a.helping ?? 0), preservation: bounded(a.preservation ?? 1),
@@ -73,8 +79,9 @@ export function createActorAutonomy(options: {
   });
   if (new Set(actors.map(a => a.id)).size !== actors.length || new Set(actors.map(a => a.cell)).size !== actors.length) throw new Error("Duplicate actor identity/spawn");
   for (let i = 0; i < actors.length; i++) for (let j = i + 1; j < actors.length; j++) {
-    if (Math.hypot(actors[i]!.x - actors[j]!.x, actors[i]!.y - actors[j]!.y) < .7) throw new Error("Actor spawns overlap");
+    if (separation(actors[i]!, actors[j]!) < .7) throw new Error("Actor spawns overlap");
   }
+  const actor = (id: string | null) => actors.find(a => a.id === id);
   let tick = 0, searches = 0;
   const routes = new Map<string, { status: string; cost: number; cells: number[] }>();
   let obstacles = "";
@@ -108,7 +115,7 @@ export function createActorAutonomy(options: {
     // Host acknowledgement transfers arrived actors out of this local collision world.
     // Retain their snapshots; no implicit removal or automatic exit clearance.
     clearArrival(id: string) {
-      const a = actors.find(a => a.id === id);
+      const a = actor(id);
       if (!a?.arrived || a.supportBy || a.supportTo) throw new Error("Clearance requires an arrived unbound actor");
       a.cleared = true;
     },
@@ -131,9 +138,9 @@ export function createActorAutonomy(options: {
       for (const a of actors) { a.supportBy = a.supportTo = null; }
       if ((perception.supports?.length ?? 0) > 256) throw new Error("Too many support links");
       for (const link of [...(perception.supports ?? [])].sort((a, b) => a.helper.localeCompare(b.helper) || a.recipient.localeCompare(b.recipient))) {
-        const a = actors.find(a => a.id === link.helper), b = actors.find(a => a.id === link.recipient);
+        const a = actor(link.helper), b = actor(link.recipient);
         if (!a || !b || a === b || a.endangered || !b.endangered || a.cleared || b.cleared || a.supportTo || a.supportBy || b.supportBy || b.supportTo
-          || Math.hypot(a.x - b.x, a.y - b.y) > 1.2 || (a.choice?.action !== "assist" || a.choice.id !== b.id) && previous.get(a.id) !== b.id) continue;
+          || separation(a, b) > 1.2 || (a.choice?.action !== "assist" || a.choice.id !== b.id) && previous.get(a.id) !== b.id) continue;
         a.supportTo = b.id; b.supportBy = a.id; b.assisted = true;
       }
       for (const a of actors) if (previous.get(a.id) && !a.supportTo && !a.arrived) {
@@ -173,42 +180,35 @@ export function createActorAutonomy(options: {
         if (choice.id !== a.choice?.id || choice.action !== a.choice?.action || choice.cell !== a.choice?.cell) { a.since = tick; a.service = 0; a.bestDistance = Infinity; a.progressTick = tick; }
         a.choice = choice;
       }
-      for (const a of actors) if (a.supportBy) a.choice = actors.find(b => b.id === a.supportBy)!.choice;
+      for (const a of actors) if (a.supportBy) a.choice = actor(a.supportBy)!.choice;
       const origins = actors.map(a => ({ x: a.x, y: a.y }));
-      const clear = (x: number, y: number) => {
-        if (x < .35 || y < .35 || x > nav.columns - .35 || y > nav.rows - .35) return false;
-        for (let cy = Math.floor(y - .35); cy <= Math.floor(y + .35); cy++) {
-          for (let cx = Math.floor(x - .35); cx <= Math.floor(x + .35); cx++) {
-            if (nav.blocked[cy * nav.columns + cx] && circleRectOverlap({ x, y, r: .35 }, { x: cx, y: cy, w: 1, h: 1 })) return false;
-          }
-        }
-        return true;
-      };
       // Every proposal reads one substep snapshot. Accepted groups reserve all their
       // endpoints; arbitration rotates each tick. No proposal pushes a second group.
       const substeps = Math.ceil(10 * dt / .05);
       for (const a of actors) { a.vx = a.vy = 0; a.contact = "none"; a.pushed = 0; }
       for (let step = 0; step < substeps; step++) {
         const before = actors.map(a => ({ x: a.x, y: a.y }));
+        const obstruction = (ids: number[], points: { x: number; y: number }[], positions: readonly { x: number; y: number }[]) => actors.findIndex((c, j) => !c.cleared && !ids.includes(j) && points.some(p => separation(p, positions[j]!) < 0.699999999));
         const proposals: { ids: number[]; points: { x: number; y: number }[] }[] = [];
         for (let i = 0; i < actors.length; i++) {
           const a = actors[i]!;
+          const choice = a.choice!;
           if (a.cleared || a.arrived || a.supportBy || tick * dt < a.reaction || a.endangered) continue;
-          if (a.choice?.action === 'idle') { a.contact = 'waiting:no-reachable-opportunity'; continue; }
+          if (choice?.action === 'idle') { a.contact = 'waiting:no-reachable-opportunity'; continue; }
           const partner = actors.findIndex(b => b.id === a.supportTo);
           const b = actors[partner];
           const leader = b ?? a;
-          const found = route(leader.cell, a.choice!.cell);
+          const found = route(leader.cell, choice.cell);
           if (found.status !== "found") { a.contact = `waiting:${found.status}`; continue; }
           let target = xy(found.cells[Math.min(1, found.cells.length - 1)]!);
           // Assistance approaches continuous reach, rather than waiting forever at
           // the centre of an adjacent cell outside the service envelope.
-          if (a.choice!.action === "assist") {
-            const recipient = actors.find(b => b.id === a.choice!.id)!;
-            if (Math.hypot(a.x - recipient.x, a.y - recipient.y) < 1.5) target = recipient;
-            if (Math.hypot(a.x - recipient.x, a.y - recipient.y) <= 1.1) continue;
+          if (choice.action === "assist") {
+            const recipient = actor(choice.id)!;
+            if (separation(a, recipient) < 1.5) target = recipient;
+            if (separation(a, recipient) <= 1.1) continue;
           }
-          const length = Math.hypot(target.x - leader.x, target.y - leader.y);
+          const length = separation(target, leader);
           for (let k = 1; k <= Math.ceil(length / .05); k++) {
             const u = k / Math.ceil(length / .05);
             if (!clear(leader.x + (target.x - leader.x) * u, leader.y + (target.y - leader.y) * u)) { target = xy(leader.cell); break; }
@@ -230,7 +230,7 @@ export function createActorAutonomy(options: {
           const ids = b ? [i, partner] : [i];
           const points = ids.map(j => ({ x: before[j]!.x + delta.x, y: before[j]!.y + delta.y }));
           if (points.some(p => !clear(p.x, p.y))) { a.contact = "waiting:wall"; continue; }
-          const other = actors.findIndex((c, j) => !c.cleared && !ids.includes(j) && points.some(p => Math.hypot(p.x - before[j]!.x, p.y - before[j]!.y) < 0.699999999));
+          const other = obstruction(ids, points, before);
           if (other >= 0) {
             const c = actors[other]!; a.contact = `body:${c.id}`;
             // Preserve the bounded single mobile-neighbour kinematic push API.
@@ -238,42 +238,43 @@ export function createActorAutonomy(options: {
             if (b || c.endangered || c.arrived || c.supportBy || c.supportTo || c.pushed + travel > .5 * dt || !clear(point.x, point.y)) continue;
             ids.push(other); points.push(point);
           }
-          if (actors.some((c, j) => !c.cleared && !ids.includes(j) && points.some(p => Math.hypot(p.x - before[j]!.x, p.y - before[j]!.y) < 0.699999999))) continue;
+          if (obstruction(ids, points, before) >= 0) continue;
           proposals.push({ ids, points });
         }
         const claimed = new Set<number>();
         for (let offset = 0; offset < proposals.length; offset++) {
           const proposal = proposals[(offset + tick) % proposals.length]!;
           if (proposal.ids.some(i => claimed.has(i))) continue;
-          if (actors.some((a, j) => !a.cleared && !proposal.ids.includes(j) && proposal.points.some(p => Math.hypot(p.x - a.x, p.y - a.y) < 0.699999999))) continue;
+          if (obstruction(proposal.ids, proposal.points, actors) >= 0) continue;
           for (let k = 0; k < proposal.ids.length; k++) {
             const i = proposal.ids[k]!, a = actors[i]!, p = proposal.points[k]!;
-            if (k > 0 && !a.supportBy) a.pushed += Math.hypot(p.x - a.x, p.y - a.y);
+            if (k > 0 && !a.supportBy) a.pushed += separation(p, a);
             a.x = p.x; a.y = p.y; a.cell = Math.floor(p.y) * nav.columns + Math.floor(p.x); claimed.add(i);
           }
         }
       }
       for (let i = 0; i < actors.length; i++) {
         const a = actors[i]!, old = origins[i]!;
+        const choice = a.choice!;
         a.vx = (a.x - old.x) / dt; a.vy = (a.y - old.y) / dt;
-        const exit = perception.exits.find(e => a.choice!.action === "flee" && e.id === a.choice!.id);
-        const partner = actors.find(b => b.id === (a.supportBy ?? a.supportTo));
+        const exit = perception.exits.find(e => choice.action === "flee" && e.id === choice.id);
+        const partner = actor(a.supportBy ?? a.supportTo);
         // Default pair region includes one root-spacing around the exit centre;
         // explicit safeCells override it. Singles require the actual exit cell.
-        const safe = (b: typeof a) => !!exit && (exit.safeCells ? exit.safeCells.includes(b.cell) : partner ? Math.hypot(b.x - xy(exit.cell).x, b.y - xy(exit.cell).y) <= 1.05 : b.cell === exit.cell);
+        const safe = (b: typeof a) => !!exit && (exit.safeCells ? exit.safeCells.includes(b.cell) : partner ? separation(b, xy(exit.cell)) <= 1.05 : b.cell === exit.cell);
         a.arrived ||= safe(a) && (!partner || safe(partner));
-        const moved = Math.hypot(a.x - old.x, a.y - old.y);
+        const moved = separation(a, old);
         a.stalled = !a.arrived && moved < 1e-6 ? a.stalled + dt : 0;
         if (a.contact !== "none") a.obstruction = a.contact;
-        const goal = xy(a.choice!.cell), remaining = Math.hypot(a.x - goal.x, a.y - goal.y);
+        const goal = xy(choice.cell), remaining = separation(a, goal);
         if (remaining < a.bestDistance - .1) { a.bestDistance = remaining; a.progressTick = tick; }
         const queue = exit && actors.find(b => b !== a && !b.cleared && b.arrived && b.cell === exit.cell && b !== partner);
-        a.blockedReason = queue && !a.arrived ? `queue:${exit!.id};clearance=${queue.id}` : !a.arrived && (a.choice!.action !== 'idle' || a.thirst > .1 || perception.threats.length > 0) && (tick - a.progressTick) * dt >= 4 ? `${a.obstruction};target=${a.choice!.id};cell=${a.choice!.cell};no-progress=4s` : null;
-        if (a.choice!.action === "drink" && a.cell === a.choice!.cell) { a.service += dt; a.thirst = Math.max(0, a.thirst - dt * .5); }
-        if (a.choice!.action === "assist" && tick * dt >= a.reaction) {
-          const other = actors.find(b => b.id === a.choice!.id)!;
+        a.blockedReason = queue && !a.arrived ? `queue:${exit!.id};clearance=${queue.id}` : !a.arrived && (choice.action !== 'idle' || a.thirst > .1 || perception.threats.length > 0) && (tick - a.progressTick) * dt >= 4 ? `${a.obstruction};target=${choice.id};cell=${choice.cell};no-progress=4s` : null;
+        if (choice.action === "drink" && a.cell === choice.cell) { a.service += dt; a.thirst = Math.max(0, a.thirst - dt * .5); }
+        if (choice.action === "assist" && tick * dt >= a.reaction) {
+          const other = actor(choice.id)!;
           a.service += dt;
-          if (Math.hypot(a.x - other.x, a.y - other.y) <= 1.2) a.contact = "support:awaiting-host";
+          if (separation(a, other) <= 1.2) a.contact = "support:awaiting-host";
           // An unconfirmed attempt expires, never heals; then seek safety.
           if (a.service + 1e-9 >= 2) { a.attempted.add(other.id); a.contact = "support:failed"; }
         }

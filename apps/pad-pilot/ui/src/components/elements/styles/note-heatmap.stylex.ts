@@ -72,7 +72,7 @@ const definitions = stylex.create({
   },
   "laneLabelStyle": {
     "fontFamily": "\"Consolas\", \"Courier New\", monospace",
-    "fontSize": "0.72rem",
+    "fontSize": "0.75rem",
     "fontVariantNumeric": "tabular-nums",
     "letterSpacing": "0.05em"
   },
@@ -125,7 +125,7 @@ const definitions = stylex.create({
     "letterSpacing": { default: null, [stylex.when.ancestor(":is(*)", readoutMarker)]: "0.08em" }
   },
   "readoutSpanStyle": {
-    "fontSize": { default: null, [stylex.when.ancestor(":is(*)", readoutMarker)]: "0.72rem" },
+    "fontSize": { default: null, [stylex.when.ancestor(":is(*)", readoutMarker)]: "0.75rem" },
     "opacity": { default: null, [stylex.when.ancestor(":is(*)", readoutMarker)]: "0.82" }
   },
   "readoutPlaceholderStyle": {

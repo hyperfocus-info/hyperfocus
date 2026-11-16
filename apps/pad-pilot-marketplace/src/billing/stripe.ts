@@ -5,7 +5,7 @@ import type { BillingCheckoutKind } from "../db";
 import { readBoundedStreamText } from "@hyperfocus/pad-pilot/bounded-stream";
 
 type StripeCheckoutMode = "payment" | "subscription";
-const maxStripeResponseBytes = 1024 * 1024;
+const maxStripeResponseBytes = 1048576;
 const stripeResponseSchema = z.object({
   amount_total: z.unknown().optional(),
   error: z.object({
@@ -54,7 +54,7 @@ function encodeForm(data: Record<string, string>) {
 
 function decodeStripeResponse(body: string) {
   try {
-    const parsed = stripeResponseSchema.safeParse(JSON.parse(body) as unknown);
+    const parsed = stripeResponseSchema.safeParse(JSON.parse(body));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;

@@ -1,3 +1,4 @@
+import { spawnBackgroundProcessSync } from '@hyperfocus/desktop-runtime/process';
 export {
   terminateAndReapProcess,
   waitForProcessWithDeadline,
@@ -17,12 +18,12 @@ type ProcessDeadlineOptions = {
 };
 
 export const processDeadlines = {
-  archive: 5 * 60_000,
-  cmakeBuild: 30 * 60_000,
-  cmakeConfigure: 10 * 60_000,
-  nativeTest: 5 * 60_000,
-  protoc: 2 * 60_000,
-  script: 10 * 60_000,
+  archive: 300000,
+  cmakeBuild: 1800000,
+  cmakeConfigure: 600000,
+  nativeTest: 300000,
+  protoc: 120000,
+  script: 600000,
 } as const;
 
 export function cmakeEnvironment() {
@@ -46,7 +47,7 @@ export function spawnSyncWithDeadline(command: string[], options: ProcessDeadlin
   if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs <= 0) {
     throw new Error("Process deadline must be a positive integer.");
   }
-  return Bun.spawnSync(command, {
+  return spawnBackgroundProcessSync({ cmd: command, ...({
     cwd: options.cwd,
     env: options.env,
     killSignal: "SIGKILL",
@@ -55,7 +56,7 @@ export function spawnSyncWithDeadline(command: string[], options: ProcessDeadlin
     stdin: options.stdin ?? "ignore",
     stdout: options.stdout ?? "inherit",
     timeout: options.timeoutMs,
-  });
+  }) });
 }
 
 export function runCheckedProcess(command: string[], options: ProcessDeadlineOptions) {

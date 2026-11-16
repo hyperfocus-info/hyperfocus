@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { render, screen, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createUiTest } from "../../../../utils/tests/test-harness";
 import { PerformanceModule } from "./performance-module";
 import { ModuleSurface, PadPilotProvider } from "../../padpilot/provider";
@@ -7,7 +7,7 @@ import { moduleSdk } from "../../module-sdk";
 import { getDevHostRuntime } from "../../dev-host/runtime";
 
 createUiTest("PerformanceModule", () => {
-  it("renders note selection, transport, and status readouts", () => {
+  it("renders note selection, transport, and status readouts", async () => {
     render(() => (
       <PadPilotProvider>
         <ModuleSurface scopeId="performance">
@@ -17,9 +17,12 @@ createUiTest("PerformanceModule", () => {
     ));
 
     expect(screen.getByText("Performance Module")).not.toBeNull();
-    expect(screen.getByRole("combobox", { name: "Root Note" })).not.toBeNull();
-    expect(screen.getByRole("combobox", { name: "Scale" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Root Note" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Scale" })).not.toBeNull();
     expect(screen.getByText("Last MIDI Note: --")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Root Note" }));
+    fireEvent.click(await screen.findByRole("option", { name: "D" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Root Note" }).textContent).toContain("D"));
   });
 
   it("sends note-off when the performance stick returns to rest", async () => {
@@ -28,10 +31,10 @@ createUiTest("PerformanceModule", () => {
     runtime.sendIntent({ type: "selectModule", moduleId: "performance" });
     const original = moduleSdk.sendCapabilityIntent;
     const midiActions: string[] = [];
-    moduleSdk.sendCapabilityIntent = ((capability, handle, action, payloadBase64) => {
+    moduleSdk.sendCapabilityIntent = (capability, handle, action, payloadBase64) => {
       if (capability === "midi-output") midiActions.push(action);
       return original(capability, handle, action, payloadBase64);
-    }) as typeof moduleSdk.sendCapabilityIntent;
+    };
 
     try {
       render(() => (

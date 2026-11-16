@@ -4,16 +4,16 @@ import { browserGamepadsSupported, readBrowserGamepadDevices } from "./browser-g
 function createGamepad(
   overrides: Omit<Partial<Gamepad>, "axes" | "buttons"> & { buttons?: readonly number[]; axes?: readonly number[] } = {},
 ) {
-  return {
+  return ({
     axes: overrides.axes ?? [],
-    buttons: (overrides.buttons ?? []).map((value) => ({ pressed: value > 0.5, touched: value > 0, value } as unknown as GamepadButton)),
+    buttons: (overrides.buttons ?? []).map((value) => ({ pressed: value > 0.5, touched: value > 0, value })),
     connected: overrides.connected ?? true,
     id: overrides.id ?? "Controller",
     index: overrides.index ?? 0,
     mapping: overrides.mapping ?? "standard",
     timestamp: overrides.timestamp ?? 0,
     vibrationActuator: null,
-  } as unknown as Gamepad;
+  });
 }
 
 describe("browser-gamepad-source", () => {

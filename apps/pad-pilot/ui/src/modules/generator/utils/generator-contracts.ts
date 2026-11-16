@@ -1,5 +1,5 @@
 import { type GeneratorMidiComposition, type GeneratorMidiTrack } from "./midi-encoder";
-import { type GeneratorAiProvider, type GeneratorFieldKey, type GeneratorFieldLocks, type GeneratorLengthBars, type GeneratorSelectorState, type GeneratorWeightedSelectorTag } from "./generator-options";
+import { type GeneratorAiProvider, type GeneratorFieldKey, type GeneratorFieldLocks, type GeneratorLengthBars, type GeneratorSelectorState, type GeneratorWeightedSelectorTag } from "./generator-option-catalog";
 
 
 export interface GeneratorPromptInput {

@@ -1,3 +1,4 @@
+import { isRecord } from "@hyperfocus/utilities/records";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { bytesToBase64 } from "../proto/base64";
 import { CapabilityFrameEnvelopeSchema, type CapabilityFrameEnvelope } from "../proto/generated/capability-pb";
@@ -6,12 +7,12 @@ import { encodeFxChainState } from "../modules/fx/fx-chain-state";
 import { createAnalyzerNoteEvent } from "../modules/analyzer/analyzer-state";
 import { PadPilotInputDeviceState } from "../padpilot/io/input-device";
 import { clamp, clamp01Or } from "../utils/math";
-import { HostState, InstalledModuleResult } from "../bridge";
+import { HostState } from "../bridge";
 import { DevHostDebugState, DevSignalProfile, DevSignalSettings } from "./types";
 import { createFactoryModuleSummary, factoryModuleCatalog } from "@hyperfocus/pad-pilot/factory-modules";
 
 export const DEV_HOST_STORAGE_KEY = "padpilot.dev-host.settings";
-export const TICK_MS = Math.round(1000 / 15);
+export const TICK_MS = Math.round(66.66666666666667);
 const DEV_SIGNAL_PROFILES = new Set<DevSignalProfile>(["idle", "steady-tone", "pulsed-groove", "noise-burst", "sweep"]);
 
 function storedNumber(value: unknown) {
@@ -19,17 +20,17 @@ function storedNumber(value: unknown) {
 }
 
 export function normalizeDevSignalSettings(
-  input: Partial<DevSignalSettings>,
+  input: { [K in keyof DevSignalSettings]?: unknown },
   fallback: DevSignalSettings,
 ) {
   return {
     continuousHostSync: typeof input.continuousHostSync === "boolean" ? input.continuousHostSync : fallback.continuousHostSync,
     intensity: clamp01Or(storedNumber(input.intensity), fallback.intensity),
-    profile: DEV_SIGNAL_PROFILES.has(input.profile as DevSignalProfile) ? input.profile as DevSignalProfile : fallback.profile,
+    profile: [...DEV_SIGNAL_PROFILES].find(profile => profile === input.profile) ?? fallback.profile,
     running: typeof input.running === "boolean" ? input.running : fallback.running,
     stereoWidth: clamp01Or(storedNumber(input.stereoWidth), fallback.stereoWidth),
     tempo: clamp(storedNumber(input.tempo) ?? fallback.tempo, 40, 220),
-  } satisfies DevSignalSettings;
+  };
 }
 
 export type ModuleSummary = {
@@ -70,7 +71,8 @@ export function loadSettings() {
     if (!raw) {
       return defaults;
     }
-    const parsed = JSON.parse(raw) as Partial<DevSignalSettings>;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return defaults;
     return normalizeDevSignalSettings(parsed, defaults);
   } catch {
     return defaults;
@@ -105,7 +107,7 @@ export function createInstalledModuleResult(module: ModuleSummary) {
     scriptEntryPath: module.scriptEntryPath,
     uiEntryPath: module.uiEntryPath,
     version: module.version,
-  } satisfies InstalledModuleResult;
+  };
 }
 
 export function encodeCapabilityFrameEnvelopeBase64(envelope: CapabilityFrameEnvelope) {
@@ -147,25 +149,25 @@ export function cloneInputDevice(device: PadPilotInputDeviceState) {
     rawAxes: [...device.rawAxes],
     rawButtons: [...device.rawButtons],
     runtimeDeviceId: device.runtimeDeviceId,
-  } satisfies PadPilotInputDeviceState;
+  };
 }
 
 export function createEmptyControllerState() {
   return {
     axes: [],
     buttons: [],
-    connected: false,
-    deviceId: "",
-    runtimeDeviceId: "",
-    hardwareId: "",
+    connected: false as const,
+    deviceId: "" as const,
+    runtimeDeviceId: "" as const,
+    hardwareId: "" as const,
     deviceKind: "unknown" as const,
-    displayName: "",
-    frameIndex: 0,
+    displayName: "" as const,
+    frameIndex: 0 as const,
     rawAxes: [],
     rawButtons: [],
     detectedLayoutKind: "auto" as const,
     activeLayoutKind: "auto" as const,
-  } satisfies PadPilotInputDeviceState;
+  };
 }
 
 export function filterAnalyzerNoteEventsForSensitivity(

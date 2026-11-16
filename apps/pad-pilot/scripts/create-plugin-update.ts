@@ -1,7 +1,7 @@
 import { copyFile, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { createSign } from "node:crypto";
 import path from "node:path";
-import { hashBoundedFile } from "./bounded-file";
+import { hashBoundedFile } from "@hyperfocus/pad-pilot/bounded-file";
 import {
   listRegularDirectoryFiles,
   snapshotDirectory,
@@ -45,10 +45,10 @@ function parseArgs(argv: string[]) {
   return values;
 }
 
-const maxArchiveBytes = 256 * 1024 * 1024;
-const maxEntryBytes = 256 * 1024 * 1024;
-const maxManifestBytes = 1024 * 1024;
-const maxUncompressedBytes = 512 * 1024 * 1024;
+const maxArchiveBytes = 268435456;
+const maxEntryBytes = 268435456;
+const maxManifestBytes = 1048576;
+const maxUncompressedBytes = 536870912;
 const maxOperations = 4096;
 const maxDirectoryDepth = 64;
 const maxTreeEntries = 65_536;
@@ -78,7 +78,7 @@ async function pathExists(filePath: string) {
     await lstat(filePath);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if ((error && typeof error === "object" && "code" in error ? error.code : undefined) === "ENOENT") {
       return false;
     }
     throw error;

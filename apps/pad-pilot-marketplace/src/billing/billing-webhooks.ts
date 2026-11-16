@@ -29,7 +29,6 @@ import {
   asObject,
   claimSubscriptionState,
   laterTimestamp,
-  readCheckoutKind,
   readCreatedAt,
   readEventCreated,
   readIdReference,
@@ -936,7 +935,7 @@ function processStripeWebhookTransaction(
     eventId,
     eventPriority: stripeEventPriority(eventType, object),
   };
-  let action = { cancelSubscriptionId: null as string | null };
+  let action: { cancelSubscriptionId: string | null } = { cancelSubscriptionId: null };
   if (eventType === "checkout.session.completed" || eventType === "checkout.session.async_payment_succeeded") {
     if (!object) throw new Error("Stripe checkout event is missing its object.");
     action = processCheckoutCompletion(db, object, runtimeEnv, eventType, eventContext);

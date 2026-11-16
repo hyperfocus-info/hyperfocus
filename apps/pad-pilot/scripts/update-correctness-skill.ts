@@ -4,11 +4,11 @@ import path from "node:path";
 import { withProcessLock } from "./directory-transaction";
 import { readBoundedUtf8File } from "@hyperfocus/pad-pilot/bounded-file";
 
-const knownFindingsByteLimit = 4 * 1024 * 1024;
+const knownFindingsByteLimit = 4194304;
 
 const args = Bun.argv.slice(2);
 const requiredFlags = ["symptom", "root-cause", "fix-pattern", "test", "files"] as const;
-const allowedFlags = new Set([...requiredFlags, "date"]);
+const allowedFlags = new Set<string>([...requiredFlags, "date"]);
 const skillFile = path.join(path.resolve(import.meta.dir, ".."), ".agents", "skills", "correctness", "references", "known-findings.md");
 
 const parsedArgs: Record<string, string> = {};
@@ -18,7 +18,7 @@ for (let index = 0; index < args.length; index += 1) {
     throw new Error(`Unexpected update-correctness-skill argument: ${argument}`);
   }
   const name = argument.slice(2);
-  if (!allowedFlags.has(name as typeof requiredFlags[number] | "date") || name in parsedArgs) {
+  if (!allowedFlags.has(name) || name in parsedArgs) {
     throw new Error(`Unknown or duplicate update-correctness-skill argument: ${argument}`);
   }
   const value = args[index + 1];
@@ -65,7 +65,7 @@ await withProcessLock(`${skillFile}.padpilot.lock`, async () => {
     knownFindingsByteLimit,
     "Correctness known-findings file",
   ).catch((error) => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if ((error && typeof error === "object" && "code" in error ? error.code : undefined) === "ENOENT") {
       return "";
     }
     throw error;

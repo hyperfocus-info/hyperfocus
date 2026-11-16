@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { readrecutState } from "../recut/recut-state";
 import { create } from "@bufbuild/protobuf";
 import { createContext, createEffect, createMemo, createSignal, onCleanup, onMount, useContext, type ParentProps } from "solid-js";
 import { getLatestHostState, subscribeHostState } from "../../bridge";
@@ -290,15 +292,18 @@ function createRecutActions(options: RecutActionOptions) {
 }
 
 
+let nextAnalysisRequestId = BigInt(Date.now());
+
 function createRecutModuleStore() {
-  const [state, setState] = PadPilot.hooks.useModuleState<RecutModuleState>("recut", createDefaultRecutModuleState());
+  const [pendingAnalysisRequestId, setPendingAnalysisRequestId] = createSignal(0n);
+  const [state, setState] = PadPilot.hooks.useModuleState<RecutModuleState>("recut", createDefaultRecutModuleState(), readrecutState);
   const [viewState, setViewState] = PadPilot.hooks.useEditorViewState<RecutUiState>("recut-module", {
     activePadIndex: 0,
     draggingMarkerIndex: null,
     importError: "",
     selectedMarkerIndex: 0,
     waveformHoverFrame: null,
-  });
+  }, value => z.object({ activePadIndex: z.number(), draggingMarkerIndex: z.number().nullable(), importError: z.string(), selectedMarkerIndex: z.number(), waveformHoverFrame: z.number().nullable() }).parse(value));
   const gamepad = PadPilot.hooks.useGamepad();
   const moduleInteraction = PadPilot.hooks.useModuleInteraction("recut");
   const [hostFrame, setHostFrame] = createSignal(createEmptySampleEditorFrame());
@@ -480,7 +485,9 @@ function createRecutModuleStore() {
   };
 
   const requestAnalysis = (nextState = state()) => {
-    sampleCapabilities.requestAnalysis(handles().sampleAnalysis, buildAnalysisRequest(nextState, projectBpm()));
+    const requestId = ++nextAnalysisRequestId; setPendingAnalysisRequestId(requestId);
+    setPendingAnalysisState({ analysisMode: nextState.analysisMode, bpmSource: nextState.bpmSource, bpmValue: nextState.bpmValue, density: nextState.density });
+    sampleCapabilities.requestAnalysis(handles().sampleAnalysis, { ...buildAnalysisRequest(nextState, projectBpm()), requestId });
   };
 
   const clearPendingDensityAnalysis = () => {
@@ -575,7 +582,7 @@ function createRecutModuleStore() {
       return;
     }
     const frame = currentFrame();
-    if (!frame.loaded) {
+    if (!frame.loaded || frame.completedAnalysisRequestId !== pendingAnalysisRequestId()) {
       return;
     }
     if (

@@ -156,23 +156,25 @@ const marketplaceErrorSchema = z.object({
   }),
 });
 
-export class MarketplaceApiError extends Error {
-  code: string | null;
+const marketplaceErrors = new WeakSet<Error>();
 
-  constructor(message: string, code: string | null = null) {
-    super(message);
-    this.name = "MarketplaceApiError";
-    this.code = code;
-  }
+export function createMarketplaceApiError(message: string, code: string | null = null) {
+  const error = Object.assign(new Error(message), { name: "MarketplaceApiError", code });
+  marketplaceErrors.add(error);
+  return error;
+}
+
+export function isMarketplaceApiError(value: unknown): value is ReturnType<typeof createMarketplaceApiError> {
+  return value instanceof Error && marketplaceErrors.has(value);
 }
 
 const baseUrl = () =>
   resolveMarketplaceHttpBaseUrl();
 
-const MAX_MARKETPLACE_JSON_BYTES = 2 * 1024 * 1024;
+const MAX_MARKETPLACE_JSON_BYTES = 2097152;
 const MAX_MARKETPLACE_RESPONSE_CHUNKS = 4096;
 const MARKETPLACE_REQUEST_TIMEOUT_MS = 30_000;
-const MARKETPLACE_UPLOAD_TIMEOUT_MS = 5 * 60_000;
+const MARKETPLACE_UPLOAD_TIMEOUT_MS = 300000;
 
 async function readBoundedResponseText(response: Response) {
   const contentLength = Number(response.headers.get("content-length"));
@@ -214,13 +216,13 @@ async function parseJson(response: Response) {
     const parsedError = marketplaceErrorSchema.safeParse(payload);
     const message = parsedError.success ? parsedError.data.error.message : null;
     const code = parsedError.success ? parsedError.data.error.code ?? null : null;
-    throw new MarketplaceApiError(message ?? (body || `Request failed with ${response.status}`), code);
+    throw createMarketplaceApiError(message ?? (body || `Request failed with ${response.status}`), code);
   }
   if (parseFailed) {
-    throw new MarketplaceApiError("Marketplace returned malformed JSON.");
+    throw createMarketplaceApiError("Marketplace returned malformed JSON.");
   }
   if (payload === null) {
-    throw new MarketplaceApiError("Marketplace returned an empty JSON response.");
+    throw createMarketplaceApiError("Marketplace returned an empty JSON response.");
   }
   return payload;
 }
@@ -233,7 +235,7 @@ async function requestMarketplaceJson<T>(url: URL, schema: z.ZodType<T>, init?: 
     const payload = await parseJson(response);
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
-      throw new MarketplaceApiError("Marketplace returned an invalid response.");
+      throw createMarketplaceApiError("Marketplace returned an invalid response.");
     }
     return parsed.data;
   } catch (error) {

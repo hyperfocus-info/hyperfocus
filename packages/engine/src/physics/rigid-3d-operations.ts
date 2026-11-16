@@ -73,14 +73,14 @@ export type RigidOperationContext = {
 };
 
 export function createRigidBaseOperations(context: RigidOperationContext) {
-  const { config, bodies, contactStorage,  } = context;
-  const { capacity,  } = config;
-  const { alive, bodyType, shapeKind, flags, generation, layer, mask, positionX, positionY, positionZ, velocityX, velocityY, velocityZ, rotationX, rotationY, rotationZ, rotationW, angularVelocityX, angularVelocityY, angularVelocityZ, linearDamping, angularDamping, extentX, extentY, extentZ, inverseMass, inverseInertiaX, inverseInertiaY, inverseInertiaZ, restitution, friction, fractureEnergyJoules, retainedEnergyRatio, aabbMinX, aabbMinY, aabbMinZ, aabbMaxX, aabbMaxY, aabbMaxZ, ids, indexById } = bodies;
-  const {  } = contactStorage;
-  function handleAt(index: number): number {
+const { config, bodies, contactStorage } = context;
+const { capacity } = config;
+const { alive, bodyType, shapeKind, flags, generation, layer, mask, positionX, positionY, positionZ, velocityX, velocityY, velocityZ, rotationX, rotationY, rotationZ, rotationW, angularVelocityX, angularVelocityY, angularVelocityZ, linearDamping, angularDamping, extentX, extentY, extentZ, inverseMass, inverseInertiaX, inverseInertiaY, inverseInertiaZ, restitution, friction, fractureEnergyJoules, retainedEnergyRatio, aabbMinX, aabbMinY, aabbMinZ, aabbMaxX, aabbMaxY, aabbMaxZ, ids, indexById } = bodies;
+const { contactA, contactB, contactNormalX, contactNormalY, contactNormalZ, contactTrigger, contactClosingSpeed, contactEffectiveMass, contactImpactEnergy, contactNormalImpulse, contactFailedBody, contactManifoldPointCount, contactManifoldPointX, contactManifoldPointY, contactManifoldPointZ, contactImpactPoint, contactManifoldClosingSpeed, contactManifoldNormalImpulse, contactManifoldFrictionX, contactManifoldFrictionY, contactManifoldFrictionZ, contactManifoldWarmStarted, contactWarmStartedPointCount } = contactStorage;
+function handleAt(index: number): number {
       return generation[index]! * HANDLE_STRIDE + index;
     }
-  function resolve(value: number | string): number {
+function resolve(value: number | string): number {
       if (typeof value === "string") {
         const index = indexById.get(value);
         if (index === undefined || alive[index] === 0) throw new Error(`Rigid body ${JSON.stringify(value)} does not exist.`);
@@ -92,7 +92,7 @@ export function createRigidBaseOperations(context: RigidOperationContext) {
       if (index >= capacity || alive[index] === 0 || generation[index] !== expectedGeneration) throw new Error(`Rigid body handle ${value} is invalid or stale.`);
       return index;
     }
-  function resolveOptional(value: number | string): number | undefined {
+function resolveOptional(value: number | string): number | undefined {
       if (typeof value === 'string') {
         const index = indexById.get(value);
         return index === undefined || alive[index] === 0 ? undefined : index;
@@ -101,7 +101,7 @@ export function createRigidBaseOperations(context: RigidOperationContext) {
       const index = value % HANDLE_STRIDE, expectedGeneration = Math.floor(value / HANDLE_STRIDE);
       return index >= capacity || alive[index] === 0 || generation[index] !== expectedGeneration ? undefined : index;
     }
-  function updateAabb(index: number): void {
+function updateAabb(index: number): void {
       let worldX = extentX[index]!, worldY = extentY[index]!, worldZ = extentZ[index]!;
       if (shapeKind[index] === SHAPE_BOX) {
         const x = rotationX[index]!, y = rotationY[index]!, z = rotationZ[index]!, w = rotationW[index]!;
@@ -118,12 +118,12 @@ export function createRigidBaseOperations(context: RigidOperationContext) {
       aabbMinY[index] = positionY[index]! - worldY; aabbMaxY[index] = positionY[index]! + worldY;
       aabbMinZ[index] = positionZ[index]! - worldZ; aabbMaxZ[index] = positionZ[index]! + worldZ;
     }
-  function setQuaternion(index: number, x: number, y: number, z: number, w: number): void {
+function setQuaternion(index: number, x: number, y: number, z: number, w: number): void {
       const length = rigidQuaternionLength(x, y, z, w);
       rotationX[index] = x / length; rotationY[index] = y / length; rotationZ[index] = z / length; rotationW[index] = w / length;
       updateAabb(index);
     }
-  function integrateRotation(index: number, seconds: number): void {
+function integrateRotation(index: number, seconds: number): void {
       const wx = angularVelocityX[index]!, wy = angularVelocityY[index]!, wz = angularVelocityZ[index]!;
       if (Math.abs(wx) + Math.abs(wy) + Math.abs(wz) <= 1e-14) return;
       const x = rotationX[index]!, y = rotationY[index]!, z = rotationZ[index]!, w = rotationW[index]!;
@@ -135,11 +135,11 @@ export function createRigidBaseOperations(context: RigidOperationContext) {
       const damping = Math.max(0, 1 - angularDamping[index]! * seconds);
       angularVelocityX[index] *= damping; angularVelocityY[index] *= damping; angularVelocityZ[index] *= damping;
     }
-  function dampLinearVelocity(index: number, seconds: number): void {
+function dampLinearVelocity(index: number, seconds: number): void {
       const damping = Math.max(0, 1 - linearDamping[index]! * seconds);
       velocityX[index] *= damping; velocityY[index] *= damping; velocityZ[index] *= damping;
     }
-  function applyRotationDelta(index: number, x: number, y: number, z: number): void {
+function applyRotationDelta(index: number, x: number, y: number, z: number): void {
       if (bodyType[index] !== TYPE_DYNAMIC || Math.abs(x) + Math.abs(y) + Math.abs(z) <= 1e-14) return;
       const qx = rotationX[index]!, qy = rotationY[index]!, qz = rotationZ[index]!, qw = rotationW[index]!;
       setQuaternion(index,
@@ -148,13 +148,13 @@ export function createRigidBaseOperations(context: RigidOperationContext) {
         qz + 0.5 * (x * qy - y * qx + z * qw),
         qw + 0.5 * (-x * qx - y * qy - z * qz));
     }
-  function filters(a: number, b: number): boolean {
+function filters(a: number, b: number): boolean {
       return (layer[a]! & mask[b]!) !== 0 && (layer[b]! & mask[a]!) !== 0;
     }
-  function activeInverseMass(index: number): number {
+function activeInverseMass(index: number): number {
       return bodyType[index] === TYPE_DYNAMIC ? inverseMass[index]! : 0;
     }
-  function applyInverseInertia(index: number, worldX: number, worldY: number, worldZ: number, output: number[]): number[] {
+function applyInverseInertia(index: number, worldX: number, worldY: number, worldZ: number, output: number[]): number[] {
       if (bodyType[index] !== TYPE_DYNAMIC) { output[0] = 0; output[1] = 0; output[2] = 0; return output; }
       const qx = rotationX[index]!, qy = rotationY[index]!, qz = rotationZ[index]!, qw = rotationW[index]!;
       const tx = 2 * (-qy * worldZ + qz * worldY);
@@ -174,7 +174,7 @@ export function createRigidBaseOperations(context: RigidOperationContext) {
       output[2] = scaledZ + qw * uz + (qx * uy - qy * ux);
       return output;
     }
-  function state(index: number): RigidBodyState3D {
+function state(index: number): RigidBodyState3D {
       const type = bodyType[index] === TYPE_STATIC ? "static" : bodyType[index] === TYPE_DYNAMIC ? "dynamic" : "kinematic";
       const shape: RigidShape3D = shapeKind[index] === SHAPE_SPHERE
         ? { kind: "sphere", radius: extentX[index]! }
@@ -195,7 +195,7 @@ export function createRigidBaseOperations(context: RigidOperationContext) {
         ...(fractureEnergyJoules[index]! > 0 ? { impactResponse: { fractureEnergyJoules: fractureEnergyJoules[index]!, retainedEnergyRatio: retainedEnergyRatio[index]! } } : {}),
       };
     }
-  function writeBoxEdges(index: number, tag: number, write: (x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, tag: number) => void): void {
+function writeBoxEdges(index: number, tag: number, write: (x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, tag: number) => void): void {
       const minX = aabbMinX[index]!; const maxX = aabbMaxX[index]!;
       const minY = aabbMinY[index]!; const maxY = aabbMaxY[index]!;
       const minZ = aabbMinZ[index]!; const maxZ = aabbMaxZ[index]!;
@@ -206,47 +206,24 @@ export function createRigidBaseOperations(context: RigidOperationContext) {
       write(minX, minY, minZ, minX, minY, maxZ, tag); write(maxX, minY, minZ, maxX, minY, maxZ, tag);
       write(minX, maxY, minZ, minX, maxY, maxZ, tag); write(maxX, maxY, minZ, maxX, maxY, maxZ, tag);
     }
-  return {
-    handleAt,
-    resolve,
-    resolveOptional,
-    updateAabb,
-    setQuaternion,
-    integrateRotation,
-    dampLinearVelocity,
-    applyRotationDelta,
-    filters,
-    activeInverseMass,
-    applyInverseInertia,
-    state,
-    writeBoxEdges,
-  };
-}
-export type RigidBaseOperationsSet = ReturnType<typeof createRigidBaseOperations>;
-
-export function createRigidCollisionOperations(context: RigidOperationContext, operations: RigidBaseOperationsSet) {
-  const { config, bodies, contactStorage,  } = context;
-  const {  } = config;
-  const { shapeKind, positionX, positionY, positionZ, velocityX, velocityY, velocityZ, rotationX, rotationY, rotationZ, rotationW, angularVelocityX, angularVelocityY, angularVelocityZ, extentX, extentY, extentZ, restitution, friction, fractureEnergyJoules, retainedEnergyRatio } = bodies;
-  const { contactA, contactB, contactNormalX, contactNormalY, contactNormalZ, contactTrigger, contactClosingSpeed, contactEffectiveMass, contactImpactEnergy, contactNormalImpulse, contactFailedBody, contactManifoldPointCount, contactManifoldPointX, contactManifoldPointY, contactManifoldPointZ, contactImpactPoint, contactManifoldClosingSpeed, contactManifoldNormalImpulse, contactManifoldFrictionX, contactManifoldFrictionY, contactManifoldFrictionZ, contactManifoldWarmStarted, contactWarmStartedPointCount } = contactStorage;
-  const inertiaA = [0, 0, 0];
-  const inertiaB = [0, 0, 0];
-  const localSphere = [0, 0, 0];
-  const worldVector = [0, 0, 0];
-  const orientedBoxes = createRigidOrientedBoxContact3D(context);
-  function detect(a: number, b: number, output: ContactScratch): boolean {
+const inertiaA = [0, 0, 0];
+const inertiaB = [0, 0, 0];
+const localSphere = [0, 0, 0];
+const worldVector = [0, 0, 0];
+const orientedBoxes = createRigidOrientedBoxContact3D(context);
+function detect(a: number, b: number, output: ContactScratch): boolean {
       if (shapeKind[a] === SHAPE_SPHERE && shapeKind[b] === SHAPE_SPHERE) return sphereSphere(a, b, output);
       if (shapeKind[a] === SHAPE_BOX && shapeKind[b] === SHAPE_BOX) return orientedBoxes.boxBox(a, b, output);
       if (shapeKind[a] === SHAPE_SPHERE) return sphereBox(a, b, output, false);
       return sphereBox(b, a, output, true);
     }
-  function detectManifold(a: number, b: number, output: ContactScratch): number {
+function detectManifold(a: number, b: number, output: ContactScratch): number {
       if (shapeKind[a] === SHAPE_BOX && shapeKind[b] === SHAPE_BOX) return orientedBoxes.boxBoxManifold(a, b, output);
       if (!detect(a, b, output)) return 0;
       orientedBoxes.manifoldPoints[0] = output.pointX; orientedBoxes.manifoldPoints[1] = output.pointY; orientedBoxes.manifoldPoints[2] = output.pointZ;
       return 1;
     }
-  function sphereSphere(a: number, b: number, output: ContactScratch): boolean {
+function sphereSphere(a: number, b: number, output: ContactScratch): boolean {
       const dx = positionX[b]! - positionX[a]!;
       const dy = positionY[b]! - positionY[a]!;
       const dz = positionZ[b]! - positionZ[a]!;
@@ -257,7 +234,7 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
       if (distance > 1e-12) {
         output.normalX = dx / distance; output.normalY = dy / distance; output.normalZ = dz / distance;
       } else {
-        output.normalX = operations.handleAt(a) < operations.handleAt(b) ? 1 : -1; output.normalY = 0; output.normalZ = 0;
+        output.normalX = handleAt(a) < handleAt(b) ? 1 : -1; output.normalY = 0; output.normalZ = 0;
       }
       output.penetration = radius - distance;
       output.pointX = positionX[a]! + output.normalX * (extentX[a]! - output.penetration * 0.5);
@@ -265,7 +242,7 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
       output.pointZ = positionZ[a]! + output.normalZ * (extentX[a]! - output.penetration * 0.5);
       return true;
     }
-  function sphereBox(sphere: number, box: number, output: ContactScratch, invert: boolean): boolean {
+function sphereBox(sphere: number, box: number, output: ContactScratch, invert: boolean): boolean {
       rotateQuaternionVector(rotationX[box]!, rotationY[box]!, rotationZ[box]!, rotationW[box]!, positionX[sphere]! - positionX[box]!, positionY[sphere]! - positionY[box]!, positionZ[sphere]! - positionZ[box]!, true, localSphere);
       const localX = localSphere[0]!, localY = localSphere[1]!, localZ = localSphere[2]!;
       let closestX = clamp(localX, -extentX[box]!, extentX[box]!);
@@ -300,26 +277,26 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
       output.pointX = positionX[box]! + worldVector[0]!; output.pointY = positionY[box]! + worldVector[1]!; output.pointZ = positionZ[box]! + worldVector[2]!;
       return true;
     }
-  const contactVelocity = (index: number, rx: number, ry: number, rz: number, output: number[]) => {
+const contactVelocity = (index: number, rx: number, ry: number, rz: number, output: number[]) => {
       output[0] = velocityX[index]! + angularVelocityY[index]! * rz - angularVelocityZ[index]! * ry;
       output[1] = velocityY[index]! + angularVelocityZ[index]! * rx - angularVelocityX[index]! * rz;
       output[2] = velocityZ[index]! + angularVelocityX[index]! * ry - angularVelocityY[index]! * rx;
     };
-  const effectiveMassTerm = (rx: number, ry: number, rz: number, dx: number, dy: number, dz: number, index: number, scratch: number[]) => {
-      operations.applyInverseInertia(index, ry * dz - rz * dy, rz * dx - rx * dz, rx * dy - ry * dx, scratch);
+const effectiveMassTerm = (rx: number, ry: number, rz: number, dx: number, dy: number, dz: number, index: number, scratch: number[]) => {
+      applyInverseInertia(index, ry * dz - rz * dy, rz * dx - rx * dz, rx * dy - ry * dx, scratch);
       return dx * (scratch[1]! * rz - scratch[2]! * ry) + dy * (scratch[2]! * rx - scratch[0]! * rz) + dz * (scratch[0]! * ry - scratch[1]! * rx);
     };
-  const applyAtPoint = (index: number, inverse: number, rx: number, ry: number, rz: number, ix: number, iy: number, iz: number, scratch: number[]) => {
+const applyAtPoint = (index: number, inverse: number, rx: number, ry: number, rz: number, ix: number, iy: number, iz: number, scratch: number[]) => {
       velocityX[index] += ix * inverse; velocityY[index] += iy * inverse; velocityZ[index] += iz * inverse;
-      operations.applyInverseInertia(index, ry * iz - rz * iy, rz * ix - rx * iz, rx * iy - ry * ix, scratch);
+      applyInverseInertia(index, ry * iz - rz * iy, rz * ix - rx * iz, rx * iy - ry * ix, scratch);
       angularVelocityX[index] += scratch[0]!; angularVelocityY[index] += scratch[1]!; angularVelocityZ[index] += scratch[2]!;
     };
-  function clearCachedPoint(offset: number): void {
+function clearCachedPoint(offset: number): void {
       contactManifoldNormalImpulse[offset] = 0;
       contactManifoldFrictionX[offset] = 0; contactManifoldFrictionY[offset] = 0; contactManifoldFrictionZ[offset] = 0;
       contactManifoldWarmStarted[offset] = 0;
     }
-  function prepareContact(contact: number): void {
+function prepareContact(contact: number): void {
       const a = contactA[contact]!, b = contactB[contact]!, nx = contactNormalX[contact]!, ny = contactNormalY[contact]!, nz = contactNormalZ[contact]!, pointCount = contactManifoldPointCount[contact]!;
       let bestClosing = 0, bestEffectiveMass = 0, bestEnergy = -1, bestPoint = 0;
       for (let point = 0; point < pointCount; point += 1) {
@@ -328,7 +305,7 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
         contactVelocity(a, rax, ray, raz, inertiaA); contactVelocity(b, rbx, rby, rbz, inertiaB);
         const closing = Math.max(0, -((inertiaB[0]! - inertiaA[0]!) * nx + (inertiaB[1]! - inertiaA[1]!) * ny + (inertiaB[2]! - inertiaA[2]!) * nz));
         contactManifoldClosingSpeed[offset] = closing;
-        const denominator = operations.activeInverseMass(a) + operations.activeInverseMass(b) + effectiveMassTerm(rax, ray, raz, nx, ny, nz, a, inertiaA) + effectiveMassTerm(rbx, rby, rbz, nx, ny, nz, b, inertiaB), effectiveMass = denominator > 1e-12 ? 1 / denominator : 0, energy = .5 * effectiveMass * closing * closing;
+        const denominator = activeInverseMass(a) + activeInverseMass(b) + effectiveMassTerm(rax, ray, raz, nx, ny, nz, a, inertiaA) + effectiveMassTerm(rbx, rby, rbz, nx, ny, nz, b, inertiaB), effectiveMass = denominator > 1e-12 ? 1 / denominator : 0, energy = .5 * effectiveMass * closing * closing;
         if (energy > bestEnergy) { bestClosing = closing; bestEffectiveMass = effectiveMass; bestEnergy = energy; bestPoint = point; }
       }
       contactClosingSpeed[contact] = bestClosing; contactEffectiveMass[contact] = bestEffectiveMass; contactImpactEnergy[contact] = Math.max(0, bestEnergy); contactNormalImpulse[contact] = 0; contactFailedBody[contact] = -1; contactImpactPoint[contact] = bestPoint;
@@ -339,7 +316,7 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
       }
       if (bestClosing <= 0) return;
       const failsA = fractureEnergyJoules[a]! > 0 && bestEnergy >= fractureEnergyJoules[a]!, failsB = fractureEnergyJoules[b]! > 0 && bestEnergy >= fractureEnergyJoules[b]!;
-      if (failsA && failsB) contactFailedBody[contact] = fractureEnergyJoules[a]! < fractureEnergyJoules[b]! || fractureEnergyJoules[a] === fractureEnergyJoules[b] && operations.handleAt(a) < operations.handleAt(b) ? a : b;
+      if (failsA && failsB) contactFailedBody[contact] = fractureEnergyJoules[a]! < fractureEnergyJoules[b]! || fractureEnergyJoules[a] === fractureEnergyJoules[b] && handleAt(a) < handleAt(b) ? a : b;
       else if (failsA) contactFailedBody[contact] = a;
       else if (failsB) contactFailedBody[contact] = b;
       if (contactFailedBody[contact]! >= 0) {
@@ -347,9 +324,9 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
         for (let point = 0; point < pointCount; point += 1) clearCachedPoint(contact * 4 + point);
       }
     }
-  function warmStart(contact: number): void {
+function warmStart(contact: number): void {
       if (contactTrigger[contact] || contactFailedBody[contact]! >= 0) return;
-      const a = contactA[contact]!, b = contactB[contact]!, nx = contactNormalX[contact]!, ny = contactNormalY[contact]!, nz = contactNormalZ[contact]!, inverseA = operations.activeInverseMass(a), inverseB = operations.activeInverseMass(b);
+      const a = contactA[contact]!, b = contactB[contact]!, nx = contactNormalX[contact]!, ny = contactNormalY[contact]!, nz = contactNormalZ[contact]!, inverseA = activeInverseMass(a), inverseB = activeInverseMass(b);
       let totalNormalImpulse = 0;
       for (let point = 0; point < contactManifoldPointCount[contact]!; point += 1) {
         const offset = contact * 4 + point, normalImpulse = Math.max(0, contactManifoldNormalImpulse[offset]!);
@@ -368,10 +345,10 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
       }
       contactNormalImpulse[contact] = totalNormalImpulse;
     }
-  function solveVelocityPoint(contact: number, point: number, firstIteration: boolean): void {
+function solveVelocityPoint(contact: number, point: number, firstIteration: boolean): void {
       const a = contactA[contact]!, b = contactB[contact]!, nx = contactNormalX[contact]!, ny = contactNormalY[contact]!, nz = contactNormalZ[contact]!, offset = contact * 4 + point, pointX = contactManifoldPointX[offset]!, pointY = contactManifoldPointY[offset]!, pointZ = contactManifoldPointZ[offset]!;
-      const inverseA = operations.activeInverseMass(a);
-      const inverseB = operations.activeInverseMass(b);
+      const inverseA = activeInverseMass(a);
+      const inverseB = activeInverseMass(b);
       if (inverseA + inverseB === 0) return;
       const rax = pointX - positionX[a]!, ray = pointY - positionY[a]!, raz = pointZ - positionZ[a]!;
       const rbx = pointX - positionX[b]!, rby = pointY - positionY[b]!, rbz = pointZ - positionZ[b]!;
@@ -429,7 +406,7 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
       applyAtPoint(a, inverseA, rax, ray, raz, -frictionX, -frictionY, -frictionZ, inertiaA);
       applyAtPoint(b, inverseB, rbx, rby, rbz, frictionX, frictionY, frictionZ, inertiaB);
     }
-  function solveVelocity(contact: number, firstIteration: boolean): void {
+function solveVelocity(contact: number, firstIteration: boolean): void {
       for (let point = 0; point < contactManifoldPointCount[contact]!; point += 1) solveVelocityPoint(contact, point, firstIteration);
       if (contactFailedBody[contact]! < 0) {
         let totalNormalImpulse = 0;
@@ -437,13 +414,13 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
         contactNormalImpulse[contact] = totalNormalImpulse;
       }
     }
-  function solvePosition(contact: number): void {
+function solvePosition(contact: number): void {
       const a = contactA[contact]!, b = contactB[contact]!;
       const pointCount = detectManifold(a, b, context.contactScratch);
       if (pointCount === 0) return;
       const { normalX: nx, normalY: ny, normalZ: nz, penetration } = context.contactScratch;
-      const inverseA = operations.activeInverseMass(a);
-      const inverseB = operations.activeInverseMass(b);
+      const inverseA = activeInverseMass(a);
+      const inverseB = activeInverseMass(b);
       const targetCorrection = Math.max(0, penetration - POSITION_SLOP) * POSITION_PERCENT;
       if (inverseA + inverseB === 0 || targetCorrection === 0) return;
       let angularAX = 0, angularAY = 0, angularAZ = 0, angularBX = 0, angularBY = 0, angularBZ = 0;
@@ -461,11 +438,11 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
         if (denominator <= 1e-12) continue;
         const impulse = targetCorrection / (pointCount * denominator);
         if (shapeKind[a] !== SHAPE_SPHERE) {
-          operations.applyInverseInertia(a, -impulse * (ray * nz - raz * ny), -impulse * (raz * nx - rax * nz), -impulse * (rax * ny - ray * nx), inertiaA);
+          applyInverseInertia(a, -impulse * (ray * nz - raz * ny), -impulse * (raz * nx - rax * nz), -impulse * (rax * ny - ray * nx), inertiaA);
           angularAX += inertiaA[0]!; angularAY += inertiaA[1]!; angularAZ += inertiaA[2]!;
         }
         if (shapeKind[b] !== SHAPE_SPHERE) {
-          operations.applyInverseInertia(b, impulse * (rby * nz - rbz * ny), impulse * (rbz * nx - rbx * nz), impulse * (rbx * ny - rby * nx), inertiaB);
+          applyInverseInertia(b, impulse * (rby * nz - rbz * ny), impulse * (rbz * nx - rbx * nz), impulse * (rbx * ny - rby * nx), inertiaB);
           angularBX += inertiaB[0]!; angularBY += inertiaB[1]!; angularBZ += inertiaB[2]!;
         }
       }
@@ -483,23 +460,17 @@ export function createRigidCollisionOperations(context: RigidOperationContext, o
       const inverseSum = inverseA + inverseB, translation = Math.max(0, targetCorrection - angularSeparation);
       positionX[a] -= nx * translation * inverseA / inverseSum; positionY[a] -= ny * translation * inverseA / inverseSum; positionZ[a] -= nz * translation * inverseA / inverseSum;
       positionX[b] += nx * translation * inverseB / inverseSum; positionY[b] += ny * translation * inverseB / inverseSum; positionZ[b] += nz * translation * inverseB / inverseSum;
-      operations.applyRotationDelta(a, angularAX, angularAY, angularAZ); operations.applyRotationDelta(b, angularBX, angularBY, angularBZ);
-      operations.updateAabb(a); operations.updateAabb(b);
+      applyRotationDelta(a, angularAX, angularAY, angularAZ); applyRotationDelta(b, angularBX, angularBY, angularBZ);
+      updateAabb(a); updateAabb(b);
     }
-  return {
-    detect,
-    detectManifold,
-    manifoldPoints: orientedBoxes.manifoldPoints,
-    sphereSphere,
-    boxBox: orientedBoxes.boxBox,
-    sphereBox,
-    prepareContact,
-    warmStart,
-    solveVelocity,
-    solvePosition,
-  };
+const manifoldPoints = orientedBoxes.manifoldPoints;
+const boxBox = orientedBoxes.boxBox;
+return { handleAt, resolve, resolveOptional, updateAabb, setQuaternion, integrateRotation, dampLinearVelocity, applyRotationDelta, filters, activeInverseMass, applyInverseInertia, state, writeBoxEdges, detect, detectManifold, manifoldPoints, sphereSphere, boxBox, sphereBox, prepareContact, warmStart, solveVelocity, solvePosition };
 }
-export type RigidCollisionOperationsSet = ReturnType<typeof createRigidCollisionOperations>;
+export type RigidBaseOperationsSet = ReturnType<typeof createRigidBaseOperations>;
+
+
+export type RigidCollisionOperationsSet = Pick<RigidBaseOperationsSet, "detect" | "detectManifold" | "manifoldPoints" | "sphereSphere" | "boxBox" | "sphereBox" | "prepareContact" | "warmStart" | "solveVelocity" | "solvePosition">;
 
 function createRigidAngularCcdOperations(context: RigidOperationContext, operations: RigidBaseOperationsSet & RigidCollisionOperationsSet) {
   const { bodies, diagnostics, contactScratch } = context;
@@ -594,13 +565,15 @@ function createRigidOrientedBoxCcdOperations(context: RigidOperationContext) {
 }
 
 export function createRigidCcdOperations(context: RigidOperationContext, operations: RigidBaseOperationsSet & RigidCollisionOperationsSet) {
-  const { config, bodies, diagnostics, contactScratch, sweepScratch } = context;
-  const { capacity, maxCcdTests,  } = config;
-  const { alive, bodyType, shapeKind, flags, positionX, positionY, positionZ, previousX, previousY, previousZ, rotationX, rotationY, rotationZ, rotationW, extentX, extentY, extentZ, aabbMinX, aabbMinY, aabbMinZ, aabbMaxX, aabbMaxY, aabbMaxZ, ids } = bodies;
-  const { quaternionTravel, axisAlignedBox, setRotationAt, setTransformsAt, sweepAngularMotion } = createRigidAngularCcdOperations(context, operations);
-  const orientedBoxCcd = createRigidOrientedBoxCcdOperations(context);
-  const mayOverlap = createCcdBoundsTest(bodies);
-  function runCcd(index: number): void {
+const { config, bodies, diagnostics, contactScratch, sweepScratch, contactStorage, mutable } = context;
+const { capacity, maxCcdTests, maxContacts, maxCandidatePairs } = config;
+const { alive, bodyType, shapeKind, flags, positionX, positionY, positionZ, previousX, previousY, previousZ, rotationX, rotationY, rotationZ, rotationW, extentX, extentY, extentZ, aabbMinX, aabbMinY, aabbMinZ, aabbMaxX, aabbMaxY, aabbMaxZ, ids, sort, sortScratch } = bodies;
+const { contactA, contactB, contactNormalX, contactNormalY, contactNormalZ, contactPenetration, contactPointX, contactPointY, contactPointZ, contactTrigger, contactManifoldPointCount, contactManifoldPointX, contactManifoldPointY, contactManifoldPointZ, contactManifoldNormalImpulse, contactManifoldFrictionX, contactManifoldFrictionY, contactManifoldFrictionZ, contactManifoldWarmStarted, contactWarmStartedPointCount, previousContactA, previousContactB, previousContactNormalX, previousContactNormalY, previousContactNormalZ, previousManifoldPointCount, previousManifoldPointX, previousManifoldPointY, previousManifoldPointZ, previousManifoldNormalImpulse, previousManifoldFrictionX, previousManifoldFrictionY, previousManifoldFrictionZ, previousManifoldUsed } = contactStorage;
+const { detectManifold, manifoldPoints } = operations;
+const { quaternionTravel, axisAlignedBox, setRotationAt, setTransformsAt, sweepAngularMotion } = createRigidAngularCcdOperations(context, operations);
+const orientedBoxCcd = createRigidOrientedBoxCcdOperations(context);
+const mayOverlap = createCcdBoundsTest(bodies);
+function runCcd(index: number): void {
       const dx = positionX[index]! - previousX[index]!;
       const dy = positionY[index]! - previousY[index]!;
       const dz = positionZ[index]! - previousZ[index]!;
@@ -750,7 +723,7 @@ export function createRigidCcdOperations(context: RigidOperationContext, operati
       }
       operations.updateAabb(index);
     }
-  function sweepSphereSphere(moving: number, fixed: number, dx: number, dy: number, dz: number, output: SweepScratch): boolean {
+function sweepSphereSphere(moving: number, fixed: number, dx: number, dy: number, dz: number, output: SweepScratch): boolean {
       const ox = previousX[moving]! - positionX[fixed]!;
       const oy = previousY[moving]! - positionY[fixed]!;
       const oz = previousZ[moving]! - positionZ[fixed]!;
@@ -772,7 +745,7 @@ export function createRigidCcdOperations(context: RigidOperationContext, operati
       output.time = time; output.normalX = nx / length; output.normalY = ny / length; output.normalZ = nz / length;
       return true;
     }
-  function sweepSphereOrientedBox(moving: number, fixed: number, relativeX: number, relativeY: number, relativeZ: number, output: SweepScratch): boolean {
+function sweepSphereOrientedBox(moving: number, fixed: number, relativeX: number, relativeY: number, relativeZ: number, output: SweepScratch): boolean {
       const sphere = shapeKind[moving] === SHAPE_SPHERE ? moving : fixed, box = sphere === moving ? fixed : moving;
       const sphereRelativeX = previousX[sphere]! - previousX[box]!, sphereRelativeY = previousY[sphere]! - previousY[box]!, sphereRelativeZ = previousZ[sphere]! - previousZ[box]!;
       const sphereDeltaX = sphere === moving ? relativeX : -relativeX, sphereDeltaY = sphere === moving ? relativeY : -relativeY, sphereDeltaZ = sphere === moving ? relativeZ : -relativeZ;
@@ -786,8 +759,8 @@ export function createRigidCcdOperations(context: RigidOperationContext, operati
       output.normalX = ccdVectorA[0]! * sign; output.normalY = ccdVectorA[1]! * sign; output.normalZ = ccdVectorA[2]! * sign;
       return true;
     }
-  const ccdVectorA = [0, 0, 0], ccdVectorB = [0, 0, 0];
-  function sweepExpandedAabb(moving: number, fixed: number, dx: number, dy: number, dz: number, output: SweepScratch): boolean {
+const ccdVectorA = [0, 0, 0], ccdVectorB = [0, 0, 0];
+function sweepExpandedAabb(moving: number, fixed: number, dx: number, dy: number, dz: number, output: SweepScratch): boolean {
       const movingHalfX = (aabbMaxX[moving]! - aabbMinX[moving]!) * 0.5;
       const movingHalfY = (aabbMaxY[moving]! - aabbMinY[moving]!) * 0.5;
       const movingHalfZ = (aabbMaxZ[moving]! - aabbMinZ[moving]!) * 0.5;
@@ -801,7 +774,7 @@ export function createRigidCcdOperations(context: RigidOperationContext, operati
       output.normalX *= -1; output.normalY *= -1; output.normalZ *= -1;
       return true;
     }
-  function raySphere(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, index: number, maxDistance: number, output: SweepScratch): boolean {
+function raySphere(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, index: number, maxDistance: number, output: SweepScratch): boolean {
       const mx = ox - positionX[index]!;
       const my = oy - positionY[index]!;
       const mz = oz - positionZ[index]!;
@@ -826,24 +799,9 @@ export function createRigidCcdOperations(context: RigidOperationContext, operati
       output.normalZ = (hitZ - positionZ[index]!) / radius;
       return true;
     }
-  return {
-    runCcd,
-    sweepSphereSphere,
-    sweepExpandedAabb,
-    raySphere,
-  };
-}
-export type RigidCcdOperationsSet = ReturnType<typeof createRigidCcdOperations>;
-
-export function createRigidBroadphaseOperations(context: RigidOperationContext, operations: RigidBaseOperationsSet & RigidCollisionOperationsSet) {
-  const { config, bodies, contactStorage, diagnostics, contactScratch, mutable } = context;
-  const { capacity, maxContacts, maxCandidatePairs,  } = config;
-  const { alive, bodyType, flags, extentX, extentY, extentZ, aabbMinX, aabbMinY, aabbMinZ, aabbMaxX, aabbMaxY, aabbMaxZ, sort, sortScratch,  } = bodies;
-  const { contactA, contactB, contactNormalX, contactNormalY, contactNormalZ, contactPenetration, contactPointX, contactPointY, contactPointZ, contactTrigger, contactManifoldPointCount, contactManifoldPointX, contactManifoldPointY, contactManifoldPointZ, contactManifoldNormalImpulse, contactManifoldFrictionX, contactManifoldFrictionY, contactManifoldFrictionZ, contactManifoldWarmStarted, contactWarmStartedPointCount, previousContactA, previousContactB, previousContactNormalX, previousContactNormalY, previousContactNormalZ, previousManifoldPointCount, previousManifoldPointX, previousManifoldPointY, previousManifoldPointZ, previousManifoldNormalImpulse, previousManifoldFrictionX, previousManifoldFrictionY, previousManifoldFrictionZ, previousManifoldUsed } = contactStorage;
-  const { detectManifold, manifoldPoints } = operations;
-  let previousContactCount = 0;
-  const previousIndex = createContactPairIndex(previousContactA, previousContactB);
-  function sortBodies(): number {
+let previousContactCount = 0;
+const previousIndex = createContactPairIndex(previousContactA, previousContactB);
+function sortBodies(): number {
       let count = 0;
       for (let index = 0; index < capacity; index += 1) if (alive[index]) sort[count++] = index;
       for (let width = 1; width < count; width *= 2) {
@@ -863,7 +821,7 @@ export function createRigidBroadphaseOperations(context: RigidOperationContext, 
       }
       return count;
     }
-  function collectContacts(): void {
+function collectContacts(): void {
       previousContactCount = mutable.currentContacts;
       previousManifoldUsed.fill(0, 0, previousContactCount * 4);
       for (let contact = 0; contact < previousContactCount; contact += 1) {
@@ -938,12 +896,12 @@ export function createRigidBroadphaseOperations(context: RigidOperationContext, 
       }
       diagnostics.contacts = mutable.currentContacts;
     }
-  return {
-    sortBodies,
-    collectContacts,
-    contactIndexStorageBytes: previousIndex.storageBytes,
-  };
+const contactIndexStorageBytes = previousIndex.storageBytes;
+return { runCcd, sweepSphereSphere, sweepExpandedAabb, raySphere, sortBodies, collectContacts, contactIndexStorageBytes };
 }
-export type RigidBroadphaseOperationsSet = ReturnType<typeof createRigidBroadphaseOperations>;
+export type RigidCcdOperationsSet = ReturnType<typeof createRigidCcdOperations>;
+
+
+export type RigidBroadphaseOperationsSet = Pick<RigidCcdOperationsSet, "sortBodies" | "collectContacts" | "contactIndexStorageBytes">;
 
 export type RigidOperations = RigidBaseOperationsSet & RigidCollisionOperationsSet & RigidCcdOperationsSet & RigidBroadphaseOperationsSet;

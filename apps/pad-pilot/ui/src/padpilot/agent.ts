@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { isPadPilotDevtoolsEnabled } from "../runtime-flags";
 import {
   BoundedStreamLimitError,
@@ -28,9 +29,9 @@ export type PadPilotAgentResponse = {
 
 const DEFAULT_AGENT_MODEL = "5.5 low fast";
 const DEFAULT_AGENT_PROVIDER: PadPilotAgentProvider = "cursor";
-const DEFAULT_AGENT_TIMEOUT_MS = 5 * 60_000;
-const MAX_AGENT_RESPONSE_BYTES = 2 * 1024 * 1024;
-const MAX_AGENT_ERROR_BYTES = 64 * 1024;
+const DEFAULT_AGENT_TIMEOUT_MS = 300000;
+const MAX_AGENT_RESPONSE_BYTES = 2097152;
+const MAX_AGENT_ERROR_BYTES = 65536;
 
 function envValue(key: string) {
   return typeof process !== "undefined" ? process.env[key] : undefined;
@@ -73,8 +74,8 @@ function resolveModel(option?: string) {
 function resolveProvider(option?: PadPilotAgentProvider) {
   const provider = option
     ?? browserWindow()?.__PADPILOT_AGENT_PROVIDER__
-    ?? (localStorageValue("padpilot.agent.provider") as PadPilotAgentProvider | undefined)
-    ?? (envValue("PADPILOT_AGENT_PROVIDER") as PadPilotAgentProvider | undefined)
+    ?? (localStorageValue("padpilot.agent.provider"))
+    ?? (envValue("PADPILOT_AGENT_PROVIDER"))
     ?? DEFAULT_AGENT_PROVIDER;
   return provider === "cursor" ? DEFAULT_AGENT_PROVIDER : DEFAULT_AGENT_PROVIDER;
 }
@@ -94,7 +95,7 @@ function parseAgentText(buffer: string) {
     return JSON.stringify(value);
   };
   try {
-    const parsed = JSON.parse(trimmed) as { response?: unknown; text?: unknown; output?: unknown };
+    const parsed = z.object({ response: z.unknown().optional(), text: z.unknown().optional(), output: z.unknown().optional() }).passthrough().parse(JSON.parse(trimmed));
     return responseText(parsed.response ?? parsed.text ?? parsed.output ?? trimmed);
   } catch {
     const fragments: string[] = [];
@@ -103,7 +104,7 @@ function parseAgentText(buffer: string) {
         continue;
       }
       try {
-        const parsed = JSON.parse(line) as { response?: unknown; text?: unknown; output?: unknown };
+        const parsed = z.object({ response: z.unknown().optional(), text: z.unknown().optional(), output: z.unknown().optional() }).passthrough().parse(JSON.parse(line));
         fragments.push(responseText(parsed.response ?? parsed.text ?? parsed.output));
       } catch {
         fragments.push(line);
@@ -134,7 +135,7 @@ async function responseErrorMessage(response: Response) {
     return fallback;
   }
   try {
-    const parsed = JSON.parse(text) as { error?: { code?: string; message?: string } };
+    const parsed = z.object({ error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional() }).passthrough().parse(JSON.parse(text));
     const code = parsed.error?.code ? `${parsed.error.code}: ` : "";
     const message = parsed.error?.message?.trim();
     return message ? `${fallback} ${code}${message}` : `${fallback} ${text.trim()}`;
@@ -143,7 +144,7 @@ async function responseErrorMessage(response: Response) {
   }
 }
 
-export async function askAgent(request: PadPilotAgentRequest | string) {
+export async function askAgent(request: PadPilotAgentRequest | string) : Promise<PadPilotAgentResponse> {
   const normalized = typeof request === "string" ? { prompt: request } : request;
   const endpoint = resolveEndpoint(normalized.endpoint);
   const model = resolveModel(normalized.model);
@@ -151,7 +152,7 @@ export async function askAgent(request: PadPilotAgentRequest | string) {
   const controller = new AbortController();
   const requestedTimeoutMs = normalized.timeoutMs;
   const timeoutMs = typeof requestedTimeoutMs === "number" && Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
-    ? Math.min(30 * 60_000, Math.round(requestedTimeoutMs))
+    ? Math.min(1800000, Math.round(requestedTimeoutMs))
     : DEFAULT_AGENT_TIMEOUT_MS;
   const abortFromCaller = () => controller.abort(normalized.signal?.reason);
   if (normalized.signal?.aborted) {
@@ -185,7 +186,7 @@ export async function askAgent(request: PadPilotAgentRequest | string) {
       provider,
       source: endpoint.includes("/api/dev/generator/codex") ? "dev-agent" : "remote-agent",
       text: parseAgentText(await readBoundedResponse(response, MAX_AGENT_RESPONSE_BYTES)),
-    } satisfies PadPilotAgentResponse;
+    };
   } finally {
     globalThis.clearTimeout(timeoutHandle);
     normalized.signal?.removeEventListener("abort", abortFromCaller);

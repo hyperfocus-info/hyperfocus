@@ -73,14 +73,14 @@ function scalePoint(width: number, height: number, xRatio: number, yRatio: numbe
   return {
     x: width * xRatio,
     y: height * yRatio,
-  } satisfies ControllerPreviewPoint;
+  };
 }
 
 function mirrorPoint(width: number, point: ControllerPreviewPoint) {
   return {
     x: width - point.x,
     y: point.y,
-  } satisfies ControllerPreviewPoint;
+  };
 }
 
 export function buildControllerPreviewGeometry(width: number, height: number) {
@@ -96,7 +96,7 @@ export function buildControllerPreviewGeometry(width: number, height: number) {
   const bottomNotchLeft = scalePoint(safeWidth, safeHeight, 0.428, 0.742);
   const bottomNotchApex = scalePoint(safeWidth, safeHeight, 0.5, 0.598);
 
-  const shellAnchors = {
+  const shellAnchors: ControllerPreviewShellAnchors = {
     bottomNotchApex,
     bottomNotchLeft,
     bottomNotchRight: mirrorPoint(safeWidth, bottomNotchLeft),
@@ -111,7 +111,7 @@ export function buildControllerPreviewGeometry(width: number, height: number) {
     topCenterDip,
     topCenterLeft,
     topCenterRight: mirrorPoint(safeWidth, topCenterLeft),
-  } satisfies ControllerPreviewShellAnchors;
+  };
 
   const shellBounds = {
     bottom: safeHeight * 0.8,
@@ -183,7 +183,7 @@ export function buildControllerPreviewGeometry(width: number, height: number) {
       x: safeWidth * 0.503,
       y: safeHeight * 0.462,
     },
-  } satisfies ControllerPreviewGeometry;
+  };
 }
 
 export function traceControllerPreviewShellPath(context: CanvasRenderingContext2D, geometry: ControllerPreviewGeometry) {

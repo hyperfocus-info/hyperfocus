@@ -1,4 +1,6 @@
-import { For, Match, Show, Switch, createMemo, createResource, createSignal, onCleanup } from "solid-js";
+import { percent, clockTime, friendlyName, commaTags, algorithmVersionParts } from "./display-format";
+import { SelectControl } from "@hyperfocus/ui";
+import { For, Match, Show, Switch, createMemo, createResource, createSignal, onCleanup, createContext, useContext } from "solid-js";
 import { SolidUplot } from "@dschz/solid-uplot";
 import { arc, curveCatmullRom, line } from "d3-shape";
 import { interpolateRgb } from "d3-interpolate";
@@ -10,18 +12,11 @@ import { audioSourceUrl, fetchLibrary, fetchRun, openRunProject, reanalyzeRun, s
 const scoreColor = scaleSequential(interpolateRgb("#ef476f", "#70e1a2")).domain([0, 1]);
 const barWidth = scaleLinear().domain([0, 1]).range([0, 100]).clamp(true);
 
-function percent(score: number | null) {
-  return score === null ? "N/A" : `${Math.round(score * 100)}%`;
-}
 
-function clockTime(seconds: number) {
-  const whole = Math.max(0, Math.round(seconds));
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-}
 
-function friendlyName(id: string) {
-  return id.replace(/([a-z0-9])([A-Z])/g, "$1 $2").split(/[._-]/).filter(Boolean).map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" ");
-}
+
+
+
 
 function reportPath(runId: string) {
   return `/runs/${encodeURIComponent(runId)}`;
@@ -80,7 +75,7 @@ export function DimensionBar(props: { dimension: DashboardDimension; explanation
 }
 
 function SectionCurve(props: { sections: DashboardRun["sections"] }) {
-  const points = createMemo(() => props.sections.map((section, index) => [index * 100 / Math.max(1, props.sections.length - 1), 56 - section.score * 48] as [number, number]));
+  const points = createMemo(() => props.sections.map((section, index): [number, number] => [index * 100 / Math.max(1, props.sections.length - 1), 56 - section.score * 48]));
   const path = createMemo(() => line<[number, number]>().x((point) => point[0]).y((point) => point[1]).curve(curveCatmullRom.alpha(0.5))(points()) ?? "");
   return (
     <svg class="section-curve" viewBox="0 0 100 64" preserveAspectRatio="none" role="img" aria-label="Section-level score changes">
@@ -216,9 +211,7 @@ function ActionPlan(props: { run: DashboardRun }) {
   );
 }
 
-function commaTags(value: string) {
-  return value.split(",").map((tag) => tag.trim()).filter(Boolean);
-}
+
 
 function ReviewPanel(props: { run: DashboardRun }) {
   const previous = props.run.review;
@@ -272,9 +265,7 @@ function ReviewPanel(props: { run: DashboardRun }) {
         <Show when={props.run.actions.length > 0}>
           <fieldset><legend>Were the suggestions right?</legend><For each={props.run.actions}>{(action) => (
             <label>{`Review ${action.title}`}
-              <select value={actionVerdicts()[action.id] ?? ""} onChange={(event) => setActionVerdicts((current) => ({ ...current, [action.id]: event.currentTarget.value as DashboardReviewVerdict | "" }))}>
-                <option value="">Not reviewed</option><option value="helpful">Helpful</option><option value="wrong">Wrong diagnosis</option><option value="intentional">Intentional choice</option><option value="fixed">Already fixed</option>
-              </select>
+              <SelectControl<DashboardReviewVerdict | ""> ariaLabel={`Review ${action.title}`} value={actionVerdicts()[action.id] ?? ""} options={[{ value: "", label: "Not reviewed" }, { value: "helpful", label: "Helpful" }, { value: "wrong", label: "Wrong diagnosis" }, { value: "intentional", label: "Intentional choice" }, { value: "fixed", label: "Already fixed" }]} onChange={value => setActionVerdicts(current => ({ ...current, [action.id]: value }))} />
             </label>
           )}</For></fieldset>
         </Show>
@@ -296,9 +287,7 @@ function TimelineExplorer(props: { series: DashboardSeries[] }) {
     <Show when={selected()}>{(series) => (
       <section class="timeline-explorer">
         <label>Timeline signal
-          <select value={series().id} onChange={(event) => setSelectedId(event.currentTarget.value)}>
-            <For each={props.series}>{(option) => <option value={option.id} selected={option.id === series().id}>{friendlyName(option.id)}</option>}</For>
-          </select>
+          <SelectControl ariaLabel="Timeline signal" value={series().id} options={props.series.map(option => ({ value: option.id, label: friendlyName(option.id) }))} onChange={setSelectedId} />
         </label>
         <TimeSeriesChart series={series()} />
       </section>
@@ -327,10 +316,7 @@ function algorithmFingerprint(run: DashboardRun) {
   return run.evaluatorFingerprint?.trim() || "unknown";
 }
 
-function algorithmVersionParts(fingerprint: string) {
-  const match = fingerprint.match(/(?:^|[-_])v(\d+(?:\.\d+)*)$/i);
-  return match?.[1]?.split(".").map(Number) ?? null;
-}
+
 
 function compareAlgorithmFingerprints(left: string, right: string) {
   const leftParts = algorithmVersionParts(left);
@@ -410,13 +396,17 @@ function LibrarySortHeader(props: {
   );
 }
 
+const PlaybackContext = createContext<(run: DashboardRun) => Promise<unknown> | unknown>();
+
 export function RunActions(props: {
   onReanalyzed: (runId: string) => void;
-  onTogglePlayback: (run: DashboardRun) => Promise<unknown> | unknown;
+  onTogglePlayback?: (run: DashboardRun) => Promise<unknown> | unknown;
   playing: boolean;
   run: DashboardRun;
   tableCell?: boolean;
 }) {
+  const playback = useContext(PlaybackContext);
+  const togglePlayback = (run: DashboardRun) => (playback ?? props.onTogglePlayback)?.(run);
   const [operation, setOperation] = createSignal<"edit" | "reanalyze" | null>(null);
   const [status, setStatus] = createSignal("");
   const reanalyze = async () => {
@@ -449,7 +439,7 @@ export function RunActions(props: {
       <button type="button" disabled={!props.run.sourceAvailable || operation() !== null} onClick={reanalyze}>
         {operation() === "reanalyze" ? "Analyzing…" : "Reanalyze"}
       </button>
-      <button type="button" disabled={!props.run.sourceAvailable || operation() !== null} onClick={() => props.onTogglePlayback(props.run)}>
+      <button type="button" disabled={!props.run.sourceAvailable || operation() !== null} onClick={() => togglePlayback(props.run)}>
         {props.playing ? "Pause" : "Play"}
       </button>
       <button type="button" disabled={!props.run.hasColocatedFlp || operation() !== null} onClick={edit}>Edit</button>
@@ -465,14 +455,14 @@ export function ReportView(props: {
 }) {
   const [run] = createResource(() => props.runId, fetchRun);
   return (
-    <Switch>
+    <PlaybackContext.Provider value={props.onTogglePlayback}><Switch>
       <Match when={run.loading}><p class="state">Loading evaluation…</p></Match>
       <Match when={run.error}><p class="state error">{run.error.message}</p></Match>
       <Match when={run()}>{(loaded) => (
         <>
           <nav><a href="/" onClick={(event) => navigate(event, "/")}>← All evaluations</a></nav>
           <header class="report-heading">
-            <div><p class="eyebrow">Persistent evaluation</p><h1>{loaded().displayName}</h1><p class="source-path">{loaded().sourcePath}</p><RunActions run={loaded()} playing={props.playingRunId === loaded().id} onTogglePlayback={props.onTogglePlayback} onReanalyzed={(runId) => navigateTo(reportPath(runId))} /></div>
+            <div><p class="eyebrow">Persistent evaluation</p><h1>{loaded().displayName}</h1><p class="source-path">{loaded().sourcePath}</p><RunActions run={loaded()} playing={props.playingRunId === loaded().id} onReanalyzed={(runId) => navigateTo(reportPath(runId))} /></div>
             <OverallArc score={loaded().overall} uncappedScore={loaded().uncappedOverall} confidence={loaded().confidence} />
           </header>
           <section class="report-grid">
@@ -506,7 +496,7 @@ export function ReportView(props: {
           <MetricTable run={loaded()} />
         </>
       )}</Match>
-    </Switch>
+    </Switch></PlaybackContext.Provider>
   );
 }
 
@@ -536,17 +526,13 @@ function LibraryView(props: {
       : { key, direction: key === "displayName" ? "ascending" : "descending" });
   };
   return (
-    <>
+    <PlaybackContext.Provider value={props.onTogglePlayback}>
       <header class="library-heading">
         <div><p class="eyebrow">PadPilot</p><h1>Synaesthetic Library</h1><p>Newest run per track for selected algorithm. Immutable history stays stored.</p></div>
         <div class="library-controls">
           <Show when={algorithms().length > 0}>
             <label>Algorithm version
-              <select value={activeAlgorithm()} onChange={(event) => setSelectedAlgorithm(event.currentTarget.value)}>
-                <For each={algorithms()}>{(fingerprint, index) => (
-                  <option value={fingerprint} title={fingerprint} selected={fingerprint === activeAlgorithm()}>{index() === 0 ? "Latest — " : ""}{algorithmVersionLabel(fingerprint)}</option>
-                )}</For>
-              </select>
+              <SelectControl ariaLabel="Algorithm version" value={activeAlgorithm()} options={algorithms().map((fingerprint, index) => ({ value: fingerprint, label: `${index === 0 ? "Latest  " : ""}${algorithmVersionLabel(fingerprint)}`, description: fingerprint }))} onChange={setSelectedAlgorithm} />
             </label>
           </Show>
           <label>Filter evaluations<input value={query()} onInput={(event) => setQuery(event.currentTarget.value)} placeholder="Track or path" /></label>
@@ -567,14 +553,14 @@ function LibraryView(props: {
             </div>
             <For each={filtered()}>{(run) => (
               <div class="library-row" role="row">
-                <span role="cell"><a class="library-file-link" href={reportPath(run.id)} onClick={(event) => navigate(event, reportPath(run.id))}><strong>{run.displayName}</strong><small>{run.sourcePath}</small></a></span><span role="cell"><strong class="score-chip" style={{ color: scoreColor(run.overall ?? 0) }}>{percent(run.overall)}</strong><Show when={run.subjectiveScore !== undefined}><small>{percent(run.subjectiveScore ?? null)} legacy listener</small></Show></span><span role="cell">{percent(run.confidence)}</span><span class="algorithm-cell" role="cell" title={algorithmFingerprint(run)}><strong>{algorithmVersionLabel(algorithmFingerprint(run))}</strong></span><time role="cell">{run.evaluatedAt ? new Date(run.evaluatedAt).toLocaleString() : "Unknown"}</time><RunActions tableCell run={run} playing={props.playingRunId === run.id} onTogglePlayback={props.onTogglePlayback} onReanalyzed={(runId) => navigateTo(reportPath(runId))} />
+                <span role="cell"><a class="library-file-link" href={reportPath(run.id)} onClick={(event) => navigate(event, reportPath(run.id))}><strong>{run.displayName}</strong><small>{run.sourcePath}</small></a></span><span role="cell"><strong class="score-chip" style={{ color: scoreColor(run.overall ?? 0) }}>{percent(run.overall)}</strong><Show when={run.subjectiveScore !== undefined}><small>{percent(run.subjectiveScore ?? null)} legacy listener</small></Show></span><span role="cell">{percent(run.confidence)}</span><span class="algorithm-cell" role="cell" title={algorithmFingerprint(run)}><strong>{algorithmVersionLabel(algorithmFingerprint(run))}</strong></span><time role="cell">{run.evaluatedAt ? new Date(run.evaluatedAt).toLocaleString() : "Unknown"}</time><RunActions tableCell run={run} playing={props.playingRunId === run.id} onReanalyzed={(runId) => navigateTo(reportPath(runId))} />
               </div>
             )}</For>
           </div>
           <Show when={filtered().length === 0}><p class="state">No persisted evaluations match.</p></Show>
         </Match>
       </Switch>
-    </>
+    </PlaybackContext.Provider>
   );
 }
 

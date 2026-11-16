@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
-  buildCodexGeneratorCommand,
-  CodexGeneratorOutputLimitError,
+  buildCodexGeneratorCommand, isCodexGeneratorOutputLimitError,
   readBoundedTextStream,
   resolveCodexGeneratorTimeoutMs,
   runCodexGenerator,
@@ -108,17 +107,17 @@ describe("codex generator command", () => {
       },
     });
 
-    await expect(readBoundedTextStream(stream, 5, "stdout", () => {
+    expect(await readBoundedTextStream(stream, 5, "stdout", () => {
       overflowed = true;
-    })).rejects.toBeInstanceOf(CodexGeneratorOutputLimitError);
+    }).then(() => false, isCodexGeneratorOutputLimitError)).toBe(true);
     expect(overflowed).toBe(true);
   });
 
   it("rejects an oversized output schema before spawning Codex", async () => {
-    await expect(runCodexGenerator({
+    expect(await runCodexGenerator({
       prompt: "Genre: Lofi",
       responseSchema: { description: "x".repeat(300_000), type: "object" },
       system: "Return tracker text.",
-    })).rejects.toBeInstanceOf(CodexGeneratorOutputLimitError);
+    }).then(() => false, isCodexGeneratorOutputLimitError)).toBe(true);
   });
 });

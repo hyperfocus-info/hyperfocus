@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, expect, it } from "bun:test";
 import { askAgent } from "./agent";
 
@@ -22,11 +23,11 @@ afterEach(() => {
 it("posts agent prompts through the public askAgent helper", async () => {
   let requestUrl = "";
   let requestBody = {};
-  globalThis.fetch = ((async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
     requestUrl = String(input);
-    requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    requestBody = z.record(z.unknown()).parse(JSON.parse(String(init?.body ?? "{}")));
     return new Response(JSON.stringify({ response: "tracker text" }));
-  }) as unknown) as typeof fetch;
+  }, { preconnect: globalThis.fetch.preconnect });
 
   const response = await askAgent({
     endpoint: "/agent",
@@ -61,11 +62,11 @@ it("uses generic agent settings and dev route without module fetch code", async 
   window.localStorage.setItem("padpilot.agent.model", "agent model");
   let requestUrl = "";
   let requestBody = {};
-  globalThis.fetch = ((async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
     requestUrl = String(input);
-    requestBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    requestBody = z.record(z.unknown()).parse(JSON.parse(String(init?.body ?? "{}")));
     return new Response("{\"response\":\"ok\"}");
-  }) as unknown) as typeof fetch;
+  }, { preconnect: globalThis.fetch.preconnect });
 
   const response = await askAgent("hello");
 
@@ -80,11 +81,11 @@ it("uses generic agent settings and dev route without module fetch code", async 
 });
 
 it("stringifies structured response objects from agent endpoints", async () => {
-  globalThis.fetch = ((async () => new Response(JSON.stringify({
+  globalThis.fetch = Object.assign(async () => new Response(JSON.stringify({
     response: {
       tracker: "!BPM:120!",
     },
-  }))) as unknown) as typeof fetch;
+  })), { preconnect: globalThis.fetch.preconnect });
 
   const response = await askAgent({
     endpoint: "/agent",
@@ -95,18 +96,18 @@ it("stringifies structured response objects from agent endpoints", async () => {
 });
 
 it("rejects oversized agent responses before buffering them without limit", async () => {
-  globalThis.fetch = ((async () => new Response(new Uint8Array(2 * 1024 * 1024 + 1))) as unknown) as typeof fetch;
+  globalThis.fetch = Object.assign(async () => new Response(new Uint8Array(2097153)), { preconnect: globalThis.fetch.preconnect });
 
   await expect(askAgent({ endpoint: "/agent", prompt: "write midi" }))
     .rejects.toThrow("response exceeded its size limit");
 });
 
 it("aborts agent requests at their deadline", async () => {
-  globalThis.fetch = (((_input: RequestInfo | URL, init?: RequestInit) =>
+  globalThis.fetch = Object.assign((_input: RequestInfo | URL, init?: RequestInit) =>
     new Promise<Response>((_resolve, reject) => {
       const signal = init?.signal;
       signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
-    })) as unknown) as typeof fetch;
+    }), { preconnect: globalThis.fetch.preconnect });
 
   await expect(askAgent({ endpoint: "/agent", prompt: "write midi", timeoutMs: 5 }))
     .rejects.toThrow("timed out");

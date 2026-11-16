@@ -1,3 +1,4 @@
+import { round } from "./utils/timeline-audio-mix-values";
 import { describe, expect, test } from "bun:test";
 import type { EditorAudioTrack } from "@hyperfocus/engine/project";
 import { createTimelineAudioMixPlan, decodeAndMixTimelineAudio, renderTimelineAudioMix, selectTimelineAudioTracks, type DecodedTimelineAudio } from "./timeline-audio-mix.ts";
@@ -51,15 +52,11 @@ describe("timeline MP4 audio mixing", () => {
     const previousContext = Object.getOwnPropertyDescriptor(globalThis, "AudioContext");
     const previousBuffer = Object.getOwnPropertyDescriptor(globalThis, "AudioBuffer");
     let closed = false;
-    class FakeAudioBuffer {
-      readonly length: number; readonly numberOfChannels: number; readonly sampleRate: number; readonly duration: number; readonly channels: Float32Array[];
-      constructor(options: { length: number; numberOfChannels: number; sampleRate: number }) { this.length = options.length; this.numberOfChannels = options.numberOfChannels; this.sampleRate = options.sampleRate; this.duration = options.length / options.sampleRate; this.channels = Array.from({ length: options.numberOfChannels }, () => new Float32Array(options.length)); }
-      getChannelData(channel: number) { return this.channels[channel]; }
-    }
-    class FakeAudioContext {
-      async decodeAudioData(bytes: ArrayBuffer) { const result = new FakeAudioBuffer({ length: 4, numberOfChannels: 1, sampleRate: 4 }); result.channels[0].fill(new Uint8Array(bytes)[0] / 10); return result as AudioBuffer; }
-      async close() { closed = true; }
-    }
+    function FakeAudioBuffer(options: { length: number; numberOfChannels: number; sampleRate: number }) { return fakeOutput(options); }
+    function FakeAudioContext() { return {
+      async decodeAudioData(bytes: ArrayBuffer) { const result = fakeOutput({ length: 4, numberOfChannels: 1, sampleRate: 4 }); result.getChannelData(0).fill(new Uint8Array(bytes)[0] / 10); return result; },
+      async close() { closed = true; },
+    }; }
     Object.defineProperty(globalThis, "AudioBuffer", { configurable: true, value: FakeAudioBuffer });
     Object.defineProperty(globalThis, "AudioContext", { configurable: true, value: FakeAudioContext });
     try {
@@ -81,9 +78,9 @@ function buffer(channels: number[][], sampleRate: number): DecodedTimelineAudio 
   const data = channels.map((channel) => Float32Array.from(channel));
   return { duration: data[0].length / sampleRate, length: data[0].length, numberOfChannels: data.length, sampleRate, getChannelData: (channel) => data[channel] };
 }
-function fakeOutput(options: { length: number; numberOfChannels: number; sampleRate: number }) {
+function fakeOutput(options: { length: number; numberOfChannels: number; sampleRate: number }): AudioBuffer {
   const channels = Array.from({ length: options.numberOfChannels }, () => new Float32Array(options.length));
-  return { duration: options.length / options.sampleRate, length: options.length, numberOfChannels: options.numberOfChannels, sampleRate: options.sampleRate, getChannelData: (channel: number) => channels[channel] } as AudioBuffer;
+  return { duration: options.length / options.sampleRate, length: options.length, numberOfChannels: options.numberOfChannels, sampleRate: options.sampleRate, getChannelData: (channel: number) => channels[channel], copyFromChannel(destination, channel, start = 0) { destination.set(channels[channel].subarray(start, start + destination.length)); }, copyToChannel(source, channel, start = 0) { channels[channel].set(source.subarray(0, options.length - start), start); } };
 }
-function round(value: number) { return Math.round(value * 1000) / 1000; }
+
 function restoreGlobal(key: "AudioContext" | "AudioBuffer", descriptor?: PropertyDescriptor) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }

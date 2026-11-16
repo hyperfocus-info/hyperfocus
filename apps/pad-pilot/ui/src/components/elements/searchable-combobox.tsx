@@ -106,7 +106,7 @@ export { filterSearchableComboboxItems, resolveSearchableComboboxItemId };
 
 function eventHandler(handler: unknown, event: Event) {
   if (typeof handler === "function") {
-    (handler as (value: Event) => void)(event);
+    handler(event);
   }
 }
 

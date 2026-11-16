@@ -12,9 +12,9 @@ import {
   rms,
   zeroCrossingRate,
 } from "./audio/audio-analysis-math";
-import { bestScaleCompliance, clamp01, FIFTHS_ORDER, fitToTarget, normalizedEntropy, standardDeviation } from "./skill-math";
+import { bestScaleCompliance, clamp01, FIFTHS_ORDER, normalizedEntropy, standardDeviation } from "./skill-math";
 import { mean } from "./statistics";
-import type { EvaluationDimensionId, MediumMetricId, MetricEvidence, SafetyAssessment } from "./evaluation-schema";
+import type { EvaluationDimensionId, MediumMetricId, MetricEvidence } from "./evaluation-schema";
 
 function audioMetricDefinition<
   const Name extends string,
@@ -167,7 +167,7 @@ export function assessAudioSafety(features: AudioSummary) {
     cap,
     valid: cap > 0,
     reasons: Object.freeze(reasons),
-  }) satisfies SafetyAssessment;
+  });
 }
 
 export function scoreAudioFeatures(features: AudioSummary) {
@@ -443,7 +443,7 @@ export function analyzeAudioChannels(channelData: readonly Float32Array[], sourc
       groovePulse: buildTimeline(groovePulseValues, analysisRate),
       sectionScore: buildTimeline(sectionScoreValues, analysisRate),
     },
-  } satisfies AudioSummary;
+  };
 }
 
 function audioMetric(
@@ -472,7 +472,7 @@ function audioMetric(
     status: options.status ?? (valid ? "valid" : "unreliable"),
     summary: options.summary,
     evidence: Object.freeze(options.evidence),
-  } satisfies AudioMetricScore;
+  };
 }
 
 function smoothstep(minimum: number, maximum: number, value: number) {
@@ -900,7 +900,7 @@ function summarizeAudioStructure(
         endSeconds: Math.min(frameCount * HOP_SIZE / sampleRate, (index + 1) * 8),
         label: labels[index]!,
         score: clamp01(0.72 + (1 - previousSimilarity) * 0.28),
-      } satisfies AudioSectionSummary;
+      };
     }),
   };
 }

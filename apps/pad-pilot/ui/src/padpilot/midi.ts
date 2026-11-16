@@ -6,7 +6,7 @@ import {
   resolveSelectedCapabilityModuleId,
 } from "@hyperfocus/pad-pilot/module-identity";
 
-const MAX_MIDI_DRAG_BYTES = 2 * 1024 * 1024;
+const MAX_MIDI_DRAG_BYTES = 2097152;
 
 function selectedMidiExportModuleId() {
   return resolveSelectedCapabilityModuleId(getLatestHostState(), "midi-export");

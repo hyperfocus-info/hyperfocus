@@ -142,7 +142,7 @@ export function createStandaloneAudioController(assets: readonly StandaloneAudio
       const streamed = command.bus === 'music' && streamedIds.has(command.assetId) && streaming;
       const playback = streamed ? playlistEngine : engine;
       const bytes = audioAssets.get(command.assetId);
-      if (!bytes && !streamed && !options.loadAsset) { remove(item);report(new Error(`Standalone audio asset is missing: ${command.assetId}`));continue; }
+      if (!bytes && !streamed && !options.loadAsset) { remove(item);report(new Error(`Standalone audio asset is missing from assets.hfp: ${command.assetId}`));continue; }
       if (!item.ready && !playback.hasBuffer(command.assetId)) {
         if (!item.decoding) {
           if (!decoding.has(command.assetId) && decoding.size >= MAX_DECODING_ASSETS) continue;

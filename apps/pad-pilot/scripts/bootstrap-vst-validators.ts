@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { asRecord } from "@hyperfocus/utilities/records";
 import { copyFile, lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,11 +13,11 @@ import {
 import { boundedFetchBytes } from "./synaesthetic-evaluator/bounded-fetch";
 import { hashBoundedFile, readBoundedUtf8File } from "@hyperfocus/pad-pilot/bounded-file";
 
-const pluginvalArchiveMaximumBytes = 8 * 1024 * 1024;
-const validatorExecutableMaximumBytes = 100 * 1024 * 1024;
-const manifestMaximumBytes = 16 * 1024;
-const networkDeadlineMs = 2 * 60_000;
-const gitDeadlineMs = 10 * 60_000;
+const pluginvalArchiveMaximumBytes = 8388608;
+const validatorExecutableMaximumBytes = 104857600;
+const manifestMaximumBytes = 16384;
+const networkDeadlineMs = 120000;
+const gitDeadlineMs = 600000;
 
 export const validatorToolPins = Object.freeze({
   pluginval: Object.freeze({
@@ -75,16 +75,18 @@ export function sha256Bytes(bytes: Uint8Array) {
 
 function isManifest(value: unknown): value is ValidatorManifest {
   if (!value || typeof value !== "object") return false;
-  const manifest = value as Partial<ValidatorManifest>;
+  const manifest = asRecord(value);
+  const pluginval = asRecord(manifest.pluginval);
+  const steinberg = asRecord(manifest.steinberg);
   return manifest.schemaVersion === 1
-    && manifest.pluginval?.version === validatorToolPins.pluginval.version
-    && manifest.pluginval.archiveSha256 === validatorToolPins.pluginval.archiveSha256
-    && typeof manifest.pluginval.executableSha256 === "string"
-    && /^[a-f0-9]{64}$/.test(manifest.pluginval.executableSha256)
-    && manifest.steinberg?.version === validatorToolPins.steinberg.version
-    && manifest.steinberg.commit === validatorToolPins.steinberg.commit
-    && typeof manifest.steinberg.executableSha256 === "string"
-    && /^[a-f0-9]{64}$/.test(manifest.steinberg.executableSha256);
+    && pluginval.version === validatorToolPins.pluginval.version
+    && pluginval.archiveSha256 === validatorToolPins.pluginval.archiveSha256
+    && typeof pluginval.executableSha256 === "string"
+    && /^[a-f0-9]{64}$/.test(pluginval.executableSha256)
+    && steinberg.version === validatorToolPins.steinberg.version
+    && steinberg.commit === validatorToolPins.steinberg.commit
+    && typeof steinberg.executableSha256 === "string"
+    && /^[a-f0-9]{64}$/.test(steinberg.executableSha256);
 }
 
 async function readManifest(manifestPath: string) {
@@ -266,7 +268,7 @@ async function installValidators(projectRoot: string) {
       hashBoundedFile(stagePluginval, validatorExecutableMaximumBytes, "staged pluginval executable"),
       hashBoundedFile(stageSteinberg, validatorExecutableMaximumBytes, "staged Steinberg validator executable"),
     ]);
-    const manifest = {
+    const manifest: ValidatorManifest = {
       pluginval: {
         archiveSha256: validatorToolPins.pluginval.archiveSha256,
         executableSha256: pluginvalHash.sha256,
@@ -278,7 +280,7 @@ async function installValidators(projectRoot: string) {
         executableSha256: steinbergHash.sha256,
         version: validatorToolPins.steinberg.version,
       },
-    } satisfies ValidatorManifest;
+    };
     await Bun.write(path.join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
     await promoteStagedDirectory(stage, validatorToolPaths(projectRoot).root, {
       validate: async (stagedDirectory) => {
@@ -326,7 +328,7 @@ async function main() {
       throw new Error("Installed VST validators failed post-install integrity verification.");
     }
     console.log(`Installed pinned VST validators: ${validatorToolPaths(projectRoot).root}`);
-  }, 45 * 60_000);
+  }, 2700000);
 }
 
 if (import.meta.main) {

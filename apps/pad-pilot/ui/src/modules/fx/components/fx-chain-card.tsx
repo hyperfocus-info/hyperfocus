@@ -1,3 +1,5 @@
+import { createContext, useContext } from "solid-js";
+const FxChainCardControls = createContext<FxChainCardProps>();
 import { createDraggable } from "@thisbeyond/solid-dnd";
 import { Headphones, Settings2, Volume2, VolumeX } from "lucide-solid";
 import { type Accessor, Show, createMemo } from "solid-js";
@@ -18,11 +20,13 @@ export type FxChainCardProps = {
   chainId: number;
 };
 
-export function FxChainCard(props: FxChainCardProps) {
+export function FxChainCard(props: FxChainCardProps) { return <FxChainCardControls.Provider value={props}><FxChainCardContent /></FxChainCardControls.Provider>; }
+function FxChainCardContent() { const controls = useContext(FxChainCardControls); if (!controls) throw new Error("Missing FxChainCard controls");
+
   const state = useFxModuleState();
   const actions = useFxModuleActions();
-  const chain = createChainAccessor(() => state.session.working.chains, props.chainId);
-  const draggable = createDraggable(`chain:${props.chainId}`);
+  const chain = createChainAccessor(() => state.session.working.chains, controls.chainId);
+  const draggable = createDraggable(`chain:${controls.chainId}`);
   const dragBinding = bindCardDraggable(draggable);
   const tapMap = createMemo(() => buildFxTapMap(state.host.displayVisualizer));
   const taps = createMemo(() => {
@@ -65,14 +69,14 @@ export function FxChainCard(props: FxChainCardProps) {
       tap?.outputPeakDbRight,
     );
   });
-  const chainPresetEntries = createMemo(() => state.ui.chainPresets.libraryByChain[props.chainId] ?? []);
+  const chainPresetEntries = createMemo(() => state.ui.chainPresets.libraryByChain[controls.chainId] ?? []);
   const chainPresetItems = createMemo(() => getFxChainPresetItems(chainPresetEntries()));
-  const selectedChainPreset = createMemo(() => chainPresetEntries().find((item) => item.name === (state.ui.chainPresets.queryByChain[props.chainId] ?? "")));
+  const selectedChainPreset = createMemo(() => chainPresetEntries().find((item) => item.name === (state.ui.chainPresets.queryByChain[controls.chainId] ?? "")));
   const muteIcon = createMemo(() => (chain()?.muted ? VolumeX : Volume2));
 
   return (
     <Show when={chain()}>
-      <FxChainDropZone chainId={props.chainId}>
+      <FxChainDropZone chainId={controls.chainId}>
         <PadPilot.DraggableCard
           dragRef={dragBinding.ref}
           dragStyle={dragBinding.style()}
@@ -92,21 +96,21 @@ export function FxChainCard(props: FxChainCardProps) {
                 <PadPilot.Button
                   aria-pressed={chain()?.muted ?? false}
                   class={`${styles["icon-action"]} ${chain()?.muted ? styles["icon-action-active"] : ""}`.trim()}
-                  data-testid={`chain-mute-button-${props.chainId}`}
+                  data-testid={`chain-mute-button-${controls.chainId}`}
                   icon={muteIcon()}
-                  onClick={() => actions.chains.toggleMute(props.chainId)}
+                  onClick={() => actions.chains.toggleMute(controls.chainId)}
                   tooltip={chain()?.muted ? "Unmute chain" : "Mute chain"}
                 />
                 <PadPilot.Button
                   aria-pressed={chain()?.solo ?? false}
                   class={`${styles["icon-action"]} ${chain()?.solo ? styles["icon-action-active"] : ""}`.trim()}
-                  data-testid={`chain-solo-button-${props.chainId}`}
+                  data-testid={`chain-solo-button-${controls.chainId}`}
                   icon={Headphones}
-                  onClick={() => actions.chains.toggleSolo(props.chainId)}
+                  onClick={() => actions.chains.toggleSolo(controls.chainId)}
                   tooltip={chain()?.solo ? "Disable solo" : "Solo chain"}
                 />
                 <PadPilot.Knob
-                  data-testid={`chain-mix-knob-${props.chainId}`}
+                  data-testid={`chain-mix-knob-${controls.chainId}`}
                   min={0}
                   max={1}
                   value={chain()?.mix ?? 0.65}
@@ -114,8 +118,8 @@ export function FxChainCard(props: FxChainCardProps) {
                   defaultValue={0.65}
                   tooltip={`Chain wet/dry mix ${Math.round((chain()?.mix ?? 0.65) * 100)}%`}
                   valueFormatter={(value) => `${Math.round(value * 100)}%`}
-                  onChange={(value) => actions.chains.setMix(props.chainId, value, false)}
-                  onCommit={(value) => actions.chains.setMix(props.chainId, value, true)}
+                  onChange={(value) => actions.chains.setMix(controls.chainId, value, false)}
+                  onCommit={(value) => actions.chains.setMix(controls.chainId, value, true)}
                   manualInput
                   fineDragMultiplier={0.15}
                   size={32}
@@ -123,15 +127,15 @@ export function FxChainCard(props: FxChainCardProps) {
               </div>
             </header>
           }
-          class={`${styles["chain-card"]} ${state.ui.activeChainId === props.chainId ? styles["is-active"] : ""} ${chain()?.muted ? styles["is-muted"] : ""}`.trim()}
-          data-testid={`chain-card-${props.chainId}`}
+          class={`${styles["chain-card"]} ${state.ui.activeChainId === controls.chainId ? styles["is-active"] : ""} ${chain()?.muted ? styles["is-muted"] : ""}`.trim()}
+          data-testid={`chain-card-${controls.chainId}`}
           isDragging={dragBinding.isActiveDraggable()}
-          isPlaceholder={props.activeDraggedChainId() === props.chainId}
+          isPlaceholder={controls.activeDraggedChainId() === controls.chainId}
           onClick={(event) => {
             if (!shouldHandleCardSurfaceAction(event.target, event.currentTarget, CARD_DRAG_INTERACTIVE_SELECTOR)) {
               return;
             }
-            actions.chains.activate(props.chainId);
+            actions.chains.activate(controls.chainId);
           }}
           onDragPointerDown={dragBinding.onPointerDown}
           variant="chain"
@@ -140,22 +144,22 @@ export function FxChainCard(props: FxChainCardProps) {
             <PadPilot.SearchableCombobox
               emptyText="No chain presets saved in this session."
               items={chainPresetItems()}
-              onOpenChange={(open) => actions.chainPresets.setOpen(props.chainId, open)}
-              onQueryChange={(value) => actions.chainPresets.setQuery(props.chainId, value)}
-              onSelect={(presetId) => actions.chainPresets.apply(props.chainId, presetId)}
-              open={state.ui.chainPresets.openByChain[props.chainId] ?? false}
+              onOpenChange={(open) => actions.chainPresets.setOpen(controls.chainId, open)}
+              onQueryChange={(value) => actions.chainPresets.setQuery(controls.chainId, value)}
+              onSelect={(presetId) => actions.chainPresets.apply(controls.chainId, presetId)}
+              open={state.ui.chainPresets.openByChain[controls.chainId] ?? false}
               placeholder="Search chain presets"
-              query={state.ui.chainPresets.queryByChain[props.chainId] ?? ""}
+              query={state.ui.chainPresets.queryByChain[controls.chainId] ?? ""}
               selectedId={selectedChainPreset()?.id}
             />
-            <PadPilot.Button icon={<Settings2 size={14} />} onClick={() => actions.chainPresets.openManager(props.chainId)} tooltip="Manage chain presets">
+            <PadPilot.Button icon={<Settings2 size={14} />} onClick={() => actions.chainPresets.openManager(controls.chainId)} tooltip="Manage chain presets">
               Manage
             </PadPilot.Button>
           </div>
 
           <div class={styles["chain-body"]}>
             <Show when={state.preferences.displayChainMeters}>
-              <div class={styles["chain-meter-column"]} data-testid={`chain-meter-column-${props.chainId}`}>
+              <div class={styles["chain-meter-column"]} data-testid={`chain-meter-column-${controls.chainId}`}>
                 <PadPilot.Meter
                   label="Input"
                   leftValueDb={chainInputMeter().leftValueDb}
@@ -172,10 +176,11 @@ export function FxChainCard(props: FxChainCardProps) {
                 />
               </div>
             </Show>
-            <FxNodeLane chainId={props.chainId} />
+            <FxNodeLane chainId={controls.chainId} />
           </div>
         </PadPilot.DraggableCard>
       </FxChainDropZone>
     </Show>
   );
+
 }

@@ -45,14 +45,15 @@ mock.module("@stylexjs/stylex", () => {
 // behave like the app, not the hyperscript compatibility runtime.
 Bun.plugin(SolidPlugin());
 
-const globalState = globalThis as typeof globalThis & { __padPilotHappyDomRegistered?: boolean };
+declare global { var __padPilotHappyDomRegistered: boolean | undefined; var React: { createElement: typeof h; Fragment: typeof Fragment }; }
+const globalState = globalThis;
 
 if (!globalState.__padPilotHappyDomRegistered) {
   GlobalRegistrator.register();
   globalState.__padPilotHappyDomRegistered = true;
 }
 
-(globalThis as { React?: { createElement: typeof h; Fragment: typeof Fragment } }).React = {
+globalThis.React = {
   createElement: h,
   Fragment
 };

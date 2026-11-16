@@ -2,16 +2,29 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "@hyperfocus/engine": ["../../packages/engine/src/index.ts"],
-      "@hyperfocus/engine/*": ["../../packages/engine/src/*"],
-      "@hyperfocus/ai-core": ["../../packages/ai-core/src/index.ts"],
-      "@hyperfocus/ui": ["../../packages/ui/src/index.ts"],
-      "@hyperfocus/workspace": ["../../packages/workspace/src/index.ts"]
+      "@hyperfocus/engine": [
+        "../../packages/engine/src/index.ts"
+      ],
+      "@hyperfocus/engine/*": [
+        "../../packages/engine/src/*"
+      ],
+      "@hyperfocus/ai-core": [
+        "../../packages/ai-core/src/index.ts"
+      ],
+      "@hyperfocus/ui": [
+        "../../packages/ui/src/index.ts"
+      ],
+      "@hyperfocus/workspace": [
+        "../../packages/workspace/src/index.ts"
+      ]
     }
   },
   "include": [
-    "./**/*.ts",
-    "./**/*.tsx",
+    "./*.ts",
+    "./src/main.tsx",
+    "./src/standalone-entry.ts",
+    "./src/standalone/entry-2d.ts",
+    "./src/standalone/entry-3d.ts",
     "../../packages/ai-core/src/**/*.ts",
     "../../packages/desktop-runtime/src/**/*.ts",
     "../../packages/engine/src/**/*.ts",
@@ -19,5 +32,9 @@
     "../../packages/ui/src/**/*.tsx",
     "../../packages/workspace/src/**/*.ts"
   ],
-  "exclude": ["dist", "**/*.test.ts", "**/*.test.tsx"]
+  "exclude": [
+    "dist",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
 }

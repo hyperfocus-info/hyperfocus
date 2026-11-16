@@ -15,33 +15,15 @@ export function bindCardDraggable(
       }
 
       draggable.dragActivators.onpointerdown?.(event);
-    }) satisfies JSX.EventHandlerUnion<HTMLElement, PointerEvent>,
+    }),
     style: () => maybeTransformStyle(draggable.transform),
     isActiveDraggable: () => draggable.isActiveDraggable,
   };
 }
 
-export function parseChainDragId(id: string | null | undefined) {
-  if (!id?.startsWith("chain:")) {
-    return null;
-  }
 
-  const [, chainId] = id.split(":");
-  return chainId ? Number(chainId) : null;
-}
 
-export function parseNodeDragId(id: string | null | undefined, chainId: number) {
-  if (!id?.startsWith("node:")) {
-    return null;
-  }
 
-  const [, dragChainId, nodeId] = id.split(":");
-  if (Number(dragChainId) !== chainId) {
-    return null;
-  }
-
-  return nodeId ? Number(nodeId) : null;
-}
 
 export function FxChainDropZone(props: { chainId: number; children: JSX.Element }) {
   const droppable = createDroppable(`chain:${props.chainId}`);

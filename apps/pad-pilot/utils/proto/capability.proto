@@ -60,6 +60,7 @@ message SampleAnalysisRequest {
   repeated SampleSliceMarker manual_markers = 7;
   uint32 max_slice_count = 8;
   bool include_candidate_transients = 9;
+  uint64 request_id = 10;
 }
 
 message SampleAnalysisResult {
@@ -156,6 +157,7 @@ message SampleEditorFrame {
   repeated uint32 playing_pad_indices = 20;
   float project_bpm = 21;
   uint64 analysis_revision = 22;
+  uint64 completed_analysis_request_id = 23;
 }
 
 message CapabilityFrameEnvelope {

@@ -9,7 +9,7 @@ import {
 } from "./fx-chain-state";
 
 export const COMPACT_FX_PRESET_PREFIX = "ppfx1:";
-export const MAX_COMPACT_FX_PRESET_BYTES = 512 * 1024;
+export const MAX_COMPACT_FX_PRESET_BYTES = 524288;
 export const MAX_COMPACT_FX_PRESET_CODE_CHARS = COMPACT_FX_PRESET_PREFIX.length + Math.ceil(MAX_COMPACT_FX_PRESET_BYTES / 3) * 4;
 
 const MAX_PRESET_ID_BYTES = 128;

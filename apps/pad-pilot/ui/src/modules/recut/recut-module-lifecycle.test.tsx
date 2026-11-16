@@ -26,13 +26,13 @@ createUiTest("RecutModuleStore lifecycle", () => {
     runtime.sendIntent({ type: "selectModule", moduleId: "recut" });
     const originalSendCapabilityIntent = moduleSdk.sendCapabilityIntent;
     const triggers: Array<{ padIndex: number; pressed: boolean }> = [];
-    moduleSdk.sendCapabilityIntent = ((capability, handle, action, payloadBase64) => {
+    moduleSdk.sendCapabilityIntent = (capability, handle, action, payloadBase64) => {
       if (capability === "slice-playback" && action === "trigger-pad") {
         const payload = fromBinary(SlicePlaybackTriggerSchema, base64ToBytes(payloadBase64));
         triggers.push({ padIndex: payload.padIndex, pressed: payload.pressed });
       }
       return originalSendCapabilityIntent(capability, handle, action, payloadBase64);
-    }) as typeof moduleSdk.sendCapabilityIntent;
+    };
 
     let actions: ReturnType<typeof useRecutModuleStore>["actions"] | undefined;
     try {
@@ -62,13 +62,13 @@ createUiTest("RecutModuleStore lifecycle", () => {
     runtime.sendIntent({ type: "selectModule", moduleId: "recut" });
     const originalSendCapabilityIntent = moduleSdk.sendCapabilityIntent;
     const triggers: Array<{ padIndex: number; pressed: boolean }> = [];
-    moduleSdk.sendCapabilityIntent = ((capability, handle, action, payloadBase64) => {
+    moduleSdk.sendCapabilityIntent = (capability, handle, action, payloadBase64) => {
       if (capability === "slice-playback" && action === "trigger-pad") {
         const payload = fromBinary(SlicePlaybackTriggerSchema, base64ToBytes(payloadBase64));
         triggers.push({ padIndex: payload.padIndex, pressed: payload.pressed });
       }
       return originalSendCapabilityIntent(capability, handle, action, payloadBase64);
-    }) as typeof moduleSdk.sendCapabilityIntent;
+    };
 
     let actions: ReturnType<typeof useRecutModuleStore>["actions"] | undefined;
     try {
@@ -100,13 +100,13 @@ createUiTest("RecutModuleStore lifecycle", () => {
     runtime.sendIntent({ type: "selectModule", moduleId: "recut" });
     const originalSendCapabilityIntent = moduleSdk.sendCapabilityIntent;
     const triggers: Array<{ padIndex: number; pressed: boolean }> = [];
-    moduleSdk.sendCapabilityIntent = ((capability, handle, action, payloadBase64) => {
+    moduleSdk.sendCapabilityIntent = (capability, handle, action, payloadBase64) => {
       if (capability === "slice-playback" && action === "trigger-pad") {
         const payload = fromBinary(SlicePlaybackTriggerSchema, base64ToBytes(payloadBase64));
         triggers.push({ padIndex: payload.padIndex, pressed: payload.pressed });
       }
       return originalSendCapabilityIntent(capability, handle, action, payloadBase64);
-    }) as typeof moduleSdk.sendCapabilityIntent;
+    };
 
     const gamepadState = (pressed: boolean, frameIndex: number) => ({
       axes: [0, 0, 0, 0],

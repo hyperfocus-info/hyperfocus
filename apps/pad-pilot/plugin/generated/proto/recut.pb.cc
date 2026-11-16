@@ -134,7 +134,8 @@ constexpr RecutFrame::RecutFrame(
   , bpm_suggested_confidence_(0)
   , density_(0)
   , project_bpm_(0)
-  , analysis_revision_(uint64_t{0u}){}
+  , analysis_revision_(uint64_t{0u})
+  , completed_analysis_request_id_(uint64_t{0u}){}
 struct RecutFrameDefaultTypeInternal {
   constexpr RecutFrameDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -2301,16 +2302,16 @@ RecutFrame::RecutFrame(const RecutFrame& from)
       playing_pad_indices_(from.playing_pad_indices_) {
   _internal_metadata_.MergeFrom<std::string>(from._internal_metadata_);
   ::memcpy(&sequence_, &from.sequence_,
-    static_cast<size_t>(reinterpret_cast<char*>(&analysis_revision_) -
-    reinterpret_cast<char*>(&sequence_)) + sizeof(analysis_revision_));
+    static_cast<size_t>(reinterpret_cast<char*>(&completed_analysis_request_id_) -
+    reinterpret_cast<char*>(&sequence_)) + sizeof(completed_analysis_request_id_));
   // @@protoc_insertion_point(copy_constructor:padpilot.recut.RecutFrame)
 }
 
 inline void RecutFrame::SharedCtor() {
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
     reinterpret_cast<char*>(&sequence_) - reinterpret_cast<char*>(this)),
-    0, static_cast<size_t>(reinterpret_cast<char*>(&analysis_revision_) -
-    reinterpret_cast<char*>(&sequence_)) + sizeof(analysis_revision_));
+    0, static_cast<size_t>(reinterpret_cast<char*>(&completed_analysis_request_id_) -
+    reinterpret_cast<char*>(&sequence_)) + sizeof(completed_analysis_request_id_));
 }
 
 RecutFrame::~RecutFrame() {
@@ -2347,8 +2348,8 @@ void RecutFrame::Clear() {
   held_pad_indices_.Clear();
   playing_pad_indices_.Clear();
   ::memset(&sequence_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&analysis_revision_) -
-      reinterpret_cast<char*>(&sequence_)) + sizeof(analysis_revision_));
+      reinterpret_cast<char*>(&completed_analysis_request_id_) -
+      reinterpret_cast<char*>(&sequence_)) + sizeof(completed_analysis_request_id_));
   _internal_metadata_.Clear<std::string>();
 }
 
@@ -2558,6 +2559,14 @@ const char* RecutFrame::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID:
         } else
           goto handle_unusual;
         continue;
+      // uint64 completed_analysis_request_id = 23;
+      case 23:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 184)) {
+          completed_analysis_request_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
       default:
         goto handle_unusual;
     }  // switch
@@ -2761,6 +2770,12 @@ uint8_t* RecutFrame::_InternalSerialize(
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(22, this->_internal_analysis_revision(), target);
   }
 
+  // uint64 completed_analysis_request_id = 23;
+  if (this->_internal_completed_analysis_request_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(23, this->_internal_completed_analysis_request_id(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = stream->WriteRaw(_internal_metadata_.unknown_fields<std::string>(::PROTOBUF_NAMESPACE_ID::internal::GetEmptyString).data(),
         static_cast<int>(_internal_metadata_.unknown_fields<std::string>(::PROTOBUF_NAMESPACE_ID::internal::GetEmptyString).size()), target);
@@ -2960,6 +2975,13 @@ size_t RecutFrame::ByteSizeLong() const {
         this->_internal_analysis_revision());
   }
 
+  // uint64 completed_analysis_request_id = 23;
+  if (this->_internal_completed_analysis_request_id() != 0) {
+    total_size += 2 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64Size(
+        this->_internal_completed_analysis_request_id());
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     total_size += _internal_metadata_.unknown_fields<std::string>(::PROTOBUF_NAMESPACE_ID::internal::GetEmptyString).size();
   }
@@ -3062,6 +3084,9 @@ void RecutFrame::MergeFrom(const RecutFrame& from) {
   if (from._internal_analysis_revision() != 0) {
     _internal_set_analysis_revision(from._internal_analysis_revision());
   }
+  if (from._internal_completed_analysis_request_id() != 0) {
+    _internal_set_completed_analysis_request_id(from._internal_completed_analysis_request_id());
+  }
   _internal_metadata_.MergeFrom<std::string>(from._internal_metadata_);
 }
 
@@ -3086,8 +3111,8 @@ void RecutFrame::InternalSwap(RecutFrame* other) {
   held_pad_indices_.InternalSwap(&other->held_pad_indices_);
   playing_pad_indices_.InternalSwap(&other->playing_pad_indices_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(RecutFrame, analysis_revision_)
-      + sizeof(RecutFrame::analysis_revision_)
+      PROTOBUF_FIELD_OFFSET(RecutFrame, completed_analysis_request_id_)
+      + sizeof(RecutFrame::completed_analysis_request_id_)
       - PROTOBUF_FIELD_OFFSET(RecutFrame, sequence_)>(
           reinterpret_cast<char*>(&sequence_),
           reinterpret_cast<char*>(&other->sequence_));

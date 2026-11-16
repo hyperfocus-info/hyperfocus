@@ -24,11 +24,11 @@ export type EvaluationState = {
   [key: string]: unknown;
 };
 
-export abstract class MIDIAnalyzer {
-  abstract name: string;
-  abstract weight: number;
-  abstract evaluate(midi: Uint8Array, state: EvaluationState): Promise<PerformanceMetric>;
-}
+export type MIDIAnalyzer = {
+  name: string;
+  weight: number;
+  evaluate: (midi: Uint8Array, state: EvaluationState) => Promise<PerformanceMetric>;
+};
 
 export type LoadedSkill = {
   readonly analyzer: MIDIAnalyzer;
@@ -42,9 +42,13 @@ export function normalizeMetric(metric: PerformanceMetric) {
     score: Math.max(0, Math.min(1, Number.isFinite(metric.score) ? metric.score : 0)),
     biologicalImpact: metric.biologicalImpact,
     justification: metric.justification,
-  } satisfies PerformanceMetric;
+  };
 }
 
 export function metric(value: PerformanceMetric) {
   return value;
 }
+
+// Compatibility for dynamically loaded legacy skills which extend the former abstract base.
+// Authored skills use plain analyzer objects; this empty function preserves the runtime prototype.
+export function MIDIAnalyzer() {}

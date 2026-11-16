@@ -1,10 +1,10 @@
+import { createBundleIntegrityError, createMultipartUploadError, isMultipartUploadError } from "./module-transfer";
 import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtempSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  BundleIntegrityError,
+import {  isBundleIntegrityError,
   createBundleIntegrityVerifier,
   createInFlightLimiter,
   createPermitBoundFileStream,
@@ -143,8 +143,8 @@ describe("module transfer bounds", () => {
         await verifier.verify(bundlePath, checksum(original), original.byteLength, 1024);
         throw new Error("Expected the rewritten bundle to fail integrity verification.");
       } catch (error) {
-        expect(error).toBeInstanceOf(BundleIntegrityError);
-        if (error instanceof BundleIntegrityError) {
+        expect(isBundleIntegrityError(error)).toBe(true);
+        if (isBundleIntegrityError(error)) {
           expect(error.code).toBe("bundle_checksum_mismatch");
         }
       }
@@ -249,3 +249,15 @@ describe("module transfer bounds", () => {
     });
   });
 });
+
+ it("preserves factory error identity and rejects lookalike errors", () => {
+ const integrity = createBundleIntegrityError("bundle_not_found", "missing");
+ const upload = createMultipartUploadError(400, "bad_upload", "invalid");
+ expect(integrity).toBeInstanceOf(Error);
+ expect(integrity.name).toBe("BundleIntegrityError");
+ expect(isBundleIntegrityError(integrity)).toBe(true);
+ expect(isMultipartUploadError(upload)).toBe(true);
+ expect(isBundleIntegrityError(upload)).toBe(false);
+ expect(isBundleIntegrityError(Object.assign(new Error("missing"), { code: integrity.code }))).toBe(false);
+ expect(upload.status).toBe(400);
+ });

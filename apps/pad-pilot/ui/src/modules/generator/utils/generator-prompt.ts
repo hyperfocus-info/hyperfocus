@@ -1,6 +1,7 @@
 import { GENERATOR_MIDI_BEATS_PER_BAR, GENERATOR_MIDI_TICKS_PER_QUARTER } from "./midi-encoder";
-import { buildGeneratorIntentPromptLines, buildGeneratorSelectorPromptLines, type GeneratorLengthBars } from "./generator-options";
-import { GENERATOR_MODEL_ENVELOPE_JSON_SCHEMA, GENERATOR_MODEL_SCHEMA_VERSION, GENERATOR_TRACKER_GRAMMAR_VERSION, type GeneratorIntentPlan, type GeneratorMusicianPlan, type GeneratorPromptEnvelope, type GeneratorPromptInput } from "./generator-contracts";
+import { buildGeneratorIntentPromptLines, buildGeneratorSelectorPromptLines } from "./generator-selector-options";
+import { type GeneratorLengthBars } from "./generator-option-catalog";
+import { GENERATOR_MODEL_ENVELOPE_JSON_SCHEMA, GENERATOR_MODEL_SCHEMA_VERSION, GENERATOR_TRACKER_GRAMMAR_VERSION, type GeneratorIntentPlan, type GeneratorMusicianPlan, type GeneratorPromptInput } from "./generator-contracts";
 import { arrangementPlanMetadataLine, buildGeneratorIntentPlanFromSelection, cleanField, dashboardFieldsFromPrompt, percentField } from "./generator-intent";
 import { buildMusicianPlan, selectedLengthBars, selectedScaleInfo, selectedScaleMode } from "./generator-style-dna";
 
@@ -46,7 +47,7 @@ Musical contract:
 - Keep output compact, but never omit late-loop musical material from all primary lanes.`;
 
 export const MAX_TRACKER_TICK = 32 * GENERATOR_MIDI_BEATS_PER_BAR * GENERATOR_MIDI_TICKS_PER_QUARTER;
-export const MAX_DELTA_TRACKER_UTF8_BYTES = 2 * 1024 * 1024;
+export const MAX_DELTA_TRACKER_UTF8_BYTES = 2097152;
 export const MAX_DELTA_TRACKER_HEADER_BYTES = 1_024;
 export const MAX_DELTA_TRACKER_METADATA_VALUE_BYTES = 128;
 export const MAX_DELTA_TRACKER_METADATA_LINE_BYTES = 2_048;
@@ -229,5 +230,5 @@ export function buildGeneratorPromptEnvelope(input: GeneratorPromptInput, select
     schemaVersion: GENERATOR_MODEL_SCHEMA_VERSION,
     system: SYSTEM_DIRECTIVE,
     user: buildPrompt(input, selectedMode, selectedScale, lengthBars, plan, intentPlan),
-  } satisfies GeneratorPromptEnvelope;
+  };
 }

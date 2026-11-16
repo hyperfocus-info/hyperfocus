@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
@@ -80,7 +81,7 @@ export type EvaluationReviewInput = {
 };
 
 const MIGRATIONS_DIR = join(import.meta.dir, "migrations");
-const MAX_MIGRATION_BYTES = 2 * 1024 * 1024;
+const MAX_MIGRATION_BYTES = 2097152;
 const MAX_SERIES_POINTS = 1_000_000;
 const MIGRATION_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS _migrations (
@@ -98,8 +99,8 @@ function normalizeSourcePath(sourcePath: string) {
   return process.platform === "win32" ? absolutePath.toLowerCase() : absolutePath;
 }
 
-function parseJson(value: string | null) {
-  return value === null ? null : JSON.parse(value) as unknown;
+function parseJson(value: string | null): unknown {
+  return value === null ? null : JSON.parse(value);
 }
 
 function stringifyJson(value: unknown) {
@@ -143,10 +144,7 @@ function applyMigrations(db: Database, migrationsDir: string) {
     }
   }
 
-  const appliedRows = db.query("SELECT id, checksum_sha256 FROM _migrations ORDER BY id").all() as Array<{
-    checksum_sha256: string;
-    id: string;
-  }>;
+  const appliedRows = z.array(z.object({ checksum_sha256: z.string(), id: z.string() })).parse(db.query("SELECT id, checksum_sha256 FROM _migrations ORDER BY id").all());
   const fileNames = new Set(files);
   const missing = appliedRows.filter((row) => !fileNames.has(row.id));
   if (missing.length > 0) {
@@ -193,7 +191,7 @@ function validateSchema(db: Database) {
   try {
     for (const [table, columns] of Object.entries(required)) {
       const actual = new Set(
-        (statement.all(table) as Array<{ name: string }>).map((row) => row.name),
+        (z.array(z.object({ name: z.string() })).parse(statement.all(table))).map((row) => row.name),
       );
       if (actual.size === 0) {
         missing.push(table);
@@ -270,21 +268,21 @@ function normalizeReviewInput(input: EvaluationReviewInput) {
 function mapReviewRow(row: Record<string, unknown> | null) {
   if (!row) return null;
   return {
-    actionFeedback: parseJson(row.action_feedback_json as string) as EvaluationReviewInput["actionFeedback"],
+    actionFeedback: z.array(z.object({ actionId: z.string(), verdict: z.enum(["helpful", "wrong", "intentional", "fixed"]) })).optional().parse(parseJson(z.string().parse(row.action_feedback_json))),
     calibrationEligible: row.calibration_eligible === 1,
-    confidence: row.confidence as number,
-    createdAt: row.created_at as string,
-    datasetSplit: row.dataset_split as ReviewDatasetSplit,
-    dimensionScores: parseJson(row.dimension_scores_json as string) as EvaluationReviewInput["dimensionScores"],
-    evaluatorFingerprint: row.evaluator_fingerprint as string,
-    genreTags: parseJson(row.genre_tags_json as string) as readonly string[],
-    id: row.id as string,
-    intentTags: parseJson(row.intent_tags_json as string) as readonly string[],
-    mediaId: row.media_id as string,
-    notes: row.notes as string | null,
-    overallScore: row.overall_score as number,
-    reviewSchemaVersion: row.review_schema_version as number,
-    runId: row.run_id as string,
+    confidence: z.number().parse(row.confidence),
+    createdAt: z.string().parse(row.created_at),
+    datasetSplit: z.enum(["train", "validation", "test"]).parse(row.dataset_split),
+    dimensionScores: z.record(z.number()).optional().parse(parseJson(z.string().parse(row.dimension_scores_json))),
+    evaluatorFingerprint: z.string().parse(row.evaluator_fingerprint),
+    genreTags: z.array(z.string()).parse(parseJson(z.string().parse(row.genre_tags_json))),
+    id: z.string().parse(row.id),
+    intentTags: z.array(z.string()).parse(parseJson(z.string().parse(row.intent_tags_json))),
+    mediaId: z.string().parse(row.media_id),
+    notes: z.union([z.string(), z.null()]).parse(row.notes),
+    overallScore: z.number().parse(row.overall_score),
+    reviewSchemaVersion: z.number().parse(row.review_schema_version),
+    runId: z.string().parse(row.run_id),
   };
 }
 
@@ -327,7 +325,7 @@ function validateInput(input: PersistedEvaluationInput) {
 }
 
 function readRun(db: Database, runId: string) {
-  const row = db.query(`
+  const row = z.union([z.record(z.unknown()), z.null()]).parse(db.query(`
     SELECT r.id, r.media_id, r.display_name, r.status, r.evaluator_fingerprint,
       r.overall_score, r.confidence, r.result_json, r.error_json,
       r.started_at, r.finished_at, s.source_path, m.content_sha256, m.kind,
@@ -337,106 +335,106 @@ function readRun(db: Database, runId: string) {
     JOIN media_assets m ON m.id = r.media_id
     JOIN source_locations s ON s.id = r.source_location_id
     WHERE r.id = ?
-  `).get(runId) as Record<string, unknown> | null;
+  `).get(runId));
   if (!row) {
     return null;
   }
 
-  const dimensions = db.query(`
+  const dimensions = z.array(z.record(z.unknown())).parse(db.query(`
     SELECT dimension_id, score, confidence, valid, weight, contribution
     FROM dimension_results WHERE run_id = ? ORDER BY dimension_id
-  `).all(runId) as Array<Record<string, unknown>>;
-  const metrics = db.query(`
+  `).all(runId));
+  const metrics = z.array(z.record(z.unknown())).parse(db.query(`
     SELECT metric_id, dimension_id, score, confidence, valid, weight,
       contribution, evidence_json, diagnosis
     FROM metric_results WHERE run_id = ? ORDER BY metric_id
-  `).all(runId) as Array<Record<string, unknown>>;
-  const series = db.query(`
+  `).all(runId));
+  const series = z.array(z.record(z.unknown())).parse(db.query(`
     SELECT series_id, unit, start_seconds, step_seconds, point_count,
       timestamps_blob, values_blob, minimum, maximum
     FROM time_series WHERE run_id = ? ORDER BY series_id
-  `).all(runId) as Array<Record<string, unknown>>;
+  `).all(runId));
 
-  const subjectiveAnnotation = readLatestSubjectiveAnnotation(db, row.media_id as string);
+  const subjectiveAnnotation = readLatestSubjectiveAnnotation(db, z.string().parse(row.media_id));
   return {
-    byteLength: row.byte_length as number,
-    channelCount: row.channel_count as number | null,
-    codec: row.codec as string | null,
-    confidence: row.confidence as number | null,
-    contentSha256: row.content_sha256 as string,
+    byteLength: z.number().parse(row.byte_length),
+    channelCount: z.union([z.number(), z.null()]).parse(row.channel_count),
+    codec: z.union([z.string(), z.null()]).parse(row.codec),
+    confidence: z.union([z.number(), z.null()]).parse(row.confidence),
+    contentSha256: z.string().parse(row.content_sha256),
     dimensions: dimensions.map((dimension) => ({
-      confidence: dimension.confidence as number,
-      contribution: dimension.contribution as number | null,
-      id: dimension.dimension_id as string,
-      score: dimension.score as number | null,
+      confidence: z.number().parse(dimension.confidence),
+      contribution: z.union([z.number(), z.null()]).parse(dimension.contribution),
+      id: z.string().parse(dimension.dimension_id),
+      score: z.union([z.number(), z.null()]).parse(dimension.score),
       valid: dimension.valid === 1,
-      weight: dimension.weight as number,
+      weight: z.number().parse(dimension.weight),
     })),
-    durationSeconds: row.duration_seconds as number | null,
-    error: parseJson(row.error_json as string | null),
-    estimatedBitrateKbps: row.estimated_bitrate_kbps as number | null,
-    evaluatorFingerprint: row.evaluator_fingerprint as string,
-    finishedAt: row.finished_at as string,
-    kind: row.kind as string,
-    mediaId: row.media_id as string,
+    durationSeconds: z.union([z.number(), z.null()]).parse(row.duration_seconds),
+    error: parseJson(z.union([z.string(), z.null()]).parse(row.error_json)),
+    estimatedBitrateKbps: z.union([z.number(), z.null()]).parse(row.estimated_bitrate_kbps),
+    evaluatorFingerprint: z.string().parse(row.evaluator_fingerprint),
+    finishedAt: z.string().parse(row.finished_at),
+    kind: z.string().parse(row.kind),
+    mediaId: z.string().parse(row.media_id),
     metrics: metrics.map((metric) => ({
-      confidence: metric.confidence as number,
-      contribution: metric.contribution as number | null,
-      diagnosis: metric.diagnosis as string | null,
-      dimensionId: metric.dimension_id as string | null,
-      evidence: parseJson(metric.evidence_json as string),
-      id: metric.metric_id as string,
-      score: metric.score as number | null,
+      confidence: z.number().parse(metric.confidence),
+      contribution: z.union([z.number(), z.null()]).parse(metric.contribution),
+      diagnosis: z.union([z.string(), z.null()]).parse(metric.diagnosis),
+      dimensionId: z.union([z.string(), z.null()]).parse(metric.dimension_id),
+      evidence: parseJson(z.string().parse(metric.evidence_json)),
+      id: z.string().parse(metric.metric_id),
+      score: z.union([z.number(), z.null()]).parse(metric.score),
       valid: metric.valid === 1,
-      weight: metric.weight as number,
+      weight: z.number().parse(metric.weight),
     })),
-    originalSampleRate: row.original_sample_rate as number | null,
-    overallScore: row.overall_score as number | null,
-    report: parseJson(row.result_json as string),
-    runId: row.id as string,
+    originalSampleRate: z.union([z.number(), z.null()]).parse(row.original_sample_rate),
+    overallScore: z.union([z.number(), z.null()]).parse(row.overall_score),
+    report: parseJson(z.string().parse(row.result_json)),
+    runId: z.string().parse(row.id),
     series: series.map((item) => ({
-      id: item.series_id as string,
-      maximum: item.maximum as number | null,
-      minimum: item.minimum as number | null,
-      startSeconds: item.start_seconds as number,
-      stepSeconds: item.step_seconds as number | null,
+      id: z.string().parse(item.series_id),
+      maximum: z.union([z.number(), z.null()]).parse(item.maximum),
+      minimum: z.union([z.number(), z.null()]).parse(item.minimum),
+      startSeconds: z.number().parse(item.start_seconds),
+      stepSeconds: z.union([z.number(), z.null()]).parse(item.step_seconds),
       timestamps: item.timestamps_blob
-        ? decodeTimeSeries(item.timestamps_blob as Uint8Array)
+        ? decodeTimeSeries(z.instanceof(Uint8Array).parse(item.timestamps_blob))
         : null,
-      unit: item.unit as string,
-      values: decodeTimeSeries(item.values_blob as Uint8Array),
+      unit: z.string().parse(item.unit),
+      values: decodeTimeSeries(z.instanceof(Uint8Array).parse(item.values_blob)),
     })),
-    sourcePath: row.source_path as string,
-    startedAt: row.started_at as string,
-    status: row.status as string,
+    sourcePath: z.string().parse(row.source_path),
+    startedAt: z.string().parse(row.started_at),
+    status: z.string().parse(row.status),
     subjectiveAnnotation,
     subjectiveScore: subjectiveAnnotation?.score ?? null,
-    title: row.display_name as string,
+    title: z.string().parse(row.display_name),
   };
 }
 
 function readLatestSubjectiveAnnotation(db: Database, mediaId: string) {
-  const row = db.query(`
+  const row = z.union([z.record(z.unknown()), z.null()]).parse(db.query(`
     SELECT id, media_id, score, label, notes, created_at
     FROM subjective_annotations
     WHERE media_id = ?
     ORDER BY created_at DESC, rowid DESC
     LIMIT 1
-  `).get(mediaId) as Record<string, unknown> | null;
+  `).get(mediaId));
   return row ? {
-    createdAt: row.created_at as string,
-    id: row.id as string,
-    label: row.label as string | null,
-    mediaId: row.media_id as string,
-    notes: row.notes as string | null,
-    score: row.score as number,
+    createdAt: z.string().parse(row.created_at),
+    id: z.string().parse(row.id),
+    label: z.union([z.string(), z.null()]).parse(row.label),
+    mediaId: z.string().parse(row.media_id),
+    notes: z.union([z.string(), z.null()]).parse(row.notes),
+    score: z.number().parse(row.score),
   } : null;
 }
 
 function listRunSummaries(db: Database, input: { readonly limit?: number; readonly mediaId?: string } = {}) {
   const limit = Math.min(500, Math.max(1, input.limit ?? 100));
   const rows = input.mediaId
-    ? db.query(`
+    ? z.array(z.record(z.unknown())).parse(db.query(`
         SELECT r.id, r.media_id, r.display_name, r.status, r.evaluator_fingerprint,
           r.overall_score, r.confidence, r.finished_at, s.source_path,
           m.content_sha256, m.kind,
@@ -449,8 +447,8 @@ function listRunSummaries(db: Database, input: { readonly limit?: number; readon
         WHERE r.media_id = ?
         ORDER BY r.finished_at DESC, r.id DESC
         LIMIT ?
-      `).all(input.mediaId, limit) as Array<Record<string, unknown>>
-    : db.query(`
+      `).all(input.mediaId, limit))
+    : z.array(z.record(z.unknown())).parse(db.query(`
         SELECT r.id, r.media_id, r.display_name, r.status, r.evaluator_fingerprint,
           r.overall_score, r.confidence, r.finished_at, s.source_path,
           m.content_sha256, m.kind,
@@ -462,20 +460,20 @@ function listRunSummaries(db: Database, input: { readonly limit?: number; readon
         JOIN source_locations s ON s.id = r.source_location_id
         ORDER BY r.finished_at DESC, r.id DESC
         LIMIT ?
-      `).all(limit) as Array<Record<string, unknown>>;
+      `).all(limit));
   return rows.map((row) => ({
-    confidence: row.confidence as number | null,
-    contentSha256: row.content_sha256 as string,
-    evaluatorFingerprint: row.evaluator_fingerprint as string,
-    finishedAt: row.finished_at as string,
-    kind: row.kind as string,
-    mediaId: row.media_id as string,
-    overallScore: row.overall_score as number | null,
-    runId: row.id as string,
-    sourcePath: row.source_path as string,
-    status: row.status as string,
-    subjectiveScore: row.subjective_score as number | null,
-    title: row.display_name as string,
+    confidence: z.union([z.number(), z.null()]).parse(row.confidence),
+    contentSha256: z.string().parse(row.content_sha256),
+    evaluatorFingerprint: z.string().parse(row.evaluator_fingerprint),
+    finishedAt: z.string().parse(row.finished_at),
+    kind: z.string().parse(row.kind),
+    mediaId: z.string().parse(row.media_id),
+    overallScore: z.union([z.number(), z.null()]).parse(row.overall_score),
+    runId: z.string().parse(row.id),
+    sourcePath: z.string().parse(row.source_path),
+    status: z.string().parse(row.status),
+    subjectiveScore: z.union([z.number(), z.null()]).parse(row.subjective_score),
+    title: z.string().parse(row.display_name),
   }));
 }
 
@@ -504,8 +502,8 @@ export function openEvaluationStore(options: {
     let mediaId = "";
 
     db.transaction(() => {
-      const existingMedia = db.query("SELECT id FROM media_assets WHERE content_sha256 = ?")
-        .get(input.media.contentSha256) as { id: string } | null;
+      const existingMedia = z.union([z.object({ id: z.string() }), z.null()]).parse(db.query("SELECT id FROM media_assets WHERE content_sha256 = ?")
+        .get(input.media.contentSha256));
       mediaId = existingMedia?.id ?? randomUUID();
       if (!existingMedia) {
         db.query(`
@@ -528,8 +526,8 @@ export function openEvaluationStore(options: {
         );
       }
 
-      const existingSource = db.query("SELECT id FROM source_locations WHERE normalized_path = ?")
-        .get(normalizedPath) as { id: string } | null;
+      const existingSource = z.union([z.object({ id: z.string() }), z.null()]).parse(db.query("SELECT id FROM source_locations WHERE normalized_path = ?")
+        .get(normalizedPath));
       const sourceId = existingSource?.id ?? randomUUID();
       if (existingSource) {
         db.query(`
@@ -632,14 +630,14 @@ export function openEvaluationStore(options: {
       return readRun(db, runId);
     },
     findCompletedRun(contentSha256: string, evaluatorFingerprint: string) {
-      const row = db.query(`
+      const row = z.union([z.object({ id: z.string() }), z.null()]).parse(db.query(`
         SELECT r.id FROM evaluation_runs r
         JOIN media_assets m ON m.id = r.media_id
         WHERE m.content_sha256 = ? AND r.evaluator_fingerprint = ?
           AND r.status = 'completed'
         ORDER BY r.finished_at DESC, r.id DESC
         LIMIT 1
-      `).get(contentSha256.toLowerCase(), evaluatorFingerprint) as { id: string } | null;
+      `).get(contentSha256.toLowerCase(), evaluatorFingerprint));
       return row ? readRun(db, row.id) : null;
     },
     listRuns(options: { readonly limit?: number } = {}) {
@@ -652,24 +650,24 @@ export function openEvaluationStore(options: {
       return readLatestSubjectiveAnnotation(db, mediaId);
     },
     getLatestReview(runId: string) {
-      return mapReviewRow(db.query(`${REVIEW_SELECT}
+      return mapReviewRow(z.union([z.record(z.unknown()), z.null()]).parse(db.query(`${REVIEW_SELECT}
         WHERE run_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1
-      `).get(runId) as Record<string, unknown> | null);
+      `).get(runId)));
     },
     listReviews(runId: string, options: { readonly limit?: number } = {}) {
       const limit = Math.min(100, Math.max(1, options.limit ?? 25));
-      return (db.query(`${REVIEW_SELECT}
+      return (z.array(z.record(z.unknown())).parse(db.query(`${REVIEW_SELECT}
         WHERE run_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?
-      `).all(runId, limit) as Array<Record<string, unknown>>).map((row) => mapReviewRow(row)!);
+      `).all(runId, limit))).map((row) => mapReviewRow(row)!);
     },
     saveReview(runId: string, input: EvaluationReviewInput) {
       const normalized = normalizeReviewInput(input);
-      const run = db.query(`
+      const run = z.union([z.object({ content_sha256: z.string(), evaluator_fingerprint: z.string(), media_id: z.string() }), z.null()]).parse(db.query(`
         SELECT r.media_id, r.evaluator_fingerprint, m.content_sha256
         FROM evaluation_runs r
         JOIN media_assets m ON m.id = r.media_id
         WHERE r.id = ?
-      `).get(runId) as { content_sha256: string; evaluator_fingerprint: string; media_id: string } | null;
+      `).get(runId));
       if (!run) throw new Error(`Evaluation run does not exist: ${runId}`);
       const id = randomUUID();
       const createdAt = nowIso();
@@ -688,18 +686,18 @@ export function openEvaluationStore(options: {
         stringifyJson(normalized.genreTags), stringifyJson(normalized.intentTags),
         normalized.notes, normalized.calibrationEligible ? 1 : 0, split, createdAt,
       );
-      return mapReviewRow(db.query(`${REVIEW_SELECT} WHERE id = ?`).get(id) as Record<string, unknown>)!;
+      return mapReviewRow(z.record(z.unknown()).parse(db.query(`${REVIEW_SELECT} WHERE id = ?`).get(id)))!;
     },
     exportReviewDataset(options: { readonly limit?: number; readonly split?: ReviewDatasetSplit } = {}) {
       if (options.split && !["train", "validation", "test"].includes(options.split)) {
         throw new Error(`Unknown review dataset split: ${options.split}.`);
       }
       const limit = Math.min(5_000, Math.max(1, options.limit ?? 5_000));
-      const rows = db.query(`${REVIEW_SELECT}
+      const rows = z.array(z.record(z.unknown())).parse(db.query(`${REVIEW_SELECT}
         WHERE calibration_eligible = 1
         ${options.split ? "AND dataset_split = ?" : ""}
         ORDER BY created_at DESC, rowid DESC
-      `).all(...(options.split ? [options.split] : [])) as Array<Record<string, unknown>>;
+      `).all(...(options.split ? [options.split] : [])));
       const mediaIds = new Set<string>();
       const examples = [];
       for (const row of rows) {
@@ -728,10 +726,10 @@ export function openEvaluationStore(options: {
       return examples;
     },
     reviewDatasetSummary() {
-      const rows = db.query(`${REVIEW_SELECT}
+      const rows = z.array(z.record(z.unknown())).parse(db.query(`${REVIEW_SELECT}
         WHERE calibration_eligible = 1
         ORDER BY created_at DESC, rowid DESC
-      `).all() as Array<Record<string, unknown>>;
+      `).all());
       const latestByMedia = new Map<string, NonNullable<ReturnType<typeof mapReviewRow>>>();
       for (const row of rows) {
         const review = mapReviewRow(row)!;

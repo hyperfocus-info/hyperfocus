@@ -1,6 +1,6 @@
 import { lstatSync, opendirSync, realpathSync, type Dirent } from "node:fs";
 import path from "node:path";
-import { hashBoundedFile } from "./bounded-file";
+import { hashBoundedFile } from "@hyperfocus/pad-pilot/bounded-file";
 
 export type DirectorySnapshotLimits = {
   maxDepth?: number;
@@ -14,10 +14,10 @@ export type DirectorySnapshotLimits = {
 export const defaultDirectorySnapshotLimits = {
   maxDepth: 64,
   maxEntries: 65_536,
-  maxFileBytes: 512 * 1024 * 1024,
+  maxFileBytes: 536870912,
   maxFiles: 65_536,
   maxRelativePathBytes: 1024,
-  maxTotalBytes: 4 * 1024 * 1024 * 1024,
+  maxTotalBytes: 4294967296,
 } as const;
 
 function normalizeLimits(overrides: DirectorySnapshotLimits) {

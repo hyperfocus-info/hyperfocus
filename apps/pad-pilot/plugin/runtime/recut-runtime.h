@@ -96,6 +96,7 @@ class RecutRuntime {
   struct LoadedSource {
     padpilot::recut::RecutModuleState state;
     std::shared_ptr<const SourceMedia> media {std::make_shared<SourceMedia>()};
+    std::uint64_t completedAnalysisRequestId {0};
     float analysisProgress {0.0f};
     std::uint64_t runtimeGeneration {0};
   };

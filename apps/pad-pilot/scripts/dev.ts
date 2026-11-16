@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from '@hyperfocus/desktop-runtime/process';
 import { randomUUID } from "node:crypto";
 import { watch, type FSWatcher } from "node:fs";
 import { rename, rm, writeFile } from "node:fs/promises";
@@ -81,7 +82,7 @@ async function runDevServer(projectRoot: string) {
     /bun\.lockb?$/,
     /test\.tsx?$/,
   ];
-  let activeUiBuild: ReturnType<typeof Bun.spawn> | null = null;
+  let activeUiBuild: ReturnType<typeof spawnBackgroundProcess> | null = null;
 
   const publishReload = async () => {
     try {
@@ -96,11 +97,11 @@ async function runDevServer(projectRoot: string) {
 
   const rebuildQueue = createSerialRebuildQueue(async (reasons) => {
     const reason = reasons.join(", ");
-    const build = Bun.spawn([process.execPath, "run", "build:ui"], {
+    const build = spawnBackgroundProcess({ cmd: [process.execPath, "run", "build:ui"], ...({
       cwd: projectRoot,
       stderr: "inherit",
       stdout: "inherit",
-    });
+    }) });
     activeUiBuild = build;
     try {
       const exitCode = await waitForProcessWithDeadline(build, processDeadlines.script, "Development UI build");
@@ -120,13 +121,13 @@ async function runDevServer(projectRoot: string) {
   });
 
   console.log(`[dev] Starting marketplace server on ${origin}`);
-  const marketplace = Bun.spawn([process.execPath, "--hot", "run", "./src/server.ts"], {
+  const marketplace = spawnBackgroundProcess({ cmd: [process.execPath, "--hot", "run", "./src/server.ts"], ...({
     cwd: path.resolve(projectRoot, "..", "pad-pilot-marketplace"),
     env: { ...process.env, NODE_ENV: "development" },
     stderr: "inherit",
     stdin: "inherit",
     stdout: "inherit",
-  });
+  }) });
   let timeout: ReturnType<typeof setTimeout> | undefined;
   let signalRequested = false;
   let shutdownPromise: Promise<void> | null = null;

@@ -1,3 +1,4 @@
+import { requireElement } from "../../utils/require-element";
 import { splitProps, type JSX } from "solid-js";
 import { Button, type ButtonProps } from "./button";
 import styles from "./styles/tab.stylex";
@@ -30,7 +31,7 @@ function moveFocus(current: HTMLElement, delta: number) {
     return;
   }
 
-  const currentIndex = tabs.indexOf(current as HTMLButtonElement);
+  const currentIndex = tabs.indexOf(requireElement(current, HTMLButtonElement));
   if (currentIndex < 0) {
     return;
   }
@@ -77,12 +78,12 @@ export function Tab(props: TabProps) {
           moveFocus(event.currentTarget, -1);
         } else if (event.key === "Home") {
           event.preventDefault();
-          const first = getTabElements(event.currentTarget.closest('[role="tablist"]') as HTMLElement)[0];
+          const first = getTabElements(requireElement(event.currentTarget.closest('[role="tablist"]'), HTMLElement))[0];
           first?.focus();
           first?.click();
         } else if (event.key === "End") {
           event.preventDefault();
-          const tabs = getTabElements(event.currentTarget.closest('[role="tablist"]') as HTMLElement);
+          const tabs = getTabElements(requireElement(event.currentTarget.closest('[role="tablist"]'), HTMLElement));
           const last = tabs[tabs.length - 1];
           last?.focus();
           last?.click();

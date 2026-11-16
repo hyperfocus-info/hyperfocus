@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, expect, it } from "bun:test";
 import { resetBridgeStateForTests } from "../bridge";
 import { midi } from "./midi";
@@ -17,7 +18,7 @@ function useNativeBridgeStub() {
       addEventListener: () => 0,
       emitEvent: (eventId, payload) => {
         if (eventId === "__juce__invoke") {
-          nativeInvocations.push(payload as NativeInvokePayload);
+          nativeInvocations.push(z.object({name:z.string(),params:z.array(z.unknown()).optional()}).passthrough().parse(payload));
         }
       },
     },

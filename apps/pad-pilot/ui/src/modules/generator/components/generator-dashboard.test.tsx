@@ -1,10 +1,11 @@
+import { requireElement } from "../../../utils/require-element";
 import { afterEach, beforeEach, expect, it } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { createUiTest } from "../../../../../utils/tests/test-harness";
 import { PadPilotProvider } from "../../../padpilot/provider";
 import { GeneratorDashboard } from "./generator-dashboard";
-import { createEmptyGeneratorFields, type GeneratorDashboardFields } from "../utils/generator-options";
+import { createEmptyGeneratorFields } from "../utils/generator-selector-options";
 
 createUiTest("GeneratorDashboard", () => {
   const originalRandom = Math.random;
@@ -32,7 +33,7 @@ createUiTest("GeneratorDashboard", () => {
   });
 
   it("fills empty selectors and submits optional fields from the home action row", () => {
-    const submissions: GeneratorDashboardFields[] = [];
+    const submissions: Parameters<Parameters<typeof GeneratorDashboard>[0]["onGenerate"]>[0][] = [];
     render(() => (
       <PadPilotProvider>
         <GeneratorDashboard onGenerate={(fields) => {
@@ -61,21 +62,21 @@ createUiTest("GeneratorDashboard", () => {
 
     fireEvent.click(magicButton);
 
-    expect((screen.getByLabelText("Genre") as HTMLInputElement).value.length).toBeGreaterThan(0);
-    expect((screen.getByLabelText("Mood / Vibe") as HTMLInputElement).value.length).toBeGreaterThan(0);
+    expect((requireElement(screen.getByLabelText("Genre"), HTMLInputElement)).value.length).toBeGreaterThan(0);
+    expect((requireElement(screen.getByLabelText("Mood / Vibe"), HTMLInputElement)).value.length).toBeGreaterThan(0);
 
     fireEvent.click(generateButton);
 
     expect(submissions[0]?.genre.length).toBeGreaterThan(0);
     expect(submissions[0]?.mood.length).toBeGreaterThan(0);
     expect(submissions[0]).toHaveProperty("magicProvenance");
-    const magicProvenance = (submissions[0] as GeneratorDashboardFields & { magicProvenance?: { reroll: number } }).magicProvenance;
+    const magicProvenance = (submissions[0]).magicProvenance;
     expect(magicProvenance?.reroll).toBe(1);
     expect(magicProvenance).not.toHaveProperty("seed");
   });
 
   it("exposes combobox semantics and keyboard-operable sliders", () => {
-    const submissions: GeneratorDashboardFields[] = [];
+    const submissions: Parameters<Parameters<typeof GeneratorDashboard>[0]["onGenerate"]>[0][] = [];
     render(() => (
       <PadPilotProvider>
         <GeneratorDashboard onGenerate={(fields) => submissions.push(fields)} />
@@ -125,18 +126,18 @@ createUiTest("GeneratorDashboard", () => {
     ));
 
     fireEvent.click(screen.getByRole("button", { name: "Suggest" }));
-    const lockedGenre = (screen.getByLabelText("Genre") as HTMLInputElement).value;
+    const lockedGenre = (requireElement(screen.getByLabelText("Genre"), HTMLInputElement)).value;
     fireEvent.click(screen.getByRole("button", { name: "Lock Genre" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Clear / Reset" }));
 
-    expect((screen.getByLabelText("Genre") as HTMLInputElement).value).toBe(lockedGenre);
-    expect((screen.getByLabelText("Mood / Vibe") as HTMLInputElement).value).toBe("");
+    expect((requireElement(screen.getByLabelText("Genre"), HTMLInputElement)).value).toBe(lockedGenre);
+    expect((requireElement(screen.getByLabelText("Mood / Vibe"), HTMLInputElement)).value).toBe("");
 
     fireEvent.click(screen.getByRole("button", { name: "Random" }));
 
-    expect((screen.getByLabelText("Genre") as HTMLInputElement).value).toBe(lockedGenre);
-    expect((screen.getByLabelText("Mood / Vibe") as HTMLInputElement).value.length).toBeGreaterThan(0);
+    expect((requireElement(screen.getByLabelText("Genre"), HTMLInputElement)).value).toBe(lockedGenre);
+    expect((requireElement(screen.getByLabelText("Mood / Vibe"), HTMLInputElement)).value.length).toBeGreaterThan(0);
   });
 
   it("locks advanced controls against reset and random actions", () => {
@@ -153,7 +154,7 @@ createUiTest("GeneratorDashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear / Reset" }));
 
     expect(screen.getByRole("slider", { name: "Bar Length" }).getAttribute("aria-valuenow")).toBe(lockedLength);
-    expect((screen.getByRole("slider", { name: "Creativity" }) as HTMLElement).getAttribute("aria-valuenow")).toBe("0.65");
+    expect((requireElement(screen.getByRole("slider", { name: "Creativity" }), HTMLElement)).getAttribute("aria-valuenow")).toBe("0.65");
   });
 
   it("unlocks locked controls when clear has nothing else to reset", () => {
@@ -170,7 +171,7 @@ createUiTest("GeneratorDashboard", () => {
   });
 
   it("submits typed dropdown text even when no menu option is clicked", () => {
-    const submissions: GeneratorDashboardFields[] = [];
+    const submissions: Parameters<Parameters<typeof GeneratorDashboard>[0]["onGenerate"]>[0][] = [];
     render(() => (
       <PadPilotProvider>
         <GeneratorDashboard onGenerate={(fields) => submissions.push(fields)} />
@@ -199,14 +200,14 @@ createUiTest("GeneratorDashboard", () => {
 
     fireEvent.input(screen.getByLabelText("Genre"), { currentTarget: { value: "Gospel" }, target: { value: "Gospel" } });
     fireEvent.click(screen.getByRole("button", { name: "Suggest" }));
-    const firstMood = (screen.getByLabelText("Mood / Vibe") as HTMLInputElement).value;
-    const firstEra = (screen.getByLabelText("Era") as HTMLInputElement).value;
+    const firstMood = (requireElement(screen.getByLabelText("Mood / Vibe"), HTMLInputElement)).value;
+    const firstEra = (requireElement(screen.getByLabelText("Era"), HTMLInputElement)).value;
 
     fireEvent.click(screen.getByRole("button", { name: "Suggest" }));
 
-    expect((screen.getByLabelText("Genre") as HTMLInputElement).value).toBe("Gospel");
-    expect((screen.getByLabelText("Mood / Vibe") as HTMLInputElement).value).not.toBe(firstMood);
-    expect((screen.getByLabelText("Era") as HTMLInputElement).value).not.toBe(firstEra);
+    expect((requireElement(screen.getByLabelText("Genre"), HTMLInputElement)).value).toBe("Gospel");
+    expect((requireElement(screen.getByLabelText("Mood / Vibe"), HTMLInputElement)).value).not.toBe(firstMood);
+    expect((requireElement(screen.getByLabelText("Era"), HTMLInputElement)).value).not.toBe(firstEra);
   });
 
   it("ranges repeated high-chaos Acid Jazz suggestions through the button path", () => {
@@ -222,7 +223,7 @@ createUiTest("GeneratorDashboard", () => {
     const moods: string[] = [];
     for (let index = 0; index < 16; index += 1) {
       fireEvent.click(screen.getByRole("button", { name: "Suggest" }));
-      moods.push((screen.getByLabelText("Mood / Vibe") as HTMLInputElement).value);
+      moods.push((requireElement(screen.getByLabelText("Mood / Vibe"), HTMLInputElement)).value);
     }
 
     for (let index = 1; index < moods.length; index += 1) {
@@ -261,12 +262,12 @@ createUiTest("GeneratorDashboard", () => {
     fireEvent.input(screen.getByLabelText("Genre"), { currentTarget: { value: "Acid Jazz" }, target: { value: "Acid Jazz" } });
     fireEvent.click(screen.getByRole("button", { name: "Suggest" }));
 
-    expect((screen.getByLabelText("Genre") as HTMLInputElement).value).toBe("Acid Jazz");
-    expect((screen.getByLabelText("Mood / Vibe") as HTMLInputElement).value).not.toBe("Warm");
+    expect((requireElement(screen.getByLabelText("Genre"), HTMLInputElement)).value).toBe("Acid Jazz");
+    expect((requireElement(screen.getByLabelText("Mood / Vibe"), HTMLInputElement)).value).not.toBe("Warm");
   });
 
   it("submits the snapped bar length slider value", () => {
-    const submissions: GeneratorDashboardFields[] = [];
+    const submissions: Parameters<Parameters<typeof GeneratorDashboard>[0]["onGenerate"]>[0][] = [];
     render(() => (
       <PadPilotProvider>
         <GeneratorDashboard onGenerate={(fields) => submissions.push(fields)} />
@@ -300,7 +301,7 @@ createUiTest("GeneratorDashboard", () => {
   });
 
   it("freezes dashboard controls while generation is disabled", () => {
-    const submissions: GeneratorDashboardFields[] = [];
+    const submissions: Parameters<Parameters<typeof GeneratorDashboard>[0]["onGenerate"]>[0][] = [];
     render(() => (
       <PadPilotProvider>
         <GeneratorDashboard disabled onGenerate={(fields) => submissions.push(fields)} />
@@ -308,8 +309,8 @@ createUiTest("GeneratorDashboard", () => {
     ));
 
     const generate = screen.getByRole("button", { name: "Generate / Send" });
-    const genre = screen.getByLabelText("Genre") as HTMLInputElement;
-    const notes = screen.getByPlaceholderText("Add any extra context, references, or instructions...") as HTMLTextAreaElement;
+    const genre = requireElement(screen.getByLabelText("Genre"), HTMLInputElement);
+    const notes = requireElement(screen.getByPlaceholderText("Add any extra context, references, or instructions..."), HTMLTextAreaElement);
     const creativity = screen.getByRole("slider", { name: "Creativity" });
     const magic = screen.getByRole("button", { name: "Suggest" });
     fireEvent.input(genre, { currentTarget: { value: "Drill" }, target: { value: "Drill" } });
@@ -335,11 +336,11 @@ createUiTest("GeneratorDashboard", () => {
       </PadPilotProvider>
     ));
 
-    expect((screen.getByLabelText("Genre") as HTMLInputElement).value).toBe("House");
+    expect((requireElement(screen.getByLabelText("Genre"), HTMLInputElement)).value).toBe("House");
     setInitialState({ fields: { ...createEmptyGeneratorFields(), genre: "Techno" } });
 
     await waitFor(() => {
-      expect((screen.getByLabelText("Genre") as HTMLInputElement).value).toBe("Techno");
+      expect((requireElement(screen.getByLabelText("Genre"), HTMLInputElement)).value).toBe("Techno");
     });
   });
 });

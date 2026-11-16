@@ -39,7 +39,7 @@ export function createFxChainHistory(limit = 50) {
       future.length = 0;
       refresh();
     },
-    pushSnapshot: (state) => {
+    pushSnapshot: (state: FxChainState) => {
       const snapshot = cloneFxChainState(state);
       const last = past[past.length - 1];
       if (last && snapshotEquals(last, snapshot)) {
@@ -52,7 +52,7 @@ export function createFxChainHistory(limit = 50) {
       future.length = 0;
       refresh();
     },
-    redo: (current) => {
+    redo: (current: FxChainState) => {
       const next = future.pop();
       if (!next) {
         refresh();
@@ -62,7 +62,7 @@ export function createFxChainHistory(limit = 50) {
       refresh();
       return cloneFxChainState(next);
     },
-    undo: (current) => {
+    undo: (current: FxChainState) => {
       const next = past.pop();
       if (!next) {
         refresh();
@@ -72,5 +72,5 @@ export function createFxChainHistory(limit = 50) {
       refresh();
       return cloneFxChainState(next);
     },
-  } satisfies FxChainHistory;
+  };
 }

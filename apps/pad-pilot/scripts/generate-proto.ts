@@ -1,3 +1,4 @@
+import { asRecord } from "@hyperfocus/utilities/records";
 import { existsSync } from "node:fs";
 import { lstat, mkdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
@@ -23,8 +24,8 @@ type ProtoTransaction = {
 };
 
 const protoNames = ["analyzer", "capability", "fx-chain", "bridge", "recut"] as const;
-export const protoTransactionJournalByteLimit = 16 * 1024;
-const generatedProtoFileByteLimit = 64 * 1024 * 1024;
+export const protoTransactionJournalByteLimit = 16384;
+const generatedProtoFileByteLimit = 67108864;
 
 async function directoryExists(directory: string) {
   try {
@@ -115,7 +116,7 @@ async function recoverProtoTransaction(
     protoTransactionJournalByteLimit,
     "Protobuf generation transaction journal",
   );
-  const parsed = JSON.parse(journal) as Partial<ProtoTransaction>;
+  const parsed = asRecord(JSON.parse(journal));
   if (parsed.version !== 1 || typeof parsed.hadCppOutput !== "boolean"
       || typeof parsed.hadTypeScriptOutput !== "boolean") {
     throw new Error(`Invalid protobuf generation transaction: ${journalPath}`);
@@ -192,11 +193,11 @@ export async function generateProtoBindings(options: GenerateProtoOptions = {}) 
       await normalizeCppProtoFiles(stagedCpp);
       await validateGeneratedOutputs(stagedTypeScript, stagedCpp);
 
-      const journal = {
+      const journal: ProtoTransaction = {
         hadCppOutput: await directoryExists(cppOutput),
         hadTypeScriptOutput: await directoryExists(typeScriptOutput),
         version: 1,
-      } satisfies ProtoTransaction;
+      };
       await writeDurableNewFile(path.join(transactionRoot, "transaction.json"), JSON.stringify(journal));
       if (journal.hadTypeScriptOutput) {
         await rename(typeScriptOutput, backupTypeScript);

@@ -1,3 +1,5 @@
+import { optimizePackageJavaScript } from './project-build/optimize-javascript';
+import { compactWebGlShaders } from './project-build/compact-shaders';
 import {
   copyFileSync,
   cpSync,
@@ -209,7 +211,7 @@ async function buildBundles(stagingRoot: string) {
     { entry: "src/migrations/index.ts", outfile: "dist/migrations.js" },
     { entry: "src/project/index.ts", outfile: "dist/project.js" },
     { entry: "src/project/metadata/index.ts", outfile: "dist/project-metadata.js" },
-    { entry: "src/project/delivery/index.ts", outfile: "dist/project-delivery.js", options: { plugins: [{ name: 'reuse-project-container', setup(api) {
+    { entry: "src/project/delivery/index.ts", outfile: "dist/project-delivery.js", options: { plugins: [compactWebGlShaders, { name: 'reuse-project-container', setup(api) {
       api.onResolve({ filter: /index\.ts$/ }, args => resolve(args.resolveDir, args.path) === resolve(rootDir, 'src/project/index.ts') ? { path: './project.js', external: true } : undefined);
     } }] } },
     { entry: "src/project/runtime-2d.ts", outfile: "dist/project-runtime-2d.js" },
@@ -257,6 +259,7 @@ async function buildBundles(stagingRoot: string) {
     external: ["three"],
     format: "esm",
     minify: true,
+    plugins: [compactWebGlShaders],
     outdir: join(stagingRoot, "browser"),
     splitting: true,
   }), ...specs.map((spec) =>
@@ -264,6 +267,7 @@ async function buildBundles(stagingRoot: string) {
       absWorkingDir: rootDir,
       bundle: true,
       minify: true,
+    plugins: [compactWebGlShaders],
       entryPoints: [spec.entry],
       format: "esm",
       outfile: join(stagingRoot, spec.outfile),
@@ -352,6 +356,7 @@ export async function buildPackage() {
     await buildWasm(stagingRoot);
     await buildBundles(stagingRoot);
     await buildAuthoringTools({ packageRoot: rootDir, outputRoot: stagingRoot });
+    await optimizePackageJavaScript(stagingRoot);
     assertCompleteStagedPackage(stagingRoot);
     swapPackageArtifactDirectories(rootDir, stagingRoot, { nonce });
   } finally {

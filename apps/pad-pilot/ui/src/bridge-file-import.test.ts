@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "bun:test";
 import { importHostFile, pickHostFile, resetBridgeStateForTests } from "./bridge";
 import { PADPILOT_FILE_IMPORT_MAX_BYTES } from "@hyperfocus/pad-pilot/file-import";
@@ -23,11 +24,7 @@ describe("bridge file import", () => {
           if (eventId !== "__juce__invoke") {
             return;
           }
-          const request = payload as {
-            name: string;
-            params: unknown[];
-            resultId: number;
-          };
+          const request = z.object({name:z.string(),params:z.array(z.unknown()),resultId:z.number()}).passthrough().parse(payload);
           completionListener?.({
             promiseId: request.resultId,
             result: handler(request.name, request.params),
@@ -89,7 +86,7 @@ describe("bridge file import", () => {
       ],
       (name, params) => {
         if (name === "padpilotBeginFileImport") {
-          beginRequest = JSON.parse(String(params[0] ?? "{}")) as Record<string, unknown>;
+          beginRequest = z.record(z.unknown()).parse(JSON.parse(String(params[0] ?? "{}")));
           return JSON.stringify({ importId: "import-1" });
         }
         if (name === "padpilotAppendFileImport") {
@@ -142,11 +139,7 @@ describe("bridge file import", () => {
           if (eventId !== "__juce__invoke") {
             return;
           }
-          const request = payload as {
-            name: string;
-            params: unknown[];
-            resultId: number;
-          };
+          const request = z.object({name:z.string(),params:z.array(z.unknown()),resultId:z.number()}).passthrough().parse(payload);
           calls.push(request.name);
           const result = request.name === "padpilotBeginFileImport"
             ? JSON.stringify({ importId: "import-3" })
@@ -194,14 +187,14 @@ describe("bridge file import", () => {
     };
 
     const originalSetTimeout = window.setTimeout;
-    window.setTimeout = ((handler: TimerHandler) => {
+    Object.defineProperty(window, "setTimeout", { configurable: true, writable: true, value: (handler: TimerHandler) => {
       queueMicrotask(() => {
         if (typeof handler === "function") {
           handler();
         }
       });
-      return 1;
-    }) as typeof window.setTimeout;
+      return originalSetTimeout(() => {}, 0);
+    } });
 
     try {
       await expect(pickHostFile()).rejects.toThrow("Native function padpilotPickFile timed out.");

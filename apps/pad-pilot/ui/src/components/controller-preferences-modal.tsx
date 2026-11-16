@@ -30,7 +30,7 @@ function cloneLayout(layout: PadPilotCustomControllerLayout) {
     name: layout.name,
     buttonBindings: layout.buttonBindings.map((binding) => ({ ...binding })),
     axisBindings: layout.axisBindings.map((binding) => ({ ...binding })),
-  } satisfies PadPilotCustomControllerLayout;
+  };
 }
 
 function bindingLabel(binding: PadPilotCustomControllerLayout["buttonBindings"][number]) {
@@ -285,7 +285,7 @@ export function ControllerPreferencesModal(props: ControllerPreferencesModalProp
                           <PadPilot.Dropdown
                             label="Layout"
                             value={row.layoutKind}
-                            onChange={(layoutKind) => updateRow(row.stableId, { layoutKind: layoutKind as typeof row.layoutKind })}
+                            onChange={(layoutKind) => { if (layoutKind === "auto" || layoutKind === "xbox" || layoutKind === "playstation" || layoutKind === "switch" || layoutKind === "generic" || layoutKind === "custom") updateRow(row.stableId, { layoutKind }); }}
                             options={[
                               { value: "auto", label: "Auto" },
                               { value: "xbox", label: "Xbox" },

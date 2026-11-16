@@ -1,3 +1,4 @@
+import { readPerformanceState } from "./performance-state-reader";
 import { createEffect, createSignal, on, onCleanup } from "solid-js";
 import { PadPilot } from "../../padpilot/index";
 import { createProducerActions } from "../../padpilot/producer-actions";
@@ -24,7 +25,7 @@ const DEFAULT_STATE: PerformanceState = {
  * PerformanceModule maps controller input to musical performance actions.
  */
 export function PerformanceModule() {
-  const [state, setState] = PadPilot.hooks.useModuleState<PerformanceState>("performance", DEFAULT_STATE);
+  const [state, setState] = PadPilot.hooks.useModuleState<PerformanceState>("performance", DEFAULT_STATE, readPerformanceState);
   const gamepad = PadPilot.hooks.useGamepad();
   const midi = PadPilot.hooks.useMidi();
   const producer = createProducerActions("performance", {
@@ -96,14 +97,14 @@ export function PerformanceModule() {
   onCleanup(() => producer.dispose());
 
   return (
-    <section class={styles["module-root"]} style={{ "--pp-accent-color": "#49ff79", "--pp-base-bg": "#122817" }}>
+    <PadPilot.ModuleWorkspace class={styles["module-root"]} style={{ "--pp-accent-color": "#49ff79", "--pp-base-bg": "#122817" }}>
       <h2 class={styles.title}>Performance Module</h2>
 
       <div class={styles["grid-2"]}>
         <PadPilot.Dropdown
           value={state().root}
           label="Root Note"
-          onChange={(root) => setState({ root: root as RootNote })}
+          onChange={(root) => { if (root === "C" || root === "C#" || root === "D" || root === "D#" || root === "E" || root === "F" || root === "F#" || root === "G" || root === "G#" || root === "A" || root === "A#" || root === "B") setState({ root }); }}
           options={["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"].map((value) => ({
             value,
             label: value
@@ -112,7 +113,7 @@ export function PerformanceModule() {
         <PadPilot.Dropdown
           value={state().scale}
           label="Scale"
-          onChange={(scale) => setState({ scale: scale as ScaleMode })}
+          onChange={(scale) => { if (scale === "major" || scale === "minor") setState({ scale }); }}
           options={[
             { value: "major", label: "Major" },
             { value: "minor", label: "Minor" }
@@ -131,7 +132,7 @@ export function PerformanceModule() {
         <span>Last MIDI Note: {midi.latest()?.note ?? "--"}</span>
         <span>Profile: {state().profileName}</span>
       </div>
-    </section>
+    </PadPilot.ModuleWorkspace>
   );
 }
 import { clamp } from "../../utils/math";

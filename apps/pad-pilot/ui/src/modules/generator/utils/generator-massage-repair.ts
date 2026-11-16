@@ -1,5 +1,5 @@
 import { GENERATOR_MIDI_DRUM_CHANNEL, GENERATOR_MIDI_TICKS_PER_QUARTER, type GeneratorMidiComposition, type GeneratorMidiTrack } from "./midi-encoder";
-import { type GeneratorLengthBars } from "./generator-options";
+import { type GeneratorLengthBars } from "./generator-option-catalog";
 import { type AbsoluteGeneratorNote, type GeneratorMusicianPlan, type StyleDnaFilterStats } from "./generator-contracts";
 import { primaryBassLayer } from "./generator-prompt";
 import { absoluteTrackNotes, clampInteger, deltaTrackNotes, isSupportingTrack, loopTicks, trackMetadata, trackRole } from "./generator-tracker";
@@ -95,7 +95,7 @@ export function boundTrackToLoop(track: GeneratorMidiTrack, lengthBars: Generato
     channel: track.drums || track.channel === GENERATOR_MIDI_DRUM_CHANNEL ? GENERATOR_MIDI_DRUM_CHANNEL : track.channel,
     drums: track.drums || track.channel === GENERATOR_MIDI_DRUM_CHANNEL || /drum|rhythm|perc|kit|groove/i.test(track.name),
     notes: deltaTrackNotes(dedupeAbsoluteNotes(notes)),
-  } satisfies GeneratorMidiTrack;
+  };
 }
 
 export function gridDistance(tick: number, step: number) {
@@ -134,7 +134,7 @@ export function sanitizeTrackToStyleGrid(track: GeneratorMidiTrack, plan: Genera
         ...note,
         durationTicks,
         tick,
-      } satisfies AbsoluteGeneratorNote;
+      };
     })
     .filter((note) => note.tick < endTick && note.durationTicks > 0);
   const deduped = dedupeAbsoluteNotes(quantized);
@@ -144,7 +144,7 @@ export function sanitizeTrackToStyleGrid(track: GeneratorMidiTrack, plan: Genera
     channel: isDrumTrack ? GENERATOR_MIDI_DRUM_CHANNEL : track.channel,
     drums: isDrumTrack || /drum|rhythm|perc|kit|groove/i.test(track.name),
     notes: deltaTrackNotes(dedupeAbsoluteNotes(clamped)),
-  } satisfies GeneratorMidiTrack;
+  };
 }
 
 export function selectChordCeilingNotes(cluster: readonly AbsoluteGeneratorNote[], limit: number) {
@@ -198,7 +198,7 @@ export function simplifyTrackHarmonicCeiling(track: GeneratorMidiTrack, plan: Ge
   return {
     ...track,
     notes: deltaTrackNotes(notes),
-  } satisfies GeneratorMidiTrack;
+  };
 }
 
 export function hasTrackRole(tracks: readonly GeneratorMidiTrack[], matcher: RegExp) {
@@ -235,7 +235,7 @@ export function patchMissingBassRoles(composition: GeneratorMidiComposition, fal
   return {
     ...composition,
     tracks,
-  } satisfies GeneratorMidiComposition;
+  };
 }
 
 export function fallbackReplacementForDecision(fallback: GeneratorMidiComposition, decision: TrackMassageDecision) {
@@ -272,7 +272,7 @@ export function regenerateSeverelyWrongTracks(composition: GeneratorMidiComposit
         channel: track.drums || replacement.drums ? GENERATOR_MIDI_DRUM_CHANNEL : track.channel,
         drums: track.drums || replacement.drums,
         name: track.name,
-      } satisfies GeneratorMidiTrack;
+      };
     }),
-  } satisfies GeneratorMidiComposition;
+  };
 }

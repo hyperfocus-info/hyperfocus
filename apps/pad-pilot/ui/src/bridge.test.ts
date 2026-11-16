@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "bun:test";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { waitFor } from "@solidjs/testing-library";
@@ -42,7 +43,7 @@ describe("bridge host state", () => {
     const received: Array<ReturnType<typeof decodeFxChainStateBase64> | null> = [];
     let latest: Record<string, unknown> = {};
     const unsubscribe = subscribeHostState((state) => {
-      latest = state as Record<string, unknown>;
+      latest = z.record(z.unknown()).parse(state);
       received.push(state.activeModuleStateBase64 ? decodeFxChainStateBase64(state.activeModuleStateBase64) : null);
     });
 
@@ -72,7 +73,7 @@ describe("bridge host state", () => {
 
     let latest: Record<string, unknown> = {};
     const unsubscribeHost = subscribeHostState((state) => {
-      latest = state as Record<string, unknown>;
+      latest = z.record(z.unknown()).parse(state);
     });
 
     window.padpilotHostReceive?.({
@@ -103,7 +104,7 @@ describe("bridge host state", () => {
     );
 
     await waitFor(() => {
-      expect((latest.modules as Array<{ id: string }>)[0]?.id).toBe("analyzer");
+      expect((z.array(z.object({id:z.string()}).passthrough()).parse(latest.modules))[0]?.id).toBe("analyzer");
       expect(latest.selectedModuleId).toBe("analyzer");
       expect(receivedPayload).toBe(encodeAnalyzerFrameBase64(frame));
     });
@@ -246,7 +247,7 @@ describe("bridge host state", () => {
   it("drops malformed and oversized legacy host JSON without poisoning later state", async () => {
     useNativeBridgeStub();
     const received: Array<Record<string, unknown>> = [];
-    const unsubscribe = subscribeHostState((state) => received.push(state as Record<string, unknown>));
+    const unsubscribe = subscribeHostState((state) => received.push(z.record(z.unknown()).parse(state)));
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
     const accessorPayload = {};
@@ -260,17 +261,17 @@ describe("bridge host state", () => {
     expect(() => window.padpilotHostReceive?.("{not-json")).not.toThrow();
     expect(() => window.padpilotHostReceive?.(cyclic)).not.toThrow();
     expect(() => window.padpilotHostReceive?.(accessorPayload)).not.toThrow();
-    expect(() => window.padpilotHostReceive?.({ selectedModuleId: 42 } as never)).not.toThrow();
-    expect(() => window.padpilotHostReceive?.({ controller: { axes: "bad" } } as never)).not.toThrow();
-    expect(() => window.padpilotHostReceive?.({
+    expect(() => window.padpilotHostReceive?.(JSON.stringify({ selectedModuleId: 42 }))).not.toThrow();
+    expect(() => window.padpilotHostReceive?.(JSON.stringify({ controller: { axes: "bad" } }))).not.toThrow();
+    expect(() => window.padpilotHostReceive?.(JSON.stringify({
       controllerConfig: { customLayouts: [{ id: 42 }], rows: [] },
-    } as never)).not.toThrow();
-    expect(() => window.padpilotHostReceive?.({
+    }))).not.toThrow();
+    expect(() => window.padpilotHostReceive?.(JSON.stringify({
       modules: [{ id: "bad", name: "Bad", uiEntryPath: 42 }],
-    } as never)).not.toThrow();
-    expect(() => window.padpilotHostReceive?.({
+    }))).not.toThrow();
+    expect(() => window.padpilotHostReceive?.(JSON.stringify({
       modules: [{ id: "Bad_Module", name: "Bad", capabilities: ["midi_output"] }],
-    } as never)).not.toThrow();
+    }))).not.toThrow();
     const oversized = `{"selectedModuleId":"${"x".repeat(MAX_HOST_JSON_INGRESS_CHARS)}"}`;
     expect(oversized.length).toBeGreaterThan(MAX_HOST_JSON_INGRESS_CHARS);
     expect(() => window.padpilotHostReceive?.(oversized)).not.toThrow();
@@ -285,8 +286,8 @@ describe("bridge host state", () => {
 
   it("contains malformed and oversized protobuf ingress before valid navigation frames", async () => {
     useNativeBridgeStub();
-    expect(MAX_HOST_PROTO_INGRESS_BYTES).toBe(16 * 1024 * 1024);
-    expect(isBoundedHostProtoPayload("A".repeat(12 * 1024 * 1024))).toBe(true);
+    expect(MAX_HOST_PROTO_INGRESS_BYTES).toBe(16777216);
+    expect(isBoundedHostProtoPayload("A".repeat(12582912))).toBe(true);
     let selectedModuleId = "";
     const unsubscribe = subscribeHostState((state) => {
       selectedModuleId = state.selectedModuleId ?? selectedModuleId;
@@ -317,7 +318,7 @@ describe("bridge host state", () => {
 
     let latest: Record<string, unknown> = {};
     const unsubscribe = subscribeHostState((state) => {
-      latest = state as Record<string, unknown>;
+      latest = z.record(z.unknown()).parse(state);
     });
 
     window.padpilotHostReceive?.({
@@ -354,9 +355,9 @@ describe("bridge host state", () => {
     window.padpilotHostReceiveProto?.("ActiveModuleStateFrame", bytesToBase64(toBinary(ActiveModuleStateFrameSchema, activeStateFrame)));
 
     await waitFor(() => {
-      expect((latest.editorViewStates as Record<string, unknown>).sidebar).toEqual({ collapsed: false });
-      expect((latest.modules as Array<{ id: string }>).map((moduleItem) => moduleItem.id)).toEqual(["fx", "performance"]);
-      expect((latest.modules as Array<Record<string, unknown>>)[0]).toEqual(expect.objectContaining({
+      expect((z.record(z.unknown()).parse(latest.editorViewStates)).sidebar).toEqual({ collapsed: false });
+      expect((z.array(z.object({id:z.string()}).passthrough()).parse(latest.modules)).map((moduleItem) => moduleItem.id)).toEqual(["fx", "performance"]);
+      expect((z.array(z.record(z.unknown())).parse(latest.modules))[0]).toEqual(expect.objectContaining({
         expectedModuleVersion: "1.0.0",
         id: "fx",
         loadErrorMessage: "Installed bundle UI entry is missing.",
@@ -382,7 +383,7 @@ describe("bridge host state", () => {
 
     let latest: Record<string, unknown> = {};
     const unsubscribe = subscribeHostState((state) => {
-      latest = state as Record<string, unknown>;
+      latest = z.record(z.unknown()).parse(state);
     });
     window.padpilotHostReceive?.({ selectedModuleId: "fx" });
 
@@ -422,7 +423,7 @@ describe("bridge host state", () => {
 
     let latest: Record<string, unknown> = {};
     const unsubscribe = subscribeHostState((state) => {
-      latest = state as Record<string, unknown>;
+      latest = z.record(z.unknown()).parse(state);
     });
 
     window.padpilotHostReceive?.({
@@ -469,17 +470,17 @@ describe("bridge host state", () => {
     window.padpilotHostReceiveProto?.("InputStateFrame", bytesToBase64(toBinary(InputStateFrameSchema, inputFrame)));
 
     await waitFor(() => {
-      expect((latest.modules as Array<{ id: string }>)[0]?.id).toBe("performance");
+      expect((z.array(z.object({id:z.string()}).passthrough()).parse(latest.modules))[0]?.id).toBe("performance");
       expect(latest.selectedModuleId).toBe("performance");
-      expect((latest.controller as { connected: boolean; frameIndex: number }).connected).toBe(true);
-      expect((latest.controller as { connected: boolean; frameIndex: number }).frameIndex).toBe(12);
-      expect((latest.inputDevices as Array<{ deviceId: string }>)[0]?.deviceId).toBe("pad-1");
-      expect((latest.inputDevices as Array<{ runtimeDeviceId: string }>)[0]?.runtimeDeviceId).toBe("pad-1#12");
-      expect((latest.inputDevices as Array<{ hardwareId: string }>)[0]?.hardwareId).toBe("pad-1");
-      expect((latest.inputDevices as Array<{ rawAxes: number[] }>)[0]?.rawAxes[0]).toBe(0.5);
-      expect((latest.inputDevices as Array<{ detectedLayoutKind: string }>)[0]?.detectedLayoutKind).toBe("playstation");
-      expect((latest.controllerConfig as { rows: Array<{ hardwareId: string; layoutKind: string }> }).rows[0]?.hardwareId).toBe("pad-1");
-      expect((latest.controllerConfig as { rows: Array<{ hardwareId: string; layoutKind: string }> }).rows[0]?.layoutKind).toBe("playstation");
+      expect(z.object({ connected: z.boolean(), frameIndex: z.number() }).parse(latest.controller).connected).toBe(true);
+      expect(z.object({ connected: z.boolean(), frameIndex: z.number() }).parse(latest.controller).frameIndex).toBe(12);
+      expect((z.array(z.object({deviceId:z.string()}).passthrough()).parse(latest.inputDevices))[0]?.deviceId).toBe("pad-1");
+      expect((z.array(z.object({runtimeDeviceId:z.string()}).passthrough()).parse(latest.inputDevices))[0]?.runtimeDeviceId).toBe("pad-1#12");
+      expect((z.array(z.object({hardwareId:z.string()}).passthrough()).parse(latest.inputDevices))[0]?.hardwareId).toBe("pad-1");
+      expect((z.array(z.object({rawAxes:z.array(z.number())}).passthrough()).parse(latest.inputDevices))[0]?.rawAxes[0]).toBe(0.5);
+      expect((z.array(z.object({detectedLayoutKind:z.string()}).passthrough()).parse(latest.inputDevices))[0]?.detectedLayoutKind).toBe("playstation");
+      expect((z.object({rows:z.array(z.object({hardwareId:z.string(),layoutKind:z.string()}).passthrough())}).passthrough().parse(latest.controllerConfig)).rows[0]?.hardwareId).toBe("pad-1");
+      expect((z.object({rows:z.array(z.object({hardwareId:z.string(),layoutKind:z.string()}).passthrough())}).passthrough().parse(latest.controllerConfig)).rows[0]?.layoutKind).toBe("playstation");
     });
 
     unsubscribe();
@@ -491,7 +492,7 @@ describe("bridge host state", () => {
       backend: {
         addEventListener: () => 0,
         emitEvent: (eventId, payload) => {
-          nativeInvocations.push({ eventId, payload: payload as Record<string, unknown> });
+          nativeInvocations.push({ eventId, payload: z.record(z.unknown()).parse(payload) });
         },
       },
       initializationData: {
@@ -515,8 +516,8 @@ describe("bridge host state", () => {
 
     expect(nativeInvocations[0]?.eventId).toBe("__juce__invoke");
     expect(nativeInvocations[0]?.payload.name).toBe("padpilotBridge");
-    const params = nativeInvocations[0]?.payload.params as unknown[] | undefined;
-    const intent = JSON.parse(String(params?.[0] ?? "{}")) as { type?: string; capability?: string; handle?: string };
+    const params = z.union([z.array(z.unknown()),z.undefined()]).parse(nativeInvocations[0]?.payload.params);
+    const intent = z.object({type:z.string().optional(),capability:z.string().optional(),handle:z.string().optional()}).passthrough().parse(JSON.parse(String(params?.[0] ?? "{}")));
     expect(intent.type).toBe("openCapabilityStream");
     expect(intent.capability).toBe("sample-analysis");
     expect(intent.handle).toBe(handle);
@@ -530,7 +531,7 @@ describe("bridge host state", () => {
       backend: {
         addEventListener: () => 0,
         emitEvent: (eventId, payload) => {
-          nativeInvocations.push({ eventId, payload: payload as Record<string, unknown> });
+          nativeInvocations.push({ eventId, payload: z.record(z.unknown()).parse(payload) });
         },
       },
       initializationData: {
@@ -559,8 +560,8 @@ describe("bridge host state", () => {
 
     expect(nativeInvocations[0]?.eventId).toBe("__juce__invoke");
     expect(nativeInvocations[0]?.payload.name).toBe("padpilotBridge");
-    const params = nativeInvocations[0]?.payload.params as unknown[] | undefined;
-    const intent = JSON.parse(String(params?.[0] ?? "{}")) as { type?: string; moduleId?: string; revision?: string };
+    const params = z.union([z.array(z.unknown()),z.undefined()]).parse(nativeInvocations[0]?.payload.params);
+    const intent = z.object({type:z.string().optional(),moduleId:z.string().optional(),revision:z.string().optional()}).passthrough().parse(JSON.parse(String(params?.[0] ?? "{}")));
     expect(intent.type).toBe("setModuleStateProto");
     expect(intent.moduleId).toBe("fx");
     expect(intent.revision).toBe("7");
@@ -572,7 +573,7 @@ describe("bridge host state", () => {
       backend: {
         addEventListener: () => 0,
         emitEvent: (eventId, payload) => {
-          nativeInvocations.push({ eventId, payload: payload as Record<string, unknown> });
+          nativeInvocations.push({ eventId, payload: z.record(z.unknown()).parse(payload) });
         },
       },
       initializationData: {
@@ -615,8 +616,8 @@ describe("bridge host state", () => {
     });
 
     const intents = nativeInvocations.map((entry) => {
-      const params = entry.payload.params as unknown[] | undefined;
-      return JSON.parse(String(params?.[0] ?? "{}")) as Record<string, unknown>;
+      const params = z.union([z.array(z.unknown()),z.undefined()]).parse(entry.payload.params);
+      return z.record(z.unknown()).parse(JSON.parse(String(params?.[0] ?? "{}")));
     });
 
     expect(intents).toEqual([

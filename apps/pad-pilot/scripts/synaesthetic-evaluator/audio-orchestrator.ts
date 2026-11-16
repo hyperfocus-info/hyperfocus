@@ -1,6 +1,6 @@
 import { extname } from "node:path";
 
-import { AudioSkillManager, type AudioEvaluationReport, type AudioEvaluationState } from "./audio-skill-manager";
+import { createAudioSkillManager, type AudioSkillManager, type AudioEvaluationReport, type AudioEvaluationState } from "./audio-skill-manager";
 import { decodeAudioBytes, type AudioSummary } from "./audio-utils";
 import { readBoundedStream } from "./bounded-fetch";
 
@@ -11,25 +11,21 @@ export type AudioSynaestheticEvaluatorOptions = {
   readonly state?: AudioEvaluationState;
 };
 
-const MAX_AUDIO_INPUT_BYTES = 64 * 1024 * 1024;
+const MAX_AUDIO_INPUT_BYTES = 67108864;
 
-export class AudioSynaestheticEvaluator {
-  private readonly manager: AudioSkillManager;
-  private readonly state: AudioEvaluationState;
+export type AudioSynaestheticEvaluator = ReturnType<typeof createAudioSynaestheticEvaluator>;
+export function createAudioSynaestheticEvaluator(options: AudioSynaestheticEvaluatorOptions = {}) {
+  const manager = options.manager ?? createAudioSkillManager();
+  const defaultState = options.state ?? {};
 
-  constructor(options: AudioSynaestheticEvaluatorOptions = {}) {
-    this.manager = options.manager ?? new AudioSkillManager();
-    this.state = options.state ?? {};
-  }
-
-  async evaluateBytes(bytes: Uint8Array, state: AudioEvaluationState = {}) {
+  async function evaluateBytes(bytes: Uint8Array, state: AudioEvaluationState = {}) {
     const audioSummary = await decodeAudioBytes(bytes);
-    return this.evaluateSummary(audioSummary, state);
+    return evaluateSummary(audioSummary, state);
   }
-
-  async evaluateSummary(audioSummary: AudioSummary, state: AudioEvaluationState = {}) {
-    return this.manager.evaluate(audioSummary, { ...this.state, ...state, audioSummary });
+  async function evaluateSummary(audioSummary: AudioSummary, state: AudioEvaluationState = {}) {
+    return manager.evaluate(audioSummary, { ...defaultState, ...state, audioSummary });
   }
+  return { evaluateBytes: evaluateBytes, evaluateSummary: evaluateSummary };
 }
 
 export async function evaluateAudioFile(filePath: string, state: AudioEvaluationState = {}) {
@@ -37,7 +33,7 @@ export async function evaluateAudioFile(filePath: string, state: AudioEvaluation
     throw new Error(`AudioSynaestheticEvaluator consumes audio files. Unsupported path: ${filePath}`);
   }
   const bytes = await readBoundedStream(Bun.file(filePath).stream(), MAX_AUDIO_INPUT_BYTES, "Audio input");
-  const evaluator = new AudioSynaestheticEvaluator({ state });
+  const evaluator = createAudioSynaestheticEvaluator({ state });
   return evaluator.evaluateBytes(bytes);
 }
 

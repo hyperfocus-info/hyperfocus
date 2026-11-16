@@ -26,7 +26,7 @@ function createRawDevice(overrides: Partial<PadPilotInputDeviceState> = {}) {
     rawAxes: overrides.rawAxes ?? overrides.axes ?? [],
     rawButtons: overrides.rawButtons ?? overrides.buttons ?? [],
     runtimeDeviceId: overrides.runtimeDeviceId ?? overrides.deviceId ?? "device-a#0",
-  } satisfies PadPilotInputDeviceState;
+  };
 }
 
 describe("controller-runtime", () => {

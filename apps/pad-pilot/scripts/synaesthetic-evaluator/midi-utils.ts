@@ -198,7 +198,7 @@ export function summarizeMidi(midi: Uint8Array) {
     trebleEnergy: totalEnergy > 0 ? trebleEnergy / totalEnergy : 0,
     rhythmicEntropy: entropy(onsetDeltas),
     pitchEntropy: entropy(pitchClassHistogram),
-  } satisfies MidiSummary;
+  };
 }
 
 export function getMidiSummary(midi: Uint8Array, state: { midiSummary?: MidiSummary } | undefined) {

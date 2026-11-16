@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, expect, it } from "bun:test";
 import { base64ToBytes } from "../proto/base64";
 import { resetBridgeStateForTests } from "../bridge";
@@ -11,7 +12,7 @@ function installNativeBridge() {
       addEventListener: () => 0,
       emitEvent: (eventId, payload) => {
         if (eventId === "__juce__invoke") {
-          invocations.push(payload as { name?: string; params?: unknown[] });
+          invocations.push(z.object({name:z.string().optional(),params:z.array(z.unknown()).optional()}).passthrough().parse(payload));
         }
       },
     },
@@ -21,7 +22,7 @@ function installNativeBridge() {
 
 function sentIntent() {
   const invocation = invocations.find((candidate) => candidate.name === "padpilotBridge");
-  return JSON.parse(String(invocation?.params?.[0] ?? "{}")) as Record<string, string>;
+  return z.record(z.string()).parse(JSON.parse(String(invocation?.params?.[0] ?? "{}")));
 }
 
 afterEach(() => {

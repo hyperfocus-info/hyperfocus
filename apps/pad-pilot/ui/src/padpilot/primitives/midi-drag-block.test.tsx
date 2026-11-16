@@ -33,12 +33,12 @@ createUiTest("MidiDragBlock", () => {
   it("keeps browser MIDI preparation single-flight", async () => {
     let importCount = 0;
     let resolveImport!: (value: Awaited<ReturnType<typeof IO.importFile>>) => void;
-    IO.importFile = (() => {
+    IO.importFile = () => {
       importCount += 1;
       return new Promise((resolve) => {
         resolveImport = resolve;
       });
-    }) as typeof IO.importFile;
+    };
 
     render(() => (
       <MidiDragBlock
@@ -67,10 +67,10 @@ createUiTest("MidiDragBlock", () => {
 
   it("revokes owned object URLs when the block unmounts", () => {
     const revoked: string[] = [];
-    URL.createObjectURL = (() => "blob:padpilot-midi") as typeof URL.createObjectURL;
-    URL.revokeObjectURL = ((url: string) => {
+    URL.createObjectURL = () => "blob:padpilot-midi";
+    URL.revokeObjectURL = (url: string) => {
       revoked.push(url);
-    }) as typeof URL.revokeObjectURL;
+    };
 
     const view = render(() => (
       <MidiDragBlock

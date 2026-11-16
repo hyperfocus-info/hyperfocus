@@ -2,7 +2,8 @@ import { afterEach, beforeAll, describe } from "bun:test";
 import { cleanup } from "@solidjs/testing-library";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
-const globalState = globalThis as typeof globalThis & { __padPilotHappyDomRegistered?: boolean };
+declare global { var __padPilotHappyDomRegistered: boolean | undefined; }
+const globalState = globalThis;
 
 function ensureHappyDom() {
   if (globalState.__padPilotHappyDomRegistered) {

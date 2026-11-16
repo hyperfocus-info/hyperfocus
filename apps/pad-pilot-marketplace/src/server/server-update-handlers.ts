@@ -1,8 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { latestPluginUpdateQuery } from "@hyperfocus/pad-pilot/marketplace-schema";
 import { getLatestPluginRelease, getPluginReleaseById } from "../db";
-import {
-  BundleIntegrityError,
+import {  isBundleIntegrityError,
   createPermitBoundFileStream,
   type createBundleIntegrityVerifier,
   type createInFlightLimiter,
@@ -39,7 +38,7 @@ export function createUpdateRouteHandlers(dependencies: UpdateHandlerDependencie
       "update-check",
       dependencies.clientIdentity(request),
       600,
-      60 * 1000,
+      60000,
     );
     if (limited) return limited;
     const parsed = latestPluginUpdateQuery.safeParse(query);
@@ -79,7 +78,7 @@ export function createUpdateRouteHandlers(dependencies: UpdateHandlerDependencie
     const artifactSize = release.artifact_size_bytes || release.file_size_bytes;
     const artifact = existingRegularFile(artifactPath, artifactSize);
     const manifest = existingRegularFile(release.manifest_path);
-    if (!artifact || !manifest || manifest.size > 1024 * 1024) {
+    if (!artifact || !manifest || manifest.size > 1048576) {
       return fail(503, "release_unavailable", "The selected plugin release is not fully staged.");
     }
 
@@ -115,7 +114,7 @@ export function createUpdateRouteHandlers(dependencies: UpdateHandlerDependencie
       "update-download",
       dependencies.clientIdentity(request),
       120,
-      60 * 1000,
+      60000,
     );
     if (limited) return limited;
     const release = getPluginReleaseById(store.db, params.releaseId);
@@ -149,7 +148,7 @@ export function createUpdateRouteHandlers(dependencies: UpdateHandlerDependencie
         },
       });
     } catch (error) {
-      if (error instanceof BundleIntegrityError) {
+      if (isBundleIntegrityError(error)) {
         return fail(error.code === "bundle_not_found" ? 404 : 409, error.code, error.message);
       }
       throw error;
@@ -167,13 +166,13 @@ export function createUpdateRouteHandlers(dependencies: UpdateHandlerDependencie
       "update-manifest",
       dependencies.clientIdentity(request),
       300,
-      60 * 1000,
+      60000,
     );
     if (limited) return limited;
     const release = getPluginReleaseById(store.db, params.releaseId);
     if (!release?.manifest_path) return fail(404, "manifest_not_found", "No plugin update manifest was found.");
     const manifestFile = existingRegularFile(release.manifest_path);
-    if (!manifestFile || manifestFile.size > 1024 * 1024) {
+    if (!manifestFile || manifestFile.size > 1048576) {
       return fail(404, "manifest_not_found", "No plugin update manifest was found.");
     }
 
@@ -185,7 +184,7 @@ export function createUpdateRouteHandlers(dependencies: UpdateHandlerDependencie
         release.manifest_path,
         release.manifest_checksum_sha256,
         manifestFile.size,
-        1024 * 1024,
+        1048576,
       );
       const body = createPermitBoundFileStream(verifiedFile, manifestFile.size, releaseTransfer);
       permitTransferredToResponse = true;
@@ -198,7 +197,7 @@ export function createUpdateRouteHandlers(dependencies: UpdateHandlerDependencie
         },
       });
     } catch (error) {
-      if (error instanceof BundleIntegrityError) {
+      if (isBundleIntegrityError(error)) {
         return fail(error.code === "bundle_not_found" ? 404 : 409, error.code, error.message);
       }
       throw error;

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { fromBinary } from "@bufbuild/protobuf";
 import { afterEach, describe, expect, it } from "bun:test";
 import { waitFor } from "@solidjs/testing-library";
@@ -40,7 +41,7 @@ describe("dev host runtime", () => {
     let emittedState: ReturnType<typeof decodeFxChainStateBase64> | null = null;
     let lastEmission: Record<string, unknown> = {};
     const unsubscribe = runtime.subscribe((state) => {
-      lastEmission = state as Record<string, unknown>;
+      lastEmission = z.record(z.unknown()).parse(state);
       if (state.activeModuleId !== "fx" || !state.activeModuleStateBase64) {
         return;
       }
@@ -174,7 +175,7 @@ describe("dev host runtime", () => {
     runtime.reset();
     runtime.updateSettings({ continuousHostSync: false, running: false });
 
-    let latestFrame = null as ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null;
+    let latestFrame: ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null = null;
     const unsubscribe = runtime.subscribe((state) => {
       if (state.type !== "capabilityFrameEnvelopeProto" || !state.capabilityFrameEnvelopeBase64) {
         return;
@@ -248,7 +249,7 @@ describe("dev host runtime", () => {
     runtime.reset();
     runtime.updateSettings({ continuousHostSync: false, running: false });
 
-    let latestFrame = null as ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null;
+    let latestFrame: ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null = null;
     const unsubscribe = runtime.subscribe((state) => {
       if (state.type !== "capabilityFrameEnvelopeProto" || !state.capabilityFrameEnvelopeBase64) {
         return;
@@ -291,7 +292,7 @@ describe("dev host runtime", () => {
     runtime.reset();
     runtime.updateSettings({ continuousHostSync: false, running: false, tempo: 128 });
 
-    let latestFrame = null as ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null;
+    let latestFrame: ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null = null;
     const unsubscribe = runtime.subscribe((state) => {
       if (state.type !== "capabilityFrameEnvelopeProto" || !state.capabilityFrameEnvelopeBase64) {
         return;
@@ -395,7 +396,7 @@ describe("dev host runtime", () => {
     runtime.reset();
     runtime.updateSettings({ continuousHostSync: false, running: false, tempo: 132 });
 
-    let latestFrame = null as ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null;
+    let latestFrame: ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null = null;
     const unsubscribe = runtime.subscribe((state) => {
       if (state.type !== "capabilityFrameEnvelopeProto" || !state.capabilityFrameEnvelopeBase64) {
         return;
@@ -462,7 +463,7 @@ describe("dev host runtime", () => {
     runtime.reset();
     runtime.updateSettings({ continuousHostSync: false, running: false });
 
-    let latestFrame = null as ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null;
+    let latestFrame: ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null = null;
     const unsubscribe = runtime.subscribe((state) => {
       if (state.type !== "capabilityFrameEnvelopeProto" || !state.capabilityFrameEnvelopeBase64) {
         return;
@@ -549,26 +550,24 @@ describe("dev host runtime", () => {
     };
     const originalAudioContext = window.AudioContext;
     const originalImportedFiles = window.__PADPILOT_DEV_IMPORTED_FILES__;
-    class FakeAudioContext {
-      currentTime = 0;
-      destination = {} as AudioNode;
-
-      createBufferSource() {
-        return {
-          buffer: null as AudioBuffer | null,
+    function FakeAudioContext() {
+return { currentTime: 0,
+destination: {},
+createBufferSource() {
+        return ({
+          buffer: null,
           connect() {},
-          onended: null as (() => void) | null,
+          onended: null,
           start: (_when: number, offset: number, duration?: number) => {
             startCalls.push({ duration, offset });
           },
           stop: () => {
             return;
           },
-        } as unknown as AudioBufferSourceNode;
-      }
-
-      createGain() {
-        return {
+        });
+      },
+createGain() {
+        return ({
           connect() {},
           gain: {
             cancelScheduledValues() {},
@@ -576,19 +575,16 @@ describe("dev host runtime", () => {
             setValueAtTime() {},
             value: 1,
           },
-        } as unknown as GainNode;
-      }
-
-      decodeAudioData() {
-        return Promise.resolve(fakeBuffer as unknown as AudioBuffer);
-      }
-
-      close() {
+        });
+      },
+decodeAudioData() {
+        return Promise.resolve((fakeBuffer));
+      },
+close() {
         return Promise.resolve();
-      }
-    }
+      } }; }
 
-    window.AudioContext = FakeAudioContext as unknown as typeof AudioContext;
+    Object.defineProperty(window, "AudioContext", { configurable: true, writable: true, value: FakeAudioContext });
     window.__PADPILOT_DEV_IMPORTED_FILES__ = {
       ...(originalImportedFiles ?? {}),
       "preview-offset-loop": {
@@ -664,22 +660,20 @@ describe("dev host runtime", () => {
     runtime.updateSettings({ continuousHostSync: false, running: false });
 
     const decodeRequests: Array<{
-      resolve: (buffer: AudioBuffer) => void;
+      resolve: (buffer: ReturnType<typeof createBuffer>) => void;
     }> = [];
     const originalAudioContext = window.AudioContext;
     const originalImportedFiles = window.__PADPILOT_DEV_IMPORTED_FILES__;
-    class FakeAudioContext {
-      decodeAudioData() {
-        return new Promise<AudioBuffer>((resolve) => {
+    function FakeAudioContext() {
+return { decodeAudioData() {
+        return new Promise<ReturnType<typeof createBuffer>>((resolve) => {
           decodeRequests.push({ resolve });
         });
-      }
-
-      close() {
+      },
+close() {
         return Promise.resolve();
-      }
-    }
-    const createBuffer = (sampleRate: number) => ({
+      } }; }
+    const createBuffer = (sampleRate: number) => (({
       duration: 4 / sampleRate,
       length: 4,
       numberOfChannels: 1,
@@ -687,9 +681,9 @@ describe("dev host runtime", () => {
       getChannelData() {
         return new Float32Array(4);
       },
-    }) as unknown as AudioBuffer;
+    }));
 
-    window.AudioContext = FakeAudioContext as unknown as typeof AudioContext;
+    Object.defineProperty(window, "AudioContext", { configurable: true, writable: true, value: FakeAudioContext });
     window.__PADPILOT_DEV_IMPORTED_FILES__ = {
       "decode-first": {
         byteSize: 4,
@@ -723,9 +717,7 @@ describe("dev host runtime", () => {
       expect(decodeRequests.length).toBe(2);
 
       decodeRequests[1]!.resolve(createBuffer(96000));
-      const internals = runtime as unknown as {
-        recutState: { loaded: boolean; sampleRate: number; sourceName: string };
-      };
+      const internals = runtime;
       await waitFor(() => {
         expect(internals.recutState.loaded).toBe(true);
         expect(internals.recutState.sampleRate).toBe(96000);
@@ -749,7 +741,7 @@ describe("dev host runtime", () => {
     runtime.reset();
     runtime.updateSettings({ continuousHostSync: false, running: false });
 
-    let latestFrame = null as ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null;
+    let latestFrame: ReturnType<typeof fromBinary<typeof SampleEditorFrameSchema>> | null = null;
     const unsubscribe = runtime.subscribe((state) => {
       if (state.type !== "capabilityFrameEnvelopeProto" || !state.capabilityFrameEnvelopeBase64) {
         return;

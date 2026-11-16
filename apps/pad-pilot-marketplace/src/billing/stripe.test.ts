@@ -37,7 +37,7 @@ describe("createStripeCheckoutSession", () => {
       }));
     });
 
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(fetchSpy, { preconnect: originalFetch.preconnect });
 
     const session = await createStripeCheckoutSession({
       amountCents: 6000,
@@ -55,10 +55,10 @@ describe("createStripeCheckoutSession", () => {
   });
 
   it("surfaces plain-text Stripe failures as a normal error message", async () => {
-    globalThis.fetch = mock(async () =>
+    globalThis.fetch = Object.assign(mock(async () =>
       new Response("You may only specify one of these parameters: product, product_data.", {
         status: 400,
-      })) as unknown as typeof fetch;
+      })), { preconnect: originalFetch.preconnect });
 
     await expect(createStripeCheckoutSession({
       amountCents: 6000,
@@ -73,11 +73,11 @@ describe("createStripeCheckoutSession", () => {
   });
 
   it("rejects an arbitrary HTTPS host in a Stripe Checkout response", async () => {
-    globalThis.fetch = mock(async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(mock(async () => new Response(JSON.stringify({
       amount_total: 6000,
       id: "cs_test_123",
       url: "https://attacker.test/checkout/cs_test_123",
-    }))) as unknown as typeof fetch;
+    }))), { preconnect: originalFetch.preconnect });
 
     await expect(createStripeCheckoutSession({
       amountCents: 6000,
@@ -92,10 +92,10 @@ describe("createStripeCheckoutSession", () => {
   });
 
   it("rejects oversized Stripe responses before buffering them", async () => {
-    globalThis.fetch = mock(async () =>
+    globalThis.fetch = Object.assign(mock(async () =>
       new Response("oversized", {
-        headers: { "content-length": `${1024 * 1024 + 1}` },
-      })) as unknown as typeof fetch;
+        headers: { "content-length": `${1048577}` },
+      })), { preconnect: originalFetch.preconnect });
 
     await expect(createStripeCheckoutSession({
       amountCents: 6000,
@@ -110,13 +110,13 @@ describe("createStripeCheckoutSession", () => {
   });
 
   it("copies PadPilot identity metadata onto recurring subscriptions", async () => {
-    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = Object.assign(mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = String(init?.body ?? "");
       expect(body).toContain("subscription_data%5Bmetadata%5D%5Bcheckout_id%5D=checkout_123");
       expect(body).toContain("subscription_data%5Bmetadata%5D%5Bcheckout_kind%5D=first_class_start");
       expect(body).toContain("subscription_data%5Bmetadata%5D%5Buser_id%5D=user_123");
       return new Response(JSON.stringify({ amount_total: 1000, id: "cs_recurring", url: "https://checkout.stripe.com/c/pay/cs_recurring" }));
-    }) as unknown as typeof fetch;
+    }), { preconnect: originalFetch.preconnect });
 
     await createStripeCheckoutSession({
       amountCents: 1000,
@@ -131,7 +131,7 @@ describe("createStripeCheckoutSession", () => {
   });
 
   it("uses dynamic product data and payment metadata for module purchases", async () => {
-    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = Object.assign(mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = String(init?.body ?? "");
       const headers = new Headers(init?.headers);
       expect(body).toContain("product_data%5D%5Bname%5D=Magic+Module");
@@ -143,7 +143,7 @@ describe("createStripeCheckoutSession", () => {
         id: "cs_module_purchase",
         url: "https://checkout.stripe.com/c/pay/cs_module_purchase",
       }));
-    }) as unknown as typeof fetch;
+    }), { preconnect: originalFetch.preconnect });
 
     await createStripeCheckoutSession({
       amountCents: 1200,
@@ -169,7 +169,7 @@ describe("createStripeCheckoutSession", () => {
       expect(headers.get("idempotency-key")).toBe("padpilot-auto-cancel-sub_financing_123");
       return new Response(JSON.stringify({ id: "sub_financing_123", status: "canceled" }));
     });
-    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    globalThis.fetch = Object.assign(fetchSpy, { preconnect: originalFetch.preconnect });
 
     await expect(cancelStripeSubscription("sub_financing_123", createEnv())).resolves.toEqual({
       alreadyCanceled: false,

@@ -1,5 +1,9 @@
+import { requireNodeMessage } from "./node-registry/types";
+import { CompressorVisualizerPayloadSchema, EqVisualizerPayloadSchema, TransientShaperVisualizerPayloadSchema, NoiseGateVisualizerPayloadSchema, DelayVisualizerPayloadSchema, ReverbVisualizerPayloadSchema, ConvolverVisualizerPayloadSchema, TapeSaturationVisualizerPayloadSchema, BitcrusherVisualizerPayloadSchema, ExciterVisualizerPayloadSchema, ChorusVisualizerPayloadSchema, PhaserVisualizerPayloadSchema, AutoPanVisualizerPayloadSchema, RotarySpeakerVisualizerPayloadSchema, StereoImagerVisualizerPayloadSchema, PitchDriftVisualizerPayloadSchema } from "../../proto/generated/fx-chain-pb";
+import { asRecord } from "@hyperfocus/utilities/records";
 import { create } from "@bufbuild/protobuf";
 import { MeterTapSchema, NodeVisualizerFrameSchema, VisualizerFrameSchema, type MeterTap, type NodeVisualizerFrame, type VisualizerFrame } from "../../proto/generated/fx-chain-pb";
+import { isRecord as isPayloadRecord } from '@hyperfocus/utilities/records';
 
 export const FX_VISUALIZER_DISPLAY_BIN_COUNT = 24;
 
@@ -80,8 +84,7 @@ function smoothNumberArray(previous: readonly number[], target: readonly number[
   return previousSeries.map((value, index) => smoothSeriesValue(value, targetSeries[index] ?? 0, amount));
 }
 
-const isPayloadRecord = (value: unknown) =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const toPayloadRecord = (value: unknown) => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return {};
@@ -173,8 +176,8 @@ function zeroPayloadValue(value: unknown) {
 function smoothPayloadValue(previous: unknown, target: unknown, factors: SmoothingFactors) {
   if (Array.isArray(previous) || Array.isArray(target)) {
     return smoothNumberArray(
-      Array.isArray(previous) ? (previous as number[]) : [],
-      Array.isArray(target) ? (target as number[]) : [],
+      Array.isArray(previous) ? previous.filter((value): value is number => typeof value === "number") : [],
+      Array.isArray(target) ? target.filter((value): value is number => typeof value === "number") : [],
       factors.series,
     );
   }
@@ -251,9 +254,9 @@ function smoothPayload(
   target: NodeVisualizerFrame["payload"] | undefined,
   factors: SmoothingFactors,
   deltaMs: number,
-) {
+): NodeVisualizerFrame["payload"] {
   if (!previous.case && !target?.case) {
-    return { case: undefined, value: undefined } as NodeVisualizerFrame["payload"];
+    return { case: undefined, value: undefined };
   }
 
   if (!previous.case) {
@@ -261,10 +264,7 @@ function smoothPayload(
   }
 
   if (!target?.case) {
-    return {
-      case: previous.case,
-      value: smoothPayloadValue(previous.value, zeroPayloadValue(previous.value), factors),
-    } as NodeVisualizerFrame["payload"];
+    return payloadValue(previous.case, smoothPayloadValue(previous.value, zeroPayloadValue(previous.value), factors));
   }
 
   if (previous.case !== target.case) {
@@ -272,26 +272,20 @@ function smoothPayload(
   }
 
   if (target.case === "autoPan") {
-    const previousValue = (previous.value ?? {}) as Record<string, unknown>;
-    const targetValue = (target.value ?? {}) as Record<string, unknown>;
+    const previousValue = asRecord((previous.value ?? {}));
+    const targetValue = asRecord((target.value ?? {}));
     const autoPanFactor = toFactor(deltaMs, AUTO_PAN_SMOOTH_MS);
-    return {
-      case: target.case,
-      value: {
+    return payloadValue(target.case, {
         ...targetValue,
         panPosition: smoothSeriesValue(
           typeof previousValue.panPosition === "number" ? previousValue.panPosition : 0,
           typeof targetValue.panPosition === "number" ? targetValue.panPosition : 0,
           autoPanFactor,
         ),
-      },
-    } as NodeVisualizerFrame["payload"];
+      });
   }
 
-  return {
-    case: target.case,
-    value: smoothPayloadValue(previous.value, target.value, factors),
-  } as NodeVisualizerFrame["payload"];
+  return payloadValue(target.case, smoothPayloadValue(previous.value, target.value, factors));
 }
 
 function smoothTap(previous: MeterTap | undefined, target: MeterTap | undefined, factors: SmoothingFactors) {
@@ -459,4 +453,23 @@ export function smoothVisualizerFrame(previous: VisualizerFrame, next: Visualize
       .map((key) => smoothNodeFrame(previousFrames.get(key), nextFrames.get(key), factors, deltaMs))
       .filter((frame) => shouldKeepNodeFrame(frame, nextFrames.get(nodeFrameKey(frame)))),
   });
+}
+
+function payloadValue(kind: NonNullable<NodeVisualizerFrame["payload"]["case"]>, value: unknown): NodeVisualizerFrame["payload"] {
+switch(kind) { case "compressor": return {case: "compressor", value: requireNodeMessage(value, CompressorVisualizerPayloadSchema)};
+case "eq": return {case: "eq", value: requireNodeMessage(value, EqVisualizerPayloadSchema)};
+case "transientShaper": return {case: "transientShaper", value: requireNodeMessage(value, TransientShaperVisualizerPayloadSchema)};
+case "noiseGate": return {case: "noiseGate", value: requireNodeMessage(value, NoiseGateVisualizerPayloadSchema)};
+case "delay": return {case: "delay", value: requireNodeMessage(value, DelayVisualizerPayloadSchema)};
+case "reverb": return {case: "reverb", value: requireNodeMessage(value, ReverbVisualizerPayloadSchema)};
+case "convolver": return {case: "convolver", value: requireNodeMessage(value, ConvolverVisualizerPayloadSchema)};
+case "tapeSaturation": return {case: "tapeSaturation", value: requireNodeMessage(value, TapeSaturationVisualizerPayloadSchema)};
+case "bitcrusher": return {case: "bitcrusher", value: requireNodeMessage(value, BitcrusherVisualizerPayloadSchema)};
+case "exciter": return {case: "exciter", value: requireNodeMessage(value, ExciterVisualizerPayloadSchema)};
+case "chorus": return {case: "chorus", value: requireNodeMessage(value, ChorusVisualizerPayloadSchema)};
+case "phaser": return {case: "phaser", value: requireNodeMessage(value, PhaserVisualizerPayloadSchema)};
+case "autoPan": return {case: "autoPan", value: requireNodeMessage(value, AutoPanVisualizerPayloadSchema)};
+case "rotarySpeaker": return {case: "rotarySpeaker", value: requireNodeMessage(value, RotarySpeakerVisualizerPayloadSchema)};
+case "stereoImager": return {case: "stereoImager", value: requireNodeMessage(value, StereoImagerVisualizerPayloadSchema)};
+case "pitchDrift": return {case: "pitchDrift", value: requireNodeMessage(value, PitchDriftVisualizerPayloadSchema)}; }
 }

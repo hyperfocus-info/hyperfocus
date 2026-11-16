@@ -55,7 +55,7 @@ const definitions = stylex.create({
   "lineStyle": {
     "color": { default: "var(--pp-streaming-text-color)", "::before": "var(--pp-streaming-text-accent)" },
     "content": { default: null, "::before": "\"> \"" },
-    "fontSize": "0.72rem",
+    "fontSize": "0.75rem",
     "fontWeight": { default: null, "::before": 900 },
     "lineHeight": 1.42,
     "overflowWrap": "anywhere",

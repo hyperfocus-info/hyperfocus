@@ -623,6 +623,7 @@ export function createEmptyTokenUsageState(overrides: Partial<TokenUsageState> =
     lifetime: createEmptyTokenUsageTotals(overrides.lifetime ?? {}),
     codexLimits: overrides.codexLimits,
     sources: overrides.sources,
+    sourceOverflow: overrides.sourceOverflow,
     resetAt: typeof overrides.resetAt === "string" && overrides.resetAt.trim() ? overrides.resetAt : undefined
   };
 }
@@ -4137,7 +4138,6 @@ function normalizeJobsPanePreferences(input: unknown, state?: HarnessViewState, 
 function normalizeOptionalStorageString(input: unknown) {
   return typeof input === "string" && input.trim() ? input.trim() : undefined;
 }
-
 
 function normalizeAssistantsViewState(state: HarnessViewState): ViewAssistantsState {
   const scopeFilter = normalizeAssistantScopeFilter(state.assistants.scopeFilter);

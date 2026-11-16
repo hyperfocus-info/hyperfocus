@@ -1,3 +1,4 @@
+import { isTriggerDefinition } from "./hotkey-trigger";
 import {
   HotkeysProvider as TanstackHotkeysProvider,
   createHotkey as createTanstackHotkey,
@@ -200,14 +201,11 @@ const PadPilotHotkeysContext =
 const DEFAULT_HOTKEYS_OPTIONS: PadPilotHotkeysProviderOptions = {};
 
 /** Distinguishes `{ keyboard?, controller? }` from a bare `RegisterableHotkey` object shape. */
-const isTriggerDefinition = (value: unknown) =>
-  typeof value === "object" &&
-  value !== null &&
-  ("controller" in value || "keyboard" in value);
+
 
 /** Solid-friendly: unwraps accessors so hotkeys/recorder options can be reactive. */
-const resolveValue = <T,>(value: T | (() => T)) =>
-  typeof value === "function" ? (value as () => T)() : value;
+const resolveValue = <T extends object | string,>(value: T | (() => T)) =>
+  typeof value === "function" ? (value)() : value;
 
 /** Fills macro fields from provider/create options without mutating the source macro. */
 const mergeControllerMacro = (
@@ -334,18 +332,18 @@ const captureControllerMacro = (
       const previousValue = previousDevice?.buttons[index] ?? 0;
       if (nextValue >= 0.75 && previousValue < 0.75) {
         return {
-          conditions: [{ kind: "button", index }],
+          conditions: [{ kind: "button" as const, index }],
           scope:
             defaults?.deviceScopeMode === "all-devices"
-              ? ({ mode: "all-devices" } as const)
+              ? ({ mode: "all-devices" as const } as const)
               : ({
-                  mode: "specific-device",
+                  mode: "specific-device" as const,
                   deviceId: device.deviceId,
                   deviceKind: device.deviceKind,
                   displayName: device.displayName,
                 } as const),
           triggerMode: defaults?.triggerMode ?? "edge",
-        } satisfies PadPilotControllerMacro;
+        };
       }
     }
 
@@ -360,45 +358,45 @@ const captureControllerMacro = (
         return {
           conditions: [
             {
-              direction: "positive",
+              direction: "positive" as const,
               index,
-              kind: "axis",
+              kind: "axis" as const,
               threshold,
             },
           ],
           scope:
             defaults?.deviceScopeMode === "all-devices"
-              ? ({ mode: "all-devices" } as const)
+              ? ({ mode: "all-devices" as const } as const)
               : ({
-                  mode: "specific-device",
+                  mode: "specific-device" as const,
                   deviceId: device.deviceId,
                   deviceKind: device.deviceKind,
                   displayName: device.displayName,
                 } as const),
           triggerMode: defaults?.triggerMode ?? "edge",
-        } satisfies PadPilotControllerMacro;
+        };
       }
       if (nextValue <= -threshold && previousValue > -threshold) {
         return {
           conditions: [
             {
-              direction: "negative",
+              direction: "negative" as const,
               index,
-              kind: "axis",
+              kind: "axis" as const,
               threshold,
             },
           ],
           scope:
             defaults?.deviceScopeMode === "all-devices"
-              ? ({ mode: "all-devices" } as const)
+              ? ({ mode: "all-devices" as const } as const)
               : ({
-                  mode: "specific-device",
+                  mode: "specific-device" as const,
                   deviceId: device.deviceId,
                   deviceKind: device.deviceKind,
                   displayName: device.displayName,
                 } as const),
           triggerMode: defaults?.triggerMode ?? "edge",
-        } satisfies PadPilotControllerMacro;
+        };
       }
     }
   }
@@ -479,7 +477,7 @@ export function createHotkey(
       ? () => {
           const resolved = options();
           const { controller: _controller, ...rest } =
-            (resolved as PadPilotCreateHotkeyOptions) ?? {};
+            Object.assign({ controller: undefined }, resolved);
           return {
             ...defaultOptions.hotkey,
             ...rest,
@@ -487,7 +485,7 @@ export function createHotkey(
         }
       : (() => {
           const { controller: _controller, ...rest } =
-            (options as PadPilotCreateHotkeyOptions) ?? {};
+            Object.assign({ controller: undefined }, options);
           return {
             ...defaultOptions.hotkey,
             ...rest,
@@ -495,22 +493,18 @@ export function createHotkey(
         })();
 
   const resolvedInitial = resolveValue(
-    hotkeyOrTrigger as
-      | RegisterableHotkey
-      | PadPilotTriggerDefinition
-      | (() => RegisterableHotkey)
-      | (() => PadPilotTriggerDefinition),
+    hotkeyOrTrigger,
   );
   if (isTriggerDefinition(resolvedInitial)) {
-    const triggerDefinition = resolvedInitial as PadPilotTriggerDefinition;
+    const triggerDefinition = resolvedInitial;
     if (triggerDefinition.keyboard) {
       createTanstackHotkey(
         triggerDefinition.keyboard,
         (event, context) => {
-          (callback as PadPilotHotkeyCallback)(event, {
+          Reflect.apply(callback, undefined, [event, {
             ...context,
             source: "keyboard",
-          });
+          }]);
         },
         keyboardOptions,
       );
@@ -521,16 +515,15 @@ export function createHotkey(
 
     createEffect(() => {
       const resolvedTrigger = resolveValue(
-        hotkeyOrTrigger as PadPilotTriggerDefinition | (() => PadPilotTriggerDefinition),
+        hotkeyOrTrigger,
       );
       const resolvedOptions = resolveValue(
-        (options ?? {}) as
-          | PadPilotCreateHotkeyOptions
-          | (() => PadPilotCreateHotkeyOptions),
+        (options ?? {}),
       );
+      if (!isTriggerDefinition(resolvedTrigger)) return;
       const controllerMacro = mergeControllerMacro(
         resolvedTrigger.controller,
-        resolvedOptions.controller ?? defaultOptions.controller,
+        ("controller" in resolvedOptions ? resolvedOptions.controller : undefined) ?? defaultOptions.controller,
       );
       const matchedDevice = matchControllerMacro(
         controllerMacro,
@@ -554,11 +547,11 @@ export function createHotkey(
       }
 
       const controllerEvent = createControllerEvent(matchedDevice);
-      (callback as PadPilotHotkeyCallback)(controllerEvent, {
+      Reflect.apply(callback, undefined, [controllerEvent, {
         controllerMacro,
         device: matchedDevice,
         source: "controller",
-      });
+      }]);
       if (
         !controllerEvent.defaultPrevented &&
         controllerMacro.keyboardOutput &&
@@ -571,8 +564,8 @@ export function createHotkey(
   }
 
   createTanstackHotkey(
-    hotkeyOrTrigger as RegisterableHotkey | (() => RegisterableHotkey),
-    callback as HotkeyCallback,
+    () => { const value = resolveValue(hotkeyOrTrigger); return isTriggerDefinition(value) ? value.keyboard ?? "Escape" : value; },
+    (event, context) => Reflect.apply(callback, undefined, [event, context]),
     keyboardOptions,
   );
 }
@@ -605,20 +598,18 @@ export function createHotkeyRecorder(
   const [previousDevices, setPreviousDevices] =
     createSignal<PadPilotInputDeviceState[]>([]);
 
-  const resolveRecorderOptions = () => {
+  const resolveRecorderOptions = (): PadPilotHotkeyRecorderOptions => {
     const resolved = resolveValue(
-      options as
-        | PadPilotHotkeyRecorderOptions
-        | (() => PadPilotHotkeyRecorderOptions),
+      options,
     );
     return {
       ...defaultOptions.hotkeyRecorder,
       ...resolved,
       controller: {
         ...defaultOptions.hotkeyRecorderController,
-        ...(resolved as PadPilotHotkeyRecorderOptions).controller,
+        ...("controller" in resolved ? resolved.controller : undefined),
       },
-    } as PadPilotHotkeyRecorderOptions;
+    };
   };
 
   const stopRecording = () => {

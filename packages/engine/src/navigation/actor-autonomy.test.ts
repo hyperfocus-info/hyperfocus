@@ -169,3 +169,10 @@ test("a delayed neighbour is physically displaced by bounded contact, not random
   expect(trace.at(-1)!.actors[1]!.x).toBeGreaterThan(1.6);
   for (let i = 1; i < trace.length; i++) expect(Math.abs(trace[i]!.actors[1]!.x - trace[i - 1]!.actors[1]!.x)).toBeLessThanOrEqual(0.033333343333333335);
 });
+
+test("decision diagnostics capture needs before host tie callbacks run", () => {
+  const options = { thirst: .5, danger: .2, helping: 0, preservation: 1,
+    opportunities: [0, 1].map(cell => ({ action: "drink" as const, id: String(cell), cell, cost: 0, safety: 0 })),
+    committed: false, hysteresis: .15, tie: (_id: string) => { options.thirst = .9; return 0; } };
+  expect(chooseActorAction(options).reason).toBe("drink:thirst=0.500,danger=0.200,route=0");
+});

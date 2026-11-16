@@ -31,14 +31,17 @@ export function createPathPredictor(options: PathPredictorOptions) {
     return value;
   };
   const hash = (node: number, goal: number) => ((Math.imul(node + 1, 73_856_093) ^ Math.imul(goal + 1, 19_349_663)) >>> 0) % capacity;
-  const lookup = (node: number, goal: number) => {
+  // Lookups and training share the same probe order. Only training selects eviction.
+  const lookup = (node: number, goal: number, training = false) => {
     const home = hash(node, goal);
+    let replacement = home;
     for (let probe = 0; probe < capacity; probe += 1) {
       const slot = (home + probe) % capacity;
-      if (nodes[slot] === -1) return -1;
       if (nodes[slot] === node && goals[slot] === goal) return slot;
+      if (nodes[slot] === -1) return training ? slot : -1;
+      if (training && confidenceValues[slot] < confidenceValues[replacement]) replacement = slot;
     }
-    return -1;
+    return training ? replacement : -1;
   };
   const write = (slot: number, node: number, goal: number, next: number) => {
     if (nodes[slot] === node && goals[slot] === goal && nextNodes[slot] === next) {
@@ -50,26 +53,6 @@ export function createPathPredictor(options: PathPredictorOptions) {
     nextNodes[slot] = next;
     confidenceValues[slot] = 1;
   };
-  const learn = (node: number, goal: number, next: number) => {
-    const home = hash(node, goal);
-    let replacement = home;
-    let lowestConfidence = confidenceValues[home];
-    for (let probe = 0; probe < capacity; probe += 1) {
-      const slot = (home + probe) % capacity;
-      if (nodes[slot] === -1 || (nodes[slot] === node && goals[slot] === goal)) {
-        write(slot, node, goal, next);
-        return;
-      }
-      if (confidenceValues[slot] < lowestConfidence) {
-        replacement = slot;
-        lowestConfidence = confidenceValues[slot];
-      }
-    }
-    nodes[replacement] = node;
-    goals[replacement] = goal;
-    nextNodes[replacement] = next;
-    confidenceValues[replacement] = 1;
-  };
   return Object.freeze({
     nodeCount,
     capacity,
@@ -80,7 +63,7 @@ export function createPathPredictor(options: PathPredictorOptions) {
       for (let index = 0; index + 1 < length; index += 1) {
         const node = nodeValue(path[index], `path[${index}]`);
         const next = nodeValue(path[index + 1], `path[${index + 1}]`);
-        learn(node, goal, next);
+        write(lookup(node, goal, true), node, goal, next);
       }
     },
     predict(start: number, goal: number, output: Int32Array, blocked?: ArrayLike<number>): PredictedPathResult {

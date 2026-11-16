@@ -1,10 +1,12 @@
+import { z } from "zod";
+import { ModuleRowSchema, VersionRowSchema, PluginReleaseRowSchema, ModuleListRowSchema } from "./storage/row-schemas";
 import { Database } from "bun:sqlite";
 
 import { compareVersions, nowIso } from "./db-core";
-import type { ModuleListRow, ModuleRow, PluginReleaseChannel, PluginReleaseRow, UserRow, VersionRow } from "./db";
+import type {   PluginReleaseChannel, UserRow } from "./db";
 import { isSemVerInRange, parseSemVer } from "@hyperfocus/pad-pilot/semver";
 export function getPluginReleaseById(db: Database, releaseId: string) {
-  return db.query("SELECT * FROM plugin_releases WHERE id = ?").get(releaseId) as PluginReleaseRow | null;
+  return z.union([PluginReleaseRowSchema, z.null()]).parse(db.query("SELECT * FROM plugin_releases WHERE id = ?").get(releaseId));
 }
 
 export function listPluginReleases(
@@ -15,14 +17,14 @@ export function listPluginReleases(
     platform: string;
   },
 ) {
-  return db
+  return z.array(PluginReleaseRowSchema).parse(db
     .query(
       `SELECT *
        FROM plugin_releases
        WHERE channel = ? AND platform = ? AND arch = ?
        ORDER BY published_at DESC`,
     )
-    .all(input.channel, input.platform, input.arch) as PluginReleaseRow[];
+    .all(input.channel, input.platform, input.arch));
 }
 
 export function getLatestPluginRelease(
@@ -50,36 +52,36 @@ export function getLatestPluginRelease(
 }
 
 export function getModuleById(db: Database, moduleId: string) {
-  return db
+  return z.union([ModuleRowSchema, z.null()]).parse(db
     .query(
       `SELECT modules.*, users.username, users.display_name
        FROM modules
        LEFT JOIN users ON users.id = modules.owner_user_id
        WHERE modules.id = ?`,
     )
-    .get(moduleId) as ModuleRow | null;
+    .get(moduleId));
 }
 
 export function getLatestPublishedVersion(db: Database, moduleId: string) {
-  const versions = db
+  const versions = z.array(VersionRowSchema).parse(db
     .query(
        `SELECT id, version, bundle_path, checksum_sha256, file_size_bytes, status, created_at, published_at
        FROM module_versions
        WHERE module_id = ? AND status = 'published'
        ORDER BY created_at DESC`,
     )
-    .all(moduleId) as VersionRow[];
+    .all(moduleId));
   return versions.sort((left, right) => compareVersions(right.version, left.version))[0] ?? null;
 }
 
 export function getLatestDraftVersion(db: Database, moduleId: string) {
-  const versions = db
+  const versions = z.array(VersionRowSchema).parse(db
     .query(
       `SELECT id, version, bundle_path, checksum_sha256, file_size_bytes, status, created_at, published_at
        FROM module_versions
        WHERE module_id = ? AND status = 'draft'`,
     )
-    .all(moduleId) as VersionRow[];
+    .all(moduleId));
   return versions.sort((left, right) => compareVersions(right.version, left.version))[0] ?? null;
 }
 
@@ -87,7 +89,7 @@ export function getLatestAccessibleVersion(db: Database, moduleId: string, user:
   if (!user) {
     return getLatestPublishedVersion(db, moduleId);
   }
-  const versions = db
+  const versions = z.array(VersionRowSchema).parse(db
     .query(
       `SELECT module_versions.id, module_versions.version, module_versions.bundle_path, module_versions.checksum_sha256, module_versions.file_size_bytes, module_versions.status, module_versions.created_at, module_versions.published_at
        FROM module_versions
@@ -95,7 +97,7 @@ export function getLatestAccessibleVersion(db: Database, moduleId: string, user:
        WHERE module_versions.module_id = ? AND modules.owner_user_id = ?
        ORDER BY module_versions.created_at DESC`,
     )
-    .all(moduleId, user.id) as VersionRow[];
+    .all(moduleId, user.id));
   return versions.sort((left, right) => compareVersions(right.version, left.version))[0] ?? null;
 }
 
@@ -115,7 +117,7 @@ export function listModulesForUser(db: Database, user: UserRow | null) {
     ? "WHERE modules.visibility = 'published' OR modules.owner_user_id = ?"
     : "WHERE modules.visibility = 'published'";
   const args = user ? [user.id] : [];
-  return db
+  return z.array(ModuleListRowSchema).parse(db
     .query(
       `SELECT modules.*, users.username, users.display_name,
         (
@@ -141,7 +143,7 @@ export function listModulesForUser(db: Database, user: UserRow | null) {
        ${visibilitySql}
        ORDER BY modules.updated_at DESC`,
     )
-    .all(...args) as ModuleListRow[];
+    .all(...args));
 }
 
 export function createModule(
@@ -183,15 +185,15 @@ export function publishModule(
   expectedDraftVersionId = "",
 ) {
   db.transaction(() => {
-    const moduleRow = db.query(
+    const moduleRow = z.union([z.object({ visibility: z.string() }), z.null()]).parse(db.query(
       "SELECT visibility FROM modules WHERE id = ? AND owner_user_id = ?",
-    ).get(moduleId, ownerUserId) as { visibility: string } | null;
+    ).get(moduleId, ownerUserId));
     if (!moduleRow) {
       throw new Error("Module owner did not match publish request.");
     }
-    const drafts = db
+    const drafts = z.array(z.object({ id: z.string(), version: z.string() })).parse(db
       .query("SELECT id, version FROM module_versions WHERE module_id = ? AND status = 'draft'")
-      .all(moduleId) as Array<{ id: string; version: string }>;
+      .all(moduleId));
     if (moduleRow.visibility === "draft" && drafts.length === 0) {
       throw new Error("A module needs a draft version before it can be published.");
     }
@@ -218,18 +220,18 @@ export function updateModuleTimestamp(db: Database, moduleId: string, timestamp:
 
 export function deleteDraftModule(db: Database, moduleId: string, ownerUserId: string) {
   return db.transaction(() => {
-    const moduleRow = db.query(
+    const moduleRow = z.union([z.object({ id: z.string(), visibility: z.string() }), z.null()]).parse(db.query(
       "SELECT id, visibility FROM modules WHERE id = ? AND owner_user_id = ?",
-    ).get(moduleId, ownerUserId) as { id: string; visibility: string } | null;
+    ).get(moduleId, ownerUserId));
     if (!moduleRow) {
       return null;
     }
     if (moduleRow.visibility !== "draft") {
       throw new Error("Published modules cannot be deleted through draft rollback.");
     }
-    const versions = db.query(
+    const versions = z.array(z.object({ bundle_path: z.string(), id: z.string() })).parse(db.query(
       "SELECT id, bundle_path FROM module_versions WHERE module_id = ?",
-    ).all(moduleId) as Array<{ bundle_path: string; id: string }>;
+    ).all(moduleId));
     db.query(
       `DELETE FROM module_assets
        WHERE module_version_id IN (SELECT id FROM module_versions WHERE module_id = ?)`,
@@ -254,13 +256,13 @@ export function deleteDraftModule(db: Database, moduleId: string, ownerUserId: s
 }
 
 export function getDraftModuleDeletion(db: Database, moduleId: string, userId: string) {
-  const row = db.query(
+  const row = z.union([z.object({ cleanup_paths_json: z.string() }), z.null()]).parse(db.query(
     "SELECT cleanup_paths_json FROM module_draft_deletions WHERE module_id = ? AND user_id = ?",
-  ).get(moduleId, userId) as { cleanup_paths_json: string } | null;
+  ).get(moduleId, userId));
   if (!row) {
     return null;
   }
-  const parsed = JSON.parse(row.cleanup_paths_json) as unknown;
+  const parsed: unknown = JSON.parse(row.cleanup_paths_json);
   if (!Array.isArray(parsed)) {
     throw new Error("Draft module cleanup metadata is invalid.");
   }

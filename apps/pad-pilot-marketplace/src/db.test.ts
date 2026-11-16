@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "bun:test";
 import { appendFileSync, copyFileSync, cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { Database } from "bun:sqlite";
@@ -43,7 +44,7 @@ describe("openMarketplaceDatabase", () => {
 
     const db = openMarketplaceDatabase(runtimeEnv);
     const tableNames = new Set(
-      (db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((row) => row.name),
+      (z.array(z.object({ name: z.string() }).passthrough()).parse(db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all())).map((row) => row.name),
     );
 
     expect(existsSync(runtimeEnv.dbPath)).toBe(true);
@@ -137,8 +138,8 @@ describe("openMarketplaceDatabase", () => {
     legacy.close(false);
 
     const reopened = openMarketplaceDatabase(runtimeEnv);
-    const row = reopened.query("SELECT checksum_sha256 FROM _migrations WHERE id = ?")
-      .get("005-draft-cleanup-paths.sql") as { checksum_sha256: string };
+    const row = z.object({ checksum_sha256: z.string() }).passthrough().parse(reopened.query("SELECT checksum_sha256 FROM _migrations WHERE id = ?")
+      .get("005-draft-cleanup-paths.sql"));
     expect(row.checksum_sha256).toMatch(/^[a-f0-9]{64}$/);
     reopened.close(false);
 

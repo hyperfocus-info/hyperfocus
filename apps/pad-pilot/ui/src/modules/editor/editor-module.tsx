@@ -1,3 +1,5 @@
+import { controlButtonIndex } from "./control-button-index";
+import { readEditorState } from "./editor-state-reader";
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
 import { PadPilot } from "../../padpilot/index";
 import { createProducerActions } from "../../padpilot/producer-actions";
@@ -27,14 +29,11 @@ const defaultTarget = (actionType: MappingItem["actionType"]) => {
   return "SPACE";
 };
 
-const controlButtonIndex = (control: string) => {
-  const match = /^Button (\d+)$/.exec(control);
-  return match ? Number(match[1]) : -1;
-};
+
 
 /** EditorModule manages controller-to-action bindings. */
 export function EditorModule() {
-  const [state, setState] = PadPilot.hooks.useModuleState<EditorState>("editor", DEFAULT_STATE);
+  const [state, setState] = PadPilot.hooks.useModuleState<EditorState>("editor", DEFAULT_STATE, readEditorState);
   const gamepad = PadPilot.hooks.useGamepad();
   const producer = createProducerActions("editor", {
     setProfile: (profileName) => setState({ profileName }),
@@ -100,7 +99,7 @@ export function EditorModule() {
   };
 
   return (
-    <section class={styles["module-root"]} style={{ "--pp-accent-color": "#bb76ff", "--pp-base-bg": "#241535" }}>
+    <PadPilot.ModuleWorkspace class={styles["module-root"]} style={{ "--pp-accent-color": "#bb76ff", "--pp-base-bg": "#241535" }}>
       <h2 class={styles.title}>Editor Module</h2>
 
       <PadPilot.Dropdown
@@ -137,7 +136,8 @@ export function EditorModule() {
             value={pendingAction()}
             label="Binding Action"
             onChange={(value) => {
-              const actionType = value as MappingItem["actionType"];
+              if (value !== "daw" && value !== "macro" && value !== "midi" && value !== "automation" && value !== "profile") return;
+              const actionType = value;
               setPendingAction(actionType);
               setPendingTarget(defaultTarget(actionType));
             }}
@@ -163,6 +163,6 @@ export function EditorModule() {
           <PadPilot.Button onClick={commitBinding}>Save Binding</PadPilot.Button>
         </div>
       </Show>
-    </section>
+    </PadPilot.ModuleWorkspace>
   );
 }

@@ -42,13 +42,14 @@ export type MeterChannel = {
 };
 
 export function resolveMeterPresentation(props: Pick<MeterProps, "label" | "leftValueDb" | "rightValueDb" | "stereo" | "valueDb">) {
-  const stereoEnabled = props.stereo === true && typeof props.leftValueDb === "number" && typeof props.rightValueDb === "number";
+  const { leftValueDb, rightValueDb } = props;
+  const stereoEnabled = props.stereo === true && typeof leftValueDb === "number" && typeof rightValueDb === "number";
   return {
     stereoEnabled,
     channels: stereoEnabled
       ? [
-        { id: "left", label: "L", valueDb: props.leftValueDb as number },
-        { id: "right", label: "R", valueDb: props.rightValueDb as number },
+        { id: "left", label: "L", valueDb: leftValueDb },
+        { id: "right", label: "R", valueDb: rightValueDb },
       ]
       : [{ id: "mono", label: props.label ?? "", valueDb: props.valueDb }],
     readout: stereoEnabled

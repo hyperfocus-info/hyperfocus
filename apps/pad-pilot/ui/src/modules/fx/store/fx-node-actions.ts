@@ -78,15 +78,15 @@ function createSetNodeControl(options: FxNodeActionOptions) {
       const config = resolveNodeConfig(node);
       if (timingAction && control.timingSync) {
         if (timingAction.action === "enabled") {
-          control.timingSync.setSyncEnabled(config as any, Boolean(value));
+          control.timingSync.setSyncEnabled(config, Boolean(value));
         } else {
           control.timingSync.setDivisionIndex(
-            config as any,
+            config,
             clampTimingSyncDivisionIndex(Number(value), control.timingSync.maximumDivisionIndex)
           );
         }
       } else {
-        control.setValue(config as any, value as never);
+        control.setValue(config, value);
       }
       syncNodeLegacyParams(node);
     });
@@ -155,7 +155,7 @@ export function createFxNodeActions(options: FxNodeActionOptions) {
     beginHostSyncHold,
     commitWorking,
     endHostSyncHold,
-    findLegacyParamById,
+
     getNodeUiKey,
     getWorkingSnapshot,
     pushToast,
@@ -237,7 +237,7 @@ export function createFxNodeActions(options: FxNodeActionOptions) {
         draftNode.muted = presetNode.muted;
         draftNode.solo = false;
         draftNode.selectedPresetId = presetId;
-        draftNode.config = presetNode.config as any;
+        draftNode.config = presetNode.config;
         draftNode.legacyParams = presetNode.legacyParams.map((param) => ({
           ...param,
         }));

@@ -8,7 +8,7 @@ export type FxEraGenreRecipe = FxIdeaRecipe & {
   researchBasis: readonly string[];
 };
 
-export const FX_ERA_GENRE_RECIPES = [
+export const FX_ERA_GENRE_RECIPES: readonly FxEraGenreRecipe[] = [
   {
     name: "1950s · Sun Slapback",
     era: "1950s",
@@ -437,6 +437,6 @@ export const FX_ERA_GENRE_RECIPES = [
       { name: "Hidden Slap", type: FxNodeType.DELAY, values: { time: 0.085, feedback: 0.05, focusMix: 0.1, lowCutHz: 200, highCutHz: 9200, width: 0.7, saturation: 0.03, character: "Clean" }, mix: 0.32 },
     ],
   },
-] as const satisfies readonly FxEraGenreRecipe[];
+] as const;
 
 export const FX_CURATED_PRESET_RECIPES = [...FX_IDEA_RECIPES, ...FX_ERA_GENRE_RECIPES] as const;

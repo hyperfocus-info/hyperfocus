@@ -305,9 +305,9 @@ type SweepScratch,
 } from "./rigid-3d-internals.ts";
 import {
 createRigidBaseOperations,
-createRigidBroadphaseOperations,
+
 createRigidCcdOperations,
-createRigidCollisionOperations,
+
 type RigidMutableState,
 type RigidOperationContext,
 type RigidOperations,
@@ -521,23 +521,16 @@ export function createRigidWorld3D(options: RigidWorldOptions3D = {}): RigidWorl
       onCountChanged(count) { diagnostics.constraints = count; },
       onBreak() { diagnostics.constraintBreaks += 1; },
     });
-  const rigidOperations2 = createRigidCollisionOperations(operationContext, { ...rigidOperations1 });
-  const rigidOperations3 = createRigidCcdOperations(operationContext, { ...rigidOperations1, ...rigidOperations2 });
-  const rigidOperations4 = createRigidBroadphaseOperations(operationContext, { ...rigidOperations1, ...rigidOperations2 });
-  const {  } = rigidOperations2;
-  const {  } = rigidOperations3;
-  const {  } = rigidOperations4;
+  const rigidOperations3 = createRigidCcdOperations(operationContext, rigidOperations1);
     const operations: RigidOperations = {
     ...rigidOperations1,
-    ...rigidOperations2,
     ...rigidOperations3,
-    ...rigidOperations4,
   };
   return createRigidWorld3DApi({
     context: operationContext,
     operations,
     constraintStore,
     precision,
-    numericStorageBytes: numericStorageBytes + rigidOperations4.contactIndexStorageBytes,
+    numericStorageBytes: numericStorageBytes + rigidOperations3.contactIndexStorageBytes,
   });
 }

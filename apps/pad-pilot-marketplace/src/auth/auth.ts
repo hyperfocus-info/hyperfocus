@@ -1,21 +1,6 @@
-import { createRequire } from "node:module";
+import { createClerkClient, verifyToken } from "@clerk/backend";
 import { marketplaceEnv as env, type MarketplaceEnv } from "../env";
 
-const require = createRequire(import.meta.url);
-const { createClerkClient, verifyToken } = require("@clerk/backend") as {
-  createClerkClient: (options: { secretKey: string }) => {
-    users: {
-      getUser: (userId: string) => Promise<{
-        emailAddresses: Array<{ emailAddress: string; id: string }>;
-        firstName: string | null;
-        lastName: string | null;
-        primaryEmailAddressId: string | null;
-        username: string | null;
-      }>;
-    };
-  };
-  verifyToken: (token: string, options: { secretKey: string }) => Promise<{ sub?: string }>;
-};
 
 export type VerifiedClerkIdentity = {
   clerkUserId: string;

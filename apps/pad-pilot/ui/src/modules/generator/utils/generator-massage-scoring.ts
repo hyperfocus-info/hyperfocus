@@ -1,32 +1,32 @@
 import { GENERATOR_MIDI_BEATS_PER_BAR, GENERATOR_MIDI_DRUM_CHANNEL, GENERATOR_MIDI_TICKS_PER_QUARTER, type GeneratorMidiComposition, type GeneratorMidiTrack } from "./midi-encoder";
-import { type GeneratorIntentTags, type GeneratorLengthBars } from "./generator-options";
+import { type GeneratorIntentTags, type GeneratorLengthBars } from "./generator-option-catalog";
 import { type GeneratorMusicianPlan, type GeneratorPromptInput, type StyleDnaFilterStats } from "./generator-contracts";
 import { clamp01, trackSourceText } from "./generator-prompt";
 import { absoluteTrackNotes, isSupportingTrack, maxNoteClusterSize, trackRole } from "./generator-tracker";
 import { groupNotesByAttack } from "./generator-massage-repair";
 import { supportingTrackVelocityCap } from "./generator-massage-patches";
 
-export function createStyleDnaFilterStats() {
+export function createStyleDnaFilterStats() : StyleDnaFilterStats {
   return {
-    chordDependentFillNotes: 0,
-    earwormLeadPatched: false,
-    eventModulatedNotes: 0,
+    chordDependentFillNotes: 0 as const,
+    earwormLeadPatched: false as const,
+    eventModulatedNotes: 0 as const,
     massageDecisionLines: new Array<string>(),
-    massagedTrackCount: 0,
-    normalizedIntentTagLine: "",
-    oneShotEvents: 0,
+    massagedTrackCount: 0 as const,
+    normalizedIntentTagLine: "" as const,
+    oneShotEvents: 0 as const,
     patchedTrackRoles: [],
-    pitchCorrectedNotes: 0,
-    quantizedNotes: 0,
+    pitchCorrectedNotes: 0 as const,
+    quantizedNotes: 0 as const,
     regeneratedTracks: [],
-    simplifiedChordClusters: 0,
+    simplifiedChordClusters: 0 as const,
     skippedAdditiveRepairs: [],
-    strippedChordNotes: 0,
-    supportBalancedNotes: 0,
-    supportThinnedNotes: 0,
-    syncopationClampedNotes: 0,
-    upperColorNotes: 0,
-  } satisfies StyleDnaFilterStats;
+    strippedChordNotes: 0 as const,
+    supportBalancedNotes: 0 as const,
+    supportThinnedNotes: 0 as const,
+    syncopationClampedNotes: 0 as const,
+    upperColorNotes: 0 as const,
+  };
 }
 
 export function roundToStep(value: number, step: number) {
@@ -267,7 +267,7 @@ export function trackMassageIssue(tag: TrackMassageIssueTag, score: number) {
   return {
     score: clamp01(score, 0),
     tag,
-  } satisfies TrackMassageIssue;
+  };
 }
 
 export function trackWrongnessIssues(track: GeneratorMidiTrack, plan: GeneratorMusicianPlan, input: GeneratorPromptInput, intentTags: GeneratorIntentTags, lengthBars: GeneratorLengthBars) {
@@ -320,7 +320,7 @@ export function buildTrackMassageDecisions(composition: GeneratorMidiComposition
       massageFactor,
       name: track.name,
       role: trackRole(track),
-    } satisfies TrackMassageDecision;
+    };
   });
 }
 
@@ -378,11 +378,11 @@ export function roleRepairPressure(decisions: readonly TrackMassageDecision[], r
 export function createStyleMassageBudget(decisions: readonly TrackMassageDecision[]) {
   const maxFactor = Math.max(0, ...decisions.map((decision) => decision.massageFactor));
   return {
-    addedRepairs: 0,
+    addedRepairs: 0 as const,
     maxAddedRepairs: maxFactor >= 0.9 ? 2 : 1,
-    maxRegeneratedTracks: 1,
-    regeneratedTracks: 0,
-  } satisfies StyleMassageBudget;
+    maxRegeneratedTracks: 1 as const,
+    regeneratedTracks: 0 as const,
+  };
 }
 
 export function consumeAdditiveRepair(budget: StyleMassageBudget, stats: StyleDnaFilterStats, label: string) {

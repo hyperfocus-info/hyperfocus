@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { toId, lineOf, extractArrayConst, sliceBetween, extractStringArrayEntries } from "./utils/audit-generator-values";
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,42 +39,19 @@ const sourceFiles = {
   ],
 };
 
-function toId(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
 
-function lineOf(source: string, needle: string) {
-  const index = source.indexOf(needle);
-  if (index < 0) {
-    return "missing";
-  }
-  return String(source.slice(0, index).split(/\r?\n/).length);
-}
 
-function extractArrayConst(source: string, name: string) {
-  const match = new RegExp(`const\\s+${name}\\s*=\\s*\\[([\\s\\S]*?)\\]\\s+as\\s+const`).exec(source);
-  if (!match) {
-    return [];
-  }
-  return [...match[1].matchAll(/"([^"\\]*(?:\\.[^"\\]*)*)"/g)].map((item) => item[1] ?? "");
-}
 
-function sliceBetween(source: string, startNeedle: string, endNeedle: string) {
-  const start = source.indexOf(startNeedle);
-  if (start < 0) {
-    return "";
-  }
-  const end = source.indexOf(endNeedle, start + startNeedle.length);
-  return end < 0 ? source.slice(start) : source.slice(start, end);
-}
+
+
+
+
 
 function countMatches(source: string, pattern: RegExp) {
   return [...source.matchAll(pattern)].length;
 }
 
-function extractStringArrayEntries(source: string) {
-  return [...source.matchAll(/"([^"\\]*(?:\\.[^"\\]*)*)"/g)].map((item) => item[1] ?? "");
-}
+
 
 function extractFallbackPaletteTags(source: string) {
   return [...source.matchAll(/\{\s*[\s\S]*?label:\s*"([^"]+)"[\s\S]*?tags:\s*\[([\s\S]*?)\][\s\S]*?\}/g)]

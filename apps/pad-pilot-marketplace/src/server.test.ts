@@ -1,8 +1,9 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { CodexGeneratorTimeoutError } from "./codex-generator";
+import { createCodexGeneratorTimeoutError } from "./codex-generator";
 import { processStripeWebhook } from "./billing/billing-webhooks";
 import {
   createModule,
@@ -56,7 +57,7 @@ function createRuntime(overrides: {
     isClerkConfigured: true,
     isDevelopment: overrides.isDevelopment ?? false,
     isStripeConfigured: true,
-    maxUploadBytes: 1024 * 1024,
+    maxUploadBytes: 1048576,
     migrationsDir: path.join(process.cwd(), "migrations"),
     port: 3100,
     publicOrigin: "https://marketplace.test",
@@ -98,7 +99,7 @@ function createRuntime(overrides: {
 }
 
 async function readJson(response: Response) {
-  return response.json() as Promise<Record<string, any>>;
+  return z.object({ error: z.object({ code: z.string(), message: z.string() }).optional(), user: z.object({ username: z.string() }).passthrough().optional(), authenticated: z.boolean().optional(), marketplace: z.object({ modules: z.array(z.unknown()) }).passthrough().optional(), module: z.object({ id: z.string(), slug: z.string(), latestPublishedVersion: z.object({ version: z.string() }).passthrough().nullable().optional() }).passthrough().optional(), modules: z.array(z.object({ id: z.string() }).passthrough()).optional(), subscriptionStatus: z.string().optional(), checkoutUrl: z.string().optional(), checkoutId: z.string().optional(), ok: z.boolean().optional(), updateAvailable: z.boolean().optional(), release: z.object({ version: z.string() }).passthrough().optional(), alreadyDeleted: z.boolean().optional(), cleanupPending: z.boolean().optional(), deleted: z.boolean().optional() }).passthrough().parse(await response.json());
 }
 
 describe("createMarketplaceApp", () => {
@@ -207,13 +208,13 @@ describe("createMarketplaceApp", () => {
     });
 
     const missing = await app.handle(mutation());
-    const crossOrigin = await app.handle(mutation("https://evil.marketplace.test"));
+    const crossOrigin = await app.handle(mutation("https://evil.marketplace!.test"));
     const sameOrigin = await app.handle(mutation("https://marketplace.test"));
 
     expect(missing.status).toBe(403);
-    expect((await readJson(missing)).error.code).toBe("invalid_request_origin");
+    expect((await readJson(missing)).error!.code).toBe("invalid_request_origin");
     expect(crossOrigin.status).toBe(403);
-    expect((await readJson(crossOrigin)).error.code).toBe("invalid_request_origin");
+    expect((await readJson(crossOrigin)).error!.code).toBe("invalid_request_origin");
     expect(sameOrigin.status).toBe(201);
     db.close(false);
   });
@@ -232,7 +233,7 @@ describe("createMarketplaceApp", () => {
     }));
     expect(authResponse.status).toBe(200);
     const authBody = await readJson(authResponse);
-    expect(authBody.user.username).toBe("server-test-user");
+    expect(authBody.user!.username).toBe("server-test-user");
     const cookie = authResponse.headers.get("set-cookie");
     expect(cookie).toContain("pp_session=");
 
@@ -248,7 +249,7 @@ describe("createMarketplaceApp", () => {
     }));
     expect(bootstrapResponse.status).toBe(200);
     const bootstrapBody = await readJson(bootstrapResponse);
-    expect(Array.isArray(bootstrapBody.marketplace.modules)).toBe(true);
+    expect(Array.isArray(bootstrapBody.marketplace!.modules)).toBe(true);
 
     const createModuleResponse = await app.handle(new Request("http://localhost/api/modules", {
       body: JSON.stringify({
@@ -265,7 +266,7 @@ describe("createMarketplaceApp", () => {
       method: "POST",
     }));
     expect(createModuleResponse.status).toBe(201);
-    const createdModule = (await readJson(createModuleResponse)).module;
+    const createdModule = (await readJson(createModuleResponse)).module!;
     expect(createdModule.slug).toBe("acceptance-fixture");
 
     const uploadForm = new FormData();
@@ -298,11 +299,11 @@ describe("createMarketplaceApp", () => {
     const detailResponse = await app.handle(new Request(`http://localhost/api/modules/${createdModule.id}`));
     expect(detailResponse.status).toBe(200);
     const detailBody = await readJson(detailResponse);
-    expect(detailBody.module.latestPublishedVersion.version).toBe("1.2.3");
+    expect(detailBody.module!.latestPublishedVersion!.version).toBe("1.2.3");
 
     const downloadResponse = await app.handle(new Request(`http://localhost/api/modules/${createdModule.id}/download`));
     expect(downloadResponse.status).toBe(403);
-    expect((await readJson(downloadResponse)).error.code).toBe("purchase_required");
+    expect((await readJson(downloadResponse)).error!.code).toBe("purchase_required");
 
     const ownerDownloadResponse = await app.handle(new Request(`http://localhost/api/modules/${createdModule.id}/download`, {
       headers: { cookie: cookie! },
@@ -319,7 +320,7 @@ describe("createMarketplaceApp", () => {
       headers: { cookie: cookie! },
     }));
     expect(blockedDownloadResponse.status).toBe(503);
-    expect((await readJson(blockedDownloadResponse)).error.code).toBe("transfer_busy");
+    expect((await readJson(blockedDownloadResponse)).error!.code).toBe("transfer_busy");
     await heldDownloadResponse.body?.cancel();
     const resumedDownloadResponse = await app.handle(new Request(`http://localhost/api/modules/${createdModule.id}/download`, {
       headers: { cookie: cookie! },
@@ -327,21 +328,21 @@ describe("createMarketplaceApp", () => {
     expect(resumedDownloadResponse.status).toBe(200);
     expect((await resumedDownloadResponse.arrayBuffer()).byteLength).toBe(4);
 
-    const storedBundle = db.query(
+    const storedBundle = z.object({ bundle_path: z.string() }).passthrough().parse(db.query(
       "SELECT bundle_path FROM module_versions WHERE module_id = ?",
-    ).get(createdModule.id) as { bundle_path: string };
+    ).get(createdModule.id));
     await Bun.write(storedBundle.bundle_path, new Uint8Array([0x50, 0x4b, 0x05, 0x06]));
     const corruptDownloadResponse = await app.handle(new Request(`http://localhost/api/modules/${createdModule.id}/download`, {
       headers: { cookie: cookie! },
     }));
     expect(corruptDownloadResponse.status).toBe(409);
-    expect((await readJson(corruptDownloadResponse)).error.code).toBe("bundle_checksum_mismatch");
+    expect((await readJson(corruptDownloadResponse)).error!.code).toBe("bundle_checksum_mismatch");
 
     const accountModulesResponse = await app.handle(new Request("http://localhost/api/account/modules", {
       headers: { cookie: cookie! },
     }));
     expect(accountModulesResponse.status).toBe(200);
-    expect((await readJson(accountModulesResponse)).modules.map((module: { id: string }) => module.id)).toContain(createdModule.id);
+    expect((await readJson(accountModulesResponse)).modules!.map((module: { id: string }) => module.id)).toContain(createdModule.id);
 
     const subscriptionResponse = await app.handle(new Request("http://localhost/api/account/subscription", {
       headers: { cookie: cookie! },
@@ -428,7 +429,7 @@ describe("createMarketplaceApp", () => {
       new Request("http://localhost/api/updates/vst3/download/release_fixture"),
     );
     expect(corruptArtifactResponse.status).toBe(409);
-    expect((await readJson(corruptArtifactResponse)).error.code).toBe("bundle_checksum_mismatch");
+    expect((await readJson(corruptArtifactResponse)).error!.code).toBe("bundle_checksum_mismatch");
 
     const manifestResponse = await app.handle(new Request("http://localhost/api/updates/vst3/manifest/release_fixture"));
     expect(manifestResponse.status).toBe(200);
@@ -438,7 +439,7 @@ describe("createMarketplaceApp", () => {
     const notFoundResponse = await app.handle(new Request("http://localhost/api/does-not-exist"));
     expect(notFoundResponse.status).toBe(404);
     const notFoundBody = await readJson(notFoundResponse);
-    expect(notFoundBody.error.code).toBe("route_not_found");
+    expect(notFoundBody.error!.code).toBe("route_not_found");
 
     const logoutResponse = await app.handle(new Request("http://localhost/api/auth/logout", {
       headers: { cookie: cookie!, origin: "https://marketplace.test" },
@@ -464,13 +465,13 @@ describe("createMarketplaceApp", () => {
       method: "POST",
     });
     const moduleResponse = await app.handle(createRequest());
-    const moduleId = (await readJson(moduleResponse)).module.id as string;
+    const moduleId = z.string().parse((await readJson(moduleResponse)).module!.id);
     const prematurePublish = await app.handle(new Request(`http://localhost/api/modules/${moduleId}/publish`, {
       headers: { cookie, origin: "https://marketplace.test" },
       method: "POST",
     }));
     expect(prematurePublish.status).toBe(409);
-    expect((await readJson(prematurePublish)).error.code).toBe("version_required");
+    expect((await readJson(prematurePublish)).error!.code).toBe("version_required");
     const upload = new FormData();
     upload.set("version", "1.0.0");
     upload.set("bundle", new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], "bundle.zip"));
@@ -479,7 +480,7 @@ describe("createMarketplaceApp", () => {
       headers: { cookie, origin: "https://marketplace.test" },
       method: "POST",
     }))).status).toBe(200);
-    const stored = db.query("SELECT bundle_path FROM module_versions WHERE module_id = ?").get(moduleId) as { bundle_path: string };
+    const stored = z.object({ bundle_path: z.string() }).passthrough().parse(db.query("SELECT bundle_path FROM module_versions WHERE module_id = ?").get(moduleId));
     expect(existsSync(stored.bundle_path)).toBe(true);
 
     const deleted = await app.handle(new Request(`http://localhost/api/modules/${moduleId}`, {
@@ -522,7 +523,7 @@ describe("createMarketplaceApp", () => {
       headers: { cookie, "content-type": "application/json", origin: "https://marketplace.test" },
       method: "POST",
     }));
-    const moduleId = (await readJson(moduleResponse)).module.id as string;
+    const moduleId = z.string().parse((await readJson(moduleResponse)).module!.id);
     const upload = new FormData();
     upload.set("version", "1.0.0");
     upload.set("bundle", new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], "bundle.zip"));
@@ -531,9 +532,7 @@ describe("createMarketplaceApp", () => {
       headers: { cookie, origin: "https://marketplace.test" },
       method: "POST",
     }))).status).toBe(200);
-    const stored = db.query("SELECT bundle_path FROM module_versions WHERE module_id = ?").get(moduleId) as {
-      bundle_path: string;
-    };
+    const stored = z.object({ bundle_path: z.string() }).passthrough().parse(db.query("SELECT bundle_path FROM module_versions WHERE module_id = ?").get(moduleId));
 
     const firstDelete = await app.handle(new Request(`http://localhost/api/modules/${moduleId}`, {
       headers: { cookie, origin: "https://marketplace.test" },
@@ -542,9 +541,9 @@ describe("createMarketplaceApp", () => {
     expect(firstDelete.status).toBe(200);
     expect((await readJson(firstDelete)).cleanupPending).toBe(true);
     expect(existsSync(stored.bundle_path)).toBe(true);
-    const pending = db.query(
+    const pending = z.object({ cleanup_paths_json: z.string() }).passthrough().parse(db.query(
       "SELECT cleanup_paths_json FROM module_draft_deletions WHERE module_id = ?",
-    ).get(moduleId) as { cleanup_paths_json: string };
+    ).get(moduleId));
     expect(JSON.parse(pending.cleanup_paths_json)).toEqual([stored.bundle_path]);
 
     const retry = await app.handle(new Request(`http://localhost/api/modules/${moduleId}`, {
@@ -556,9 +555,9 @@ describe("createMarketplaceApp", () => {
     expect(retryBody.alreadyDeleted).toBe(true);
     expect(retryBody.cleanupPending).toBe(false);
     expect(existsSync(stored.bundle_path)).toBe(false);
-    const completed = db.query(
+    const completed = z.object({ cleanup_paths_json: z.string() }).passthrough().parse(db.query(
       "SELECT cleanup_paths_json FROM module_draft_deletions WHERE module_id = ?",
-    ).get(moduleId) as { cleanup_paths_json: string };
+    ).get(moduleId));
     expect(JSON.parse(completed.cleanup_paths_json)).toEqual([]);
     db.close(false);
   });
@@ -618,9 +617,9 @@ describe("createMarketplaceApp", () => {
     expect((await readJson(retry)).checkoutId).toBe((await readJson(first)).checkoutId);
     expect(checkoutCalls).toHaveLength(1);
 
-    const checkout = db.query(
+    const checkout = z.object({ id: z.string(), order_id: z.string() }).passthrough().parse(db.query(
       "SELECT id, order_id FROM billing_checkouts WHERE stripe_checkout_session_id = ?",
-    ).get("cs_module_server") as { id: string; order_id: string };
+    ).get("cs_module_server"));
     const completedEvent = {
       id: "evt_module_server_paid",
       type: "checkout.session.completed",
@@ -681,9 +680,9 @@ describe("development Codex generator route", () => {
   it("binds development to loopback and seeds the configured upload root", () => {
     const { db, runtimeEnv } = createRuntime({ isDevelopment: true, seedData: true });
     expect(marketplaceListenOptions(runtimeEnv)).toEqual({ hostname: "127.0.0.1", port: 3100 });
-    const seeded = db.query(
+    const seeded = z.union([z.object({ bundle_path: z.string() }).passthrough(), z.null()]).parse(db.query(
       "SELECT bundle_path FROM module_versions WHERE version = '1.0.0' ORDER BY created_at LIMIT 1",
-    ).get() as { bundle_path: string } | null;
+    ).get());
     expect(seeded?.bundle_path.startsWith(runtimeEnv.uploadRoot)).toBe(true);
     expect(existsSync(seeded?.bundle_path ?? "")).toBe(true);
     db.close(false);
@@ -759,9 +758,9 @@ describe("development Codex generator route", () => {
 
     const body = await readJson(response);
     expect(response.status).toBe(502);
-    expect(body.error.code).toBe("codex_generator_failed");
-    expect(body.error.message).toContain("Codex CLI exited with 1.");
-    expect(body.error.message).toContain("unexpected argument '--ask-for-approval'");
+    expect(body.error!.code).toBe("codex_generator_failed");
+    expect(body.error!.message).toContain("Codex CLI exited with 1.");
+    expect(body.error!.message).toContain("unexpected argument '--ask-for-approval'");
     db.close(false);
   });
 
@@ -770,7 +769,7 @@ describe("development Codex generator route", () => {
       isDevelopment: true,
       services: {
         runCodexGenerator: async () => {
-          throw new CodexGeneratorTimeoutError("Codex CLI generation timed out after 300s.");
+          throw createCodexGeneratorTimeoutError("Codex CLI generation timed out after 300s.");
         },
       },
     });
@@ -791,8 +790,8 @@ describe("development Codex generator route", () => {
 
     const body = await readJson(response);
     expect(response.status).toBe(504);
-    expect(body.error.code).toBe("codex_generator_timeout");
-    expect(body.error.message).toContain("timed out after 300s");
+    expect(body.error!.code).toBe("codex_generator_timeout");
+    expect(body.error!.message).toContain("timed out after 300s");
     db.close(false);
   });
 
@@ -852,7 +851,7 @@ describe("development Codex generator route", () => {
     await started;
     const busy = await app.handle(request());
     expect(busy.status).toBe(503);
-    expect((await readJson(busy)).error.code).toBe("dev_generator_busy");
+    expect((await readJson(busy)).error!.code).toBe("dev_generator_busy");
     releaseProcess();
     expect((await first).status).toBe(200);
     db.close(false);

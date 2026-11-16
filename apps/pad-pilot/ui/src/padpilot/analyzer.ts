@@ -123,7 +123,7 @@ function mapScaleMatch(match: AnalyzerScaleMatch | null | undefined) {
   return {
     confidence: match.confidence,
     label: `${formatPitchClass(match.rootPitchClass)} ${formatScaleLabel(match.scaleId)}`,
-  } satisfies AnalyzerKeyMatch;
+  };
 }
 
 function mapNoteEvent(noteEvent: AnalyzerNoteEvent) {
@@ -138,7 +138,7 @@ function mapNoteEvent(noteEvent: AnalyzerNoteEvent) {
     intensity: noteEvent.intensity,
     velocity: noteEvent.velocity,
     meanFrequencyHz: noteEvent.meanFrequencyHz,
-  } satisfies AnalyzerFeedNoteEvent;
+  };
 }
 
 function resolveMinMidiNote(moduleState: AnalyzerModuleState | null, frame: AnalyzerFrame | null) {
@@ -151,7 +151,7 @@ function resolveMaxMidiNote(moduleState: AnalyzerModuleState | null, frame: Anal
   return candidates.length > 0 ? Math.max(...candidates) : null;
 }
 
-function mapAnalyzerFeedFrame() {
+function mapAnalyzerFeedFrame() : AnalyzerFeedFrame {
   const { frame, moduleState } = analyzerStateCache;
   const topMatches = moduleState?.takeSummary?.topMatches ?? [];
   const alternateMatches = frame?.alternateMatches.length ? frame.alternateMatches : topMatches.slice(1);
@@ -182,7 +182,7 @@ function mapAnalyzerFeedFrame() {
     takeDurationSeconds: moduleState?.takeSummary?.durationSeconds ?? frame?.durationSeconds ?? null,
     frameCount: Math.max(moduleState?.takeSummary?.frameCount ?? 0, frame?.frameCount ?? 0),
     noteEvents: (moduleState?.noteEvents ?? []).map(mapNoteEvent),
-  } satisfies AnalyzerFeedFrame;
+  };
 }
 
 function publishMappedAnalyzerFrame() {
@@ -334,7 +334,7 @@ export const analyzer = {
       isClosed() {
         return closed;
       },
-    } satisfies AnalyzerSubscription;
+    };
   },
   startCapture(options?: { mode?: "overwrite" | "append" }) {
     ensureAnalyzerWiring();

@@ -75,14 +75,14 @@ export function createAccountRouteHandlers(dependencies: AccountHandlerDependenc
   const checkout = async ({ request, store, authUser }: AccountRequestContext) => {
     const auth = requireAuthUser(authUser);
     if (auth.response) return auth.response;
-    const limited = dependencies.enforceRateLimit("checkout", auth.user!.id, 12, 10 * 60 * 1000);
+    const limited = dependencies.enforceRateLimit("checkout", auth.user!.id, 12, 600000);
     if (limited) return limited;
     if (!store.env.isStripeConfigured) return fail(503, "stripe_not_configured", "Stripe is not configured for this environment.");
     if (!store.env.publicOrigin && !store.env.isDevelopment) {
       return fail(503, "public_origin_not_configured", "Marketplace public origin is not configured.");
     }
 
-    const requestBody = await readBoundedJson(request, 4 * 1024);
+    const requestBody = await readBoundedJson(request, 4096);
     if (requestBody.response) return requestBody.response;
     const parsed = createCheckoutSessionBody.safeParse(requestBody.data);
     if (!parsed.success) return fail(400, "invalid_checkout_kind", "A supported checkout kind is required.");
@@ -138,7 +138,7 @@ export function createAccountRouteHandlers(dependencies: AccountHandlerDependenc
       checkoutRow = store.db.transaction(() => {
         let active = findActiveBillingCheckoutByScope(store.db, auth.user!.id, scopeKey);
         const activeCreatedAt = active ? Date.parse(active.created_at) : Number.NaN;
-        if (active && (!Number.isFinite(activeCreatedAt) || Date.now() - activeCreatedAt > 24 * 60 * 60 * 1000)) {
+        if (active && (!Number.isFinite(activeCreatedAt) || Date.now() - activeCreatedAt > 86400000)) {
           updateBillingCheckoutStatusById(store.db, active.id, "expired", timestamp);
           if (active.order_id) updateModuleOrder(store.db, active.order_id, { status: "expired", updatedAt: timestamp });
           active = null;
@@ -209,7 +209,7 @@ export function createAccountRouteHandlers(dependencies: AccountHandlerDependenc
   };
 
   const stripeWebhook = async ({ request, store }: { request: Request; store: AccountStore }) => {
-    const limited = dependencies.enforceRateLimit("stripe-webhook", dependencies.clientIdentity(request), 600, 60 * 1000);
+    const limited = dependencies.enforceRateLimit("stripe-webhook", dependencies.clientIdentity(request), 600, 60000);
     if (limited) return limited;
     const body = await readBoundedBody(request, maxStripeWebhookBytes);
     if (!body) return fail(413, "stripe_webhook_too_large", "Stripe webhook exceeded the request limit.");

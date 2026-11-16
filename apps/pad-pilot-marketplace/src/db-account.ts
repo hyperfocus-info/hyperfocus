@@ -1,12 +1,14 @@
+import { z } from "zod";
+import { UserRowSchema, SessionRowSchema, PadPilotAccessRowSchema, FirstClassMembershipRowSchema, PilotTokenLedgerRowSchema } from "./storage/row-schemas";
 import { Database } from "bun:sqlite";
 
 import type { VerifiedClerkIdentity } from "./auth/auth";
-import type { AccountSnapshot, FirstClassMembershipRow, FirstClassMembershipStatus, PadPilotAccessRow, PadPilotAccessStatus, PilotTokenLedgerRow, SessionRow, TokenSourceKind, UserRow } from "./db";
+import type { AccountSnapshot, FirstClassMembershipRow, FirstClassMembershipStatus, PadPilotAccessRow, PadPilotAccessStatus, TokenSourceKind, UserRow } from "./db";
 const selectUserColumns =
   "users.id, users.clerk_user_id, users.email, users.username, users.display_name, users.subscription_status, users.pilot_token_balance";
 
 function getUserById(db: Database, userId: string) {
-  return db.query(`SELECT ${selectUserColumns} FROM users WHERE id = ?`).get(userId) as UserRow | null;
+  return z.union([UserRowSchema, z.null()]).parse(db.query(`SELECT ${selectUserColumns} FROM users WHERE id = ?`).get(userId));
 }
 
 export function computeSubscriptionStatus(
@@ -39,23 +41,23 @@ export function computeSubscriptionStatus(
 }
 
 export function getPadPilotAccessByUserId(db: Database, userId: string) {
-  return db.query("SELECT * FROM padpilot_access WHERE user_id = ?").get(userId) as PadPilotAccessRow | null;
+  return z.union([PadPilotAccessRowSchema, z.null()]).parse(db.query("SELECT * FROM padpilot_access WHERE user_id = ?").get(userId));
 }
 
 export function getFirstClassMembershipByUserId(db: Database, userId: string) {
-  return db.query("SELECT * FROM first_class_memberships WHERE user_id = ?").get(userId) as FirstClassMembershipRow | null;
+  return z.union([FirstClassMembershipRowSchema, z.null()]).parse(db.query("SELECT * FROM first_class_memberships WHERE user_id = ?").get(userId));
 }
 
 export function getPadPilotAccessByProviderSubscriptionId(db: Database, providerSubscriptionId: string) {
-  return db.query("SELECT * FROM padpilot_access WHERE provider_subscription_id = ?").get(providerSubscriptionId) as PadPilotAccessRow | null;
+  return z.union([PadPilotAccessRowSchema, z.null()]).parse(db.query("SELECT * FROM padpilot_access WHERE provider_subscription_id = ?").get(providerSubscriptionId));
 }
 
 export function getFirstClassMembershipByProviderSubscriptionId(db: Database, providerSubscriptionId: string) {
-  return db.query("SELECT * FROM first_class_memberships WHERE provider_subscription_id = ?").get(providerSubscriptionId) as FirstClassMembershipRow | null;
+  return z.union([FirstClassMembershipRowSchema, z.null()]).parse(db.query("SELECT * FROM first_class_memberships WHERE provider_subscription_id = ?").get(providerSubscriptionId));
 }
 
 export function getRecentPilotTokenLedger(db: Database, userId: string, limit = 10) {
-  return db.query("SELECT * FROM pilot_token_ledger WHERE user_id = ? ORDER BY created_at DESC LIMIT ?").all(userId, limit) as PilotTokenLedgerRow[];
+  return z.array(PilotTokenLedgerRowSchema).parse(db.query("SELECT * FROM pilot_token_ledger WHERE user_id = ? ORDER BY created_at DESC LIMIT ?").all(userId, limit));
 }
 
 export function getAccountSnapshot(db: Database, user: UserRow | null) {
@@ -89,20 +91,20 @@ export function getAccountSnapshot(db: Database, user: UserRow | null) {
 }
 
 export function findUserByTokenHash(db: Database, tokenHash: string, nowIsoVal: string) {
-  return db
+  return z.union([UserRowSchema, z.null()]).parse(db
     .query(
       `SELECT ${selectUserColumns}
        FROM api_sessions
        JOIN users ON users.id = api_sessions.user_id
        WHERE api_sessions.token_hash = ? AND api_sessions.expires_at > ?`,
     )
-    .get(tokenHash, nowIsoVal) as UserRow | null;
+    .get(tokenHash, nowIsoVal));
 }
 
 export function findSessionByTokenHash(db: Database, tokenHash: string, nowIsoVal: string) {
-  return db
+  return z.union([SessionRowSchema, z.null()]).parse(db
     .query("SELECT user_id, token_hash, expires_at FROM api_sessions WHERE token_hash = ? AND expires_at > ?")
-    .get(tokenHash, nowIsoVal) as SessionRow | null;
+    .get(tokenHash, nowIsoVal));
 }
 
 export function updateSessionLastSeen(db: Database, tokenHash: string, nowIsoVal: string) {
@@ -144,7 +146,7 @@ export function upsertUserFromClerk(db: Database, identity: VerifiedClerkIdentit
     timestamp,
     timestamp,
   );
-  return (db.query("SELECT id FROM users WHERE clerk_user_id = ?").get(identity.clerkUserId) as { id: string }).id;
+  return (z.object({ id: z.string() }).parse(db.query("SELECT id FROM users WHERE clerk_user_id = ?").get(identity.clerkUserId))).id;
 }
 
 export function createSession(
@@ -303,8 +305,8 @@ export function applyPilotTokenDelta(
 ) {
   try {
     return db.transaction(() => {
-      const existing = db.query("SELECT * FROM pilot_token_ledger WHERE source_ref = ?")
-        .get(input.sourceRef) as PilotTokenLedgerRow | null;
+      const existing = z.union([PilotTokenLedgerRowSchema, z.null()]).parse(db.query("SELECT * FROM pilot_token_ledger WHERE source_ref = ?")
+        .get(input.sourceRef));
       if (existing) {
         return existing;
       }
@@ -328,11 +330,11 @@ export function applyPilotTokenDelta(
         input.createdAt,
         input.notesJson ?? "{}",
       );
-      return db.query("SELECT * FROM pilot_token_ledger WHERE id = ?").get(ledgerId) as PilotTokenLedgerRow;
+      return PilotTokenLedgerRowSchema.parse(db.query("SELECT * FROM pilot_token_ledger WHERE id = ?").get(ledgerId));
     })();
   } catch (error) {
-    const existing = db.query("SELECT * FROM pilot_token_ledger WHERE source_ref = ?")
-      .get(input.sourceRef) as PilotTokenLedgerRow | null;
+    const existing = z.union([PilotTokenLedgerRowSchema, z.null()]).parse(db.query("SELECT * FROM pilot_token_ledger WHERE source_ref = ?")
+      .get(input.sourceRef));
     if (existing) {
       return existing;
     }

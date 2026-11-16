@@ -3,10 +3,11 @@ import { basename, extname, join, resolve } from "node:path";
 
 import { evaluateMediaFile as defaultEvaluateMediaFile } from "./orchestrator";
 import { openEvaluationStore } from "./evaluation-store";
+import { isRecord } from '@hyperfocus/utilities/records';
 
 const DEFAULT_EVALUATOR_FINGERPRINT = "synaesthetic-evaluator-v3.1";
 const DEFAULT_DASHBOARD_ORIGIN = "http://127.0.0.1:3217";
-const MAX_MEDIA_BYTES = 64 * 1024 * 1024;
+const MAX_MEDIA_BYTES = 67108864;
 
 export function defaultEvaluationDatabasePath() {
   const localData = process.env.LOCALAPPDATA?.trim();
@@ -20,9 +21,7 @@ export function defaultEvaluationDatabasePath() {
   return join(process.cwd(), "build", "synaesthetic-evaluator", "evaluations.sqlite");
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+
 
 function finiteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -170,9 +169,9 @@ function normalizeSeries(report: Record<string, unknown>) {
       id,
       startSeconds: finiteNumber(value.startSeconds) ?? 0,
       stepSeconds: finiteNumber(value.stepSeconds) ?? undefined,
-      timestamps: timestamps as number[] | undefined,
+      timestamps: timestamps?.filter((value): value is number => value !== null),
       unit: typeof value.unit === "string" ? value.unit : "",
-      values: values as number[],
+      values: values.filter((value): value is number => value !== null),
     });
   }
   return series;

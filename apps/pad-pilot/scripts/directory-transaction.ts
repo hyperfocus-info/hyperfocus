@@ -1,3 +1,4 @@
+import { asRecord } from "@hyperfocus/utilities/records";
 import { randomUUID } from "node:crypto";
 import {
   lstat,
@@ -35,15 +36,15 @@ const lockWaitMilliseconds = 60_000;
 const incompleteLockGraceMilliseconds = 5_000;
 const coordinationSuffix = ".padpilot-coordination.sqlite";
 const inProcessLocks = new Set<string>();
-export const processLockByteLimit = 8 * 1024;
-export const directoryTransactionJournalByteLimit = 32 * 1024;
+export const processLockByteLimit = 8192;
+export const directoryTransactionJournalByteLimit = 32768;
 
 async function exists(target: string) {
   try {
     await lstat(target);
     return true;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if ((error && typeof error === "object" && "code" in error ? error.code : undefined) === "ENOENT") {
       return false;
     }
     throw error;
@@ -58,14 +59,14 @@ function isProcessAlive(pid: number) {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    return (error && typeof error === "object" && "code" in error ? error.code : undefined) === "EPERM";
   }
 }
 
 async function readLockOwner(lockPath: string) {
   try {
     const contents = await readBoundedUtf8File(lockPath, processLockByteLimit, "Filesystem transaction lock");
-    const parsed = JSON.parse(contents) as Partial<LockOwner>;
+    const parsed = asRecord(JSON.parse(contents));
     const createdAt = typeof parsed.createdAt === "number" ? parsed.createdAt : Number.NaN;
     const pid = typeof parsed.pid === "number" ? parsed.pid : Number.NaN;
     const token = typeof parsed.token === "string" && parsed.token.length > 0
@@ -82,7 +83,7 @@ async function readLockOwner(lockPath: string) {
 }
 
 function isSqliteBusy(error: unknown) {
-  return (error as { code?: unknown }).code === "SQLITE_BUSY";
+  return (error && typeof error === "object" && "code" in error ? error.code : undefined) === "SQLITE_BUSY";
 }
 
 async function acquireCoordinationLock(lockPath: string, deadline: number) {
@@ -131,11 +132,11 @@ async function acquireInProcessLock(lockPath: string, deadline: number) {
 
 async function acquireProcessLock(lockPath: string, deadline: number) {
   while (true) {
-    const candidateOwner = {
+    const candidateOwner: LockOwner = {
       createdAt: Date.now(),
       pid: process.pid,
       token: randomUUID(),
-    } satisfies LockOwner;
+    };
     try {
       const handle = await open(lockPath, "wx");
       try {
@@ -146,7 +147,7 @@ async function acquireProcessLock(lockPath: string, deadline: number) {
       }
       return candidateOwner;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      if ((error && typeof error === "object" && "code" in error ? error.code : undefined) !== "EEXIST") {
         throw error;
       }
     }
@@ -270,7 +271,7 @@ async function readDirectoryTransaction(destination: string) {
     directoryTransactionJournalByteLimit,
     "Directory transaction journal",
   );
-  const parsed = JSON.parse(contents) as Partial<DirectoryTransaction>;
+  const parsed = asRecord(JSON.parse(contents));
   if (parsed.version !== 1 || typeof parsed.hadDestination !== "boolean"
       || typeof parsed.backupName !== "string" || typeof parsed.stagedName !== "string") {
     throw new Error(`Invalid directory transaction journal: ${paths.journal}`);
@@ -368,12 +369,12 @@ export async function promoteStagedDirectory(stagedDirectory: string, destinatio
           throw new Error("Refusing to replace a non-directory or linked destination.");
         }
       }
-      const journal = {
+      const journal: DirectoryTransaction = {
         backupName: path.basename(backup),
         hadDestination,
         stagedName: path.basename(staged),
         version: 1,
-      } satisfies DirectoryTransaction;
+      };
       await writeDurableNewFile(paths.journal, JSON.stringify(journal));
       if (hadDestination) {
         await rename(destination, backup);

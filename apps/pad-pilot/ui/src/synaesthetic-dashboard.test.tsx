@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, beforeEach, expect, it } from "bun:test";
 import { fireEvent, render, screen, within } from "@solidjs/testing-library";
 import { createUiTest } from "../../utils/tests/test-harness";
@@ -38,7 +39,7 @@ createUiTest("Synaesthetic dashboard", () => {
   });
 
   it("sorts library rows by score in both directions", async () => {
-    globalThis.fetch = Object.assign(
+    globalThis.fetch = Object.assign(Object.assign(
       async () => new Response(JSON.stringify({
         runs: [
           { id: "low", displayName: "Zebra.mp3", sourcePath: "C:\\Zebra.mp3", overall: 0.4, confidence: 0.8, evaluatedAt: "2026-03-03T00:00:00.000Z" },
@@ -47,7 +48,7 @@ createUiTest("Synaesthetic dashboard", () => {
         ],
       })),
       { preconnect: originalFetch.preconnect },
-    );
+    ), { preconnect: globalThis.fetch.preconnect });
 
     render(() => <DashboardApp />);
     await screen.findByText("Zebra.mp3");
@@ -78,7 +79,7 @@ createUiTest("Synaesthetic dashboard", () => {
   });
 
   it("defaults to the latest algorithm and keeps only the newest run per track", async () => {
-    globalThis.fetch = Object.assign(
+    globalThis.fetch = Object.assign(Object.assign(
       async () => new Response(JSON.stringify({
         runs: [
           { id: "blue-v2", mediaId: "blue", displayName: "Blue Tint 0.mp3", sourcePath: "C:\\Blue Tint 0.mp3", overall: 0.78, confidence: 0.9, evaluatorFingerprint: "synaesthetic-evaluator-v2", evaluatedAt: "2026-08-27T06:01:01.000Z" },
@@ -89,20 +90,21 @@ createUiTest("Synaesthetic dashboard", () => {
         ],
       })),
       { preconnect: originalFetch.preconnect },
-    );
+    ), { preconnect: globalThis.fetch.preconnect });
 
     render(() => <DashboardApp />);
     const algorithm = await screen.findByLabelText("Algorithm version");
-    if (!(algorithm instanceof HTMLSelectElement)) throw new Error("Algorithm filter must be a select.");
+    if (!(algorithm instanceof HTMLButtonElement)) throw new Error("Algorithm filter must be a shared selection trigger.");
 
-    expect(algorithm.value).toBe("synaesthetic-evaluator-v2.3");
+    expect(algorithm.dataset.selectValue).toBe("synaesthetic-evaluator-v2.3");
     expect(screen.getAllByText("Blue Tint 0.mp3")).toHaveLength(1);
     const currentBlue = screen.getByRole("row", { name: /Blue Tint 0\.mp3/ });
     expect(within(currentBlue).getByText("95%")).toBeTruthy();
     expect(within(currentBlue).getByText("v2.3")).toBeTruthy();
     expect(screen.queryByText("Legacy Only.mp3")).toBeNull();
 
-    fireEvent.change(algorithm, { target: { value: "synaesthetic-evaluator-v2" } });
+    fireEvent.click(algorithm);
+    fireEvent.click(document.querySelector('[data-select-option="synaesthetic-evaluator-v2"]')!);
     const legacyBlue = screen.getByRole("row", { name: /Blue Tint 0\.mp3/ });
     expect(within(legacyBlue).getByText("78%")).toBeTruthy();
     expect(within(legacyBlue).getByText("v2")).toBeTruthy();
@@ -110,7 +112,7 @@ createUiTest("Synaesthetic dashboard", () => {
   });
 
   it("shows run actions and disables Edit without a colocated FLP", async () => {
-    globalThis.fetch = Object.assign(
+    globalThis.fetch = Object.assign(Object.assign(
       async () => new Response(JSON.stringify({
         runs: [
           { id: "editable", displayName: "Editable.mp3", sourcePath: "C:\\Editable.mp3", sourceAvailable: true, hasColocatedFlp: true, overall: 0.9, confidence: 0.9 },
@@ -118,7 +120,7 @@ createUiTest("Synaesthetic dashboard", () => {
         ],
       })),
       { preconnect: originalFetch.preconnect },
-    );
+    ), { preconnect: globalThis.fetch.preconnect });
 
     render(() => <DashboardApp />);
     const editable = await screen.findByRole("row", { name: /Editable\.mp3/ });
@@ -131,7 +133,7 @@ createUiTest("Synaesthetic dashboard", () => {
   });
 
   it("leads report with safety and producer actions without a redundant contributors panel", async () => {
-    globalThis.fetch = Object.assign(
+    globalThis.fetch = Object.assign(Object.assign(
       async (input: RequestInfo | URL) => {
         const url = String(input);
         if (url.endsWith("/series")) return new Response(JSON.stringify({ series: [] }));
@@ -151,7 +153,7 @@ createUiTest("Synaesthetic dashboard", () => {
         }));
       },
       { preconnect: originalFetch.preconnect },
-    );
+    ), { preconnect: globalThis.fetch.preconnect });
 
     render(() => <ReportView runId="clipped" onTogglePlayback={() => undefined} />);
 
@@ -164,12 +166,12 @@ createUiTest("Synaesthetic dashboard", () => {
 
   it("collects a structured human review for future evaluator versions", async () => {
     let submitted: Record<string, unknown> | undefined;
-    globalThis.fetch = Object.assign(
+    globalThis.fetch = Object.assign(Object.assign(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         if (url.endsWith("/series")) return new Response(JSON.stringify({ series: [] }));
         if (url.endsWith("/reviews") && init?.method === "POST") {
-          submitted = JSON.parse(String(init.body)) as Record<string, unknown>;
+          submitted = z.record(z.unknown()).parse(JSON.parse(String(init.body)));
           return new Response(JSON.stringify({ id: "review-1", datasetSplit: "train", ...submitted }), { status: 201 });
         }
         return new Response(JSON.stringify({
@@ -188,14 +190,15 @@ createUiTest("Synaesthetic dashboard", () => {
         }));
       },
       { preconnect: originalFetch.preconnect },
-    );
+    ), { preconnect: globalThis.fetch.preconnect });
 
     render(() => <ReportView runId="reviewed" onTogglePlayback={() => undefined} />);
     expect(await screen.findByRole("heading", { name: "Your review" })).toBeTruthy();
 
     fireEvent.input(screen.getByLabelText("Overall rating (0-100)"), { target: { value: "96" } });
     fireEvent.input(screen.getByLabelText("Genre or style tags"), { target: { value: "trap, melodic rap" } });
-    fireEvent.change(screen.getByLabelText("Review Strengthen pulse anchors"), { target: { value: "intentional" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review Strengthen pulse anchors" }));
+    fireEvent.click(screen.getByRole("option", { name: "Intentional choice" }));
     fireEvent.click(screen.getByRole("button", { name: "Save review" }));
 
     expect((await screen.findByRole("status", { name: "Review status" })).textContent).toContain("Review saved to train split");
@@ -211,14 +214,14 @@ createUiTest("Synaesthetic dashboard", () => {
     const requests: string[] = [];
     const played: string[] = [];
     const reruns: string[] = [];
-    globalThis.fetch = Object.assign(
+    globalThis.fetch = Object.assign(Object.assign(
       async (input: RequestInfo | URL) => {
         const url = String(input);
         requests.push(url);
         return new Response(JSON.stringify(url.endsWith("/reanalyze") ? { runId: "new-run" } : { opened: true }));
       },
       { preconnect: originalFetch.preconnect },
-    );
+    ), { preconnect: globalThis.fetch.preconnect });
     const run = {
       confidence: 0.9,
       dimensions: [],

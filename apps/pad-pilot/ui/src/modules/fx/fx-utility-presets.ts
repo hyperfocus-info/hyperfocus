@@ -9,7 +9,7 @@ export type FxUtilityPresetRecipe = FxIdeaRecipe & {
   sources: readonly string[];
 };
 
-export const FX_UTILITY_PRESET_RECIPES = [
+export const FX_UTILITY_PRESET_RECIPES: readonly FxUtilityPresetRecipe[] = [
   {
     name: "Mix · Mud Control · Light",
     intensity: "light",
@@ -215,4 +215,4 @@ export const FX_UTILITY_PRESET_RECIPES = [
       { name: "Sample Field", type: FxNodeType.STEREO_IMAGER, values: { widthPercent: 112, bassMonoCrossoverHz: 140, stereoBalance: 0.5, pan: 0 }, mix: 1 },
     ],
   },
-] as const satisfies readonly FxUtilityPresetRecipe[];
+] as const;

@@ -50,6 +50,21 @@ createUiTest("Codex usage", () => {
     harnessStore.applyServerEvent({ type: "usage.updated", requestId: "empty", payload: { tokenUsage: createEmptyTokenUsageState({ codexLimits: { status: "available", windows: [] } }) } });
     expect(screen.getByText("No account windows reported by Codex.")).toBeTruthy();
   });
+  it("keeps aggregated sources distinct from unknown history through store updates", () => {
+    setup(); render(() => <UsageSummary />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Codex usage" }));
+    const tokenUsage = createEmptyTokenUsageState({
+      lifetime: createEmptyTokenUsageTotals({ totalProcessedTokens: 250 }),
+      sourceOverflow: { count: 120000, totals: createEmptyTokenUsageTotals({ inputTokens: 150, outputTokens: 50, cachedInputTokens: 100, totalProcessedTokens: 200 }) }
+    });
+    harnessStore.applyServerEvent({ type: "usage.updated", requestId: "overflow", payload: { tokenUsage } });
+    expect(screen.getByText("Local usage sources (120000)")).toBeTruthy();
+    expect(screen.getByText(/120000 additional sources are aggregated/).textContent).toContain("Input 150; Output 50; Cached 100");
+    expect(screen.getByText("Unknown attribution: 50 lifetime tokens.")).toBeTruthy();
+    expect(screen.getByText("All attributed sources are included in the aggregate above.")).toBeTruthy();
+    harnessStore.applyServerEvent({ type: "usage.updated", requestId: "reset", payload: { tokenUsage: createEmptyTokenUsageState() } });
+    expect(screen.queryByText(/additional sources are aggregated/)).toBeNull();
+  });
   it("confirms reset, waits for acknowledgement, preserves failure and closes nested Escape first", async () => {
     const commands = setup(); render(() => <UsageSummary />);
     fireEvent.click(screen.getByRole("button", { name: "Open Codex usage" }));

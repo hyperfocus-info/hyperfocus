@@ -1,3 +1,4 @@
+import { asRecord } from "@hyperfocus/utilities/records";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { readBoundedUtf8File } from "./directory-transaction";
@@ -16,8 +17,8 @@ type WindowsProcessInfo = {
   pid: number;
 };
 
-export const devProcessRegistryByteLimit = 4 * 1024;
-const processQueryOutputByteLimit = 64 * 1024;
+export const devProcessRegistryByteLimit = 4096;
+const processQueryOutputByteLimit = 65536;
 const devProcessRegistryCountLimit = 64;
 const processInspectorTimeoutMs = 10_000;
 const projectRoot = path.resolve(import.meta.dir, "..");
@@ -190,9 +191,9 @@ export function parseDevProcessRegistry(value: string) {
   if (Buffer.byteLength(value, "utf8") > devProcessRegistryByteLimit) {
     throw new Error("Invalid PadPilot dev-process registry: file is oversized.");
   }
-  let parsed: Partial<DevProcessRegistry>;
+  let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(value) as Partial<DevProcessRegistry>;
+    parsed = asRecord(JSON.parse(value));
   } catch {
     throw new Error("Invalid PadPilot dev-process registry.");
   }
@@ -202,7 +203,7 @@ export function parseDevProcessRegistry(value: string) {
       || !Number.isSafeInteger(startedAt) || startedAt <= 0) {
     throw new Error("Invalid PadPilot dev-process registry.");
   }
-  return { pid, startedAt, version: 1 } satisfies DevProcessRegistry;
+  return { pid, startedAt, version: 1 as const };
 }
 
 export async function readDevProcessRegistry(registryPath: string) {
@@ -269,14 +270,14 @@ export function queryWindowsProcess(pid: number) {
   if (!decoded || typeof decoded !== "object") {
     throw new Error("Registered PadPilot dev process identity response was malformed.");
   }
-  const processInfo = decoded as Partial<WindowsProcessInfo>;
+  const processInfo = asRecord(decoded);
   if (!Number.isSafeInteger(processInfo.pid) || processInfo.pid !== pid
-      || !Number.isSafeInteger(processInfo.createdAt) || (processInfo.createdAt ?? 0) <= 0
+      || typeof processInfo.createdAt !== "number" || !Number.isSafeInteger(processInfo.createdAt) || processInfo.createdAt <= 0
       || typeof processInfo.name !== "string" || processInfo.name.length === 0 || processInfo.name.length > 260
       || typeof processInfo.commandLine !== "string" || processInfo.commandLine.length > 32_768) {
     throw new Error("Registered PadPilot dev process identity response was malformed.");
   }
-  return processInfo as WindowsProcessInfo;
+  return { pid, createdAt: Number(processInfo.createdAt), name: processInfo.name, commandLine: processInfo.commandLine };
 }
 
 export function terminateRegisteredDevProcess(registry: DevProcessRegistry) {

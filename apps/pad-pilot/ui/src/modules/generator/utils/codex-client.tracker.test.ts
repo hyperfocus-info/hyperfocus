@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import {
-  buildMusicianPlan,
-  extractGeneratorArrangementPlan,
-  MAX_DELTA_TRACKER_UTF8_BYTES,
-  parseDeltaTickTracker,
-  scoreGeneratorComposition,
-} from "./codex-client";
+import { buildMusicianPlan, extractGeneratorArrangementPlan, MAX_DELTA_TRACKER_UTF8_BYTES } from "./generator-prompt";
+import { parseDeltaTickTracker, scoreGeneratorComposition } from "./generator-tracker";
 import {
   MAX_GENERATOR_MIDI_NOTES_PER_TRACK,
   MAX_GENERATOR_MIDI_TRACKS,

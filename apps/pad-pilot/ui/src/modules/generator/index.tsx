@@ -1,14 +1,15 @@
+import { readGeneratorState, readGeneratorView } from "./generator-state-reader";
+import { percent } from "./utils/generator-selector-options";
+import { normalizeGeneratorAiSettings } from "./utils/generator-selector-options";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { ChevronDown, ChevronUp } from "lucide-solid";
 import { createStore } from "solid-js/store";
 import { PadPilot } from "../../padpilot/index";
 import { GeneratorDashboard, type GeneratorDashboardState } from "./components/generator-dashboard";
-import { generateMidiTemplate, type GeneratedMidiTemplate } from "./utils/codex-client";
+import { generateMidiTemplate } from "./utils/generator-client";
+import { type GeneratedMidiTemplate } from "./utils/generator-contracts";
 import { isPadPilotDevtoolsEnabled } from "../../runtime-flags";
-import {
-  type GeneratorAiSettings,
-  type GeneratorDashboardFields,
-} from "./utils/generator-options";
+import {  type GeneratorDashboardFields } from "./utils/generator-option-catalog";
 import {
   GENERATOR_AI_SETTINGS_CHANGED_EVENT,
   loadGeneratorAiSettings,
@@ -40,68 +41,66 @@ type GeneratorViewState = {
 function createInitialRunState() {
   return {
     logs: ["standby Codex CLI bridge"],
-    progress: 0,
-    status: "idle",
-  } satisfies GeneratorRunState;
+    progress: 0 as const,
+    status: "idle" as const,
+  };
 }
 
 function createInitialModuleState() {
   return {
     dashboard: {
       fields: {
-        complexity: "",
-        creativity: 0.65,
-        density: 0.55,
-        era: "",
-        genre: "",
-        humanize: 0.35,
-        lengthBars: 4,
-        mood: "",
-        notes: "",
-        scaleKey: "",
-        temperature: 0.7,
+        complexity: "" as const,
+        creativity: 0.65 as const,
+        density: 0.55 as const,
+        era: "" as const,
+        genre: "" as const,
+        humanize: 0.35 as const,
+        lengthBars: 4 as const,
+        mood: "" as const,
+        notes: "" as const,
+        scaleKey: "" as const,
+        temperature: 0.7 as const,
       },
       locked: {
-        complexity: false,
-        creativity: false,
-        density: false,
-        era: false,
-        genre: false,
-        humanize: false,
-        lengthBars: false,
-        mood: false,
-        scaleKey: false,
-        temperature: false,
+        complexity: false as const,
+        creativity: false as const,
+        density: false as const,
+        era: false as const,
+        genre: false as const,
+        humanize: false as const,
+        lengthBars: false as const,
+        mood: false as const,
+        scaleKey: false as const,
+        temperature: false as const,
       },
       manualFields: {
-        complexity: false,
-        era: false,
-        genre: false,
-        mood: false,
-        scaleKey: false,
+        complexity: false as const,
+        era: false as const,
+        genre: false as const,
+        mood: false as const,
+        scaleKey: false as const,
       },
       queries: {
-        complexity: "",
-        era: "",
-        genre: "",
-        mood: "",
-        scaleKey: "",
+        complexity: "" as const,
+        era: "" as const,
+        genre: "" as const,
+        mood: "" as const,
+        scaleKey: "" as const,
       },
-      rerollSeed: 0,
+      rerollSeed: 0 as const,
       suggestedFields: {
-        complexity: false,
-        era: false,
-        genre: false,
-        mood: false,
-        scaleKey: false,
+        complexity: false as const,
+        era: false as const,
+        genre: false as const,
+        mood: false as const,
+        scaleKey: false as const,
       },
     },
-  } satisfies GeneratorModuleState;
+  };
 }
 
-function percent(value: number) {
-  return `${value.toFixed(1)}%`;
-}
+
 
 function generatorAuditLines(generated: GeneratedMidiTemplate) {
   const audit = generated.audit;
@@ -145,11 +144,11 @@ function generatorAuditLines(generated: GeneratedMidiTemplate) {
 
 /** GeneratorModule builds local-model MIDI templates and exposes DAW drag blocks. */
 export function GeneratorModule() {
-  const [moduleState, setModuleState] = PadPilot.hooks.useModuleState<GeneratorModuleState>("generator", createInitialModuleState());
+  const [moduleState, setModuleState] = PadPilot.hooks.useModuleState<GeneratorModuleState>("generator", createInitialModuleState(), readGeneratorState);
   const [viewState, setViewState] = PadPilot.hooks.useEditorViewState<GeneratorViewState>("generator", {
     midiDrawerOpen: true,
     statusDrawerOpen: true,
-  });
+  }, readGeneratorView);
   const [mounted, setMounted] = createSignal(false);
   const [theme, setTheme] = createSignal<"dark" | "light">("light");
   const [template, setTemplate] = createSignal<GeneratedMidiTemplate | null>(null);
@@ -197,7 +196,8 @@ export function GeneratorModule() {
       setMounted(true);
     });
     const onAiSettingsChanged = (event: Event) => {
-      const settings = (event as CustomEvent<GeneratorAiSettings>).detail;
+      if (!(event instanceof CustomEvent)) return;
+      const settings = normalizeGeneratorAiSettings(event.detail);
       if (settings) {
         setAiSettings(settings);
       }
@@ -297,7 +297,7 @@ export function GeneratorModule() {
   };
 
   return (
-    <section class={styles.root} data-theme={theme()}>
+    <PadPilot.ModuleWorkspace class={styles.root} data-theme={theme()}>
       <div
         class={styles.workspace}
         data-midi-visible={showMidiDrawer() ? "true" : "false"}
@@ -463,7 +463,7 @@ export function GeneratorModule() {
         </section>
         </Show>
       </div>
-    </section>
+    </PadPilot.ModuleWorkspace>
   );
 }
 

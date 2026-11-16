@@ -1,3 +1,4 @@
+import { normalizeSampleFieldTypes } from "./utils/sample-capability-native-contract-values";
 import { describe, expect, it } from "bun:test";
 import { readEditorSource } from "./editor-source-contract";
 import { readProcessorSource } from "./processor-source-contract";
@@ -11,14 +12,7 @@ function messageFields(schema: string, messageName: string) {
     .filter((line) => line.length > 0);
 }
 
-function normalizeSampleFieldTypes(fields: string[]) {
-  return fields.map((field) => field
-    .replaceAll("SampleSliceMarker", "SliceMarker")
-    .replaceAll("SamplePadAssignment", "PadAssignment")
-    .replaceAll("SampleChokeGroup", "ChokeGroup")
-    .replaceAll("SampleAnalysisMode", "RecutAnalysisMode")
-    .replaceAll("SampleBpmSource", "RecutBpmSource"));
-}
+
 
 describe("Sample capability native contract", () => {
   it("keeps the generic sample capability bridge aligned across proto, processor, editor, and UI bridge", async () => {
@@ -97,11 +91,11 @@ describe("Sample capability native contract", () => {
 
   it("keeps recut sample-editor frame sequencing stable when the state is idle", async () => {
     const recutRuntimeSource = await Bun.file(new URL("./recut-runtime.cpp", import.meta.url)).text();
-    const devHostRuntimeSource = await Bun.file(new URL("../../ui/src/dev-host/runtime.ts", import.meta.url)).text();
+    const devHostRuntimeSource = await Bun.file(new URL("../../ui/src/dev-host/sample-runtime.ts", import.meta.url)).text();
 
     expect(recutRuntimeSource).toContain("frame.set_sequence(current ? current->state.revision() : 0);");
     expect(recutRuntimeSource).not.toContain("frame.set_sequence(sequence_.fetch_add");
-    expect(devHostRuntimeSource).toContain("sequence: this.recutState.revision");
-    expect(devHostRuntimeSource).toContain("sequence: this.recutState.revision,");
+    expect(devHostRuntimeSource).toContain("sequence: runtimeState.recutState.revision");
+    expect(devHostRuntimeSource).toContain("sequence: runtimeState.recutState.revision,");
   });
 });

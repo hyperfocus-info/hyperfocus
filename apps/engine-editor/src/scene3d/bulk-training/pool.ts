@@ -191,7 +191,7 @@ export function createBulkPool(options: { project: GameplayProject3D; assets: re
               return;
             }
             try {
-              if (slot.job?.trial.id !== message.result.id) throw Error('Worker returned an unassigned policy trial.');
+              if (!slot.job || slot.job.trial.id !== message.result.id) throw Error('Worker returned an unassigned policy trial.');
               const key = policyJobKey(slot.job), committed = pipeline.record(slot.job, message.result);
               learn(slot, message.progress, true);
               delete message.progress.contextualResult;

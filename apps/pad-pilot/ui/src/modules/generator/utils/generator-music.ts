@@ -1,6 +1,6 @@
 import { GENERATOR_MIDI_BEATS_PER_BAR, GENERATOR_MIDI_TICKS_PER_QUARTER, type GeneratorMidiComposition, type GeneratorMidiTrack } from "./midi-encoder";
 import { isPadPilotDevtoolsEnabled } from "../../../runtime-flags";
-import { type GeneratorIntentTags, type GeneratorLengthBars } from "./generator-options";
+import { type GeneratorIntentTags, type GeneratorLengthBars } from "./generator-option-catalog";
 import { type AbsoluteGeneratorNote, type CodexClientOptions, type GeneratorHarmonicTolerancePolicy, type GeneratorMusicianPlan, type GeneratorPromptInput, type StyleDnaFilterStats } from "./generator-contracts";
 import { blueNotesRequested, derivedHarmonicTolerancePolicy, selectedScaleInfo } from "./generator-prompt";
 import { canonicalScaleRootName, semitoneByRoot } from "./generator-selection";
@@ -289,14 +289,14 @@ export function enforceCompositionScale(
         return {
           ...note,
           note: snapped,
-        } satisfies AbsoluteGeneratorNote;
+        };
       });
       return {
         ...track,
         notes: deltaTrackNotes(notes),
-      } satisfies GeneratorMidiTrack;
+      };
     }),
-  } satisfies GeneratorMidiComposition;
+  };
 }
 
 export function scaleNote(root: number, intervals: readonly number[], degree: number, octave = 0) {

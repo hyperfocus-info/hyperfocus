@@ -3,6 +3,8 @@ import { parseCapabilityHandle } from "@hyperfocus/pad-pilot/module-identity";
 
 type CapabilityStreamListener = (frame: CapabilityStreamFrame) => void;
 type CapabilityStreamRegistryEntry = {
+  capability: CapabilityKind;
+  handle: string;
   cachedFrame: CapabilityStreamFrame | null;
   isOpen: boolean;
   lastSequence: bigint | null;
@@ -44,6 +46,8 @@ export function createCapabilityStreamRegistry() {
     let entry = registry.get(key);
     if (!entry) {
       entry = {
+        capability,
+        handle,
         cachedFrame: null,
         isOpen: false,
         lastSequence: null,
@@ -55,12 +59,9 @@ export function createCapabilityStreamRegistry() {
   };
 
   const closeAllOpen = (send: (intent: HostIntent) => void) => {
-    for (const [key, entry] of registry.entries()) {
+    for (const entry of registry.values()) {
       if (entry.listeners.size === 0 || !entry.isOpen) continue;
-      const separatorIndex = key.indexOf("::");
-      if (separatorIndex <= 0) continue;
-      const capability = key.slice(0, separatorIndex) as CapabilityKind;
-      const handle = key.slice(separatorIndex + 2);
+      const { capability, handle } = entry;
       entry.isOpen = false;
       entry.cachedFrame = null;
       entry.lastSequence = null;
@@ -70,12 +71,9 @@ export function createCapabilityStreamRegistry() {
 
   const reopenRequested = (selectedModuleId: string, force: boolean, send: (intent: HostIntent) => void) => {
     if (!selectedModuleId) return;
-    for (const [key, entry] of registry.entries()) {
+    for (const entry of registry.values()) {
       if (entry.listeners.size === 0) continue;
-      const separatorIndex = key.indexOf("::");
-      if (separatorIndex <= 0) continue;
-      const capability = key.slice(0, separatorIndex) as CapabilityKind;
-      const handle = key.slice(separatorIndex + 2);
+      const { capability, handle } = entry;
       if (parseCapabilityHandle(handle).moduleInstanceId !== selectedModuleId || (!force && entry.isOpen)) continue;
       entry.cachedFrame = null;
       entry.lastSequence = null;

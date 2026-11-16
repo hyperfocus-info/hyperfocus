@@ -58,7 +58,7 @@ describe("refreshSessionIfNeeded", () => {
       db,
       userId,
       sha256(sessionToken),
-      new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      new Date(Date.now() + 3600000).toISOString(),
       now.toISOString(),
     );
 

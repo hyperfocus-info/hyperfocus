@@ -1,4 +1,4 @@
-import { fromJson, toBinary, type DescMessage } from "@bufbuild/protobuf";
+import { fromJson, toBinary, type DescMessage, type JsonValue } from "@bufbuild/protobuf";
 import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync } from "node:fs";
 import { cp, mkdtemp, open, rename, rm } from "node:fs/promises";
@@ -8,7 +8,7 @@ import { snapshotDirectory } from "./directory-snapshot";
 import { promoteStagedDirectory, withProcessLock } from "./directory-transaction";
 import { readBoundedUtf8File } from "@hyperfocus/pad-pilot/bounded-file";
 
-export const MAX_PRESET_MANIFEST_BYTES = 2 * 1024 * 1024;
+export const MAX_PRESET_MANIFEST_BYTES = 2097152;
 const MAX_PRESET_MANIFEST_ENTRIES = 4096;
 const presetManifestSchema = z.object({
   presets: z.array(z.object({
@@ -35,16 +35,16 @@ export function requireArg(value: string | undefined, message: string) {
   return value;
 }
 
-export function parseJsonArg<T extends object>(payload: string) {
-  const parsed = JSON.parse(payload) as unknown;
+export function parseJsonArg(payload: string) {
+  const parsed: unknown = JSON.parse(payload);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Preset JSON must be an object.");
   }
-  return parsed as T;
+  return z.record(z.unknown()).parse(parsed);
 }
 
-export function parseProtoJson<T extends object>(schema: DescMessage, payload: object) {
-  return fromJson(schema, payload as never) as T;
+export function parseProtoJson<Schema extends DescMessage>(schema: Schema, payload: unknown) {
+  return fromJson(schema, protoJsonSchema.parse(payload));
 }
 
 export function ensureDir(dir: string) {
@@ -106,7 +106,7 @@ async function nextManifest(manifestPath: string, entry: PresetManifestEntry) {
       MAX_PRESET_MANIFEST_BYTES,
       "Preset manifest",
     );
-    const parsed = presetManifestSchema.safeParse(JSON.parse(contents) as unknown);
+    const parsed = presetManifestSchema.safeParse(JSON.parse(contents));
     if (!parsed.success) {
       throw new Error(`Invalid preset manifest: ${manifestPath}`, { cause: parsed.error });
     }
@@ -187,6 +187,8 @@ function validateManifestEntry(entry: PresetManifestEntry) {
   }
 }
 
-export function binaryFromProtoJson(schema: DescMessage, payload: object) {
-  return toBinary(schema, fromJson(schema, payload as never));
+export function binaryFromProtoJson<Schema extends DescMessage>(schema: Schema, payload: unknown) {
+  return toBinary(schema, fromJson(schema, protoJsonSchema.parse(payload)));
 }
+
+const protoJsonSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(protoJsonSchema), z.record(protoJsonSchema)]));

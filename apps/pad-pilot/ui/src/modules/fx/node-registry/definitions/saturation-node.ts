@@ -14,7 +14,7 @@ export const SaturationNodeDefinition = createNodeDefinition({
     createLegacyParamState(1, "Drive", config.drive, 0, 1),
     createLegacyParamState(2, "Tone", config.tone, 0, 1),
     createLegacyParamState(3, "Bias", config.bias, -1, 1),
-    createLegacyParamState(4, "Character", Math.max(0, CHARACTERS.indexOf(config.character as typeof CHARACTERS[number])), 0, CHARACTERS.length - 1),
+    createLegacyParamState(4, "Character", Math.max(0, CHARACTERS.findIndex((value) => value === config.character)), 0, CHARACTERS.length - 1),
     createLegacyParamState(5, "Output", config.outputGainDb, -18, 12, "dB"),
   ],
   rackControls: [

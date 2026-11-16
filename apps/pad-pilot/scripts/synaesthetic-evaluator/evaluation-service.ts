@@ -1,4 +1,5 @@
-import { mkdir } from "node:fs/promises";
+import { spawnBackgroundProcess } from '@hyperfocus/desktop-runtime/process';
+import { mkdir, open } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { defaultEvaluationDatabasePath } from "./evaluation-library";
@@ -37,14 +38,18 @@ export async function startEvaluationService() {
   const directory = serviceDirectory();
   await mkdir(directory, { recursive: true });
   const cliPath = join(import.meta.dir, "evaluation-cli.ts");
-  const child = Bun.spawn([process.execPath, "run", cliPath, "serve", "--port", String(port)], {
+  const stdout = await open(join(directory, "server.stdout.log"), "a");
+  const child = await (async () => { try {
+    const stderr = await open(join(directory, "server.stderr.log"), "a");
+    try { return spawnBackgroundProcess({ cmd: [process.execPath, "run", cliPath, "serve", "--port", String(port)], ...({
     cwd: resolve(import.meta.dir, "..", ".."),
     detached: true,
-    stderr: Bun.file(join(directory, "server.stderr.log")),
+    stderr: stderr.fd,
     stdin: "ignore",
-    stdout: Bun.file(join(directory, "server.stdout.log")),
-    windowsHide: true,
-  });
+    stdout: stdout.fd,
+    keepAliveAfterParentExit: true,
+  }) }); } finally { await stderr.close(); }
+  } finally { await stdout.close(); } })();
   child.unref();
   await Bun.write(join(directory, "server.json"), JSON.stringify({
     command: "synaesthetic:serve",

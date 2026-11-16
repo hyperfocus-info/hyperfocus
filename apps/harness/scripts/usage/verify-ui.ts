@@ -9,6 +9,7 @@ import { createEmptyTokenUsageTotals } from "../../cli/src/usage/token-usage";
 import { recordServerTokenUsage } from "../../cli/src/server/transport/events";
 
 // Real host, disposable persisted usage, official read-only account quota probe.
+const growth = process.argv.includes("--growth");
 const root = path.resolve(import.meta.dir, "../../../..");
 const output = path.join(root, ".local/codex-usage/browser", crypto.randomUUID());
 const projectRoot = path.join(output, "usage-project");
@@ -25,6 +26,13 @@ for (const [sourceKind, sourceLabel, inputTokens, outputTokens] of [
   sourceKind, sourceLabel, modelId: "openai/gpt-6.1-sol", inputTokens, totalProcessedTokens: inputTokens + outputTokens,
   cachedInputTokens: inputTokens / 2, contextWindow: 400000, updatedAt: new Date().toISOString()
 }, { projectId: project.id, threadId: project.activeThreadId, runtime: "codex" });
+if (growth) {
+  for (let index = 0; index < 150; index++) recordServerTokenUsage(repository, session, {
+    sourceKind: "main", sourceLabel: `Growth source ${index}`, modelId: "openai/gpt-6.1-sol", inputTokens: 12,
+    totalProcessedTokens: 20, cachedInputTokens: 5, contextWindow: 400000, updatedAt: "2026-11-16T00:00:00Z"
+  }, { projectId: project.id, threadId: `growth-thread-${index}`, runtime: "codex" });
+  repository.addTokenUsageLifetime(createEmptyTokenUsageTotals({ inputTokens: 40, totalProcessedTokens: 40, totalTokensIncludingCached: 40 }));
+}
 repository.close();
 const server = await startManagedServer({ supervisor: { command: [process.execPath, path.join(root, ".agents/skills/dev-server/scripts/dev.ts")], cwd: root },
   surface: "harness", healthPath: "/", env: { HARNESS_DB_PATH: dbPath, HARNESS_UI_OUTPUT_DIR: path.join(output, "ui-dist") } });
@@ -47,7 +55,11 @@ try {
   const liveLimits = await dialog.locator('[data-test-usage-window]').count();
   await dialog.locator('[data-test-usage-sources] summary').click();
   await dialog.getByText("Review usage accounting", { exact: true }).waitFor();
-  if (await dialog.locator('[data-test-usage-source]').count() !== 2) throw Error("Missing persisted source breakdown");
+  if (await dialog.locator('[data-test-usage-source]').count() !== (growth ? 100 : 2)) throw Error("Missing persisted source breakdown");
+  if (growth) {
+    await dialog.getByText(/52 additional sources are aggregated/).waitFor();
+    await dialog.getByText("Unknown attribution: 40 lifetime tokens.", { exact: true }).waitFor();
+  }
   await page.screenshot({ path: path.join(output, "desktop.png") });
   await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
   await page.screenshot({ path: path.join(output, "enlarged.png") });
@@ -63,6 +75,7 @@ try {
   await confirmation.waitFor({ state: "hidden" });
   if (!await dialog.isVisible()) throw Error("Nested Escape closed the usage modal");
   await page.setViewportSize({ width: 390, height: 844 });
+  if (growth) await dialog.locator('[data-test-usage-sources] summary').scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(output, "phone.png") });
   const box = await dialog.boundingBox();
   if (!box || box.x < -1 || box.x + box.width > 391 || box.y < -1 || box.y + box.height > 845) throw Error("Usage dialog exceeds phone viewport");
@@ -91,7 +104,7 @@ try {
   } finally { stored.close(); }
   if (errors.length) throw Error(errors.join("\n"));
   await Bun.write(path.join(output, "receipt.json"), JSON.stringify({ passed: true, serverId: server.id, liveAccountWindows: liveLimits,
-    persistedSources: 2, nestedEscape: true, focusReturned: true, phoneBounds: true, enlargedBounds: true, resetPersisted: true,
+    persistedSources: growth ? 152 : 2, boundedSources: growth ? 100 : 2, aggregatedSources: growth ? 52 : 0, nestedEscape: true, focusReturned: true, phoneBounds: true, enlargedBounds: true, resetPersisted: true,
     accountQuotaPreserved: true, visibleWindows: windows.visibleWindows, errors }, null, 2));
   console.log(JSON.stringify({ passed: true, output, liveAccountWindows: liveLimits }));
 } catch (error) {

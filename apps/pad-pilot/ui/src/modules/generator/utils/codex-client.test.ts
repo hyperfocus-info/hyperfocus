@@ -1,10 +1,9 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "bun:test";
-import {
-  buildFallbackTracker,
-  buildGeneratorPromptEnvelope,
-  generateMidiTemplate,
-  parseDeltaTickTracker,
-} from "./codex-client";
+import { buildFallbackTracker } from "./generator-fallback";
+import { buildGeneratorPromptEnvelope } from "./generator-prompt";
+import { generateMidiTemplate } from "./generator-client";
+import { parseDeltaTickTracker } from "./generator-tracker";
 import {
   GENERATOR_MIDI_TICKS_PER_QUARTER,
 } from "./midi-encoder";
@@ -21,10 +20,10 @@ describe("codex client client", () => {
   it("propagates caller cancellation instead of building a fallback", async () => {
     const controller = new AbortController();
     const logs: string[] = [];
-    globalThis.fetch = ((async (_input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = Object.assign(((async (_input: RequestInfo | URL, init?: RequestInit) => {
       controller.abort(new DOMException("superseded", "AbortError"));
       throw init?.signal?.reason;
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     await expect(generateMidiTemplate({}, {
       onLog: (line) => logs.push(line),
@@ -35,18 +34,18 @@ describe("codex client client", () => {
 
   it("uses local model responses when available", async () => {
     let requestBody = "";
-    globalThis.fetch = ((async (_input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = Object.assign(((async (_input: RequestInfo | URL, init?: RequestInit) => {
       requestBody = String(init?.body ?? "");
       return new Response(JSON.stringify({
         response: buildFallbackTracker({}),
       }));
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     const result = await generateMidiTemplate({});
 
     expect(result.source).toBe("local-model");
     expect(result.tracks.length).toBeGreaterThanOrEqual(4);
-    const request = JSON.parse(requestBody) as { model: string; prompt: string; provider: string };
+    const request = z.object({ model: z.string(), prompt: z.string(), provider: z.string() }).passthrough().parse(JSON.parse(requestBody));
     expect(request).toMatchObject({
       model: "5.5 low fast",
       provider: "cursor",
@@ -76,11 +75,11 @@ describe("codex client client", () => {
   });
 
   it("accepts a structured model envelope with tracker text", async () => {
-    globalThis.fetch = ((async () => structuredEnvelopeResponse(buildFallbackTracker({ genre: "Lofi" }), {
+    globalThis.fetch = Object.assign(((async () => structuredEnvelopeResponse(buildFallbackTracker({ genre: "Lofi" }), {
       confidence: 0.91,
       repairAvoided: ["kept model groove"],
       validationNotes: ["tracker grammar checked"],
-    })) as unknown) as typeof fetch;
+    }))), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "Lofi" });
 
@@ -95,7 +94,7 @@ describe("codex client client", () => {
 
   it("rejects structured envelopes missing schema-required planning fields", async () => {
     const logs: string[] = [];
-    globalThis.fetch = ((async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(((async () => new Response(JSON.stringify({
       response: JSON.stringify({
         confidence: 0.91,
         grammarVersion: "delta-tracker-v2",
@@ -104,7 +103,7 @@ describe("codex client client", () => {
         tracker: buildFallbackTracker({ genre: "Lofi" }),
         validationNotes: [],
       }),
-    }))) as unknown) as typeof fetch;
+    })))), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "Lofi" }, { onLog: (line) => logs.push(line) });
 
@@ -115,11 +114,11 @@ describe("codex client client", () => {
 
   it("rejects structured envelopes with partial nested planning fields", async () => {
     const logs: string[] = [];
-    globalThis.fetch = ((async () => structuredEnvelopeResponse(buildFallbackTracker({ genre: "Lofi" }), {
+    globalThis.fetch = Object.assign(((async () => structuredEnvelopeResponse(buildFallbackTracker({ genre: "Lofi" }), {
       groovePlan: {
         grid: "half-time",
       },
-    })) as unknown) as typeof fetch;
+    }))), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "Lofi" }, { onLog: (line) => logs.push(line) });
 
@@ -173,13 +172,13 @@ describe("codex client client", () => {
       mode: "tension",
       source: "fixture",
     };
-    globalThis.fetch = ((async () => structuredEnvelopeResponse(buildFallbackTracker({ genre: "Drill" }), {
+    globalThis.fetch = Object.assign(((async () => structuredEnvelopeResponse(buildFallbackTracker({ genre: "Drill" }), {
       arrangementPlan,
       chordPlan,
       groovePlan,
       harmonicTolerancePolicy,
       lanePlan,
-    })) as unknown) as typeof fetch;
+    }))), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "Drill" });
 
@@ -217,7 +216,7 @@ describe("codex client client", () => {
 
   it("rejects structured envelopes with mismatched grammar before fallback", async () => {
     const logs: string[] = [];
-    globalThis.fetch = ((async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(((async () => new Response(JSON.stringify({
       response: JSON.stringify({
         confidence: 0.91,
         grammarVersion: "delta-tracker-v1",
@@ -226,7 +225,7 @@ describe("codex client client", () => {
         tracker: buildFallbackTracker({ genre: "Lofi" }),
         validationNotes: [],
       }),
-    }))) as unknown) as typeof fetch;
+    })))), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "Lofi" }, { onLog: (line) => logs.push(line) });
 
@@ -238,9 +237,9 @@ describe("codex client client", () => {
   it("repairs and keeps high-scoring local model output instead of falling back", async () => {
     const logs: string[] = [];
     const rawTracker = buildFallbackTracker({ genre: "House", lengthBars: 8 }).replace(/#TRK:[^,\n]*Drums/, "#TRK:Groove Kit");
-    globalThis.fetch = ((async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(((async () => new Response(JSON.stringify({
       response: rawTracker,
-    }))) as unknown) as typeof fetch;
+    })))), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "House", lengthBars: 8 }, { onLog: (line) => logs.push(line) });
 
@@ -252,9 +251,9 @@ describe("codex client client", () => {
 
   it("rejects thin local model output before exporting it", async () => {
     const logs: string[] = [];
-    globalThis.fetch = ((async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(((async () => new Response(JSON.stringify({
       response: "!BPM:90!\n#TRK:Piano,CH:0,PG:0\n[0,60,90,480]",
-    }))) as unknown) as typeof fetch;
+    })))), { preconnect() {} });
 
     const result = await generateMidiTemplate({}, { onLog: (line) => logs.push(line) });
 
@@ -265,9 +264,9 @@ describe("codex client client", () => {
 
   it("keeps structured model diagnostics when valid envelopes fall back on quality", async () => {
     const logs: string[] = [];
-    globalThis.fetch = ((async () => structuredEnvelopeResponse("!BPM:90!\n#TRK:Piano,CH:0,PG:0\n[0,60,90,480]", {
+    globalThis.fetch = Object.assign(((async () => structuredEnvelopeResponse("!BPM:90!\n#TRK:Piano,CH:0,PG:0\n[0,60,90,480]", {
       validationNotes: ["schema valid but musically thin"],
-    })) as unknown) as typeof fetch;
+    }))), { preconnect() {} });
 
     const result = await generateMidiTemplate({}, { onLog: (line) => logs.push(line) });
 
@@ -279,9 +278,9 @@ describe("codex client client", () => {
 
   it("rejects structured envelopes with schema-forbidden extra fields", async () => {
     const logs: string[] = [];
-    globalThis.fetch = ((async () => structuredEnvelopeResponse(buildFallbackTracker({ genre: "Lofi" }), {
+    globalThis.fetch = Object.assign(((async () => structuredEnvelopeResponse(buildFallbackTracker({ genre: "Lofi" }), {
       extra: "hallucinated",
-    })) as unknown) as typeof fetch;
+    }))), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "Lofi" }, { onLog: (line) => logs.push(line) });
 
@@ -293,13 +292,13 @@ describe("codex client client", () => {
     process.env.PADPILOT_DEVTOOLS_ENABLED = "true";
     let requestUrl = "";
     const logs: string[] = [];
-    globalThis.fetch = ((async (input: RequestInfo | URL) => {
+    globalThis.fetch = Object.assign(((async (input: RequestInfo | URL) => {
       requestUrl = String(input);
       return new Response(JSON.stringify({
         response: buildFallbackTracker({ genre: "Lofi" }),
         source: "codex-cli",
       }));
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "Lofi" }, { onLog: (line) => logs.push(line) });
 
@@ -314,12 +313,12 @@ describe("codex client client", () => {
 
   it("logs detailed Codex route errors before falling back", async () => {
     const logs: string[] = [];
-    globalThis.fetch = ((async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(((async () => new Response(JSON.stringify({
       error: {
         code: "codex_generator_failed",
         message: "Codex CLI exited with 1.\nstderr:\nunexpected argument '--ask-for-approval'",
       },
-    }), { status: 502 })) as unknown) as typeof fetch;
+    }), { status: 502 }))), { preconnect() {} });
 
     const result = await generateMidiTemplate({}, { onLog: (line) => logs.push(line) });
 
@@ -330,9 +329,9 @@ describe("codex client client", () => {
   });
 
   it("keeps Amapiano log drum bass as bass, not a drum lane", async () => {
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = Object.assign(((async () => {
       throw new Error("offline");
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "Amapiano", lengthBars: 8 });
     const logDrumBass = result.tracks.find((track) => /log drum bass/i.test(track.name));
@@ -345,7 +344,7 @@ describe("codex client client", () => {
   it("falls back instead of inventing a drum lane for drumless Drill model output", async () => {
     const input = { genre: "Drill", lengthBars: 8 } as const;
     const rawTracker = withoutTracks(buildFallbackTracker(input), /drum|kit|perc|groove/i);
-    globalThis.fetch = ((async () => new Response(JSON.stringify({ response: rawTracker }))) as unknown) as typeof fetch;
+    globalThis.fetch = Object.assign(((async () => new Response(JSON.stringify({ response: rawTracker })))), { preconnect() {} });
 
     const result = await generateMidiTemplate(input);
 
@@ -384,9 +383,9 @@ describe("codex client client", () => {
   });
 
   it("default fallback export ends on the four-bar boundary", async () => {
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = Object.assign(((async () => {
       throw new Error("offline");
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     const result = await generateMidiTemplate({});
 
@@ -398,9 +397,9 @@ describe("codex client client", () => {
   });
 
   it("ends fallback exports at the selected length boundary", async () => {
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = Object.assign(((async () => {
       throw new Error("offline");
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     const result = await generateMidiTemplate({ genre: "Cinematic", lengthBars: 8 });
 
@@ -409,13 +408,13 @@ describe("codex client client", () => {
   });
 
   it("truncates local model exports to the selected length boundary", async () => {
-    globalThis.fetch = ((async () => new Response(JSON.stringify({
+    globalThis.fetch = Object.assign(((async () => new Response(JSON.stringify({
       response: [
         buildFallbackTracker({ lengthBars: 2 }),
         "#TRK:Long Pad,CH:11,PG:89",
         "[0,60,90,60000][60000,64,90,480]",
       ].join("\n"),
-    }))) as unknown) as typeof fetch;
+    })))), { preconnect() {} });
 
     const result = await generateMidiTemplate({ lengthBars: 2 });
 
@@ -424,9 +423,9 @@ describe("codex client client", () => {
   });
 
   it("includes the chosen key and mode in generated filenames", async () => {
-    globalThis.fetch = ((async () => {
+    globalThis.fetch = Object.assign(((async () => {
       throw new Error("offline");
-    }) as unknown) as typeof fetch;
+    })), { preconnect() {} });
 
     const result = await generateMidiTemplate({ scaleKey: "F# Major Pentatonic" });
 

@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from '@hyperfocus/desktop-runtime/process';
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -65,10 +66,10 @@ describe("kill PadPilot processes", () => {
     if (process.platform !== "win32") {
       return;
     }
-    const unrelated = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], {
+    const unrelated = spawnBackgroundProcess({ cmd: [process.execPath, "-e", "setInterval(() => {}, 1000)"], ...({
       stderr: "ignore",
       stdout: "ignore",
-    });
+    }) });
     try {
       await Bun.sleep(50);
       const info = queryWindowsProcess(unrelated.pid);
@@ -94,7 +95,7 @@ describe("kill PadPilot processes", () => {
     const script = path.join(root, "scripts", "dev.ts");
     mkdirSync(path.dirname(script), { recursive: true });
     writeFileSync(script, "setInterval(() => {}, 1000);\n");
-    const devProcess = Bun.spawn([process.execPath, script], { stderr: "ignore", stdout: "ignore" });
+    const devProcess = spawnBackgroundProcess({ cmd: [process.execPath, script], ...({ stderr: "ignore", stdout: "ignore" }) });
     try {
       await Bun.sleep(50);
       const info = queryWindowsProcess(devProcess.pid);

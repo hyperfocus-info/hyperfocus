@@ -1,4 +1,4 @@
-import { SolidPlugin } from "bun-plugin-solid";
+import { stylexSolidPlugin } from "@hyperfocus/ui/build/stylex-solid-plugin";
 import { cp, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -18,7 +18,7 @@ export async function buildSynaestheticDashboard({
     target: "browser",
     format: "esm",
     sourcemap: "linked",
-    plugins: [SolidPlugin()],
+    plugins: [stylexSolidPlugin({ cssOutputFile: "dashboard.css" })],
   });
   if (!result.success) {
     throw new Error("Synaesthetic dashboard build failed.");

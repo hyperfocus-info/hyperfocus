@@ -1,4 +1,4 @@
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary, isMessage } from "@bufbuild/protobuf";
 import { bytesToBase64 } from "../proto/base64";
 import {
   AutoPanVisualizerPayloadSchema,
@@ -22,21 +22,21 @@ import {
   TransientShaperVisualizerPayloadSchema,
   VisualizerFrameSchema,
   type ChainState,
-  type CompressorNodeConfig,
-  type ConvolverNodeConfig,
-  type DelayNodeConfig,
-  type EqNodeConfig,
-  type ExciterNodeConfig,
+  CompressorNodeConfigSchema,
+  ConvolverNodeConfigSchema,
+  DelayNodeConfigSchema,
+  EqNodeConfigSchema,
+  ExciterNodeConfigSchema,
   type FxChainState,
   type NodeState,
-  type NoiseGateNodeConfig,
-  type PhaserNodeConfig,
-  type PitchDriftNodeConfig,
-  type ReverbNodeConfig,
-  type RotarySpeakerNodeConfig,
-  type StereoImagerNodeConfig,
-  type TapeSaturationNodeConfig,
-  type TransientShaperNodeConfig,
+  NoiseGateNodeConfigSchema,
+  PhaserNodeConfigSchema,
+  PitchDriftNodeConfigSchema,
+  ReverbNodeConfigSchema,
+  RotarySpeakerNodeConfigSchema,
+  StereoImagerNodeConfigSchema,
+  TapeSaturationNodeConfigSchema,
+  TransientShaperNodeConfigSchema,
 } from "../proto/generated/fx-chain-pb";
 import { resolveNodeConfig } from "../modules/fx/node-registry/registry";
 import { clamp, clamp01 } from "../utils/math";
@@ -113,7 +113,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
 
   switch (node.type) {
     case FxNodeType.COMPRESSOR: {
-      const typedConfig = config as CompressorNodeConfig;
+      if (!isMessage(config, CompressorNodeConfigSchema)) throw new Error("Unexpected CompressorNodeConfig payload");
+      const typedConfig = config;
       const effectiveThreshold = Math.abs(typedConfig.thresholdDb) / 60;
       const ratio = clamp(typedConfig.ratio, 0.5, 20);
       const reduction = clamp((activity - effectiveThreshold * 0.6) * ratio * 8, 0, 24);
@@ -140,7 +141,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.EQ: {
-      const typedConfig = config as EqNodeConfig;
+      if (!isMessage(config, EqNodeConfigSchema)) throw new Error("Unexpected EqNodeConfig payload");
+      const typedConfig = config;
       const gainSum = typedConfig.bands.reduce((sum, band) => sum + (band.enabled ? band.gainDb : 0), 0) + typedConfig.lowShelfGainDb + typedConfig.highShelfGainDb;
       return create(NodeVisualizerFrameSchema, {
         chainId,
@@ -161,7 +163,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.TRANSIENT_SHAPER: {
-      const typedConfig = config as TransientShaperNodeConfig;
+      if (!isMessage(config, TransientShaperNodeConfigSchema)) throw new Error("Unexpected TransientShaperNodeConfig payload");
+      const typedConfig = config;
       return create(NodeVisualizerFrameSchema, {
         chainId,
         nodeId: node.id,
@@ -181,7 +184,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.NOISE_GATE: {
-      const typedConfig = config as NoiseGateNodeConfig;
+      if (!isMessage(config, NoiseGateNodeConfigSchema)) throw new Error("Unexpected NoiseGateNodeConfig payload");
+      const typedConfig = config;
       const signalLevelDb = dbFromEnergy(activity + signal.noise * 0.12);
       const gateOpen = signalLevelDb >= typedConfig.thresholdDb;
       return create(NodeVisualizerFrameSchema, {
@@ -204,7 +208,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.DELAY: {
-      const typedConfig = config as DelayNodeConfig;
+      if (!isMessage(config, DelayNodeConfigSchema)) throw new Error("Unexpected DelayNodeConfig payload");
+      const typedConfig = config;
       return create(NodeVisualizerFrameSchema, {
         chainId,
         nodeId: node.id,
@@ -225,7 +230,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.REVERB: {
-      const typedConfig = config as ReverbNodeConfig;
+      if (!isMessage(config, ReverbNodeConfigSchema)) throw new Error("Unexpected ReverbNodeConfig payload");
+      const typedConfig = config;
       const shimmer = typedConfig.mode === "Shimmer" ? typedConfig.shimmerFeedback * 0.7 + signal.modulation * 0.3 : typedConfig.shimmerFeedback * 0.35;
       return create(NodeVisualizerFrameSchema, {
         chainId,
@@ -247,7 +253,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.CONVOLVER: {
-      const typedConfig = config as ConvolverNodeConfig;
+      if (!isMessage(config, ConvolverNodeConfigSchema)) throw new Error("Unexpected ConvolverNodeConfig payload");
+      const typedConfig = config;
       const irAccent = typedConfig.irId.includes("plate") ? 1.35 : typedConfig.irId.includes("closet") ? 0.65 : 1;
       return create(NodeVisualizerFrameSchema, {
         chainId,
@@ -267,7 +274,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.TAPE_SATURATION: {
-      const typedConfig = config as TapeSaturationNodeConfig;
+      if (!isMessage(config, TapeSaturationNodeConfigSchema)) throw new Error("Unexpected TapeSaturationNodeConfig payload");
+      const typedConfig = config;
       return create(NodeVisualizerFrameSchema, {
         chainId,
         nodeId: node.id,
@@ -306,7 +314,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.EXCITER: {
-      const typedConfig = config as ExciterNodeConfig;
+      if (!isMessage(config, ExciterNodeConfigSchema)) throw new Error("Unexpected ExciterNodeConfig payload");
+      const typedConfig = config;
       const bandBias = typedConfig.frequencyBandSolo === "High" ? 1.15 : typedConfig.frequencyBandSolo === "Low" ? 0.75 : 0.95;
       return create(NodeVisualizerFrameSchema, {
         chainId,
@@ -345,7 +354,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.PHASER: {
-      const typedConfig = config as PhaserNodeConfig;
+      if (!isMessage(config, PhaserNodeConfigSchema)) throw new Error("Unexpected PhaserNodeConfig payload");
+      const typedConfig = config;
       return create(NodeVisualizerFrameSchema, {
         chainId,
         nodeId: node.id,
@@ -382,7 +392,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.ROTARY_SPEAKER: {
-      const typedConfig = config as RotarySpeakerNodeConfig;
+      if (!isMessage(config, RotarySpeakerNodeConfigSchema)) throw new Error("Unexpected RotarySpeakerNodeConfig payload");
+      const typedConfig = config;
       const speedScale = typedConfig.fast ? 2.4 : 0.9;
       return create(NodeVisualizerFrameSchema, {
         chainId,
@@ -403,7 +414,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.STEREO_IMAGER: {
-      const typedConfig = config as StereoImagerNodeConfig;
+      if (!isMessage(config, StereoImagerNodeConfigSchema)) throw new Error("Unexpected StereoImagerNodeConfig payload");
+      const typedConfig = config;
       const radius = clamp01(typedConfig.widthPercent / 200) * (0.4 + signal.spread * 0.6);
       return create(NodeVisualizerFrameSchema, {
         chainId,
@@ -428,7 +440,8 @@ function createPayloadFrame(node: NodeState, chainId: number, signal: DevSignalF
       });
     }
     case FxNodeType.PITCH_DRIFT: {
-      const typedConfig = config as PitchDriftNodeConfig;
+      if (!isMessage(config, PitchDriftNodeConfigSchema)) throw new Error("Unexpected PitchDriftNodeConfig payload");
+      const typedConfig = config;
       return create(NodeVisualizerFrameSchema, {
         chainId,
         nodeId: node.id,

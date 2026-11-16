@@ -1,3 +1,5 @@
+import { createContext, useContext } from "solid-js";
+const FxNodeHeaderControls = createContext<FxNodeHeaderProps>();
 import { Headphones, PowerIcon, PowerOffIcon, X } from "lucide-solid";
 import { DraggableCardHandle } from "../../../components/elements/draggable-card";
 import { PadPilot } from "../../../padpilot/index";
@@ -13,11 +15,13 @@ export type FxNodeHeaderProps = {
   nodeId: number;
 };
 
-export function FxNodeHeader(props: FxNodeHeaderProps) {
+export function FxNodeHeader(props: FxNodeHeaderProps) { return <FxNodeHeaderControls.Provider value={props}><FxNodeHeaderContent /></FxNodeHeaderControls.Provider>; }
+function FxNodeHeaderContent() { const controls = useContext(FxNodeHeaderControls); if (!controls) throw new Error("Missing FxNodeHeader controls");
+
   const state = useFxModuleState();
   const actions = useFxModuleActions();
-  const chain = createChainAccessor(() => state.session.working.chains, props.chainId);
-  const node = createNodeAccessor(chain, props.nodeId);
+  const chain = createChainAccessor(() => state.session.working.chains, controls.chainId);
+  const node = createNodeAccessor(chain, controls.nodeId);
   const bypassIcon = () => (node()?.bypassed ? PowerOffIcon : PowerIcon);
 
   return (
@@ -28,17 +32,17 @@ export function FxNodeHeader(props: FxNodeHeaderProps) {
           <PadPilot.Button
             aria-pressed={node()?.bypassed ?? false}
             class={`${moduleStyles["icon-action"]} ${node()?.bypassed ? moduleStyles["icon-action-active"] : ""}`.trim()}
-            data-testid={`node-bypass-button-${props.chainId}-${props.nodeId}`}
+            data-testid={`node-bypass-button-${controls.chainId}-${controls.nodeId}`}
             icon={bypassIcon()}
-            onClick={() => actions.nodes.toggleBypass(props.chainId, props.nodeId)}
+            onClick={() => actions.nodes.toggleBypass(controls.chainId, controls.nodeId)}
             tooltip={node()?.bypassed ? "Enable node" : "Bypass node"}
           />
           <PadPilot.Button
             aria-pressed={node()?.solo ?? false}
             class={`${moduleStyles["icon-action"]} ${node()?.solo ? moduleStyles["icon-action-active"] : ""}`.trim()}
-            data-testid={`node-solo-button-${props.chainId}-${props.nodeId}`}
+            data-testid={`node-solo-button-${controls.chainId}-${controls.nodeId}`}
             icon={Headphones}
-            onClick={() => actions.nodes.toggleSolo(props.chainId, props.nodeId)}
+            onClick={() => actions.nodes.toggleSolo(controls.chainId, controls.nodeId)}
             tooltip={node()?.solo ? "Disable node solo" : "Solo node"}
           />
         </div>
@@ -48,7 +52,7 @@ export function FxNodeHeader(props: FxNodeHeaderProps) {
             <div class={styles["node-name"]}>
               <strong class={styles["node-name-strong"]}>{(node() && getNodeName(node()!.type)) ?? node()?.name}</strong>
             </div>
-            <FxNodePresetDropdown chainId={props.chainId} nodeId={props.nodeId} />
+            <FxNodePresetDropdown chainId={controls.chainId} nodeId={controls.nodeId} />
           </div>
         </div>
 
@@ -62,15 +66,15 @@ export function FxNodeHeader(props: FxNodeHeaderProps) {
             tooltip={`Node mix ${Math.round((node()?.mix ?? 1) * 100)}%`}
             label="Mix"
             valueFormatter={(value) => `${Math.round(value * 100)}%`}
-            onChange={(value) => actions.nodes.setMix(props.chainId, props.nodeId, value, false)}
-            onCommit={(value) => actions.nodes.setMix(props.chainId, props.nodeId, value, true)}
+            onChange={(value) => actions.nodes.setMix(controls.chainId, controls.nodeId, value, false)}
+            onCommit={(value) => actions.nodes.setMix(controls.chainId, controls.nodeId, value, true)}
             size={28}
           />
           <PadPilot.Button
             class={moduleStyles["icon-action"]}
-            data-testid={`node-remove-button-${props.chainId}-${props.nodeId}`}
+            data-testid={`node-remove-button-${controls.chainId}-${controls.nodeId}`}
             icon={X}
-            onClick={() => actions.nodes.remove(props.chainId, props.nodeId)}
+            onClick={() => actions.nodes.remove(controls.chainId, controls.nodeId)}
             tooltip="Remove node"
             anchorClass={moduleStyles["icon-action-anchor-danger"]}
           />
@@ -78,4 +82,5 @@ export function FxNodeHeader(props: FxNodeHeaderProps) {
       </div>
     </header>
   );
+
 }

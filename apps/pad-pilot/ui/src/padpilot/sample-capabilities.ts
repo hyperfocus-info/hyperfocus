@@ -1,4 +1,4 @@
-import { fromBinary, toBinary } from "@bufbuild/protobuf";
+import { fromBinary, toBinary, type DescMessage, type MessageShape } from "@bufbuild/protobuf";
 import { create } from "@bufbuild/protobuf";
 import { subscribeCapabilityStream } from "../bridge";
 import { moduleSdk } from "../module-sdk";
@@ -31,12 +31,12 @@ export type {
   SlicePlaybackTrigger,
 };
 
-function encodePayload(schema: Parameters<typeof toBinary>[0], value: unknown) {
-  return bytesToBase64(toBinary(schema as never, value as never));
+function encodePayload<T extends DescMessage>(schema: T, value: MessageShape<T>) {
+  return bytesToBase64(toBinary(schema, value));
 }
 
-function decodePayload(schema: Parameters<typeof fromBinary>[0], payloadBase64: string) {
-  return fromBinary(schema as never, base64ToBytes(payloadBase64));
+function decodePayload<T extends DescMessage>(schema: T, payloadBase64: string) {
+  return fromBinary(schema, base64ToBytes(payloadBase64));
 }
 
 export function createCapabilityHandle(capability: "sample-source" | "sample-analysis" | "slice-playback" | "haptics", moduleInstanceId: string, slot = "primary") {
@@ -77,7 +77,7 @@ export function encodeHapticIntent(value: Record<string, unknown>) {
 }
 
 export function decodeSampleEditorFrame(payloadBase64: string) {
-  return decodePayload(SampleEditorFrameSchema, payloadBase64) as SampleEditorFrame;
+  return decodePayload(SampleEditorFrameSchema, payloadBase64);
 }
 
 export function createEmptySampleEditorFrame() {

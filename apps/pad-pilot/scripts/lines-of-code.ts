@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from '@hyperfocus/desktop-runtime/process';
 import path from "node:path";
 import {
   terminateAndReapProcess,
@@ -25,16 +26,16 @@ async function getGitFiles() {
   // -o: others (untracked)
   // --exclude-standard: respect .gitignore rules
   const projectRoot = path.resolve(import.meta.dir, "..");
-  const proc = Bun.spawn(["git", "ls-files", "-c", "-o", "--exclude-standard"], {
+  const proc = spawnBackgroundProcess({ cmd: ["git", "ls-files", "-c", "-o", "--exclude-standard"], ...({
     cwd: projectRoot,
     stderr: "inherit",
     stdout: "pipe",
-  });
+  }) });
   let bytes: Uint8Array;
   let exitCode: number;
   try {
     [bytes, exitCode] = await Promise.all([
-      readBoundedStreamBytes(proc.stdout, { label: "git file inventory", maxBytes: 8 * 1024 * 1024 }),
+      readBoundedStreamBytes(proc.stdout, { label: "git file inventory", maxBytes: 8388608 }),
       waitForProcessWithDeadline(proc, 30_000, "git file inventory"),
     ]);
   } catch (error) {
@@ -64,11 +65,11 @@ export async function countLines(filePath: string) {
     const file = Bun.file(filePath);
 
     // Skip files larger than 1MB to avoid processing giant minified bundles
-    if (file.size > 1024 * 1024) return 0;
+    if (file.size > 1048576) return 0;
 
     const bytes = await readBoundedStreamBytes(file.stream(), {
       label: `source file ${filePath}`,
-      maxBytes: 1024 * 1024,
+      maxBytes: 1048576,
     });
     const text = new TextDecoder().decode(bytes);
 

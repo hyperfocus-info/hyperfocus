@@ -76,7 +76,7 @@ function cloneDevice(device: PadPilotInputDeviceState) {
     rawAxes: [...device.rawAxes],
     rawButtons: [...device.rawButtons],
     runtimeDeviceId: device.runtimeDeviceId,
-  } satisfies PadPilotInputDeviceState;
+  };
 }
 
 export function detectControllerLayoutKind(displayName: string, hardwareId: string) {

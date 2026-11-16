@@ -1,6 +1,6 @@
+import type { PadPilotStateReader, PadPilotRegisterModuleStateCodec } from "./module-ui-contract";
 import type {
   PadPilotInstalledModuleSummary,
-  PadPilotModuleStateCodec,
 } from "./module-ui-contract";
 
 export const PADPILOT_HOST_SURFACE_VERSION = "0.1.0";
@@ -183,16 +183,16 @@ export type PadPilotFxAutomationBinding = {
 
 export type PadPilotModuleHostSurface = {
   hooks: {
-    useEditorViewState: <T>(scopeId: string, fallback: T) => readonly [PadPilotAccessor<T>, PadPilotStateUpdater<T>];
+    useEditorViewState: <T>(scopeId: string, fallback: T, read: PadPilotStateReader<T>) => readonly [PadPilotAccessor<T>, PadPilotStateUpdater<T>];
     useModuleInteraction: (moduleId: string) => { begin: () => void; end: () => void };
-    useModuleState: <T>(moduleId: string, fallback: T) => readonly [PadPilotAccessor<T>, PadPilotStateUpdater<T>];
+    useModuleState: <T>(moduleId: string, fallback: T, read: PadPilotStateReader<T>) => readonly [PadPilotAccessor<T>, PadPilotStateUpdater<T>];
   };
   modules: {
     getActiveModule: () => PadPilotInstalledModuleSummary | null;
     installBundle: (bundlePath?: string) => Promise<PadPilotInstalledModuleSummary | null>;
     listInstalled: () => PadPilotInstalledModuleSummary[];
   };
-  registerModuleStateCodec: <T>(moduleId: string, codec: PadPilotModuleStateCodec<T>) => void;
+  registerModuleStateCodec: PadPilotRegisterModuleStateCodec;
 };
 
 export type PadPilotServiceHostSurface<

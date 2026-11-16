@@ -1,3 +1,4 @@
+import { overlayOwnsEscape } from "./overlay-stack";
 import { afterEach, describe, expect, test } from "bun:test";
 import { isTopFocusOverlay, isTopOverlay, registerOverlay } from "./overlay-stack";
 
@@ -163,4 +164,15 @@ test("a queued native close from a previous open lifetime cannot remove the reop
     dialog.removeAttribute("open"); dialog.dispatchEvent(new Event("close"));
     expect(isTopOverlay("reopened-native")).toBe(false);
   } finally { cleanup(); }
+});
+
+test("delegated hosts can defer Escape to the overlay captured before their handler", () => {
+ let closed = 0, owned = false;
+ const unregister = registerOverlay({ id: "host-escape-regression", close: () => { closed++; } });
+ const delegated = (event: KeyboardEvent) => { owned = overlayOwnsEscape(event); };
+ document.addEventListener("keydown", delegated, true);
+ try {
+  document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  expect(owned).toBe(true);expect(closed).toBe(1);
+ } finally { document.removeEventListener("keydown", delegated, true);unregister(); }
 });

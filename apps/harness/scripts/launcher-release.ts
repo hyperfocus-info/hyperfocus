@@ -1,7 +1,7 @@
 import { spawnBackgroundProcess,terminateProcessTree } from "@hyperfocus/desktop-runtime/process";
 import { isRecord } from "@hyperfocus/utilities/records";
 import { existsSync } from "node:fs";
-import { appendFile,mkdtemp,readdir,readFile,rm } from "node:fs/promises";
+import { appendFile,mkdir,mkdtemp,readdir,readFile,rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createCliUsageError,isCliUsageError,parseCliOptions } from "../cli/src/cli-options";
@@ -126,10 +126,11 @@ async function extractArchive(archivePath: string, destination: string) {
   if (exitCode !== 0) throw new Error(`Could not extract Harness archive: ${stderr.trim()}`);
 }
 
-export async function runLauncherUiSmoke({ cmd, cwd, timeoutMs = 45_000, verify }: {
+export async function runLauncherUiSmoke({ cmd, cwd, timeoutMs = 45_000, verify, home }: {
   cmd: string[];
   cwd: string;
   timeoutMs?: number;
+  home?: string;
   verify?: (options: { serverUrl: string }) => Promise<void>;
 }) {
   const reservation = Bun.serve({
@@ -145,7 +146,8 @@ export async function runLauncherUiSmoke({ cmd, cwd, timeoutMs = 45_000, verify 
     return { exitCode: 1, stdout: "", stderr: "Could not reserve a launcher smoke port" };
   }
 
-  const smokeHome = await mkdtemp(path.join(os.tmpdir(), "hyperfocus-harness-smoke-"));
+  const smokeHome = home ?? await mkdtemp(path.join(os.tmpdir(), "hyperfocus-harness-smoke-"));
+  if (home) await mkdir(home, { recursive: true });
   const result = spawnBackgroundProcess({
     cmd,
     cwd,
@@ -198,7 +200,7 @@ export async function runLauncherUiSmoke({ cmd, cwd, timeoutMs = 45_000, verify 
     };
   } finally {
     await terminateProcessTree({ process: result });
-    await rm(smokeHome, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    if (!home) await rm(smokeHome, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }
 

@@ -1,4 +1,3 @@
-import type { Clerk } from "@clerk/clerk-js";
 import { expect, it } from "bun:test";
 import { createClerkLoader } from "./clerk";
 
@@ -16,7 +15,7 @@ it("deduplicates callers until the matching Clerk instance finishes loading", as
   const loaded = createDeferred<void>();
   const instance = {
     load: () => loaded.promise,
-  } as unknown as Clerk;
+  };
   let createCount = 0;
   const loadClerk = createClerkLoader(() => {
     createCount += 1;
@@ -41,8 +40,8 @@ it("deduplicates callers until the matching Clerk instance finishes loading", as
 it("keeps overlapping publishable-key loads bound to their own instances", async () => {
   const firstLoaded = createDeferred<void>();
   const secondLoaded = createDeferred<void>();
-  const firstInstance = { load: () => firstLoaded.promise } as unknown as Clerk;
-  const secondInstance = { load: () => secondLoaded.promise } as unknown as Clerk;
+  const firstInstance = { load: () => firstLoaded.promise };
+  const secondInstance = { load: () => secondLoaded.promise };
   const loadClerk = createClerkLoader((publishableKey) =>
     publishableKey === "pk_test_first" ? firstInstance : secondInstance,
   );
@@ -59,8 +58,8 @@ it("retries a key after its active load rejects", async () => {
   const firstLoaded = createDeferred<void>();
   const secondLoaded = createDeferred<void>();
   const instances = [
-    { load: () => firstLoaded.promise } as unknown as Clerk,
-    { load: () => secondLoaded.promise } as unknown as Clerk,
+    { load: () => firstLoaded.promise },
+    { load: () => secondLoaded.promise },
   ];
   let createCount = 0;
   const loadClerk = createClerkLoader(() => instances[createCount++]!);

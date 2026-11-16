@@ -1,6 +1,8 @@
+import { z } from "zod";
+import { BillingCheckoutRowSchema, OrderRowSchema, BillingPaymentRowSchema } from "./storage/row-schemas";
 import { Database } from "bun:sqlite";
 
-import type { BillingCheckoutKind, BillingCheckoutRow, BillingPaymentRow, OrderRow } from "./db";
+import type { BillingCheckoutKind } from "./db";
 export function createBillingCheckout(
   db: Database,
   input: {
@@ -39,7 +41,7 @@ export function createBillingCheckout(
     input.createdAt,
     input.createdAt,
   );
-  return db.query("SELECT * FROM billing_checkouts WHERE id = ?").get(id) as BillingCheckoutRow;
+  return BillingCheckoutRowSchema.parse(db.query("SELECT * FROM billing_checkouts WHERE id = ?").get(id));
 }
 
 export function updateBillingCheckoutSession(
@@ -75,11 +77,11 @@ export function updateBillingCheckoutSession(
 }
 
 export function findActiveBillingCheckoutByScope(db: Database, userId: string, scopeKey: string) {
-  return db.query(
+  return z.union([BillingCheckoutRowSchema, z.null()]).parse(db.query(
     `SELECT * FROM billing_checkouts
      WHERE user_id = ? AND scope_key = ? AND status IN ('created', 'pending')
      ORDER BY created_at DESC LIMIT 1`,
-  ).get(userId, scopeKey) as BillingCheckoutRow | null;
+  ).get(userId, scopeKey));
 }
 
 export function updateBillingCheckoutStatusById(
@@ -122,7 +124,7 @@ export function createModuleOrder(
 }
 
 export function getOrderById(db: Database, orderId: string) {
-  return db.query("SELECT * FROM orders WHERE id = ?").get(orderId) as OrderRow | null;
+  return z.union([OrderRowSchema, z.null()]).parse(db.query("SELECT * FROM orders WHERE id = ?").get(orderId));
 }
 
 export function updateModuleOrder(
@@ -204,15 +206,15 @@ export function updateBillingCheckoutStatusBySessionId(
     updatedAt,
     stripeCheckoutSessionId,
   );
-  return db.query("SELECT * FROM billing_checkouts WHERE stripe_checkout_session_id = ?").get(stripeCheckoutSessionId) as BillingCheckoutRow | null;
+  return z.union([BillingCheckoutRowSchema, z.null()]).parse(db.query("SELECT * FROM billing_checkouts WHERE stripe_checkout_session_id = ?").get(stripeCheckoutSessionId));
 }
 
 export function findBillingCheckoutBySessionId(db: Database, stripeCheckoutSessionId: string) {
-  return db.query("SELECT * FROM billing_checkouts WHERE stripe_checkout_session_id = ?").get(stripeCheckoutSessionId) as BillingCheckoutRow | null;
+  return z.union([BillingCheckoutRowSchema, z.null()]).parse(db.query("SELECT * FROM billing_checkouts WHERE stripe_checkout_session_id = ?").get(stripeCheckoutSessionId));
 }
 
 export function findBillingCheckoutById(db: Database, checkoutId: string) {
-  return db.query("SELECT * FROM billing_checkouts WHERE id = ?").get(checkoutId) as BillingCheckoutRow | null;
+  return z.union([BillingCheckoutRowSchema, z.null()]).parse(db.query("SELECT * FROM billing_checkouts WHERE id = ?").get(checkoutId));
 }
 
 export function recordWebhookEvent(
@@ -267,9 +269,9 @@ export function recordBillingPayment(
     userId: string;
   },
 ) {
-  const existing = db.query(
+  const existing = z.union([BillingPaymentRowSchema, z.null()]).parse(db.query(
     "SELECT * FROM billing_payments WHERE provider = 'stripe' AND provider_payment_id = ?",
-  ).get(input.providerPaymentId) as BillingPaymentRow | null;
+  ).get(input.providerPaymentId));
   if (existing) {
     return { created: false, payment: existing };
   }
@@ -303,7 +305,7 @@ export function recordBillingPayment(
   );
   return {
     created: true,
-    payment: db.query("SELECT * FROM billing_payments WHERE id = ?").get(id) as BillingPaymentRow,
+    payment: BillingPaymentRowSchema.parse(db.query("SELECT * FROM billing_payments WHERE id = ?").get(id)),
   };
 }
 
@@ -332,9 +334,9 @@ export function findBillingPaymentByProviderReferences(
     clauses.push("provider_payment_intent_id = ?");
     values.push(input.paymentIntentId);
   }
-  const payments = db.query(
+  const payments = z.array(BillingPaymentRowSchema).parse(db.query(
     `SELECT * FROM billing_payments WHERE provider = 'stripe' AND (${clauses.join(" OR ")})`,
-  ).all(...values) as BillingPaymentRow[];
+  ).all(...values));
   if (payments.length > 1) {
     throw new Error("Stripe refund references multiple recorded payments.");
   }
@@ -377,13 +379,9 @@ export function recordBillingRefund(
     status: string;
   },
 ) {
-  const existing = db.query(
+  const existing = z.union([z.object({ amount_cents: z.number(), applied_at: z.union([z.string(), z.null()]), billing_payment_id: z.string() }), z.null()]).parse(db.query(
     "SELECT * FROM billing_refunds WHERE provider = 'stripe' AND provider_refund_id = ?",
-  ).get(input.providerRefundId) as {
-    amount_cents: number;
-    applied_at: string | null;
-    billing_payment_id: string;
-  } | null;
+  ).get(input.providerRefundId));
   if (
     existing &&
     (existing.billing_payment_id !== input.billingPaymentId || existing.amount_cents !== input.amountCents)
@@ -421,11 +419,11 @@ export function recordBillingRefund(
 }
 
 export function getAppliedBillingRefundTotal(db: Database, billingPaymentId: string) {
-  const row = db.query(
+  const row = z.object({ total: z.number() }).parse(db.query(
     `SELECT COALESCE(SUM(amount_cents), 0) AS total
      FROM billing_refunds
      WHERE billing_payment_id = ? AND applied_at IS NOT NULL`,
-  ).get(billingPaymentId) as { total: number };
+  ).get(billingPaymentId));
   return row.total;
 }
 
@@ -439,9 +437,9 @@ export function claimBillingResourceEvent(
     updatedAt: string;
   },
 ) {
-  const existing = db.query(
+  const existing = z.union([z.object({ event_created: z.number(), event_priority: z.number() }), z.null()]).parse(db.query(
     "SELECT event_created, event_priority FROM billing_resource_cursors WHERE resource_key = ?",
-  ).get(input.resourceKey) as { event_created: number; event_priority: number } | null;
+  ).get(input.resourceKey));
   if (
     existing &&
     (existing.event_created > input.eventCreated ||

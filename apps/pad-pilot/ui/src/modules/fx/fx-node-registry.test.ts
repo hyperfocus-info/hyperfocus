@@ -1,3 +1,4 @@
+import { requireElement } from "../../utils/require-element";
 import { describe, expect, it } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createUiTest } from "../../../../utils/tests/test-harness";
@@ -9,7 +10,8 @@ import {
 } from "./node-registry/native-control-contract";
 import { IO } from "../../padpilot/provider";
 import { PADPILOT_FILE_IMPORT_MAX_BYTES } from "@hyperfocus/pad-pilot/file-import";
-import { renderConvolverNodeEditor, renderDelayNodeEditor } from "./node-registry/renderers";
+import { renderConvolverNodeEditor } from "./node-registry/renderers-tone";
+import { renderDelayNodeEditor } from "./node-registry/renderers-spatial";
 
 describe("fx node registry", () => {
   it("exposes all 19 functional node types including parity additions", () => {
@@ -66,7 +68,7 @@ describe("fx node registry", () => {
       expect(renderedKeys).toEqual([...FX_NATIVE_SUPPORTED_CONTROL_KEYS[definition.type]]);
 
       const compatibilityOnlyFields = FX_PROTO_COMPATIBILITY_ONLY_FIELDS[definition.type] ?? [];
-      expect(renderedKeys.some((key) => compatibilityOnlyFields.includes(key as never))).toBe(false);
+      expect(renderedKeys.some((key) => compatibilityOnlyFields.includes(key))).toBe(false);
     }
 
     expect(FX_NATIVE_SUPPORTED_CONTROL_KEYS[FxNodeType.CONVOLVER]).toContain("blend");
@@ -150,7 +152,7 @@ createUiTest("fx node renderers", () => {
         name: "room.wav",
         path: "C:/PadPilot/media/impulse-responses/0123456789abcdef0123456789abcdef.wav",
       };
-    }) as typeof IO.importFile;
+    });
 
     try {
       const result = render(() => renderConvolverNodeEditor({
@@ -161,7 +163,7 @@ createUiTest("fx node renderers", () => {
         updateControl: (key, value, commit) => updates.push([key, value, commit]),
         visualizer: null,
       }));
-      const input = result.container.querySelector("input[type=file]") as HTMLInputElement;
+      const input = requireElement(result.container.querySelector("input[type=file]"), HTMLInputElement);
       fireEvent.change(input, { target: { files: [new File(["room"], "room.wav", { type: "audio/wav" })] } });
       await waitFor(() => expect(updates).toEqual([
         ["irSourcePath", "C:/PadPilot/media/impulse-responses/0123456789abcdef0123456789abcdef.wav", true],

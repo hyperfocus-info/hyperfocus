@@ -33,7 +33,7 @@ export type HeadlessEditorHandoff = EditorCommandHandoff & {
   persisted: boolean;
 };
 
-const MAX_BROWSER_HYDRATION_BYTES = 24 * 1024 * 1024;
+const MAX_BROWSER_HYDRATION_BYTES = 25165824;
 
 export async function snapshotHeadlessEditorProject(projectRoot: string, options: { includeAssets?: boolean } = {}): Promise<HeadlessEditorSnapshot> {
   const opened = await openFileBackedSession(projectRoot);
@@ -68,8 +68,8 @@ export async function runHeadlessEditorPlan(options: { projectRoot: string; plan
       const inputs: HyperfocusAssetInput[] = [...opened.assets.values()]
         .filter((asset) => catalogIds.has(asset.id))
         .map((asset) => ({ id: asset.id, name: asset.name, mimeType: asset.mimeType, bytes: asset.bytes }));
-      const files = await createHyperfocusProjectFiles(opened.session.project, inputs, { maxAssets: 5_000, maxUnpackedBytes: 1024 * 1024 * 1024 });
-      await writeHyperfocusProjectPair(opened.projectRoot, files, { maxAssets: 5_000, maxUnpackedBytes: 1024 * 1024 * 1024 });
+      const files = await createHyperfocusProjectFiles(opened.session.project, inputs, { maxAssets: 5_000, maxUnpackedBytes: 1073741824 });
+      await writeHyperfocusProjectPair(opened.projectRoot, files, { maxAssets: 5_000, maxUnpackedBytes: 1073741824 });
       const persisted = await openFileBackedSession(opened.projectRoot);
       snapshot = persisted.session.snapshot();
     } catch (cause) {
@@ -104,7 +104,7 @@ export async function readEditorCommandPlan(path: string): Promise<EditorCommand
 
 async function openFileBackedSession(projectRoot: string) {
   const root = resolve(projectRoot);
-  const opened = await readHyperfocusProjectPair(root, { maxArchiveBytes: 1024 * 1024 * 1024, maxAssets: 5_000, maxUnpackedBytes: 1024 * 1024 * 1024 });
+  const opened = await readHyperfocusProjectPair(root, { maxArchiveBytes: 1073741824, maxAssets: 5_000, maxUnpackedBytes: 1073741824 });
   const assets = new Map<string, EditorCommandAsset>(opened.assets.map((asset) => [asset.id, { id: asset.id, name: asset.name, mimeType: asset.mimeType, bytes: new Uint8Array(asset.bytes) }]));
   const session = createEditorCommandSession(migrateProject(opened.project), {
     async putAsset(asset) { assets.set(asset.id, { ...asset, bytes: new Uint8Array(asset.bytes) }); },

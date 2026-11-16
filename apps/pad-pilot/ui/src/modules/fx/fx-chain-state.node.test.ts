@@ -1,8 +1,9 @@
+import { spawnBackgroundProcessSync } from '@hyperfocus/desktop-runtime/process';
 import { describe, expect, test } from "bun:test";
 
 describe("FX chain state Node import contract", () => {
   test("loads pure state and registry code without browser globals", () => {
-    const result = Bun.spawnSync({
+    const result = spawnBackgroundProcessSync({
       cmd: [
         process.execPath,
         "--conditions",

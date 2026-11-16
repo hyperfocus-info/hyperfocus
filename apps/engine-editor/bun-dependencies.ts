@@ -1,3 +1,4 @@
+import { spawnBackgroundProcess } from '@hyperfocus/desktop-runtime/process';
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -86,12 +87,12 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 
 async function runBun(options: { cwd: string; argv: string[] }) {
-  const child = Bun.spawn([process.execPath, ...options.argv], {
+  const child = spawnBackgroundProcess({ cmd: [process.execPath, ...options.argv], ...({
     cwd: options.cwd,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
-  });
+  }) });
   const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),

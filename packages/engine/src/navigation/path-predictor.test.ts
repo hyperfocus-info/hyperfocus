@@ -20,3 +20,19 @@ test("path predictor reinforces stable transitions and validates nodes", () => {
   expect(predictor.confidence(0, 3)).toBe(2);
   expect(() => predictor.train([0, 4])).toThrow("outside nodeCount");
 });
+
+test("path predictor preserves confidence eviction, wraparound probing and replacement", () => {
+  const predictor = createPathPredictor({ nodeCount: 5, capacity: 2 });
+  predictor.train([0, 4]);
+  predictor.train([0, 4]);
+  predictor.train([1, 4]);
+  predictor.train([2, 4]);
+  expect(predictor.confidence(0, 4)).toBe(2);
+  expect(predictor.confidence(1, 4)).toBe(0);
+  expect(predictor.confidence(2, 4)).toBe(1);
+  predictor.train([0, 3, 4]);
+  expect(predictor.confidence(0, 4)).toBe(1);
+  predictor.clear();
+  expect(predictor.confidence(0, 4)).toBe(0);
+  expect(predictor.predict(0, 4, new Int32Array(5))).toEqual({ status: "miss", length: 0 });
+});

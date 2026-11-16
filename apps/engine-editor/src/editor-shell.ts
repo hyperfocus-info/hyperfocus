@@ -1,7 +1,10 @@
+import { overlayOwnsEscape } from "@hyperfocus/ui/overlay-stack";
+import { dispatchInspectorChange } from "./components/inspector-change";
+import { trapFocus, fileInput, download, appendConsole, showError, announce, required, setText, slug, formatBytes } from './app/shell-browser-helpers';
+import { writeDirectoryFile, type DirectoryHandle } from './app/shell-directory-files';
 import {
   createDefaultProject,
   migrateProject,
-  stableProjectJson,
   uniqueId,
   type EditorAsset,
   type EditorComponent,
@@ -32,7 +35,6 @@ import { toggleWorkbenchPanel } from "@hyperfocus/ui/workbench";
 import { applyEditorUiPreferences, readEditorUiPreferences, writeEditorUiPreferences } from "./app/editor-preferences.ts";
 import type { EditorCenterContentState } from "./components/editor-center-content.tsx";
 import { mountEditorWorkspaceLayouts } from "./editor-workspace-layouts.ts";
-import { editorFieldLabel } from "./editor-field-presentation.ts";
 import { findEditorAssetUsages, removeEditorAssetMetadata, renameEditorAsset, replaceEditorAssetMetadata } from "./editor-asset-model.ts";
 import { createEditor3DEntity, createEditor3DLight, createEditor3DMaterial, duplicateEditor3DEntity, placeImportedGltf, readEditor3DDeclaration, removeEditor3DEntity } from "./editor-3d-authoring.ts";
 import { attachEditorScriptBehavior, createEditorScript, findEditorScriptReferences, readEditorBehaviorDefinitions, removeEditorScript, renameEditorScript, upsertEditorBehaviorDefinition } from "./editor-script-model.ts";
@@ -43,9 +45,9 @@ import type { EditorPaletteCommand } from "./components/editor-command-palette.t
 const RECOVERY_KEY = "catalog-engine.editor.recovery.v1";
 const LAST_BUILD_KEY = "catalog-engine.editor.last-build.v1";
 const ASSET_DB = "catalog-engine-editor-assets";
-const MAX_PROJECT_FILE_BYTES = 10 * 1024 * 1024;
-const MAX_ASSET_FILE_BYTES = 256 * 1024 * 1024;
-const MAX_ASSET_CATALOG_BYTES = 1024 * 1024 * 1024;
+const MAX_PROJECT_FILE_BYTES = 10485760;
+const MAX_ASSET_FILE_BYTES = 268435456;
+const MAX_ASSET_CATALOG_BYTES = 1073741824;
 const FIRST_RUN_KEY = "catalog-engine.editor.first-run-complete.v1";
 const TUTORIAL_PROGRESS_KEY = "hyperfocus.editor.tutorial.v1";
 
@@ -75,7 +77,7 @@ type EditorScripts = { activePath: string; files: EditorScriptFile[] };
 type BuildSourcePreflight = { revision: string; status: "pending" | "ready" | "error"; detail: string };
 type AudioAudition = { assetId: string; element: HTMLAudioElement; objectUrl: string; cancelLoad?: () => void };
 declare global { var showDirectoryPicker: ((options: unknown) => Promise<DirectoryHandle>) | undefined; }
-let announcementTimer: number | undefined;
+
 /** Returns hierarchy depths aligned with the authored entity order. */
 export function editorEntityTreeDepths(entities: readonly { id: string; parentId?: string }[]): number[] {
   const parentById = new Map(entities.map((entity) => [entity.id, entity.parentId]));
@@ -445,15 +447,10 @@ export function createEditorShell(bridge: EditorShellBridge) {
     queueMicrotask(() => menu.querySelector<HTMLElement>("[role='menuitem']")?.focus());
   }
 
-  function onChange(event: Event) {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
-    if (target.dataset.entityProperty) return editEntityProperty(target.dataset.entityProperty, target.value);
-    if (target.dataset.componentId && target.dataset.componentKey) return editComponentValue(target);
-    if (target.dataset["3dField"]) return edit3DField(target.dataset["3dField"], target instanceof HTMLInputElement && target.type === "checkbox" ? String(target.checked) : target.value);
-  }
+  function onChange(event: Event) { dispatchInspectorChange(event, { editEntityProperty, editComponentValue, edit3DField }); }
 
   function onKeyDown(event: KeyboardEvent) {
+    if (overlayOwnsEscape(event) || (event.target instanceof HTMLElement && event.target.closest('[aria-haspopup="listbox"], [role="listbox"]'))) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
     const openMenu = document.querySelector<HTMLDetailsElement>(".resource-overflow[open]");
     if (event.key === "Escape" && openMenu) {
@@ -1044,8 +1041,8 @@ export function createEditorShell(bridge: EditorShellBridge) {
   }
 
   function addSelectedComponent(target: HTMLElement) {
-    const select = target.closest<HTMLElement>(".component-add-form")?.querySelector<HTMLSelectElement>("[data-add-component-type]");
-    const value = select?.value;
+    const select = target.closest<HTMLElement>(".component-add-form")?.querySelector<HTMLButtonElement>("[data-add-component-type]");
+    const value = select?.dataset.selectValue;
     if (value?.startsWith("behavior:")) addComponent("behavior", value.slice("behavior:".length));
     else addComponent(optionalOneOf(value, EDITOR_COMPONENT_TYPES));
   }
@@ -1126,7 +1123,7 @@ export function createEditorShell(bridge: EditorShellBridge) {
   function addBehaviorVariable(target: HTMLElement) {
     const form = target.closest<HTMLElement>(".behavior-public-property-form");
     const name = form?.querySelector<HTMLInputElement>("[data-behavior-variable-name]")?.value.trim();
-    const type = form?.querySelector<HTMLSelectElement>("[data-behavior-variable-type]")?.value;
+    const type = form?.querySelector<HTMLButtonElement>("[data-behavior-variable-type]")?.dataset.selectValue;
     const componentId = target.dataset.componentId;
     if (!componentId || !name || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name) || name === "module" || name === "export") {
       showError(new Error("Public property names must start with a letter or underscore and contain only letters, numbers, or underscores."));
@@ -1168,7 +1165,7 @@ export function createEditorShell(bridge: EditorShellBridge) {
     });
   }
 
-  function editComponentValue(input: HTMLInputElement | HTMLSelectElement) {
+  function editComponentValue(input: HTMLInputElement | HTMLSelectElement | HTMLButtonElement) {
     const componentId = input.dataset.componentId;
     const key = input.dataset.componentKey;
     if (!componentId || !key) return;
@@ -1178,7 +1175,7 @@ export function createEditorShell(bridge: EditorShellBridge) {
       if (!component || !entity) return;
       const previous = component.values[key];
       const valueKind = input.dataset.valueKind;
-      const value = input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : valueKind === "number" || typeof previous === "number" ? Number(input.value) : input.value;
+      const value = input instanceof HTMLInputElement && input.type === "checkbox" ? input.checked : valueKind === "number" || typeof previous === "number" ? Number(input.value) : input instanceof HTMLButtonElement ? input.dataset.selectValue ?? "" : input.value;
       if (typeof value === "number" && !Number.isFinite(value)) return;
       component.values[key] = value;
       if (component.type === "transform" && typeof value === "number") {
@@ -2297,10 +2294,7 @@ function has3DProject(project: EditorProject) {
   return Boolean(readHyperfocus3DDeclaration(project));
 }
 
-function starterTemplate(project: EditorProject) {
-  const value = project.extensions?.hyperfocusStarter;
-  return isObject(value) && typeof value.template === "string" ? value.template : "";
-}
+
 
 function readRecovery() {
   const value = localStorage.getItem(RECOVERY_KEY);
@@ -2463,35 +2457,6 @@ function openAssetDb() {
   });
 }
 
-type WritableFile = {
-  write(value: Uint8Array): Promise<void>;
-  close(): Promise<void>;
-  abort?(): Promise<void>;
-};
-
-type FileHandle = {
-  getFile(): Promise<File>;
-  createWritable(): Promise<WritableFile>;
-};
-
-type DirectoryHandle = {
-  name: string;
-  getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<DirectoryHandle>;
-  getFileHandle(name: string, options?: { create?: boolean }): Promise<FileHandle>;
-};
-
-async function writeDirectoryFile(directory: DirectoryHandle, name: string, bytes: Uint8Array) {
-  const handle = await directory.getFileHandle(name, { create: true });
-  const writable = await handle.createWritable();
-  try {
-    await writable.write(new Uint8Array(bytes));
-    await writable.close();
-  } catch (error) {
-    await writable.abort?.();
-    throw error;
-  }
-}
-
 async function writeProjectScripts(root: DirectoryHandle, project: EditorProject) {
   const scripts = readProjectScripts(project);
   for (const file of scripts.files) {
@@ -2504,85 +2469,3 @@ async function writeProjectScripts(root: DirectoryHandle, project: EditorProject
   }
   return scripts.files.length;
 }
-
-function trapFocus(root: HTMLElement, onEscape: () => void) {
-  const handler = (event: KeyboardEvent) => {
-    if (event.key === "Escape") { onEscape(); return; }
-    if (event.key !== "Tab") return;
-    const items = [...root.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')];
-    if (!items.length) return;
-    const first = items[0];
-    const last = items.at(-1)!;
-    if (event.shiftKey && document.activeElement === first) { last.focus(); event.preventDefault(); }
-    else if (!event.shiftKey && document.activeElement === last) { first.focus(); event.preventDefault(); }
-  };
-  root.addEventListener("keydown", handler);
-  return () => root.removeEventListener("keydown", handler);
-}
-
-function fileInput(accept: string, multiple: boolean) {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = accept;
-  input.multiple = multiple;
-  input.hidden = true;
-  return input;
-}
-
-function download(name: string, value: string | Uint8Array, type: string) {
-  const contents = typeof value === "string" ? value : new Uint8Array(value);
-  const url = URL.createObjectURL(new Blob([contents], { type }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-function appendConsole(message: string) {
-  const output = required("#editor-console-output");
-  const row = document.createElement("div");
-  row.textContent = `${new Date().toLocaleTimeString()}  ${message}`;
-  output.prepend(row);
-}
-
-function showError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  appendConsole(`✕ ${message}`);
-  document.dispatchEvent(new CustomEvent("hyperfocus:console-open"));
-  announce(message, "error");
-}
-
-function announce(message: string, tone: "status" | "error" = "status") {
-  let live = document.querySelector<HTMLElement>("#editor-announcer");
-  if (!live) {
-    live = document.createElement("div");
-    live.id = "editor-announcer";
-    live.className = "sr-only";
-    live.setAttribute("aria-live", "polite");
-    document.body.append(live);
-  }
-  live.textContent = message;
-  let toast = document.querySelector<HTMLElement>("#editor-toast");
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "editor-toast";
-    toast.setAttribute("role", "status");
-    document.body.append(toast);
-  }
-  toast.className = `editor-toast is-visible ${tone === "error" ? "is-error" : ""}`;
-  toast.textContent = message;
-  if (announcementTimer !== undefined) clearTimeout(announcementTimer);
-  announcementTimer = window.setTimeout(() => toast?.classList.remove("is-visible"), 3_200);
-}
-
-function required<T extends Element = HTMLElement>(selector: string, root: ParentNode = document): T {
-  const element = root.querySelector<T>(selector);
-  if (!element) throw new Error(`Editor shell is missing ${selector}`);
-  return element;
-}
-
-function setText(selector: string, value: string) { required(selector).textContent = value; }
-function slug(value: string) { return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "game"; }
-function formatBytes(value: number) { if (value < 1024) return `${value} B`; if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`; return `${(value / 1024 / 1024).toFixed(1)} MB`; }
-function escapeHtml(value: unknown) { return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!); }

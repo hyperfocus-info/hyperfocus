@@ -1,3 +1,4 @@
+import { PadPilot } from "../../padpilot/index";
 import styles from "./recut-module.stylex";
 import { PadGrid } from "./components/pad-grid";
 import { ParameterControls } from "./components/parameter-controls";
@@ -16,7 +17,7 @@ function RecutModuleView() {
   useRecutModuleStore();
 
   return (
-    <section class={styles["module-root"]}>
+    <PadPilot.ModuleWorkspace class={styles["module-root"]}>
       <header class={styles.brand}>
         <h2 class={styles["brand-h2"]}>RECUT</h2>
         <span>Sample slicer</span>
@@ -29,7 +30,7 @@ function RecutModuleView() {
         <PadGrid />
         <ParameterControls />
       </div>
-    </section>
+    </PadPilot.ModuleWorkspace>
   );
 }
 
@@ -37,12 +38,12 @@ function ControllerGuide() {
   const store = useRecutModuleStore();
 
   return (
-    <section class={styles["controller-guide"]}>
+    <PadPilot.ModuleWorkspace class={styles["controller-guide"]}>
       <span class={styles["section-label"]}>Controller</span>
       <div class={styles["guide-line"]}>Click waveform to select chops. Double-click adds chop. Delete removes selected chop.</div>
       <div class={styles["guide-line"]}>Face buttons trigger chops. Hold LB and/or RB for banks 2-4.</div>
       <div class={styles["guide-line"]}>Held pads: {store.derived.heldPadIndices().length} · Playing pads: {store.derived.playingPadIndices().length}</div>
       <div class={styles["guide-line"]}>Haptics: {store.derived.hapticStatus()}</div>
-    </section>
+    </PadPilot.ModuleWorkspace>
   );
 }

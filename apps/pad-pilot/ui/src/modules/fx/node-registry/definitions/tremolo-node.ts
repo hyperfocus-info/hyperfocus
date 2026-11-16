@@ -24,7 +24,7 @@ export const TremoloNodeDefinition = createNodeDefinition({
     createLegacyParamState(4, "Rate Sync", config.rateSync?.enabled ? 1 : 0, 0, 1),
     createLegacyParamState(5, "Rate Division", config.rateSync?.divisionIndex ?? 8, 0, 19),
     createLegacyParamState(6, "Smoothing", config.smoothing, 0, 1),
-    createLegacyParamState(7, "Shape", Math.max(0, LFO_SHAPES.indexOf(config.lfoShape as typeof LFO_SHAPES[number])), 0, LFO_SHAPES.length - 1),
+    createLegacyParamState(7, "Shape", Math.max(0, LFO_SHAPES.findIndex((value) => value === config.lfoShape)), 0, LFO_SHAPES.length - 1),
   ],
   rackControls: [
     createNumberControl("rateHz", "Rate", (config) => config.rateHz, (config, value) => (config.rateHz = value), {

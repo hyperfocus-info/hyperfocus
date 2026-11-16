@@ -25,10 +25,8 @@ import {
   moduleDetailDto,
   moduleListDto,
 } from "../modules";
-import {
-  BundleIntegrityError,
-  createPermitBoundFileStream,
-  MultipartUploadError,
+import {  isBundleIntegrityError,
+  createPermitBoundFileStream, isMultipartUploadError,
   streamModuleUploadToFile,
   type createBundleIntegrityVerifier,
   type createInFlightLimiter,
@@ -78,9 +76,9 @@ export function createModuleRouteHandlers(dependencies: ModuleHandlerDependencie
   const create = async ({ request, store, authUser }: ModuleRequestContext) => {
     const auth = requireAuthUser(authUser);
     if (auth.response) return auth.response;
-    const limited = dependencies.enforceRateLimit("module-create", auth.user!.id, 30, 60 * 60 * 1000);
+    const limited = dependencies.enforceRateLimit("module-create", auth.user!.id, 30, 3600000);
     if (limited) return limited;
-    const requestBody = await readBoundedJson(request, 16 * 1024);
+    const requestBody = await readBoundedJson(request, 16384);
     if (requestBody.response) return requestBody.response;
     const parsed = createModuleBody.safeParse(requestBody.data);
     if (!parsed.success) return fail(400, "invalid_name", parsed.error.errors[0]?.message ?? "Module name is required.");
@@ -110,7 +108,7 @@ export function createModuleRouteHandlers(dependencies: ModuleHandlerDependencie
   const uploadVersion = async ({ params, request, store, authUser }: ModuleRequestParamsContext) => {
     const auth = requireAuthUser(authUser);
     if (auth.response) return auth.response;
-    const limited = dependencies.enforceRateLimit("module-upload", auth.user!.id, 20, 60 * 60 * 1000);
+    const limited = dependencies.enforceRateLimit("module-upload", auth.user!.id, 20, 3600000);
     if (limited) return limited;
     const parsed = moduleIdParams.safeParse(params);
     const moduleId = parsed.success ? parsed.data.moduleId : "";
@@ -165,7 +163,7 @@ export function createModuleRouteHandlers(dependencies: ModuleHandlerDependencie
       persisted = true;
       return json({ ok: true, version: parsedVersion.data });
     } catch (error) {
-      if (error instanceof MultipartUploadError) return fail(error.status, error.code, error.message);
+      if (isMultipartUploadError(error)) return fail(error.status, error.code, error.message);
       const duplicate = store.db.query("SELECT 1 FROM module_versions WHERE module_id = ? AND version = ?")
         .get(moduleRow.id, requestedVersion);
       if (duplicate) return fail(409, "version_exists", "A version with that identifier already exists.");
@@ -179,7 +177,7 @@ export function createModuleRouteHandlers(dependencies: ModuleHandlerDependencie
   const publish = async ({ params, store, authUser }: ModuleParamsContext) => {
     const auth = requireAuthUser(authUser);
     if (auth.response) return auth.response;
-    const limited = dependencies.enforceRateLimit("module-publish", auth.user!.id, 60, 60 * 60 * 1000);
+    const limited = dependencies.enforceRateLimit("module-publish", auth.user!.id, 60, 3600000);
     if (limited) return limited;
     const parsed = moduleIdParams.safeParse(params);
     const moduleId = parsed.success ? parsed.data.moduleId : "";
@@ -201,7 +199,7 @@ export function createModuleRouteHandlers(dependencies: ModuleHandlerDependencie
       }
       publishModule(store.db, moduleId, auth.user!.id, nowIso(), draftVersion?.id);
     } catch (error) {
-      if (error instanceof BundleIntegrityError) {
+      if (isBundleIntegrityError(error)) {
         return fail(error.code === "bundle_not_found" ? 404 : 409, error.code, error.message);
       }
       if (error instanceof Error && error.message.includes("draft version")) return fail(409, "version_required", error.message);
@@ -216,7 +214,7 @@ export function createModuleRouteHandlers(dependencies: ModuleHandlerDependencie
   const remove = ({ params, store, authUser }: ModuleParamsContext) => {
     const auth = requireAuthUser(authUser);
     if (auth.response) return auth.response;
-    const limited = dependencies.enforceRateLimit("module-delete-draft", auth.user!.id, 30, 60 * 60 * 1000);
+    const limited = dependencies.enforceRateLimit("module-delete-draft", auth.user!.id, 30, 3600000);
     if (limited) return limited;
     const parsed = moduleIdParams.safeParse(params);
     const moduleId = parsed.success ? parsed.data.moduleId : "";
@@ -239,7 +237,7 @@ export function createModuleRouteHandlers(dependencies: ModuleHandlerDependencie
   };
 
   const download = async ({ params, request, store, authUser }: ModuleRequestParamsContext) => {
-    const limited = dependencies.enforceRateLimit("module-download", authUser?.id ?? dependencies.clientIdentity(request), 240, 60 * 1000);
+    const limited = dependencies.enforceRateLimit("module-download", authUser?.id ?? dependencies.clientIdentity(request), 240, 60000);
     if (limited) return limited;
     const parsed = moduleIdParams.safeParse(params);
     const moduleId = parsed.success ? parsed.data.moduleId : "";
@@ -275,7 +273,7 @@ export function createModuleRouteHandlers(dependencies: ModuleHandlerDependencie
         "x-padpilot-sha256": version.checksum_sha256,
       } });
     } catch (error) {
-      if (error instanceof BundleIntegrityError) {
+      if (isBundleIntegrityError(error)) {
         return fail(error.code === "bundle_not_found" ? 404 : 409, error.code, error.message);
       }
       throw error;

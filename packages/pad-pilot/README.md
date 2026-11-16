@@ -57,17 +57,24 @@ declared capabilities. Module JavaScript runs only on the Script Thread.
 import type { PadPilotServiceHostSurface } from "@hyperfocus/pad-pilot/host-surface";
 import { definePadPilotModule } from "@hyperfocus/pad-pilot/module-ui-contract";
 import { manifest } from "./manifest";
+import { z } from "zod";
+const readNotes = (value: unknown) => z.object({ notes: z.string() }).parse(value);
 
 declare const PadPilot: PadPilotServiceHostSurface;
 
 export default definePadPilotModule({
   manifest,
   Component: () => {
-    const [state] = PadPilot.hooks.useModuleState(manifest.id, { notes: "" });
+    const [state] = PadPilot.hooks.useModuleState(manifest.id, { notes: "" }, readNotes);
     return state().notes;
   },
 });
 ```
+
+Typed state hooks and codec registration require an explicit unknown-value reader.
+Pass the same reader as the third argument to `registerModuleStateCodec`. Legacy
+two-argument hooks no longer promise a caller-selected generic state shape; migrate
+clients to their authored schema before reading fields.
 
 The component type is inferred from the author's UI framework. Production still
 uses the trusted starter UI until external code can run in a sandboxed Module realm.

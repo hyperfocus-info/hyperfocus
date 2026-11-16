@@ -1,3 +1,5 @@
+import { createContext, useContext } from "solid-js";
+const FxNodeCardControls = createContext<FxNodeCardProps>();
 import { createDraggable } from "@thisbeyond/solid-dnd";
 import { Show, createMemo, type JSX } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
@@ -19,14 +21,16 @@ export type FxNodeCardProps = {
 };
 
 /** FxNodeCard renders the compressed rack state and inline focus editor for a single FX node. */
-export function FxNodeCard(props: FxNodeCardProps) {
+export function FxNodeCard(props: FxNodeCardProps) { return <FxNodeCardControls.Provider value={props}><FxNodeCardContent /></FxNodeCardControls.Provider>; }
+function FxNodeCardContent() { const controls = useContext(FxNodeCardControls); if (!controls) throw new Error("Missing FxNodeCard controls");
+
   const state = useFxModuleState();
   const actions = useFxModuleActions();
-  const chain = createChainAccessor(() => state.session.working.chains, props.chainId);
-  const node = createNodeAccessor(chain, props.nodeId);
-  const draggable = createDraggable(`node:${props.chainId}:${props.nodeId}`);
+  const chain = createChainAccessor(() => state.session.working.chains, controls.chainId);
+  const node = createNodeAccessor(chain, controls.nodeId);
+  const draggable = createDraggable(`node:${controls.chainId}:${controls.nodeId}`);
   const dragBinding = bindCardDraggable(draggable);
-  const nodeFrame = createMemo(() => state.host.displayVisualizer.nodeFrames.find((frame) => frame.chainId === props.chainId && frame.nodeId === props.nodeId) ?? null);
+  const nodeFrame = createMemo(() => state.host.displayVisualizer.nodeFrames.find((frame) => frame.chainId === controls.chainId && frame.nodeId === controls.nodeId) ?? null);
   const definition = createMemo(() => (node() ? getNodeDefinition(node()!.type) : null));
   const visualizer = createMemo(() => (definition() && nodeFrame() ? definition()!.visualizer.selectPayload(nodeFrame()!) : null));
   const inputMeter = createMemo(() =>
@@ -35,7 +39,7 @@ export function FxNodeCard(props: FxNodeCardProps) {
   const outputMeter = createMemo(() =>
     createMeterVisual(nodeFrame()?.outputPeakDb ?? meterDbFromMix(0.6), state.preferences.displayStereoMeters, nodeFrame()?.outputPeakDbLeft, nodeFrame()?.outputPeakDbRight),
   );
-  const focused = createMemo(() => state.ui.focusedNode.chainId === props.chainId && state.ui.focusedNode.nodeId === props.nodeId);
+  const focused = createMemo(() => state.ui.focusedNode.chainId === controls.chainId && state.ui.focusedNode.nodeId === controls.nodeId);
   let surfacePointerDownAt = 0;
   const soloState = createMemo(() => {
     const currentChain = chain();
@@ -83,27 +87,27 @@ export function FxNodeCard(props: FxNodeCardProps) {
       return;
     }
 
-    actions.nodes.openFocus(props.chainId, props.nodeId);
+    actions.nodes.openFocus(controls.chainId, controls.nodeId);
   };
 
   return (
     <Show when={node()}>
-      <FxNodeDropZone chainId={props.chainId} nodeId={props.nodeId}>
+      <FxNodeDropZone chainId={controls.chainId} nodeId={controls.nodeId}>
         <PadPilot.DraggableCard
           dragRef={dragBinding.ref}
           dragStyle={dragBinding.style()}
-          header={<FxNodeHeader chainId={props.chainId} nodeId={props.nodeId} />}
+          header={<FxNodeHeader chainId={controls.chainId} nodeId={controls.nodeId} />}
           class={`${shellStyles["node-card"]} ${node()?.bypassed ? shellStyles["is-bypassed"] : ""} ${node()?.muted ? shellStyles["is-muted"] : ""} ${soloState() === "ghosted" ? shellStyles["node-solo-ghosted"] : ""} ${soloState() === "active" ? shellStyles["node-solo-active"] : ""} ${soloState() === "darkened" ? shellStyles["node-solo-darkened"] : ""} ${focused() ? shellStyles["node-focused"] : ""}`.trim()}
-          data-testid={`node-card-${props.chainId}-${props.nodeId}`}
+          data-testid={`node-card-${controls.chainId}-${controls.nodeId}`}
           isDragging={dragBinding.isActiveDraggable()}
-          isPlaceholder={props.isPlaceholder}
+          isPlaceholder={controls.isPlaceholder}
           onClick={onNodeClick}
           onDragPointerDown={onNodePointerDown}
           variant="node"
         >
           <div class={shellStyles["node-card-body"]}>
             <Show when={state.preferences.displayNodeMeters}>
-              <div class={shellStyles["node-meter-column"]} data-testid={`node-meter-row-${props.chainId}-${props.nodeId}`}>
+              <div class={shellStyles["node-meter-column"]} data-testid={`node-meter-row-${controls.chainId}-${controls.nodeId}`}>
                 <PadPilot.Meter
                   class={shellStyles["node-meter"]}
                   label="In"
@@ -125,21 +129,22 @@ export function FxNodeCard(props: FxNodeCardProps) {
             <div class={shellStyles["node-rack-shell"]}>
               <Show when={node() && definition()}>
                 <FxNodeRack
-                  chainId={props.chainId}
-                  nodeId={props.nodeId}
+                  chainId={controls.chainId}
+                  nodeId={controls.nodeId}
                   config={resolveNodeConfig(node()!)}
                   definition={definition()!}
                   nodeFrame={nodeFrame()}
-                  onControlChange={(key, value, commit) => actions.nodes.setControl(props.chainId, props.nodeId, key, value, commit)}
+                  onControlChange={(key, value, commit) => actions.nodes.setControl(controls.chainId, controls.nodeId, key, value, commit)}
                   visualizer={visualizer()}
                 />
               </Show>
             </div>
           </div>
 
-          <FxInlineNodeEditor chainId={props.chainId} nodeFrame={nodeFrame()} nodeId={props.nodeId} visualizer={visualizer()} />
+          <FxInlineNodeEditor chainId={controls.chainId} nodeFrame={nodeFrame()} nodeId={controls.nodeId} visualizer={visualizer()} />
         </PadPilot.DraggableCard>
       </FxNodeDropZone>
     </Show>
   );
+
 }

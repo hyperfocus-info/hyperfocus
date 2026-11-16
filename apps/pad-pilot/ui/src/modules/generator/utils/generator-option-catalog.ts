@@ -35,50 +35,50 @@ export interface GeneratorMagicOptions {
   reroll?: number;
 }
 
-export const GENERATOR_FIELD_KEYS = ["genre", "mood", "era", "complexity", "scaleKey"] satisfies GeneratorFieldKey[];
+export const GENERATOR_FIELD_KEYS: GeneratorFieldKey[] = ["genre", "mood", "era", "complexity", "scaleKey"];
 
-export const GENERATOR_RANGE_KEYS = ["creativity", "temperature", "density", "humanize"] satisfies GeneratorRangeKey[];
+export const GENERATOR_RANGE_KEYS: GeneratorRangeKey[] = ["creativity", "temperature", "density", "humanize"];
 
-export const GENERATOR_ADVANCED_KEYS = ["creativity", "temperature", "lengthBars", "density", "humanize"] satisfies GeneratorAdvancedKey[];
+export const GENERATOR_ADVANCED_KEYS: GeneratorAdvancedKey[] = ["creativity", "temperature", "lengthBars", "density", "humanize"];
 
-export const GENERATOR_LENGTH_OPTIONS = [
+export const GENERATOR_LENGTH_OPTIONS: Array<{ label: string; value: GeneratorLengthBars }> = [
   { label: "2 bars", value: 2 },
   { label: "4 bars", value: 4 },
   { label: "8 bars", value: 8 },
   { label: "16 bars", value: 16 },
   { label: "32 bars", value: 32 },
-] as const satisfies Array<{ label: string; value: GeneratorLengthBars }>;
+] as const;
 
-export const DEFAULT_GENERATOR_ADVANCED_SETTINGS = {
+export const DEFAULT_GENERATOR_ADVANCED_SETTINGS: Pick<GeneratorDashboardFields, GeneratorAdvancedKey> = {
   creativity: 0.65,
   density: 0.55,
   humanize: 0.35,
   lengthBars: GENERATOR_LENGTH_OPTIONS[1].value,
   temperature: 0.7,
-} satisfies Pick<GeneratorDashboardFields, GeneratorAdvancedKey>;
+};
 
-export const DEFAULT_GENERATOR_AI_SETTINGS = {
+export const DEFAULT_GENERATOR_AI_SETTINGS: GeneratorAiSettings = {
   model: "5.5 low fast",
   provider: "cursor",
-} satisfies GeneratorAiSettings;
+};
 
-export const GENERATOR_AI_PROVIDER_OPTIONS = [
+export const GENERATOR_AI_PROVIDER_OPTIONS: SearchableComboboxItem[] = [
   {
     description: "AI Provider",
     id: "cursor",
     kind: "Provider",
     label: "Cursor",
   },
-] satisfies SearchableComboboxItem[];
+];
 
-export const GENERATOR_AI_MODEL_OPTIONS = [
+export const GENERATOR_AI_MODEL_OPTIONS: SearchableComboboxItem[] = [
   {
     description: "Fast low-reasoning generator",
     id: "5-5-low-fast",
     kind: "Model",
     label: DEFAULT_GENERATOR_AI_SETTINGS.model,
   },
-] satisfies SearchableComboboxItem[];
+];
 
 export const genreLabels = [
   "Synthwave", "Lofi", "Liquid Drum & Bass", "Boom Bap", "Cinematic", "Blues", "Modern Trap", "Retro Future", "Ambient", "Electro Funk",
@@ -155,7 +155,7 @@ export function toItems(labels: readonly string[], kind: string) {
     id: toId(label),
     kind,
     label,
-  } satisfies SearchableComboboxItem));
+  }));
 }
 
 export const GENERATOR_OPTION_GROUPS = {

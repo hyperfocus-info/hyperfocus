@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 
-import { SkillManager } from "./skill-manager";
+import { createSkillManager } from "./skill-manager";
 
 const CANDIDATE_RESULT_PREFIX = "PADPILOT_CANDIDATE_RESULT:";
 
@@ -10,7 +10,7 @@ async function main() {
     throw new Error("Candidate validator requires an evaluator root path.");
   }
   const candidateRoot = resolve(candidateRootArgument);
-  const manager = new SkillManager({
+  const manager = createSkillManager({
     evaluatorRoot: candidateRoot,
     skillsDir: join(candidateRoot, "skills"),
     cacheDir: join(candidateRoot, "cache"),

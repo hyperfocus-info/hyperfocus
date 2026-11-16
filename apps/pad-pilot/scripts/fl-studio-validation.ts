@@ -32,7 +32,7 @@ export const flStudioFixtureNames = Object.freeze({
 
 const referenceSampleRate = 48_000;
 const referenceSeconds = 1;
-const referencePeakAmplitude = 10 ** (-18 / 20);
+const referencePeakAmplitude = 0.12589254117941673;
 const segmentMarginSeconds = 0.1;
 
 export function parseFlStudioValidationArguments(args: string[]) {

@@ -1,7 +1,9 @@
 import type { PadPilotInputDeviceState } from "../padpilot/io/input-device";
 
-type NavigatorWithGamepads = {
-  getGamepads?: () => ArrayLike<Gamepad | null> | null;
+type BrowserGamepad = Pick<Gamepad, "axes" | "buttons" | "connected" | "id" | "index">;
+
+export type NavigatorWithGamepads = {
+  getGamepads?: () => ArrayLike<BrowserGamepad | null> | null;
 } | null | undefined;
 
 function trimOrFallback(value: string, fallback: string) {
@@ -17,15 +19,15 @@ export function readBrowserGamepadDevices(
   frameIndex: number,
   navigatorLike: NavigatorWithGamepads = globalThis.navigator,
 ) {
+  const devices: PadPilotInputDeviceState[] = [];
   if (!browserGamepadsSupported(navigatorLike)) {
     return {
       browserGamepadSupported: false,
-      devices: [] as PadPilotInputDeviceState[],
+      devices,
     };
   }
 
   const gamepads = navigatorLike?.getGamepads?.();
-  const devices: PadPilotInputDeviceState[] = [];
 
   for (const entry of Array.from(gamepads ?? [])) {
     if (!entry || entry.connected === false) {

@@ -1,7 +1,7 @@
 import { fallbackInstrumentPalettes } from "./generator-fallback-palettes";
 export { fallbackInstrumentPalettes } from "./generator-fallback-palettes";
 import { GENERATOR_MIDI_BEATS_PER_BAR, GENERATOR_MIDI_DRUM_CHANNEL, GENERATOR_MIDI_TICKS_PER_QUARTER } from "./midi-encoder";
-import { type GeneratorLengthBars } from "./generator-options";
+import { type GeneratorLengthBars } from "./generator-option-catalog";
 import { type FallbackInstrument, type FallbackInstrumentPalette, type FallbackNoteEvent, type GeneratorIntentPlan, type GeneratorMusicianPlan, type GeneratorPromptInput } from "./generator-contracts";
 import { buildGenreProgression, chooseVoiceLedVoicing, chordDegreeOffsets, colorVoicing, fitNoteToRange, scaleIntervals, scaleNote, voiceLedChordVoicings } from "./generator-music";
 import { arrangementPlanMetadataLine, buildGeneratorIntentPlan, buildMusicianPlan, intentPlanTagList, intentPlanTagSet, intentTagMetadataLine, MAX_TRACKER_TICK, normalizedTag, promptSeed, schemaMetadataLine, selectedLengthBars, selectedScaleInfo, tagSetHas } from "./generator-prompt";
@@ -179,7 +179,7 @@ export function strummedChord(tick: number, notes: readonly number[], velocity: 
       note,
       tick: tick + offsetTicks,
       velocity: clampInteger(velocity + velocityShift, 1, 127),
-    } satisfies FallbackNoteEvent;
+    };
   });
 }
 
@@ -198,77 +198,77 @@ export function drumFillEvents(start: number, index: number, lengthBars: number,
 
   if (strength === 1 && density < 0.46 && !isHighEnergy) {
     return [
-      { durationTicks: 120, note: 49, tick: start + 1800, velocity: 88 },
-    ] satisfies FallbackNoteEvent[];
+      { durationTicks: 120 as const, note: 49 as const, tick: start + 1800, velocity: 88 as const },
+    ];
   }
 
   const velocity = strength === 3 ? 118 : strength === 2 ? 108 : 96;
   const spacing = strength === 3 ? 120 : 240;
   const voices = strength === 3 ? [38, 45, 47, 50] : strength === 2 ? [38, 42, 45, 49] : [38, 42, 38, 49];
   return voices.map((note, voiceIndex) => ({
-    durationTicks: 120,
+    durationTicks: 120 as const,
     note,
     tick: start + 1440 + voiceIndex * spacing,
     velocity: clampInteger(velocity - voiceIndex * 5, 1, 127),
-  })) satisfies FallbackNoteEvent[];
+  }));
 }
 
 export function drumGrooveEvents(joined: string, start: number, index: number, lengthBars: number, density: number, isHighEnergy: boolean) {
   const phraseFill = drumFillEvents(start, index, lengthBars, density, isHighEnergy);
   if (/reggaeton|dancehall|dembow|moombahton/i.test(joined)) {
     return [
-      { durationTicks: 120, note: 36, tick: start, velocity: 112 },
-      { durationTicks: 120, note: 42, tick: start + 480, velocity: 66 },
-      { durationTicks: 120, note: 36, tick: start + 720, velocity: 96 },
-      { durationTicks: 120, note: 38, tick: start + 960, velocity: 108 },
-      { durationTicks: 120, note: 42, tick: start + 1440, velocity: 72 },
+      { durationTicks: 120 as const, note: 36 as const, tick: start, velocity: 112 as const },
+      { durationTicks: 120 as const, note: 42 as const, tick: start + 480, velocity: 66 as const },
+      { durationTicks: 120 as const, note: 36 as const, tick: start + 720, velocity: 96 as const },
+      { durationTicks: 120 as const, note: 38 as const, tick: start + 960, velocity: 108 as const },
+      { durationTicks: 120 as const, note: 42 as const, tick: start + 1440, velocity: 72 as const },
       ...phraseFill,
-    ] satisfies FallbackNoteEvent[];
+    ];
   }
   if (/amapiano|log-drum|durban/i.test(joined)) {
     return [
-      { durationTicks: 120, note: 36, tick: start, velocity: 104 },
-      { durationTicks: 120, note: 42, tick: start + 360, velocity: 62 },
-      { durationTicks: 120, note: 44, tick: start + 720, velocity: 82 },
-      { durationTicks: 120, note: 36, tick: start + 960, velocity: 94 },
-      { durationTicks: 120, note: 44, tick: start + 1200, velocity: 78 },
-      { durationTicks: 120, note: 42, tick: start + 1440, velocity: 70 },
+      { durationTicks: 120 as const, note: 36 as const, tick: start, velocity: 104 as const },
+      { durationTicks: 120 as const, note: 42 as const, tick: start + 360, velocity: 62 as const },
+      { durationTicks: 120 as const, note: 44 as const, tick: start + 720, velocity: 82 as const },
+      { durationTicks: 120 as const, note: 36 as const, tick: start + 960, velocity: 94 as const },
+      { durationTicks: 120 as const, note: 44 as const, tick: start + 1200, velocity: 78 as const },
+      { durationTicks: 120 as const, note: 42 as const, tick: start + 1440, velocity: 70 as const },
       ...phraseFill,
-    ] satisfies FallbackNoteEvent[];
+    ];
   }
   if (/baile|tamborzao|tamborzão|funk-carioca|rio-baile/i.test(joined)) {
     return [
-      { durationTicks: 120, note: 36, tick: start, velocity: 116 },
-      { durationTicks: 120, note: 42, tick: start + 240, velocity: 68 },
-      { durationTicks: 120, note: 36, tick: start + 480, velocity: 100 },
-      { durationTicks: 120, note: 39, tick: start + 720, velocity: 104 },
-      { durationTicks: 120, note: 38, tick: start + 960, velocity: 108 },
-      { durationTicks: 120, note: 42, tick: start + 1200, velocity: 72 },
-      { durationTicks: 120, note: 39, tick: start + 1440, velocity: 96 },
+      { durationTicks: 120 as const, note: 36 as const, tick: start, velocity: 116 as const },
+      { durationTicks: 120 as const, note: 42 as const, tick: start + 240, velocity: 68 as const },
+      { durationTicks: 120 as const, note: 36 as const, tick: start + 480, velocity: 100 as const },
+      { durationTicks: 120 as const, note: 39 as const, tick: start + 720, velocity: 104 as const },
+      { durationTicks: 120 as const, note: 38 as const, tick: start + 960, velocity: 108 as const },
+      { durationTicks: 120 as const, note: 42 as const, tick: start + 1200, velocity: 72 as const },
+      { durationTicks: 120 as const, note: 39 as const, tick: start + 1440, velocity: 96 as const },
       ...phraseFill,
-    ] satisfies FallbackNoteEvent[];
+    ];
   }
   if (/bossa|salsa|samba|cumbia|clave/i.test(joined)) {
     return [
-      { durationTicks: 120, note: 75, tick: start, velocity: 86 },
-      { durationTicks: 120, note: 36, tick: start + 240, velocity: 92 },
-      { durationTicks: 120, note: 42, tick: start + 720, velocity: 68 },
-      { durationTicks: 120, note: 38, tick: start + 960, velocity: 96 },
-      { durationTicks: 120, note: 75, tick: start + 1200, velocity: 82 },
-      { durationTicks: 120, note: 42, tick: start + 1440, velocity: 70 },
+      { durationTicks: 120 as const, note: 75 as const, tick: start, velocity: 86 as const },
+      { durationTicks: 120 as const, note: 36 as const, tick: start + 240, velocity: 92 as const },
+      { durationTicks: 120 as const, note: 42 as const, tick: start + 720, velocity: 68 as const },
+      { durationTicks: 120 as const, note: 38 as const, tick: start + 960, velocity: 96 as const },
+      { durationTicks: 120 as const, note: 75 as const, tick: start + 1200, velocity: 82 as const },
+      { durationTicks: 120 as const, note: 42 as const, tick: start + 1440, velocity: 70 as const },
       ...phraseFill,
-    ] satisfies FallbackNoteEvent[];
+    ];
   }
   const closedHatVelocity = isHighEnergy ? 78 : 68;
   return [
-    { durationTicks: 120, note: 36, tick: start, velocity: 110 },
-    { durationTicks: 120, note: 42, tick: start + 480, velocity: closedHatVelocity },
-    { durationTicks: 120, note: 38, tick: start + 960, velocity: 104 },
-    { durationTicks: 120, note: 42, tick: start + 1440, velocity: 70 },
-    ...(isHighEnergy ? [{ durationTicks: 120, note: 42, tick: start + 720, velocity: 64 }] : []),
-    ...(density > 0.68 ? [{ durationTicks: 120, note: 42, tick: start + 240, velocity: 58 }] : []),
+    { durationTicks: 120 as const, note: 36 as const, tick: start, velocity: 110 as const },
+    { durationTicks: 120 as const, note: 42 as const, tick: start + 480, velocity: closedHatVelocity },
+    { durationTicks: 120 as const, note: 38 as const, tick: start + 960, velocity: 104 as const },
+    { durationTicks: 120 as const, note: 42 as const, tick: start + 1440, velocity: 70 as const },
+    ...(isHighEnergy ? [{ durationTicks: 120 as const, note: 42 as const, tick: start + 720, velocity: 64 as const }] : []),
+    ...(density > 0.68 ? [{ durationTicks: 120 as const, note: 42 as const, tick: start + 240, velocity: 58 as const }] : []),
     ...phraseFill,
-  ] satisfies FallbackNoteEvent[];
+  ];
 }
 
 export function houseStrobeBassEvents(progression: readonly number[], root: number, intervals: readonly number[], lengthBars: GeneratorLengthBars, density: number, isHighEnergy: boolean) {
@@ -284,7 +284,7 @@ export function houseStrobeBassEvents(progression: readonly number[], root: numb
       note: noteIndex % 4 === 3 ? octave : noteIndex % 2 === 0 ? rootNote : fifth,
       tick: start + tickOffset,
       velocity: clampInteger((isHighEnergy ? 98 : 86) - noteIndex * 4, 1, 127),
-    })) satisfies FallbackNoteEvent[];
+    }));
   });
 }
 
@@ -299,9 +299,9 @@ export function liveBassEvents(progression: readonly number[], root: number, int
     const approach = scaleNote(root, intervals, Math.max(0, nextOffset + (nextOffset >= offset ? -1 : 1)), -2);
     if (isSparse) {
       return [
-        { durationTicks: phraseEndsBar(index, lengthBars) ? 1080 : 1440, note: rootNote, tick: start, velocity: 86 },
-        ...(phraseEndsBar(index, lengthBars) ? [{ durationTicks: 240, note: approach, tick: start + 1560, velocity: 84 }] : []),
-      ] satisfies FallbackNoteEvent[];
+        { durationTicks: phraseEndsBar(index, lengthBars) ? 1080 : 1440, note: rootNote, tick: start, velocity: 86 as const },
+        ...(phraseEndsBar(index, lengthBars) ? [{ durationTicks: 240 as const, note: approach, tick: start + 1560, velocity: 84 as const }] : []),
+      ];
     }
     const events = [
       { durationTicks: isSparse ? 720 : 420, note: rootNote, tick: start, velocity: 88 },
@@ -312,7 +312,7 @@ export function liveBassEvents(progression: readonly number[], root: number, int
     if (phraseEndsBar(index, lengthBars)) {
       events.push({ durationTicks: 120, note: scaleNote(root, intervals, nextOffset, -2), tick: start + 1800, velocity: 90 });
     }
-    return events satisfies FallbackNoteEvent[];
+    return events;
   });
 }
 
@@ -376,7 +376,7 @@ export function motifEvents(
         note: scaleNote(root, intervals, offset + leadStart + mutatedDegree + index % 2, 1),
         tick,
         velocity: clampInteger(82 + phraseMutation * 4 - noteIndex * 2, 1, 127),
-      } satisfies FallbackNoteEvent;
+      };
     });
   });
 }
@@ -402,7 +402,7 @@ export function riffLayerEvents(
         note: sourceNote !== undefined ? fitNoteToRange(sourceNote + 12 + layerIndex * 7, 60, 96) : scaleNote(root, intervals, fallbackDegree, 1),
         tick: start + tickOffset,
         velocity: clampInteger(72 + phraseStrength(index, progression.length) * 5 - layerIndex * 4, 1, 127),
-      } satisfies FallbackNoteEvent;
+      };
     });
   });
 }
@@ -425,7 +425,7 @@ export function counterMelodyEvents(
         note: scaleNote(root, intervals, contraryDegree, 1),
         tick: start + tickOffset,
         velocity: clampInteger(66 + phraseStrength(index, progression.length) * 5 - noteIndex * 3, 1, 127),
-      } satisfies FallbackNoteEvent;
+      };
     });
   });
 }

@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,6 +21,25 @@ function createStore() {
 }
 
 describe("evaluation store", () => {
+  it("rejects malformed persisted review JSON at the read boundary", () => {
+    const directory = mkdtempSync(join(tmpdir(), "padpilot-review-corruption-"));
+    temporaryDirectories.push(directory);
+    const dbPath = join(directory, "evaluations.sqlite");
+    const store = openEvaluationStore({ dbPath });
+    const saved = store.saveEvaluation({
+      media: { byteLength: 10, contentSha256: "f".repeat(64), displayName: "fixture.mid", kind: "midi", sourcePath: join(directory, "fixture.mid") },
+      run: { confidence: 0.8, evaluatorFingerprint: "fixture", overallScore: 0.7, report: {} },
+    });
+    store.saveReview(saved.runId, { calibrationEligible: true, confidence: 0.9, overallScore: 0.8 });
+    const database = new Database(dbPath);
+    try {
+      database.query("UPDATE evaluation_reviews SET dimension_scores_json = ? WHERE run_id = ?").run('{"groove":"invalid"}', saved.runId);
+      expect(() => store.getLatestReview(saved.runId)).toThrow();
+    } finally {
+      database.close();
+      store.close();
+    }
+  });
   it("persists one complete evaluation and reads its diagnostic detail", () => {
     const store = createStore();
     const saved = store.saveEvaluation({

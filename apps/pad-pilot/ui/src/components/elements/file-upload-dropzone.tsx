@@ -1,10 +1,6 @@
 import { JSX, createSignal, splitProps } from "solid-js";
 import styles from "./styles/file-upload-dropzone.stylex";
 
-type FileWithPath = File & {
-  path?: string;
-};
-
 export type FileUploadSelection = {
   files: File[];
   paths: string[];
@@ -12,7 +8,7 @@ export type FileUploadSelection = {
 
 const DROP_TEXT_TYPES = ["text/uri-list", "text/plain"] as const;
 export const MAX_FILE_UPLOAD_SELECTION_ITEMS = 64;
-const MAX_DROP_TEXT_LENGTH = 64 * 1024;
+const MAX_DROP_TEXT_LENGTH = 65536;
 const MAX_DROPPED_PATH_LENGTH = 4096;
 
 function normalizeDroppedPath(value: string) {
@@ -84,7 +80,7 @@ export function extractFileUploadSelection(
   const paths = new Set<string>();
 
   for (const file of files) {
-    const path = (file as FileWithPath).path?.trim();
+    const path = "path" in file && typeof file.path === "string" ? file.path.trim() : undefined;
     if (path && path.length <= MAX_DROPPED_PATH_LENGTH) {
       paths.add(path);
     }

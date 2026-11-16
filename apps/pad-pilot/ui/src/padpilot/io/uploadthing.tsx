@@ -1,9 +1,12 @@
-import { JSX } from "solid-js";
-import { UploadDropzone } from "@uploadthing/solid";
+import { normalizeUploadthingBaseUrl } from "./uploadthing-url";
+import { asRecord } from "@hyperfocus/utilities/records";
+import type { FileRouter } from "uploadthing/types";
+import { generateUploadDropzone } from "@uploadthing/solid";
+
+
 
 type UploadResponse = { url?: string; ufsUrl?: string };
 
-type UploadDropzoneComponent = (props: Record<string, unknown>) => JSX.Element;
 
 export type UploadWidgetProps = {
   endpoint?: string;
@@ -14,24 +17,19 @@ export type UploadWidgetProps = {
   onError?: (error: Error) => void;
 };
 
-const UploadDropzoneAny = UploadDropzone as unknown as UploadDropzoneComponent;
+
 
 const readEnv = (key: string) =>
   typeof process !== "undefined" ? process.env[key] : undefined;
 
-const normalizeUploadthingBaseUrl = (value: string) => {
-  const trimmed = value.trim().replace(/\/+$/, "");
-  if (trimmed.endsWith("/api/uploadthing")) {
-    return trimmed.slice(0, -"/api/uploadthing".length);
-  }
-  return trimmed;
-};
+
 
 const uploadThingUrl = (props: UploadWidgetProps) => {
-  const explicitWindowUrl = (globalThis as { PADPILOT_UPLOADTHING_URL?: string }).PADPILOT_UPLOADTHING_URL;
+  const explicitWindowUrl = asRecord(globalThis).PADPILOT_UPLOADTHING_URL;
+  const windowUrl = typeof explicitWindowUrl === "string" ? explicitWindowUrl : undefined;
   const envUrl = readEnv("UPLOADTHING_URL");
   const fallbackUrl = "http://localhost:3000";
-  const resolvedUrl = props.url ?? explicitWindowUrl ?? envUrl ?? fallbackUrl;
+  const resolvedUrl = props.url ?? windowUrl ?? envUrl ?? fallbackUrl;
   if (!resolvedUrl) {
     throw new Error("UploadThing URL could not be resolved. Provide `props.url`, `PADPILOT_UPLOADTHING_URL`, or `UPLOADTHING_URL`.");
   }
@@ -47,16 +45,17 @@ const resolveEndpoint = (props: UploadWidgetProps) => {
 export function upload(props: UploadWidgetProps) {
   const resolvedEndpoint = resolveEndpoint(props);
   const resolvedUrl = uploadThingUrl(props);
+  const TypedUploadDropzone = generateUploadDropzone<FileRouter>({ url: resolvedUrl });
 
   return (
-    <UploadDropzoneAny
+    <TypedUploadDropzone
       endpoint={resolvedEndpoint}
       class={props.class}
       config={{
         appendOnPaste: false,
         mode: "auto",
       }}
-      url={resolvedUrl}
+
       onClientUploadComplete={(files: UploadResponse[] | undefined) => {
         const firstFile = files?.[0];
         const url = firstFile?.ufsUrl ?? firstFile?.url;

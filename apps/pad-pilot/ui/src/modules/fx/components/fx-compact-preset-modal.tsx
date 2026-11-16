@@ -1,3 +1,4 @@
+import { errorMessage } from "./utils/fx-compact-preset-modal-values";
 import { FileInput } from "lucide-solid";
 import { createEffect, createSignal, Show } from "solid-js";
 import { PadPilot } from "../../../padpilot/index";
@@ -10,9 +11,7 @@ export type FxCompactPresetModalProps = {
   open: boolean;
 };
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Preset code could not be applied.";
-}
+
 
 /** Applies a paste-safe protobuf Preset envelope to canonical FX Module state. */
 export function FxCompactPresetModal(props: FxCompactPresetModalProps) {

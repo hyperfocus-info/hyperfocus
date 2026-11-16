@@ -13,7 +13,7 @@ describe("aggregateMetricAssessments", () => {
     expect(evaluation.dimensions.groove.score).toBeCloseTo(0.9);
     expect(evaluation.dimensions.groove.validMetricCount).toBe(1);
     expect(evaluation.dimensions.structure.score).toBeCloseTo(0.7);
-    expect(evaluation.overall).toBeCloseTo((0.9 * 0.5 + 0.7) / 1.5);
+    expect(evaluation.overall).toBeCloseTo(0.7666666666666666);
     expect(evaluation.confidence).toBeLessThan(1);
   });
 

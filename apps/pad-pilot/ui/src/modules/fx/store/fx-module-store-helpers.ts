@@ -46,7 +46,7 @@ export function createFxModuleStoreHelpers(options: FxModuleStoreHelperOptions) 
   const activeAutomationTouches = new Set<string>();
 
   const getWorkingSnapshot = () =>
-    cloneFxChainState(state.session.working as FxChainState);
+    cloneFxChainState(state.session.working);
 
   const touchHistory = () => {
     updateStore(setState, (draft) => {

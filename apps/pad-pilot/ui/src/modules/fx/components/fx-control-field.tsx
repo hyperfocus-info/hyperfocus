@@ -4,7 +4,7 @@ import { Toggle } from "../../../components/elements/toggle";
 import { ToggleButton } from "../../../components/elements/toggle-button";
 import { FxSelectField } from "./fx-select-field";
 import {
-  type AnyNodeConfig,
+
   type FxNodeControlDefinition,
   type FxNodeControlValue,
 } from "../node-registry/types";
@@ -26,7 +26,7 @@ export function resolveFxControls<TConfig>(
 }
 
 export function formatFxControlValue(
-  control: FxNodeControlDefinition<AnyNodeConfig>,
+  control: Pick<FxNodeControlDefinition, "max" | "unit">,
   value: number,
 ) {
   const formatted = Number(value).toFixed(control.max && control.max > 10 ? 0 : 2);
@@ -81,7 +81,7 @@ export function renderFxControlField<TConfig>(
                 defaultValue={Number(value())}
                 onChange={(next) => updateControl(control.key, next, false)}
                 onCommit={(next) => updateControl(control.key, next, true)}
-                valueFormatter={(next) => formatFxControlValue(control as FxNodeControlDefinition<AnyNodeConfig>, next)}
+                valueFormatter={(next) => formatFxControlValue(control, next)}
                 manualInput
                 size={size}
               />
@@ -103,7 +103,7 @@ export function renderFxControlField<TConfig>(
                   updateControl(syncEnabled() ? buildTimingSyncControlKey(control.key, "division") : control.key, next, true)
                 }
                 valueFormatter={(next) =>
-                  syncEnabled() ? getTimingSyncLabel(next) : formatFxControlValue(control as FxNodeControlDefinition<AnyNodeConfig>, next)
+                  syncEnabled() ? getTimingSyncLabel(next) : formatFxControlValue(control, next)
                 }
                 manualInput={!syncEnabled()}
                 size={size}

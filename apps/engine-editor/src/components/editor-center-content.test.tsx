@@ -18,10 +18,12 @@ describe("EditorCenterContent", () => {
     const project = createDefaultProject("Current game");
     const mounted = mount({ kind: "project", project, hasRecovery: true });
 
-    const selector = mounted.host.querySelector<HTMLSelectElement>('[aria-label="Starter template"]')!;
-    expect(selector.options).toHaveLength(5);
-    expect(selector.value).toBe("pong");
-    expect(Array.from(selector.options, (option) => option.value)).toContain("platformer");
+    const selector = mounted.host.querySelector<HTMLButtonElement>('[aria-label="Starter template"]')!;
+    selector.click();
+    expect(document.querySelectorAll('[role="option"]')).toHaveLength(5);
+    expect(selector.dataset.selectValue).toBe("pong");
+    expect(document.querySelector('[data-select-option="platformer"]')).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(mounted.host.querySelector('[data-template="pong"]')?.textContent).toBe("Create playable Pong");
     expect(mounted.host.textContent).toContain("Current game");
     expect(mounted.host.textContent).toContain("local recovery available");

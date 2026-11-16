@@ -40,7 +40,7 @@ describe("Bridge native contract", () => {
     expect(processorBridgeSource).toContain("HostSyncFrame serialization rejected bytes=");
     expect(wireLimitsSource).toContain("kMaximumLegalHostSyncFrameBytes");
     expect(wireLimitsSource).toContain("kMaximumHostSyncFrameBytes = 16U * 1024U * 1024U");
-    expect(ingressSource).toContain("MAX_HOST_PROTO_INGRESS_BYTES = 16 * 1024 * 1024");
+    expect(ingressSource).toContain("MAX_HOST_PROTO_INGRESS_BYTES = 16777216");
     expect(controllerConfigHeader).toContain("kMaximumControllerHardwareIdBytes = kMaxDeviceIdChars - 1U");
     expect(controllerConfigHeader).toContain("kMaximumControllerLayoutNameBytes = 128U");
     expect(processorInternalSource).toContain("row.hardware_id().size() > padpilot::kMaximumControllerHardwareIdBytes");

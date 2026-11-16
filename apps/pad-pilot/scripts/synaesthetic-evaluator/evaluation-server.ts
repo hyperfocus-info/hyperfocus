@@ -1,13 +1,16 @@
+import { asRecord } from "@hyperfocus/utilities/records";
+import { z } from "zod";
+import { spawnBackgroundProcess } from '@hyperfocus/desktop-runtime/process';
 import { Elysia } from "elysia";
 import { existsSync, lstatSync } from "node:fs";
 import { extname, join, parse, resolve } from "node:path";
 
 import { openEvaluationLibrary } from "./evaluation-library";
 import { readBoundedStream } from "./bounded-fetch";
-import { openEvaluationStore, type EvaluationReviewInput, type EvaluationStore, type ReviewDatasetSplit } from "./evaluation-store";
+import { openEvaluationStore, type EvaluationStore } from "./evaluation-store";
 
 const DEFAULT_PORT = 3217;
-const MAX_REVIEW_BODY_BYTES = 64 * 1024;
+const MAX_REVIEW_BODY_BYTES = 65536;
 const DEFAULT_DASHBOARD_DIR = resolve(import.meta.dir, "..", "..", "build", "synaesthetic-evaluator", "dashboard");
 const AUDIO_CONTENT_TYPES = new Map([
   [".aac", "audio/aac"],
@@ -66,7 +69,7 @@ function dashboardDocument(store: EvaluationStore, runId?: string) {
 
 function reportObject(value: unknown) {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? asRecord(value)
     : {};
 }
 
@@ -165,23 +168,23 @@ async function boundedJsonObject(request: Request) {
     }
   }
   const bytes = await readBoundedStream(request.body, MAX_REVIEW_BODY_BYTES, "Review body");
-  const value = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  const value: unknown = JSON.parse(new TextDecoder().decode(bytes));
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("Review body must be a JSON object.");
   }
-  return value as Record<string, unknown>;
+  return asRecord(value);
 }
 
 async function openProjectFile(projectPath: string) {
   const command = process.platform === "win32"
     ? ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "Start-Process -FilePath $args[0]", projectPath]
     : process.platform === "darwin" ? ["open", projectPath] : ["xdg-open", projectPath];
-  const child = Bun.spawn(command, {
+  const child = spawnBackgroundProcess({ cmd: command, ...({
     stderr: "ignore",
     stdin: "ignore",
     stdout: "ignore",
     windowsHide: process.platform === "win32",
-  });
+  }) });
   const exitCode = await child.exited;
   if (exitCode !== 0) throw new Error(`Project launcher exited with code ${exitCode}.`);
 }
@@ -331,7 +334,7 @@ export function createEvaluationApp(options: {
       }
       try {
         const input = await boundedJsonObject(request);
-        return json(store.saveReview(params.runId, input as EvaluationReviewInput), 201);
+        return json(store.saveReview(params.runId, reviewInputSchema.parse(input)), 201);
       } catch (error) {
         return json({
           error: {
@@ -400,9 +403,9 @@ export function createEvaluationApp(options: {
     .get("/api/v1/review-dataset/summary", () => json(store.reviewDatasetSummary()))
     .get("/api/v1/review-dataset", ({ query }) => {
       const split = typeof query.split === "string" && query.split
-        ? query.split as ReviewDatasetSplit
+        ? query.split
         : undefined;
-      if (split && !["train", "validation", "test"].includes(split)) {
+      if (split !== undefined && split !== "train" && split !== "validation" && split !== "test") {
         return json({ error: { code: "invalid_dataset_split", message: "Dataset split must be train, validation, or test." } }, 400);
       }
       const requested = Number(query.limit);
@@ -458,3 +461,5 @@ export function serveEvaluationDashboard(options: {
     },
   };
 }
+
+const reviewInputSchema = z.object({ actionFeedback: z.array(z.object({ actionId: z.string(), verdict: z.enum(["helpful", "wrong", "intentional", "fixed"]) })).optional(), calibrationEligible: z.boolean(), confidence: z.number(), dimensionScores: z.record(z.number()).optional(), genreTags: z.array(z.string()).optional(), intentTags: z.array(z.string()).optional(), notes: z.string().optional(), overallScore: z.number() });

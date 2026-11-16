@@ -16,21 +16,12 @@ export type HostIntent =
   | { type: "closeCapabilityStream"; capability: CapabilityKind; handle: string }
   | { type: "sendCapabilityIntent"; capability: CapabilityKind; handle: string; action: string; payloadBase64: string };
 
-export type CapabilityKind =
-  | "sample-source"
-  | "sample-analysis"
-  | "slice-playback"
-  | "haptics"
-  | "analyzer-feed"
-  | "analyzer-session"
-  | "midi-export"
-  | "host-tempo"
-  | "fx-graph"
-  | "fx-visualizer"
-  | "automation"
-  | "keyboard-output"
-  | "midi-output"
-  | "module-state";
+export const capabilityKinds = ["sample-source", "sample-analysis", "slice-playback", "haptics", "analyzer-feed", "analyzer-session", "midi-export", "host-tempo", "fx-graph", "fx-visualizer", "automation", "keyboard-output", "midi-output", "module-state"] as const;
+export type CapabilityKind = typeof capabilityKinds[number];
+
+export function isCapabilityKind(value: unknown): value is CapabilityKind {
+  return capabilityKinds.some(kind => kind === value);
+}
 
 export type CoalescedCapabilityIntent = Extract<HostIntent, { type: "sendCapabilityIntent" }> & {
   capability: "automation";

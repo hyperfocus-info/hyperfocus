@@ -46,13 +46,13 @@ export type DimensionEvaluation = {
   readonly safety: SafetyAssessment;
 };
 
-const DIMENSION_WEIGHTS = {
+const DIMENSION_WEIGHTS: Record<EvaluationDimensionId, number> = {
   musicality: 1,
   groove: 1,
   structure: 1,
   soundQuality: 1,
   emotionalImpact: 1,
-} as const satisfies Record<EvaluationDimensionId, number>;
+} as const;
 
 export function metricAssessment(input: Omit<MetricAssessment, "valid" | "facet" | "status" | "summary"> & {
   readonly valid?: boolean;
@@ -72,14 +72,14 @@ export function metricAssessment(input: Omit<MetricAssessment, "valid" | "facet"
     status: input.status ?? (valid ? "valid" : "unreliable"),
     summary: input.summary?.trim() || input.id,
     weight: finitePositive(input.weight),
-  }) satisfies MetricAssessment;
+  });
 }
 
 export function aggregateMetricAssessments(
   metrics: readonly MetricAssessment[],
   safety: SafetyAssessment = { cap: 1, valid: true, reasons: [] },
 ) {
-  const dimensions = Object.fromEntries(EVALUATION_DIMENSIONS.map((id) => {
+  const assessDimension = (id: EvaluationDimensionId) => {
     const candidates = metrics.filter((metric) => metric.dimension === id);
     const valid = candidates.filter((metric) => metric.valid && metric.score !== null && metric.confidence > 0 && metric.weight > 0);
     const facets = [...new Set(candidates.map((metric) => metric.facet))];
@@ -100,14 +100,15 @@ export function aggregateMetricAssessments(
       : 0.5;
     const reliability = validFacets.length > 0 ? facetConfidence / validFacets.length : 0;
     const coverage = facets.length > 0 ? validFacets.length / facets.length : 0;
-    return [id, Object.freeze({
+    return Object.freeze({
       id,
       score: clamp01(score),
       confidence: clamp01(reliability * coverage),
       validMetricCount: valid.length,
       metricCount: candidates.length,
-    })];
-  })) as Record<EvaluationDimensionId, DimensionAssessment>;
+    });
+  };
+  const dimensions = { musicality: assessDimension("musicality"), groove: assessDimension("groove"), structure: assessDimension("structure"), soundQuality: assessDimension("soundQuality"), emotionalImpact: assessDimension("emotionalImpact") };
 
   const validDimensions = EVALUATION_DIMENSIONS.map((id) => dimensions[id]).filter((dimension) => dimension.confidence > 0);
   const denominator = validDimensions.reduce((sum, dimension) => sum + DIMENSION_WEIGHTS[dimension.id] * dimension.confidence, 0);
@@ -131,7 +132,7 @@ export function aggregateMetricAssessments(
     confidence: clamp01(confidence),
     dimensions: Object.freeze(dimensions),
     safety: normalizedSafety,
-  }) satisfies DimensionEvaluation;
+  });
 }
 
 function finitePositive(value: number) {

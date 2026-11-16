@@ -1,16 +1,13 @@
+import { z } from "zod";
 import path from "node:path";
 import { FxChainStateSchema } from "../ui/src/proto/generated/fx-chain-pb";
 import { requireArg, parseJsonArg, binaryFromProtoJson, slugify, validatePresetId, validatePresetName, writePresetFile } from "./preset-utils";
 
-type ChainPresetJson = {
-  name?: string;
-  selected_preset_id?: string;
-  selectedPresetId?: string;
-};
+
 
 async function main() {
   const payloadArg = requireArg(Bun.argv.slice(2).join(" "), "Usage: bun run create-chain-preset '<payload-json>'");
-  const payload = parseJsonArg<ChainPresetJson>(payloadArg);
+  const payload = z.object({ name: z.string().optional(), selected_preset_id: z.string().optional(), selectedPresetId: z.string().optional() }).passthrough().parse(parseJsonArg(payloadArg));
   const presetId = validatePresetId(payload.selected_preset_id ?? payload.selectedPresetId ?? slugify(payload.name ?? "chain-preset"));
   const presetName = validatePresetName(payload.name ?? presetId);
   const fileName = `${presetId}.preset`;

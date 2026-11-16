@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,7 +32,7 @@ describe("ensureSeedData", () => {
     const db = openMarketplaceDatabase(runtimeEnv);
     ensureSeedData(db, runtimeEnv);
 
-    const versionRow = db.query("SELECT bundle_path FROM module_versions LIMIT 1").get() as { bundle_path: string } | null;
+    const versionRow = z.union([z.object({ bundle_path: z.string() }).passthrough(), z.null()]).parse(db.query("SELECT bundle_path FROM module_versions LIMIT 1").get());
 
     expect(versionRow).not.toBeNull();
     expect(versionRow?.bundle_path.startsWith(runtimeEnv.uploadRoot)).toBe(true);
@@ -59,7 +60,7 @@ describe("ensureSeedData", () => {
     );
     mkdirSync(path.dirname(bundlePath), { recursive: true });
     writeFileSync(bundlePath, "");
-    truncateSync(bundlePath, 512 * 1024 * 1024);
+    truncateSync(bundlePath, 536870912);
 
     const db = openMarketplaceDatabase(runtimeEnv);
     ensureSeedData(db, runtimeEnv);

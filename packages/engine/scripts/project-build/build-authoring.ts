@@ -1,3 +1,4 @@
+import { compactWebGlShaders } from './compact-shaders';
 import { join, resolve } from "node:path";
 import { build } from "esbuild";
 
@@ -11,6 +12,7 @@ export async function buildAuthoringTools(options: { packageRoot: string; output
     bundle: true,
     splitting: true,
     minify: true,
+    plugins: [compactWebGlShaders],
     platform: "node",
     format: "esm",
     external: ["esbuild"],
@@ -31,6 +33,7 @@ export async function buildAuthoringTools(options: { packageRoot: string; output
     platform: "browser",
     format: "esm",
     minify: true,
+    plugins: [compactWebGlShaders],
     // Standalone hosts consume these public bundles during the same atomic build.
     // Resolve against staging so a clean checkout never needs an older dist tree.
     alias: {

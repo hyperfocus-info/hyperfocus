@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -68,18 +69,18 @@ describe("evaluation server", () => {
     const { app, saved, store } = createFixture();
 
     const libraryResponse = await app.handle(new Request("http://localhost/api/v1/library"));
-    const library = await libraryResponse.json() as { runs: Array<{ displayName: string }> };
+    const library = z.object({ runs: z.array(z.object({ displayName: z.string() }).passthrough()) }).passthrough().parse(await libraryResponse.json());
     expect(library.runs[0]?.displayName).toBe("Complete Full Filename.mp3");
 
     const detailResponse = await app.handle(new Request(`http://localhost/api/v1/runs/${saved.runId}`));
-    const detail = await detailResponse.json() as { runId: string; sourcePath: string };
+    const detail = z.object({ runId: z.string(), sourcePath: z.string() }).passthrough().parse(await detailResponse.json());
     expect(detail).toEqual(expect.objectContaining({
       runId: saved.runId,
       sourcePath: "C:\\Music\\Complete Full Filename.mp3",
     }));
 
     const seriesResponse = await app.handle(new Request(`http://localhost/api/v1/runs/${saved.runId}/series?names=loudness`));
-    const series = await seriesResponse.json() as Array<{ id: string; values: number[] }>;
+    const series = z.array(z.object({ id: z.string(), values: z.array(z.number()) }).passthrough()).parse(await seriesResponse.json());
     expect(series).toEqual([
       expect.objectContaining({ id: "loudness", values: [-10, -9] }),
     ]);
@@ -130,7 +131,7 @@ describe("evaluation server", () => {
     });
 
     const detailResponse = await app.handle(new Request(`http://localhost/api/v1/runs/${saved.runId}`));
-    const detail = await detailResponse.json() as { hasColocatedFlp: boolean; sourceAvailable: boolean };
+    const detail = z.object({ hasColocatedFlp: z.boolean(), sourceAvailable: z.boolean() }).passthrough().parse(await detailResponse.json());
     expect(detail).toEqual(expect.objectContaining({ hasColocatedFlp: true, sourceAvailable: true }));
 
     const audio = await app.handle(new Request(`http://localhost/api/v1/runs/${saved.runId}/audio`, {
@@ -167,7 +168,7 @@ describe("evaluation server", () => {
     });
 
     const libraryResponse = await app.handle(new Request("http://localhost/api/v1/library"));
-    const library = await libraryResponse.json() as { runs: Array<{ hasColocatedFlp: boolean }> };
+    const library = z.object({ runs: z.array(z.object({ hasColocatedFlp: z.boolean() }).passthrough()) }).passthrough().parse(await libraryResponse.json());
     expect(library.runs[0]?.hasColocatedFlp).toBeFalse();
 
     const edit = await app.handle(new Request(`http://localhost/api/v1/runs/${saved.runId}/edit`, { method: "POST" }));
@@ -192,15 +193,15 @@ describe("evaluation server", () => {
       headers: { "content-type": "application/json", origin: "http://localhost" },
       method: "POST",
     }));
-    const review = await reviewResponse.json() as { overallScore: number; datasetSplit: string };
+    const review = z.object({ overallScore: z.number(), datasetSplit: z.string() }).passthrough().parse(await reviewResponse.json());
     expect(reviewResponse.status).toBe(201);
     expect(review.overallScore).toBe(0.96);
     expect(["train", "validation", "test"]).toContain(review.datasetSplit);
 
-    const detail = await (await app.handle(new Request(`http://localhost/api/v1/runs/${saved.runId}`))).json() as { review: { notes: string } };
+    const detail = z.object({ review: z.object({ notes: z.string() }).passthrough() }).passthrough().parse(await (await app.handle(new Request(`http://localhost/api/v1/runs/${saved.runId}`))).json());
     expect(detail.review.notes).toBe("Intentional pocket.");
 
-    const summary = await (await app.handle(new Request("http://localhost/api/v1/review-dataset/summary"))).json() as { uniqueMedia: number; readyForCalibration: boolean };
+    const summary = z.object({ uniqueMedia: z.number(), readyForCalibration: z.boolean() }).passthrough().parse(await (await app.handle(new Request("http://localhost/api/v1/review-dataset/summary"))).json());
     expect(summary).toEqual(expect.objectContaining({ uniqueMedia: 1, readyForCalibration: false }));
     store.close();
   });

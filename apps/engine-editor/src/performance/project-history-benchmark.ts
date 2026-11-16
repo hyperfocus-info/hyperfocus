@@ -1,3 +1,4 @@
+import { round, positiveInteger, nonNegativeInteger } from "./utils/project-history-benchmark-values";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
@@ -152,9 +153,7 @@ function percentDelta(value: number, baseline: number) {
   return round((value - baseline) / Math.max(0.001, baseline) * 100);
 }
 
-function round(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
+
 
 function parseOptions(argv: readonly string[]) {
   return {
@@ -170,16 +169,4 @@ function parseOptions(argv: readonly string[]) {
 function argument(argv: readonly string[], name: string, fallback: string) {
   const prefix = `--${name}=`;
   return argv.find((value) => value.startsWith(prefix))?.slice(prefix.length) ?? fallback;
-}
-
-function positiveInteger(name: string, value: string) {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new RangeError(`--${name} must be a positive safe integer.`);
-  return parsed;
-}
-
-function nonNegativeInteger(name: string, value: string) {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new RangeError(`--${name} must be a non-negative safe integer.`);
-  return parsed;
 }
